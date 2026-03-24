@@ -1,0 +1,4 @@
+pydantic-settings
+structlog
+tenacity
+python-dotenv
