@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# IDEs (Importante para não conflitar com seu PC de casa)
+.vscode/
+.idea/
+
+# Logs e Temporários
+*.log
+.DS_Store
