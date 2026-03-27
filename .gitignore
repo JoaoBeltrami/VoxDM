@@ -10,6 +10,9 @@ venv/
 .vscode/
 .idea/
 
+# Interno — não sobe pro GitHub
+.internal/
+
 # Logs e Temporários
 *.log
 .DS_Store

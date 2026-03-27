@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_PROJETO.md\")",
+      "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_CHECKLIST.md\")"
+    ]
+  }
+}
