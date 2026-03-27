@@ -1,4 +1,4 @@
-git add . && git commit -m "feat: initial setup — .claude, VOXDM_LEARN.md, schema v1.1" && git pushpydantic-settings
+pydantic-settings
 structlog
 tenacity
 python-dotenv

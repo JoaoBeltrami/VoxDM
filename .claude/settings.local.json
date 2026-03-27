@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_PROJETO.md\")",
-      "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_CHECKLIST.md\")"
+      "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_CHECKLIST.md\")",
+      "Bash(python -m py_compile config.py)",
+      "Bash(uv --version)"
     ]
   }
 }
