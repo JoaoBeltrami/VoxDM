@@ -16,3 +16,6 @@ venv/
 # Logs e Temporários
 *.log
 .DS_Store
+
+# PDFs — módulos licenciados não sobem
+*.pdf
