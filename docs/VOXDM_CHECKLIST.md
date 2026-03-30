@@ -104,7 +104,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `uv pip install torch --index-url https://download.pytorch.org/whl/cu124` *(sem Claude)*
 - [ ] `python -c "import torch; print(torch.cuda.is_available())"` → deve retornar `True` *(sem Claude)*
 - [ ] `nvcc --version` → confirmar CUDA Toolkit acessível *(sem Claude)*
-- [ ] `uv pip install -r requirements.txt` *(sem Claude)*
+- [x] `uv pip install -r requirements.txt` *(30/03)*
 
 ### Modelos locais
 - [ ] Instalar Ollama → `ollama pull codestral` → `ollama pull llama3.1:8b` *(sem Claude)*
