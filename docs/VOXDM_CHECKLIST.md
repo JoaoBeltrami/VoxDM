@@ -110,11 +110,12 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] Instalar Ollama → `ollama pull codestral` → `ollama pull llama3.1:8b` *(sem Claude)*
 
 ### Configuração do projeto
-- [ ] Verificar `config.py` — deve falhar explicitamente sem `.env` `[revisão]` `[claude.ai]` `[leve]`
-- [ ] Criar `Makefile` com targets: `run`, `test`, `ingest`, `debug`, `backup` `[código]` `[claude code]`
-- [ ] Criar estrutura de pastas completa incluindo `tests/` `[código]` `[claude code]`
-- [ ] Criar `tests/conftest.py` com fixtures base `[código]` `[claude code]`
-- [ ] Confirmar `.claude` no repositório — verificar que Claude Code lê as instruções `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
+
+- [x] Verificar `config.py` — deve falhar explicitamente sem `.env` *(30/03 — validator adicionado)*
+- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `debug`, `backup` *(30/03)*
+- [x] Criar estrutura de pastas completa incluindo `tests/` *(30/03)*
+- [x] Criar `tests/conftest.py` com fixtures base *(30/03)*
+- [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
 
 ### API Keys
 - [ ] Coletar e adicionar ao `.env`: Groq, Gemini, Qdrant, Neo4j, LangSmith *(sem Claude)*
@@ -126,12 +127,14 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] Instalar Claude Code *(sem Claude)* `[roteiro]` — ⚡ gravar reações reais dos primeiros minutos
 
 ### Repositório
-- [ ] Confirmar `.gitignore` cobrindo `.env`, `__pycache__`, `.venv` *(sem Claude)*
-- [ ] `git push` funcionando *(sem Claude)*
-- [ ] `git grep "gsk_"` antes do push — confirmar que nenhuma chave vazou *(sem Claude)*
+
+- [x] Confirmar `.gitignore` cobrindo `.env`, `__pycache__`, `.venv`, PDFs *(30/03)*
+- [x] `git push` funcionando *(30/03)*
+- [x] `git grep "gsk_"` — nenhuma chave vazada confirmado *(30/03)*
 
 ### Validação
-- [ ] Confirmar `modulo_teste/modulo_teste_v1.1.json` no repositório *(sem Claude)*
+
+- [x] Confirmar `modulo_teste/modulo_teste_v1.1.json` no repositório *(26/03)*
 - [ ] `make test` rodando verde ← **marco** *(sem Claude)*
 
 ---
