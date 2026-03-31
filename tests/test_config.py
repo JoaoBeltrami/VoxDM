@@ -17,7 +17,6 @@ def test_settings_falha_com_key_vazia():
     with pytest.raises(ValidationError):
         Settings(
             GROQ_API_KEY="",
-            GEMINI_API_KEY="x",
             QDRANT_URL="x",
             QDRANT_API_KEY="x",
             NEO4J_URI="x",
