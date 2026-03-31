@@ -112,7 +112,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 ### Configuração do projeto
 
 - [x] Verificar `config.py` — deve falhar explicitamente sem `.env` *(30/03 — validator adicionado)*
-- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `debug`, `backup` *(30/03)*
+- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `ingest-rules`, `debug`, `backup` *(30/03)*
 - [x] Criar estrutura de pastas completa incluindo `tests/` *(30/03)*
 - [x] Criar `tests/conftest.py` com fixtures base *(30/03)*
 - [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
@@ -159,6 +159,13 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `ingestor/qdrant_uploader.py` — tenacity `[código]` `[claude code]`
 - [ ] `ingestor/neo4j_uploader.py` — tenacity, labels separados: NPC/Companion/Entity `[código]` `[claude code]`
 - [ ] `main.py` — pipeline completo linha de comando, roda ingestão e query `[código]` `[claude code]` `[moderado]`
+
+### Ingestão de Regras (paralelo ao módulo)
+- [ ] Baixar `5e-bits/5e-database` — filtrar: spells, conditions, classes, equipment `[código]` `[claude code]`
+- [ ] `ingestor/rules_loader.py` — carrega JSONs do SRD, normaliza para chunks de texto `[código]` `[claude code]` `[moderado]`
+- [ ] Configurar coleção `voxdm_rules` no Qdrant (separada de `voxdm_modules`) `[código]` `[claude code]`
+- [ ] Rodar ingestão de regras com `make ingest-rules` `[revisão]` `[roteiro]`
+- [ ] Query "o que Fireball faz?" retornando entrada correta do SRD ← **marco** `[revisão]` `[claude.ai]` `[leve]`
 
 > **Nota Fase 1:** o `neo4j_uploader.py` precisa criar labels separados para NPC, Companion e Entity conforme schema v1.1. Ver VOXDM_PONTE.md seção 9.5 para justificativa.
 
