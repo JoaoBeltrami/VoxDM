@@ -1,4 +1,40 @@
+# ─── Core ──────────────────────────────���─────────────────────────���───────────
 pydantic-settings
 structlog
 tenacity
 python-dotenv
+httpx
+numpy
+
+# ─── Fase 1 — Ingestão ───────────────────────────────────────────────────────
+PyMuPDF
+google-generativeai
+groq
+sentence-transformers
+qdrant-client
+neo4j
+aiosqlite
+
+# ─── Fase 2 — Voz ───────────────────────────���────────────────────────────────
+RealtimeSTT
+faster-whisper==1.2.1
+edge-tts
+kokoro
+
+# ─── Fase 3 — LLM e Memória ─────────────────────────────────────────────────���
+langsmith
+streamlit
+
+# ─── Fase 4 — API ───────────────────────────────────���────────────────────────
+fastapi
+uvicorn[standard]
+websockets
+
+# ─── Segurança ─────────────────────────────────���─────────────────────────────
+passlib[bcrypt]
+
+# ─── Dev ────────────────────────────────���────────────────────────────────────
+pytest
+
+# ─── Nota: torch instalado separadamente com CUDA ────────────────────────────
+# uv pip install torch --index-url https://download.pytorch.org/whl/cu124
