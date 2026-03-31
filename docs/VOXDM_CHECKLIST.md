@@ -92,7 +92,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ---
 
-## Fase 0 — Setup de Ambiente
+## Fase 0 — Setup de Ambiente ✅ MARCO BATIDO
 > Semana de 1-6 de abril de 2026 · 100% local · Requer PC com GPU
 > 🟢 Carga leve no pool — maioria das tarefas não precisa do Claude Pro
 > **Nota:** Fase 1 roda em paralelo no estágio via Codespaces (sem GPU)
@@ -135,7 +135,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 ### Validação
 
 - [x] Confirmar `modulo_teste/modulo_teste_v1.1.json` no repositório *(26/03)*
-- [ ] `make test` rodando verde ← **marco** *(sem Claude)*
+- [x] `make test` rodando verde ← **marco** *(31/03)*
 
 ---
 
