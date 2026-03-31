@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # OBRIGATÓRIAS — sem essas no .env, o programa não sobe
     GROQ_API_KEY: str
-    GEMINI_API_KEY: str
     QDRANT_URL: str
     QDRANT_API_KEY: str
     NEO4J_URI: str
@@ -12,6 +11,7 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: str
 
     # OPCIONAIS — têm default, não travam o boot
+    GEMINI_API_KEY: str = ""  # pendente — decisão no claude.ai
     NEO4J_USER: str = "neo4j"
     LANGCHAIN_TRACING_V2: bool = True
     LANGCHAIN_PROJECT: str = "voxdm"
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(
-        "GROQ_API_KEY", "GEMINI_API_KEY", "QDRANT_URL", "QDRANT_API_KEY",
+        "GROQ_API_KEY", "QDRANT_URL", "QDRANT_API_KEY",
         "NEO4J_URI", "NEO4J_PASSWORD", "LANGCHAIN_API_KEY",
     )
     @classmethod

@@ -17,7 +17,6 @@ import pytest
 def settings_mock(monkeypatch):
     """Sobrescreve variáveis de ambiente para testes sem .env real."""
     monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
-    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("QDRANT_URL", "https://test.qdrant.io")
     monkeypatch.setenv("QDRANT_API_KEY", "test-qdrant-key")
     monkeypatch.setenv("NEO4J_URI", "neo4j+s://test.databases.neo4j.io")
@@ -32,4 +31,4 @@ def settings_mock(monkeypatch):
 @pytest.fixture
 def modulo_teste_path() -> str:
     """Caminho para o módulo de teste padrão."""
-    return "./modulo_teste/modulo_teste.json"
+    return "./modulo_teste/modulo_teste_v1.1.json"
