@@ -40,6 +40,8 @@ Siga as convenções descritas aqui sem exceção.
 | TTS principal | Edge TTS Microsoft (neural, SSML nativo) |
 | TTS fallback | Kokoro-82M local (offline) |
 | Banco vetorial | Qdrant Cloud free tier |
+| Coleção Qdrant — módulos | `voxdm_modules` |
+| Coleção Qdrant — regras | `voxdm_rules` |
 | Banco de grafos | Neo4j AuraDB free tier (200MB) |
 | Banco estruturado | SQLite local via aiosqlite |
 | Exposição de rede | Cloudflare Tunnel (URL fixa permanente) |
@@ -485,7 +487,24 @@ Qdrant Cloud — armazena chunks + embeddings
 Neo4j AuraDB — armazena entidades e relações (labels: NPC, Companion, Entity)
 ```
 
-**Marco da Fase 1:** query "onde está Strahd?" retorna chunks corretos do módulo.
+**Marco da Fase 1 — módulo:** query "onde está Strahd?" retorna chunks corretos do módulo.
+
+### Pipeline de Regras (paralelo ao de módulo)
+
+```
+5e-database JSON (SRD público — 5e-bits/5e-database)
+      ↓
+rules_loader.py — carrega e filtra categorias relevantes (spells, conditions, classes, equipment)
+      ↓
+chunker.py — mesmo chunker do pipeline de módulo
+      ↓
+embedder.py — mesmo embedder
+      ↓
+Qdrant Cloud — coleção voxdm_rules (separada de voxdm_modules)
+```
+
+**Marco da Fase 1 — regras:** query "o que Fireball faz?" retorna a entrada correta do SRD.
+Executado uma vez — reutilizado em todos os módulos.
 
 ---
 
