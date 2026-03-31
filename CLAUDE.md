@@ -69,7 +69,7 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Componente | Decisão |
 |---|---|
 | LLM de jogo | Groq — `llama-3.3-70b-versatile` |
-| LLM de conversão | Gemini — `gemini-2.0-flash` (free tier) |
+| LLM de conversão | Groq — `llama-3.3-70b-versatile` |
 | STT | RealtimeSTT + Faster-Whisper tiny (GPU) |
 | TTS principal | Edge TTS Microsoft |
 | TTS fallback | Kokoro-82M local (`pip install kokoro` — NÃO kokoro-tts) |
@@ -99,6 +99,7 @@ NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1
 
 # Modelos depreciados
+NÃO usar Gemini para conversão → free tier extinto (quota=0). Usar: Groq llama-3.3-70b-versatile
 NÃO usar gemini-1.5-pro     → DESCONTINUADO, retorna 404. Usar: gemini-2.0-flash
 NÃO usar llama-3.1-70b      → DEPRECIADO pelo Groq. Usar: llama-3.3-70b-versatile
 
@@ -152,7 +153,8 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | 🔴 |
-| `ingestor/gemini_converter.py` | Converte páginas para VoxDM Schema via Gemini | 🔴 |
+| `ingestor/gemini_converter.py` | DEPRECATED — substituído por schema_converter.py | ⚠️ Remover Fase 2 |
+| `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.1 via Groq | ✅ Criado |
 | `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
 | `ingestor/parser.py` | Valida estrutura do schema v1.1 | 🔴 |
 | `ingestor/chunker.py` | Divide em chunks semânticos | 🔴 |

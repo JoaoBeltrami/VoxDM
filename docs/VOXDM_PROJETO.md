@@ -35,7 +35,7 @@ Siga as convenções descritas aqui sem exceção.
 |---|---|
 | Nome do projeto | VoxDM |
 | LLM de jogo | Groq — `llama-3.3-70b-versatile` |
-| LLM de conversão | Gemini — `gemini-2.0-flash` (Google AI Studio free tier) |
+| LLM de conversão | Groq — `llama-3.3-70b-versatile` |
 | STT | RealtimeSTT + Faster-Whisper tiny (GPU local) |
 | TTS principal | Edge TTS Microsoft (neural, SSML nativo) |
 | TTS fallback | Kokoro-82M local (offline) |
@@ -75,6 +75,7 @@ NÃO usar pykokoro           → nome incorreto no PyPI
 NÃO usar faster_whisper==latest → fixar em faster-whisper==1.2.1
 
 # Modelos depreciados
+NÃO usar Gemini para conversão → usar: Groq llama-3.3-70b-versatile (free tier Gemini extinto)
 NÃO usar gemini-1.5-pro     → DESCONTINUADO — retorna 404. Usar: gemini-2.0-flash
 NÃO usar llama-3.1-70b      → DEPRECIADO pelo Groq. Usar: llama-3.3-70b-versatile
 
@@ -148,8 +149,7 @@ VoxDM é uma engine de narração de RPG de mesa por voz, controlada 100% por fa
 | Componente | Tecnologia | Custo |
 |---|---|---|
 | Leitura de PDF | PyMuPDF (`fitz`) | Gratuito |
-| Conversão para schema | Gemini `gemini-2.0-flash` | Gratuito (free tier, 1M tokens contexto) |
-| Refinamento de schema | Groq — `llama-3.3-70b-versatile` | Gratuito |
+| Conversão para schema | Groq — `llama-3.3-70b-versatile` | Gratuito |
 
 ### 2.2 Armazenamento e Memória
 
@@ -472,9 +472,7 @@ PDF (Curse of Strahd)
       ↓
 PyMuPDF — extração de texto por página
       ↓
-Gemini gemini-2.0-flash — conversão para VoxDM Schema v1.1
-      ↓
-Groq llama-3.3-70b-versatile — refinamento e validação do schema
+Groq llama-3.3-70b-versatile — conversão para VoxDM Schema v1.1
       ↓
 Parser — validação de estrutura
       ↓
@@ -642,7 +640,6 @@ Claude Code roda no terminal direto no repositório. Incluso no Claude Pro/Max �
 | Serviço | URL | Variável no .env | Fase | Status |
 |---|---|---|---|---|
 | Groq | console.groq.com | `GROQ_API_KEY` | 0 | ✅ Conta criada |
-| Google AI Studio | aistudio.google.com | `GEMINI_API_KEY` | 0 | ✅ Conta criada |
 | Qdrant Cloud | cloud.qdrant.io | `QDRANT_URL` + `QDRANT_API_KEY` | 0 | ✅ Cluster ativo |
 | Neo4j AuraDB | neo4j.com/cloud/aura-free | `NEO4J_URI` + `NEO4J_PASSWORD` | 0 | ✅ Instância ativa |
 | LangSmith | smith.langchain.com | `LANGCHAIN_API_KEY` | 1 | ✅ Conta criada |
