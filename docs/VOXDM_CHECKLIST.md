@@ -118,8 +118,8 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
 
 ### API Keys
-- [ ] Coletar e adicionar ao `.env`: Groq, Gemini, Qdrant, Neo4j, LangSmith *(sem Claude)*
-- [ ] Testar cada conexão individualmente antes de avançar `[revisão]` `[claude.ai ou claude code]` `[leve]`
+- [x] Coletar e adicionar ao `.env`: Groq, Gemini, Qdrant, Neo4j, LangSmith *(31/03)*
+- [x] Testar cada conexão: Groq OK, Qdrant OK, Neo4j OK, LangSmith OK *(31/03)* — Gemini: free tier extinto, alternativa pendente
 
 ### Infraestrutura
 - [ ] Cloudflare Tunnel: instalar `cloudflared`, autenticar, criar túnel com URL permanente `[roteiro]` `[claude.ai]` `[leve]`
