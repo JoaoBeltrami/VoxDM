@@ -100,10 +100,10 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 **Marco:** `make test` roda sem erro + `torch.cuda.is_available()` retorna `True` + repositório no GitHub
 
 ### Ambiente Python e GPU
-- [ ] `uv venv --python 3.12 .venv` → ativar venv *(sem Claude)*
-- [ ] `uv pip install torch --index-url https://download.pytorch.org/whl/cu124` *(sem Claude)*
-- [ ] `python -c "import torch; print(torch.cuda.is_available())"` → deve retornar `True` *(sem Claude)*
-- [ ] `nvcc --version` → confirmar CUDA Toolkit acessível *(sem Claude)*
+- [x] `uv venv --python 3.12 .venv` *(30/03)*
+- [x] `uv pip install torch --index-url https://download.pytorch.org/whl/cu124` *(30/03 — torch 2.6.0+cu124)*
+- [x] `python -c "import torch; print(torch.cuda.is_available())"` → `True` — RTX 2060 SUPER *(30/03)*
+- [ ] `nvcc --version` → CUDA Toolkit não instalado — baixar em developer.nvidia.com/cuda-12-4-0-download-archive
 - [x] `uv pip install -r requirements.txt` *(30/03)*
 
 ### Modelos locais
