@@ -92,6 +92,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 
 ```
 # Pacotes errados
+NÃO usar google-generativeai → DEPRECATED. Usar: pip install google-genai
+NÃO assumir NEO4J_USER=neo4j → AuraDB Free usa o ID da instância como username (ex: 54b6147b)
 NÃO usar kokoro-tts         → usar: pip install kokoro
 NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1

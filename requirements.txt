@@ -8,7 +8,7 @@ numpy
 
 # ─── Fase 1 — Ingestão ───────────────────────────────────────────────────────
 PyMuPDF
-google-generativeai
+google-genai
 groq
 sentence-transformers
 qdrant-client
