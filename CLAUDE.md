@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 30 de março de 2026
+> Atualizado: 6 de abril de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,8 +13,9 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Pré-Fase 0 concluída.** Fase 0 começa semana de 1-6 de abril.
-Fase 0 (setup local) e Fase 1 (ingestão via Codespaces) rodam em paralelo — Fase 1 não precisa de GPU.
+**Fase 0 marco batido.** Fase 1 em andamento em paralelo.
+- Fase 0 (setup local, GPU): config.py ✅, venv ✅, CUDA ✅, .env ✅, connections ✅. Falta: nvcc, Ollama, Cloudflare Tunnel.
+- Fase 1 (ingestão): schema_converter.py ✅. Restam: pdf_reader, parser, chunker, embedder, uploaders, rules_loader, main.py.
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -141,8 +142,9 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `config.py` | Configuração centralizada via pydantic-settings | ✅ Criado |
 | `.env.example` | Template de variáveis de ambiente documentado | ✅ Criado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
-| `Makefile` | Targets: run, test, ingest, debug, backup | 🔴 Fase 0 |
-| `tests/conftest.py` | Fixtures base para pytest | 🔴 Fase 0 |
+| `Makefile` | Targets: run, test, ingest, debug, backup | ✅ Criado |
+| `tests/conftest.py` | Fixtures base para pytest | ✅ Criado |
+| `tests/test_config.py` | Smoke tests — config carrega e falha corretamente | ✅ Criado |
 
 ### Módulo de Teste
 | Arquivo | O que faz | Status |
