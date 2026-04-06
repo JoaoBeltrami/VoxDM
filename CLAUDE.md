@@ -154,7 +154,7 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### Ingestão (Fase 1)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | 🔴 |
+| `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | ✅ Criado |
 | `ingestor/gemini_converter.py` | DEPRECATED — substituído por schema_converter.py | ⚠️ Remover Fase 2 |
 | `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.1 via Groq | ✅ Criado |
 | `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
