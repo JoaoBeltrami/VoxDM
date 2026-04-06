@@ -118,13 +118,19 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
 
 ### API Keys
-- [x] Coletar e adicionar ao `.env`: Groq, Gemini, Qdrant, Neo4j, LangSmith *(31/03)*
-- [x] Testar cada conexão: Groq OK, Qdrant OK, Neo4j OK, LangSmith OK *(31/03)* — Gemini: free tier extinto, alternativa pendente
+- [x] Coletar e adicionar ao `.env`: Groq, Qdrant, Neo4j, LangSmith *(31/03)*
+- [x] Testar cada conexão: Groq OK, Qdrant OK, Neo4j OK, LangSmith OK *(31/03)* — Gemini: free tier extinto, substituído por Groq
+
+### GitHub MCP
+- [ ] Gerar PAT no GitHub (Settings → Developer settings → Tokens) `[roteiro]`
+- [x] Claude Code instalado *(02/04)* `[roteiro]`
+- [ ] GitHub MCP configurado no Claude Code `[roteiro]`
+- [ ] `claude mcp list` confirmado
+- [ ] Loop teste: issue → código → commit via MCP `[revisão]` `[roteiro]`
 
 ### Infraestrutura
 - [ ] Cloudflare Tunnel: instalar `cloudflared`, autenticar, criar túnel com URL permanente `[roteiro]` `[claude.ai]` `[leve]`
 - [ ] Linear: criar board VoxDM com cards para todas as fases *(sem Claude)*
-- [ ] Instalar Claude Code *(sem Claude)* `[roteiro]` — ⚡ gravar reações reais dos primeiros minutos
 
 ### Repositório
 
@@ -147,18 +153,23 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 **Marco:** query "onde está Strahd?" retorna chunks corretos do módulo
 
 ### Setup de monitoramento
-- [ ] Configurar LangSmith no `.env` → confirmar tracing ativo `[revisão]` `[claude.ai]` `[leve]`
+- [x] Configurar LangSmith no `.env` → tracing ativo *(03/04)*
 
-### Implementação
-- [ ] `ingestor/pdf_reader.py` — PyMuPDF, structlog `[código]` `[claude code]` `[roteiro]`
-- [ ] `ingestor/gemini_converter.py` — model: `gemini-2.0-flash`, tenacity `[código]` `[claude code]`
-- [ ] `ingestor/groq_refiner.py` — model: `llama-3.3-70b-versatile`, tenacity `[código]` `[claude code]`
-- [ ] `ingestor/parser.py` — validação do VoxDM Schema v1.1 `[código]` `[claude code]` `[moderado]`
-- [ ] `ingestor/chunker.py` — chunks semânticos `[código]` `[claude code]` `[moderado]`
-- [ ] `ingestor/embedder.py` — sentence-transformers `all-MiniLM-L6-v2` `[código]` `[claude code]`
-- [ ] `ingestor/qdrant_uploader.py` — tenacity `[código]` `[claude code]`
-- [ ] `ingestor/neo4j_uploader.py` — tenacity, labels separados: NPC/Companion/Entity `[código]` `[claude code]`
-- [ ] `main.py` — pipeline completo linha de comando, roda ingestão e query `[código]` `[claude code]` `[moderado]`
+### Implementação — Ordem de prioridade
+
+| # | Arquivo | Status | Ferramenta |
+|---|---|---|---|
+| 1 | `ingestor/pdf_reader.py` — PyMuPDF, structlog | 🔴 | `[claude code]` `[roteiro]` |
+| 2 | `ingestor/schema_converter.py` — Groq llama-3.3-70b | ✅ Criado | `[claude code]` |
+| ⚠️ | `ingestor/gemini_converter.py` | DEPRECATED | Remover Fase 2 |
+| 3 | `ingestor/chunker.py` — chunks semânticos | 🔴 | `[claude code]` `[moderado]` |
+| 4 | `ingestor/embedder.py` — sentence-transformers | 🔴 | `[claude code]` |
+| 5 | `ingestor/qdrant_uploader.py` — tenacity | 🔴 | `[claude code]` |
+| 6 | `main.py` + `query_test.py` — pipeline completo | 🔴 | `[claude code]` `[moderado]` |
+| 7 | `ingestor/neo4j_uploader.py` — labels NPC/Companion/Entity | 🔴 não bloqueia | `[claude code]` |
+| 8 | `ingestor/parser.py` — validação schema v1.1 | 🔴 não bloqueia | `[claude code]` `[moderado]` |
+
+> `neo4j_uploader.py` e `parser.py` não bloqueiam o marco — pipeline funciona sem eles.
 
 ### Ingestão de Regras (paralelo ao módulo)
 - [ ] Baixar `5e-bits/5e-database` — filtrar: spells, conditions, classes, equipment `[código]` `[claude code]`
