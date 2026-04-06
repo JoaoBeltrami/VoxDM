@@ -150,7 +150,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 > 🟡 Carga moderada — Claude Code para os complexos, Codespaces manual para os diretos
 > **Roda em paralelo com Fase 0** — Codespaces não depende de GPU local
 
-**Marco:** query "onde está Strahd?" retorna chunks corretos do módulo
+**Marco:** query "onde está Bjorn?" retorna chunks corretos do módulo
 
 ### Setup de monitoramento
 - [x] Configurar LangSmith no `.env` → tracing ativo *(03/04)*
@@ -185,12 +185,11 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `make test` passando verde `[revisão]` `[claude.ai ou claude code]` `[leve]`
 
 ### Validação
-- [ ] Rodar pipeline com `modulo_teste/modulo_teste_v1.1.json` `[revisão]` `[roteiro]` `[claude.ai]` `[moderado]`
+- [ ] Rodar pipeline com `modulo_teste/modulo_teste.json` `[revisão]` `[roteiro]` `[claude.ai]` `[moderado]`
 - [ ] Confirmar chunks no Qdrant Cloud dashboard *(sem Claude)*
 - [ ] Confirmar entidades e relações no Neo4j Browser *(sem Claude)*
 - [ ] LangSmith mostrando latência por etapa `[revisão]` `[claude.ai]` `[leve]`
-- [ ] Rodar pipeline com Curse of Strahd PDF — local, sem câmera, nunca commitar `[roteiro]`
-- [ ] Query "onde está Strahd?" retornando chunks corretos ← **marco** `[revisão]` `[claude.ai]` `[leve]`
+- [ ] Query "onde está Bjorn?" retornando chunks corretos ← **marco** `[revisão]` `[claude.ai]` `[leve]`
 
 ---
 
@@ -254,7 +253,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] Qodo: gerar testes para `context_builder.py` *(Qodo)*
 - [ ] LangSmith: verificar distribuição real de tokens pelas 3 camadas `[revisão]` `[claude.ai]` `[moderado]`
 - [ ] Streamlit: gráficos de latência e memória funcionando `[revisão]` `[claude.ai]` `[leve]`
-- [ ] **Sessão de 1h do Curse of Strahd — gravar para o canal** ← **marco crítico** `[roteiro]`
+- [ ] **Sessão de 1h com "Os Filhos de Valdrek" — gravar para o canal** ← **marco crítico** `[roteiro]`
 
 ---
 

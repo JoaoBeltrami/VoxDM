@@ -49,7 +49,8 @@ Siga as convenções descritas aqui sem exceção.
 | Frontend | Next.js 14 + Vercel free tier |
 | Python | 3.12.x |
 | Embeddings | sentence-transformers (`all-MiniLM-L6-v2`) |
-| Módulo de teste | `modulo_teste/` — conteúdo original, usado nas gravações da Fase 1. Curse of Strahd: rodar localmente, nunca commitar PDF, nunca mostrar texto em tela |
+| Módulo de trabalho | `modulo_teste/modulo_teste.json` — "Os Filhos de Valdrek" (original). Único módulo até engine validada |
+| Curse of Strahd | Adiado — copyright. Retomar quando engine funcionar em produção |
 | Idiomas | PT-BR e EN simultâneos com detecção automática |
 | Arquitetura de memória | Working / Episodic / Semantic |
 | Gerenciador de pacotes | `uv` |
@@ -130,7 +131,7 @@ VoxDM é uma engine de narração de RPG de mesa por voz, controlada 100% por fa
 - Mantém estado emocional de NPCs entre falas
 
 **Escopo inicial:**
-- Primeiro módulo: Curse of Strahd (D&D 5e)
+- Primeiro módulo: "Os Filhos de Valdrek" (original, sem copyright)
 - Engine genérica: aceita qualquer módulo no VoxDM Schema v1.1
 - Custo de operação: zero
 - Latência alvo: menos de 2 segundos por resposta completa
@@ -470,7 +471,7 @@ Schema padronizado para representar qualquer módulo de RPG. O pipeline de inges
 ## 5. Pipeline de Ingestão — Fase 1
 
 ```
-PDF (Curse of Strahd)
+modulo_teste.json / PDF do módulo
       ↓
 PyMuPDF — extração de texto por página
       ↓
@@ -487,7 +488,7 @@ Qdrant Cloud — armazena chunks + embeddings
 Neo4j AuraDB — armazena entidades e relações (labels: NPC, Companion, Entity)
 ```
 
-**Marco da Fase 1 — módulo:** query "onde está Strahd?" retorna chunks corretos do módulo.
+**Marco da Fase 1 — módulo:** query "onde está Bjorn?" retorna chunks corretos do módulo.
 
 ### Pipeline de Regras (paralelo ao de módulo)
 

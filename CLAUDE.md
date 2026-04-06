@@ -82,7 +82,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Frontend | Next.js 14 |
 | Exposição de rede | Cloudflare Tunnel |
 | Schema | VoxDM Schema v1.1 — companions/entities separados de npcs, secrets centralizado |
-| Módulo de teste | `modulo_teste/modulo_teste_v1.1.json` — "Os Filhos de Valdrek" (original) |
+| Módulo de trabalho | `modulo_teste/modulo_teste.json` — "Os Filhos de Valdrek" (original) — único módulo usado até engine funcionar |
+| Curse of Strahd | Adiado — copyright. Retomar só quando engine estiver validada |
 | Configuração | `pydantic-settings` em `config.py` |
 | Dashboard debug | Streamlit — `dashboard.py` na raiz |
 | Documentação | Docstrings robustos no código + registro compacto neste CLAUDE.md |
@@ -123,6 +124,10 @@ NÃO aceitar diff sem ler    → revisar cada arquivo gerado
 # Memória
 NÃO cortar Working Memory   → prioridade máxima, nunca cortada
 NÃO pular fases             → Fase 3 antes de 5, sempre
+
+# Copyright
+NÃO usar Curse of Strahd    → copyright. Só "Os Filhos de Valdrek" até engine pronta
+NÃO usar material licenciado → apenas SRD aberto (5e-bits/5e-database)
 
 # Segurança
 NÃO expor /debug/* em prod  → proteger com settings.debug
