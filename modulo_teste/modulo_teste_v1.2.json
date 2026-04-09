@@ -1,0 +1,923 @@
+{
+  "_meta": {
+    "schema_version": "1.2",
+    "converted_by": "Claude Opus 4.6",
+    "conversion_date": "2026-04-09",
+    "source_document": "Os Filhos de Valdrek — Módulo de Teste VoxDM v1.0",
+    "migration_notes": [
+      "v1.0 → v1.2: companions separados de npcs (Soren, Gharen, Fael)",
+      "v1.0 → v1.2: Vyrmathax movida para entities",
+      "v1.0 → v1.2: Mundr permanece em npcs (dialoga, negocia, tem personalidade completa)",
+      "v1.0 → v1.2: honesty, disposition, political_allegiance adicionados a npcs/companions",
+      "v1.0 → v1.2: secrets reestruturados com lie_content, min_trust_level, trigger_condition composto",
+      "v1.0 → v1.2: relationships individuais consolidados em edges[] top-level",
+      "v1.0 → v1.2: factions com reputation_thresholds",
+      "v1.0 → v1.2: quests com stages e on_complete",
+      "v1.0 → v1.2: items com owner e unlock_conditions",
+      "v1.0 → v1.2: locations com state_variants",
+      "REVISÃO MANUAL NECESSÁRIA: honesty de cada NPC, lie_content dos secrets, weights das edges"
+    ]
+  },
+
+  "module": {
+    "id": "os-filhos-de-valdrek",
+    "name": "Os Filhos de Valdrek",
+    "system": "D&D 5e",
+    "language": "pt-BR",
+    "_ext": {
+      "level": 3,
+      "tone": "dark fantasy",
+      "setting": "wasteland bárbara",
+      "player_count": "solo + 1 NPC companheiro",
+      "language_support": ["pt-BR", "en"]
+    }
+  },
+
+  "locations": [
+    {
+      "id": "wasteland",
+      "name": "A Wasteland",
+      "description": "Região sem nome oficial — cada vila a chama diferente. Solo seco e rochoso com vegetação rasteira resistente. Temperaturas extremas: calor abrasador de dia, frio cortante à noite. Tempestades de areia e cinza vulcânica periódicas vindas do norte. Formações rochosas irregulares no leste, gargantas vulcânicas no norte, planície aberta no centro. Fauna hostil: worgs, hienas gigantes, escorpiões, e os carniçais da cinza.",
+      "connections": ["tharnvik", "kaelmund", "drevamor", "acampamento-sem-vila"],
+      "npcs": [],
+      "atmosphere": "Desolação com beleza brutal. O céu é sempre grande demais. O horizonte treme de calor. À noite, as estrelas parecem mais perto porque não há nada entre elas e você. O vento carrega cinza fina que entra nos olhos e nos pulmões. Uma terra que não perdoa, mas que pertence a quem não desiste."
+    },
+    {
+      "id": "tharnvik",
+      "name": "Tharnvik",
+      "description": "Vila do Norte — 'Os que falam com fogo'. Assentamento nas bordas de gargantas vulcânicas ativas. Construções de pedra escura basáltica — tudo parece fortaleza mesmo quando não é. Fogueiras de carvite (mineral local que queima azul) iluminam a vila à noite. Ar permanentemente seco, cinza fina no vento constante. Cheiro de enxofre. Guerreiros jovens fazem rito de passagem descendo às gargantas — a marca de cinza no rosto é ganho permanente.",
+      "connections": ["wasteland", "gargantas-vulcanicas"],
+      "npcs": ["bjorn-tharnsson", "runa-tharnsdottir", "halvard-o-cinza", "yrsa-a-curandeira"],
+      "atmosphere": "Calor constante. Cinza no ar. Tudo é pedra escura e fogo azul. As pessoas falam alto porque o vento das gargantas abafa tudo. Energia nervosa permanente — como viver na borda de um vulcão, literalmente. O orgulho é a moeda mais valiosa.",
+      "state_variants": [
+        {
+          "trigger_condition": {
+            "operator": "AND",
+            "conditions": [
+              {"type": "quest_stage", "target": "a-verdade-enterrada", "value": "verdade-revelada-publicamente"}
+            ]
+          },
+          "description": "A vila ferve de raiva. Guerreiros se reúnem em grupos tensos. O nome de Tharn — antes símbolo de orgulho — agora carrega a sombra de cumplicidade com um tirano. Bjorn fala menos e os punhos ficam mais cerrados."
+        }
+      ]
+    },
+    {
+      "id": "gargantas-vulcanicas",
+      "name": "Gargantas Vulcânicas",
+      "description": "Complexo de gargantas e cavernas subterrâneas abaixo de Tharnvik. Calor extremo, gases vulcânicos, escuridão profunda. Rito de passagem de Tharnvik ocorre aqui. Nas profundezas mora Vyrmathax — território dela, não de Tharnvik. A fronteira não está marcada, mas todos sabem onde fica.",
+      "connections": ["tharnvik"],
+      "npcs": [],
+      "atmosphere": "Escuridão cortada por lava distante. Cheiro de enxofre concentrado. O chão treme às vezes. Não é silêncio — é o barulho da terra respirando. Quem desce sente que a wasteland acima é segura em comparação."
+    },
+    {
+      "id": "kaelmund",
+      "name": "Kaëlmund",
+      "description": "Vila do Leste — 'Os que carregam pedra'. Construída entre formações rochosas naturais que funcionam como muralhas. Passagens estreitas que dois homens bloqueiam. Casas parcialmente escavadas na rocha, telhados que são lajes de pedra natural. Vista de longe, Kaëlmund parece parte da paisagem. A forja de Torvin nunca para.",
+      "connections": ["wasteland", "formacoes-rochosas"],
+      "npcs": ["senna-kaeldottir", "torvin-kaelsson", "liiv", "edda-a-velha"],
+      "atmosphere": "Sombras longas entre rochas. Ecos que carregam vozes por caminhos inesperados. Sempre fresco — as formações bloqueiam o sol parte do dia. O som dominante é de martelos em metal. Há uma tranquilidade que pode ser reconfortante ou claustrofóbica, dependendo de quem visita.",
+      "state_variants": [
+        {
+          "trigger_condition": {
+            "operator": "SINGLE",
+            "conditions": [
+              {"type": "quest_stage", "target": "o-pacto-rachado", "value": "pacto-colapsou"}
+            ]
+          },
+          "description": "Sem a proteção dos Grothmar, a vila vive em alerta permanente. Vigias dobrados nas passagens. A forja de Torvin agora produz mais armas que ferramentas. O silêncio entre as rochas não é mais tranquilo — é tenso."
+        }
+      ]
+    },
+    {
+      "id": "formacoes-rochosas",
+      "name": "Formações Rochosas — Território Grothmar",
+      "description": "Formações rochosas irregulares ao redor de Kaëlmund onde o clã Grothmar habita. Passagens e caminhos que humanos conhecem mas os gigantes dominam. O espaço entre as pedras grandes tem escala diferente — feito para criaturas Grandes. Liiv conhece cada passagem.",
+      "connections": ["kaelmund"],
+      "npcs": ["mundr"],
+      "atmosphere": "Escala errada. As rochas são grandes demais. Os sons ecoam diferente. Há marcas que não são ferramentas humanas — entalhes de dedos que têm o tamanho de um antebraço. Uma presença que não ameaça, mas que lembra que você é pequeno aqui."
+    },
+    {
+      "id": "drevamor",
+      "name": "Drevamor",
+      "description": "Vila Central — 'Os que guardam'. Posicionada no centro da região, entre as duas outras vilas. A mais estruturada das três, com arquivo de registros escritos e rudimento de escola. O globo translúcido do Cajado de Valdrek cobre o centro — o salão comunal e as casas ao redor. Quem mora na periferia está fora da proteção: hierarquia interna não-oficial criada por isso.",
+      "connections": ["wasteland", "tharnvik", "kaelmund"],
+      "npcs": ["aldric-drevasson", "maren-drevadottir", "dalla-drevadottir", "osmund-o-exilado"],
+      "atmosphere": "A única vila que parece uma vila. Casas com telhado. Crianças brincando. Um gato dormindo em cima de um muro. A normalidade é quase estranha depois de atravessar a wasteland. Mas o globo brilhando suavemente sobre o centro lembra que essa normalidade tem prazo de validade. O ar dentro do globo é perceptivelmente mais limpo.",
+      "state_variants": [
+        {
+          "trigger_condition": {
+            "operator": "AND",
+            "conditions": [
+              {"type": "quest_stage", "target": "a-verdade-enterrada", "value": "verdade-revelada-publicamente"}
+            ]
+          },
+          "description": "O orgulho quieto de Drevamor se transformou em vergonha. Os artefatos não foram confiados por mérito — foram dados ao mais inofensivo. A vila está dividida: alguns querem entregar tudo, outros se agarram ao cajado como última defesa contra o caos que a revelação trouxe."
+        }
+      ]
+    },
+    {
+      "id": "acampamento-sem-vila",
+      "name": "Acampamento dos Sem-Vila",
+      "description": "Não é um local fixo. Brennan e 20-30 seguidores acampam em pontos diferentes da wasteland, nunca no mesmo lugar por mais de uma semana. Quando encontrado: tendas de couro, fogueira central, vigias em turnos. Sem luxo, sem símbolo, sem bandeira. A ausência de identidade visual é intencional.",
+      "connections": ["wasteland"],
+      "npcs": ["brennan-sem-vila"],
+      "atmosphere": "Funcional e espartano. Nada que não seja necessário. Sem marcas de vila. O que identifica o acampamento é o que falta — nenhum símbolo, nenhuma insígnia. A fogueira central é o único ponto de calor numa wasteland fria. Todo mundo aqui escolheu estar aqui."
+    }
+  ],
+
+  "npcs": [
+    {
+      "id": "bjorn-tharnsson",
+      "name": "Bjorn Tharnsson",
+      "role": "lider-de-tharnvik",
+      "personality": "Inteligente o suficiente para ser perigoso. Cultiva a imagem de bárbaro burro porque subestimação é vantagem. Calculista por trás da brutalidade aparente. Ama Tharnvik genuinamente, mas confunde proteção com controle. Não quer destruir as outras vilas — quer que reconheçam Tharnvik como dominante.",
+      "knowledge": [
+        "Sabe que Vyrmathax existe e que a dívida pode ser cobrada — mas nunca testou",
+        "Sabe que o pacto de Kaëlmund com os gigantes é frágil e custoso",
+        "NÃO sabe que Runa troca cartas com Senna de Kaëlmund",
+        "NÃO sabe que Soren encontrou Dalla de Drevamor"
+      ],
+      "speech_style": "Direto, frases curtas, voz que carrega naturalmente. Metáforas de fogo e combate. Nunca pede — declara. Exemplo: 'Não estou perguntando.' Pausa antes de frases importantes, como se pesando o peso delas.",
+      "honesty": 0.4,
+      "disposition": "hostile",
+      "political_allegiance": "os-tharn",
+      "_ext": {
+        "race": "humano",
+        "age": 44,
+        "appearance": "Alto, largo, cicatrizes visíveis no rosto e braços. Marca de cinza ritual nas duas bochechas — desceu às gargantas duas vezes. Barba ruiva curta, sempre aparada. Olhos que avaliam antes de responder.",
+        "motivation": "Tomar os artefatos de Drevamor — especialmente o Cajado, que neutralizaria a fraqueza defensiva de Tharnvik. Estabelecer Tharnvik como vila dominante."
+      }
+    },
+    {
+      "id": "runa-tharnsdottir",
+      "name": "Runa Tharnsdottir",
+      "role": "comandante-guarda-gargantas",
+      "personality": "Leal a Tharnvik, não necessariamente a Bjorn. Vê o irmão caminhando para um confronto que pode destruir tudo. Pragmática — não é pacifista, mas quer sobrevivência, não glória. Vê o suficiente para agir em segredo.",
+      "knowledge": [
+        "Sabe como Tharnvik luta — posições, forças e fraquezas completas",
+        "Acha que a aliança com Vyrmathax é uma bomba-relógio que nunca foi testada",
+        "Mantém correspondência secreta com Senna de Kaëlmund — usa para inteligência, mas há respeito real"
+      ],
+      "speech_style": "Medida, precisa. Fala menos que Bjorn. Cada palavra é escolhida. Quando faz uma pergunta, já sabe metade da resposta. Nenhuma palavra desperdiçada — se Runa faz uma observação, é porque importa.",
+      "honesty": 0.6,
+      "disposition": "neutral",
+      "political_allegiance": "os-tharn",
+      "_ext": {
+        "race": "humana",
+        "age": 38,
+        "appearance": "Mesma estrutura do irmão, mais ágil. Cabelo ruivo trançado apertado. Marca de cinza na testa — desceu às gargantas uma vez. Armadura de couro reforçado com placas de basalto.",
+        "motivation": "Proteger Tharnvik de um confronto que pode destruí-la. Manter o canal com Kaëlmund como seguro contra catástrofe."
+      }
+    },
+    {
+      "id": "halvard-o-cinza",
+      "name": "Halvard, o Cinza",
+      "role": "conselheiro-militar-tharnvik",
+      "personality": "Calmo, econômico com palavras, letal quando necessário. Vive entre humanos há décadas e quase esqueceu o que é ser goliath. Sua lealdade é a Tharnvik — não a Bjorn. Se Bjorn fizer algo que ameace a vila, Halvard se oporia. Distinção que nunca precisou ser testada, mas existe.",
+      "knowledge": [
+        "Lutou nas três últimas escaramuças entre as vilas — conhece as táticas de todos os lados",
+        "Conhece Osmund pessoalmente — foram companheiros de armas antes da saída de Osmund",
+        "Sabe que Bjorn é mais inteligente do que finge ser — e que isso é preocupante",
+        "Acha que Osmund fez a escolha certa saindo de Tharnvik — nunca diria isso a Bjorn"
+      ],
+      "speech_style": "Mínimo. Frases de três palavras quando possível. Quando usa uma frase longa, todo mundo para pra ouvir. Sotaque goliath residual em palavras específicas — vogais mais abertas, consoantes mais percussivas. O silêncio dele é tão comunicativo quanto as palavras.",
+      "honesty": 0.9,
+      "disposition": "neutral",
+      "political_allegiance": "os-tharn",
+      "_ext": {
+        "race": "goliath",
+        "age": 60,
+        "appearance": "Enorme mesmo para um goliath. Pele acinzentada — origem do apelido, não a cinza vulcânica. Marcas de clã goliath desbotadas no crânio raspado. Claudicação leve no joelho direito — ferimento antigo.",
+        "motivation": "Proteger Tharnvik. Lealdade à vila, não ao líder."
+      }
+    },
+    {
+      "id": "yrsa-a-curandeira",
+      "name": "Yrsa, a Curandeira",
+      "role": "curandeira-voz-da-paz-tharnvik",
+      "personality": "Não tem interesse em política, mas as pessoas a ouvem. Curou todo mundo em Tharnvik em algum momento — isso lhe dá autoridade que nenhum cargo daria. Acha que a guerra entre as vilas é suicídio coletivo. Se alguém começar um movimento de paz em Tharnvik, ele passaria por Yrsa.",
+      "knowledge": [
+        "Sabe que as vilas são mais parecidas do que diferentes — as pessoas, não os líderes",
+        "Comunica-se com Edda de Kaëlmund por ervas e presentes via comerciantes",
+        "Já tratou feridos das três vilas — sabe o custo humano do conflito em carne viva"
+      ],
+      "speech_style": "Gentil mas firme. Fala como avó que não aceita desculpa. Exemplo: 'Senta, bebe isso, e me conta o que realmente aconteceu.' Usa provérbios da wasteland. Nunca levanta a voz — não precisa.",
+      "honesty": 0.95,
+      "disposition": "friendly",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "humana",
+        "age": 55,
+        "appearance": "Baixa, mãos fortes de quem trabalha com ervas. Cabelo grisalho solto. Cheiro permanente de camomila, alecrim, e algo amargo que ninguém identifica. Olhos gentis que ficam duros quando alguém fala em guerra.",
+        "motivation": "Paz. Não lidera facção, mas é o nó que qualquer facção pacifista precisaria."
+      }
+    },
+    {
+      "id": "senna-kaeldottir",
+      "name": "Senna Kaëldottir",
+      "role": "lider-de-kaelmund",
+      "personality": "Pragmática ao ponto de parecer fria. Mantém o pacto com os gigantes funcionando por pura diplomacia e contabilidade. Não é cruel, mas é capaz de decisões que parecem cruéis de fora. Ama Liiv com uma ferocidade que contradiz toda a frieza — é o único ponto onde a máscara cai.",
+      "knowledge": [
+        "Sabe o custo exato do pacto com os Grothmar — e que está ficando insustentável",
+        "Troca cartas com Runa de Tharnvik — usa para inteligência, mas há respeito real",
+        "Sabe que Bjorn é mais inteligente do que finge",
+        "NÃO sabe da profundidade real da amizade entre Liiv e Mundr"
+      ],
+      "speech_style": "Precisa, econômica, nunca emotiva em público. Frases completas e bem construídas — pensa antes de falar. Em privado com Liiv, a voz muda completamente — fica suave, quente, quase irreconhecível. Contraste deliberado que o jogador pode testemunhar.",
+      "honesty": 0.5,
+      "disposition": "neutral",
+      "political_allegiance": "os-kael",
+      "_ext": {
+        "race": "humana",
+        "age": 34,
+        "appearance": "Magra, postura impecável, cabelo escuro em coque funcional. Rosto que não entrega nada — poker face natural. Veste-se de forma prática mas limpa.",
+        "motivation": "Segurança. Se tivesse o Cajado, não dependeria dos Grothmar. A Crônica poderia reabrir fronteiras injustas."
+      }
+    },
+    {
+      "id": "torvin-kaelsson",
+      "name": "Torvin Kaëlsson",
+      "role": "ferreiro-mediador-kaelmund",
+      "personality": "Deveria ter sido o líder, mas recusou e é feliz assim. Querido por todos — inclusive por primos de outras vilas que vêm encomendar armas. É o rosto da ideia de que sangue é sangue, não importa a vila. Não faz discursos — faz espadas pra todo mundo e trata todo mundo igual.",
+      "knowledge": [
+        "Sabe o que cada vila encomenda — portanto sabe quem está se armando e em que ritmo",
+        "Conhece gente nas três vilas pessoalmente — único NPC com esse alcance",
+        "Sabe que a irmã é mais solitária do que demonstra"
+      ],
+      "speech_style": "Aberto, caloroso, ri fácil. Metáforas de forja e metal em tudo. Exemplo: 'Pressão demais e o aço trinca — vale pra espada e pra gente.' Pausa para examinar o trabalho enquanto fala — raramente olha direto nos olhos, mas está ouvindo tudo.",
+      "honesty": 0.95,
+      "disposition": "friendly",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "humano",
+        "age": 38,
+        "appearance": "Braços enormes, mãos sempre queimadas. Rosto aberto e simpático — oposto da irmã. Avental de couro sobre roupa simples. Suor permanente. Sorriso fácil.",
+        "motivation": "Paz pelo exemplo. Comércio cria laços que política destrói."
+      }
+    },
+    {
+      "id": "liiv",
+      "name": "Liiv",
+      "role": "variavel-narrativa-kaelmund",
+      "personality": "Curiosa, corajosa de um jeito inconsequente, amigável com qualquer criatura. Não entende a política das vilas — pra ela, todo mundo é gente. Fez amizade com Mundr visitando a gigante escondida. Faz perguntas que os adultos evitam.",
+      "knowledge": [
+        "Conhece as passagens rochosas melhor que qualquer adulto — brinca nelas desde que anda",
+        "Sabe falar com Mundr — aprendeu a falar mais alto e mais devagar",
+        "NÃO sabe que a amizade com Mundr é uma variável política explosiva"
+      ],
+      "speech_style": "Perguntas diretas sem filtro social. Fala rápido quando animada. Exemplo: 'Por que vocês odeiam os primos de Tharnvik?' Sem malícia — genuinamente não entende. As perguntas dela chegam aonde os adultos não vão.",
+      "honesty": 1.0,
+      "disposition": "friendly",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "humana",
+        "age": 12,
+        "appearance": "Magra, cabelo escuro como a mãe, olhos brilhantes de curiosidade. Joelhos sempre ralados. Roupa prática surrada.",
+        "motivation": "Explorar. Entender. Perguntar por quê até alguém responder de verdade.",
+        "narrative_weight": "ALTA — ameaça a Liiv ativa Mundr independente do pacto econômico"
+      }
+    },
+    {
+      "id": "edda-a-velha",
+      "name": "Edda, a Velha",
+      "role": "matriarca-memoria-kaelmund",
+      "personality": "A memória viva do que foi perdido. Lembra de quando as três vilas faziam festivais juntas. Não quer guerra, mas também não quer que Kaëlmund dependa dos gigantes para sempre. Não dá opiniões — conta histórias. Quem ouve entende.",
+      "knowledge": [
+        "Conhece genealogias de todas as três vilas — sabe quem é primo de quem",
+        "Lembra de histórias que os líderes atuais nunca ouviram sobre os primeiros anos",
+        "Comunica-se com Yrsa de Tharnvik — amigas de juventude, prova viva de que paz é possível"
+      ],
+      "speech_style": "Lenta, deliberada, com pausas longas que fazem as pessoas se inclinarem pra ouvir. Conta histórias em vez de dar opiniões. Exemplo: 'Quando eu era criança, minha mãe levava mel pra tia em Tharnvik. O mel era o mesmo. As abelhas não sabiam de fronteiras.'",
+      "honesty": 0.9,
+      "disposition": "friendly",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "humana",
+        "age": 78,
+        "appearance": "Pequena, curvada, olhos absolutamente lúcidos. Mãos com artrite que ainda costuram. Cabelo branco coberto com lenço de lã. Senta perto do fogo o dia inteiro.",
+        "motivation": "Solução humana para um problema humano. Mandar os gigantes embora. Resolver entre primos."
+      }
+    },
+    {
+      "id": "mundr",
+      "name": "Mundr",
+      "role": "lider-cla-grothmar",
+      "personality": "Surpreendentemente astuta para uma gigante das colinas. Entende nuances mesmo com gramática simplificada. Gosta genuinamente de alguns humanos de Kaëlmund. Mas negócio é negócio — é capaz de separar afeto de transação com clareza que humanos raramente têm.",
+      "knowledge": [
+        "Sabe que o pacto está ficando caro pra Kaëlmund — percebeu as porções menores de comida",
+        "Conhece a wasteland como nenhum humano — vive há séculos nela",
+        "Sabe que dragões não negociam — acha a situação de Tharnvik com Vyrmathax patética",
+        "A amizade com Liiv é mais profunda do que Senna sabe"
+      ],
+      "speech_style": "Comum quebrado, frases curtas, sem artigos. Exemplo: 'Pequena traz mel. Mundr gosta. Pacto é pacto. Mel é mel. Coisas diferentes.' Lenta, cada palavra pesa. Quando fica em silêncio, é porque está pensando — não é hesitação.",
+      "honesty": 0.85,
+      "disposition": "neutral",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "gigante das colinas",
+        "age": "~200 anos (estimativa)",
+        "appearance": "Enorme. Pele cor de barro seco, cabelo cinza grosso preso com cordas. Peles de animais em escala gigante. Um olho mais fechado que o outro — velhice ou ferimento antigo.",
+        "motivation": "O pacto funciona. Enquanto Kaëlmund pagar, Mundr protege. Se parar, para.",
+        "stat_block": "Hill Giant — CR 5 cada, 5 no total"
+      }
+    },
+    {
+      "id": "aldric-drevasson",
+      "name": "Aldric Drevasson",
+      "role": "lider-de-drevamor",
+      "personality": "O oposto de Bjorn: calmo, deliberado, completamente paralisado pela responsabilidade. Sabe que os artefatos são a única razão pela qual Drevamor não foi invadida. Não consegue decidir se deveria compartilhar (arriscando a defesa) ou segurar (perpetuando o conflito). Motor narrativo central — NPC que o jogador pode empurrar em qualquer direção.",
+      "knowledge": [
+        "Sabe usar o Cajado — é o portador com attunement atual",
+        "Sabe que a Crônica contém verdades que podem mudar tudo — mas não leu tudo. Fael leu mais",
+        "Sabe que Bjorn o odeia e que Senna o considera fraco",
+        "NÃO sabe tudo que Fael descobriu na Crônica — isso é uma bomba"
+      ],
+      "speech_style": "Pausado, reflexivo, às vezes se perde no meio da frase reconsiderando. Faz perguntas retóricas sem responder. Exemplo: 'Se eu entregar o cajado e Tharnvik nos atacar depois... mas se eu não entregar e o conflito nunca acabar...' A voz de alguém que pensa demais e age de menos.",
+      "honesty": 0.85,
+      "disposition": "neutral",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humano",
+        "age": 50,
+        "appearance": "Magro, olhos cansados, cabelo castanho com muito grisalho. Mãos de quem segura livros, não espadas. Postura ligeiramente curvada — o peso é metafórico mas parece físico.",
+        "motivation": "Não causar dano. O problema é que a inação também causa dano — e ele sabe disso."
+      }
+    },
+    {
+      "id": "maren-drevadottir",
+      "name": "Maren Drevadottir",
+      "role": "esposa-aldric-ancora-drevamor",
+      "personality": "Mais resoluta que o marido. Acha que os artefatos devem ficar em Drevamor, ponto final. Pragmatismo puro sem filosofia. Percebe que Fael está mudando e se preocupa. Vê a fibra que Dalla tem e o marido não.",
+      "knowledge": [
+        "Percebe que Fael está mudando — não sabe o segredo, mas sente o peso nele",
+        "Sabe que a segurança de Drevamor depende inteiramente dos artefatos e nada mais",
+        "Conhece os limites de Aldric melhor do que qualquer pessoa"
+      ],
+      "speech_style": "Direta, sem rodeio. Corta Aldric quando ele se enrola. Exemplo: 'Aldric, a pergunta não é o que é justo. A pergunta é quem sobrevive.' Frases que fecham discussões, não abrem.",
+      "honesty": 0.9,
+      "disposition": "neutral",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humana",
+        "age": 47,
+        "appearance": "Robusta, prática, cabelo castanho preso. Mãos que carregam, constroem, resolvem. Rosto que sorri pouco mas transmite segurança quando sorri.",
+        "motivation": "Proteger a família e a vila. Sem filosofia, sem dúvida."
+      }
+    },
+    {
+      "id": "dalla-drevadottir",
+      "name": "Dalla Drevadottir",
+      "role": "guerreira-drevamor",
+      "personality": "O que Drevamor não produz: uma guerreira. Treina com mercenários de passagem. Tem mais em comum com os jovens de Tharnvik do que com a própria família. Respeita o pai mas se frustra com a passividade. Quer fazer algo — qualquer coisa.",
+      "knowledge": [
+        "Sabe lutar melhor do que qualquer jovem de Drevamor",
+        "Encontrou Soren de Tharnvik duas vezes em território neutro",
+        "Sabe que a vila depende do Cajado e pouco mais para defesa"
+      ],
+      "speech_style": "Impaciente, direta. Corta conversa longa sem cerimônia. Exemplo: 'Tá, mas o que a gente *faz*?' A ênfase sempre cai na ação, nunca na análise.",
+      "honesty": 0.9,
+      "disposition": "neutral",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humana",
+        "age": 17,
+        "appearance": "Atlética, ombros largos. Cabelo castanho curto — cortou porque atrapalhava o treino. Mãos calejadas de espada. Roupa de treino mais que roupa de vila.",
+        "motivation": "Ação. Qualquer ação. A passividade de Drevamor a sufoca."
+      }
+    },
+    {
+      "id": "osmund-o-exilado",
+      "name": "Osmund, o Exilado",
+      "role": "comandante-milicia-drevamor",
+      "personality": "Veio de Tharnvik, saiu por discordância com Bjorn. Quando Bjorn quis atacar Drevamor, Osmund disse não. Foi chamado de traidor e saiu para a vila que deveria ter atacado. Carrega remorso e propósito ao mesmo tempo. Sabe que Drevamor nunca confiará nele completamente.",
+      "knowledge": [
+        "Sabe exatamente como Tharnvik luta — posições, táticas, fraquezas. Isso o torna valioso e suspeito ao mesmo tempo",
+        "Sabe que Bjorn eventualmente vai tentar algo — a questão é quando, não se",
+        "Ninguém em Drevamor confia totalmente nele — a suspeita é racional e ele entende isso"
+      ],
+      "speech_style": "Amargo mas controlado. Fala de Bjorn com ódio contido que nunca explode em público. Exemplo: 'Bjorn acha que força é a resposta. Bjorn nunca perguntou qual é a pergunta.' Pesa cada palavra sobre Tharnvik — sabe que qualquer coisa que diga pode ser interpretada como espionagem.",
+      "honesty": 0.8,
+      "disposition": "neutral",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humano",
+        "age": 45,
+        "appearance": "Corpo de guerreiro de Tharnvik — largo, marcado. Sem a marca de cinza — raspou quando saiu. Armadura mista, metade Tharnvik, metade improvisada. Rosto fechado de quem carrega remorso.",
+        "motivation": "Provar que lealdade não é obediência cega. Proteger Drevamor, que o acolheu."
+      }
+    },
+    {
+      "id": "brennan-sem-vila",
+      "name": "Brennan Sem-Vila",
+      "role": "lider-faccao-sem-vila",
+      "personality": "Carismático, idealista com métodos pragmáticos. Filho de comerciante élfica — nunca foi 100% aceito em lugar nenhum. Viver entre dois mundos é a base da identidade dele. Quer reunificar as vilas forçando a verdade à tona. Não é vilão — genuinamente acredita que a verdade une. Mas está disposto a causar caos no curto prazo para criar paz no longo.",
+      "knowledge": [
+        "Sabe que Fael leu algo na Crônica que muda tudo — mas não sabe todos os detalhes",
+        "Tem informantes em todas as três vilas — primos cansados do conflito",
+        "Sabe que Vyrmathax e os Grothmar são bombas que explodem se o conflito escalar",
+        "NÃO sabe a verdade completa — precisa de Fael ou do acesso à Crônica"
+      ],
+      "speech_style": "Persuasivo, apaixonado. Faz perguntas que levam a conclusões sem parecer manipulação. Exemplo: 'Você é primo de todos eles. Eu também sou. Então por que estamos fingindo que somos de povos diferentes?' Nunca ordena — convence. Tom de alguém que acredita no que diz.",
+      "honesty": 0.7,
+      "disposition": "friendly",
+      "political_allegiance": "os-sem-vila",
+      "_ext": {
+        "race": "half-elf",
+        "age": 35,
+        "appearance": "Traços élficos sutis — orelhas levemente pontudas, olhos amendoados, feições finas. Pele bronzeada, cabelo castanho claro comprido e solto. Roupa de viajante sem insígnia de nenhuma vila — ausência deliberada.",
+        "motivation": "Reunificação forçada. Expor a verdade. Redistribuir os artefatos.",
+        "followers": "20-30 seguidores de sangue de todas as três vilas — leais à ideia, não à pessoa"
+      }
+    }
+  ],
+
+  "companions": [
+    {
+      "id": "soren-tharnsson",
+      "name": "Soren Tharnsson",
+      "companion_for": "tharnvik",
+      "role": "guerreiro-herdeiro-tharnvik",
+      "personality": "Impetuoso, leal, desesperado para provar que merece a liderança. Tem a intensidade da juventude sem a sabedoria que vem depois. Criado ouvindo que Tharnvik é a mais forte — nunca questionou isso. A ausência da marca de cinza o corrói.",
+      "knowledge": [
+        "Sabe lutar — treinado desde criança",
+        "NÃO sabe política nem diplomacia",
+        "NÃO sabe que a tia Runa troca cartas com Kaëlmund",
+        "Encontrou Dalla de Drevamor em território neutro duas vezes — sabe que os pais ficariam furiosos"
+      ],
+      "speech_style": "Entusiasmado demais. Fala rápido. Interrompe. Usa superlativos constantemente. Exemplo: 'Isso vai ser a maior batalha que essa wasteland já viu.' Insegurança disfarçada de bravata — quando o jogador pressiona, a confiança racha.",
+      "honesty": 0.8,
+      "disposition": "friendly",
+      "political_allegiance": "os-tharn",
+      "_ext": {
+        "race": "humano",
+        "age": 19,
+        "appearance": "Alto como o pai, mas ainda não preencheu a estrutura. Sem marca de cinza — ainda não desceu às gargantas. Cabelo ruivo como a família.",
+        "motivation": "Provar ao pai que é digno. Qualquer missão é uma chance de mostrar valor.",
+        "class_mechanic": "Berserker — stat block simplificado, nível 3"
+      }
+    },
+    {
+      "id": "gharen-braco-de-ferro",
+      "name": "Gharen Braço-de-Ferro",
+      "companion_for": "kaelmund",
+      "role": "comandante-guarda-kaelmund",
+      "personality": "Pragmático, leal à missão, não à líder. Sabe que é politicamente dispensável — o de fora, o sem sangue Valdrek. Não se importa. Veio de fora, casou em Kaëlmund, ficou porque é um bom lugar pra viver. Experiência de mercenário num mundo que só conhece guerreiros tribais.",
+      "knowledge": [
+        "Experiência de mercenário — já lutou em contextos muito piores que essa wasteland",
+        "Conhece formações e táticas que as vilas não usam — emboscadas, guerra de atrito",
+        "Sabe que não ter sangue Valdrek é fraqueza e força: sem lealdade familiar, sem ponto cego"
+      ],
+      "speech_style": "Seco, prático. Não desperdiça palavras. Humor negro ocasional e inesperado. Exemplo: 'Já vi gente morrer por menos. Também já vi gente viver por menos.' Fala como alguém que calculou os riscos e fez as pazes com eles.",
+      "honesty": 0.85,
+      "disposition": "neutral",
+      "political_allegiance": "os-kael",
+      "_ext": {
+        "race": "half-orc",
+        "age": 42,
+        "appearance": "Porte imponente. Pele esverdeada, mandíbula proeminente, caninos inferiores visíveis. Cicatriz longa do queixo ao pescoço. Armadura mista — parte Torvin, parte saqueada.",
+        "motivation": "Proteger a vila que o aceitou. Sem filosofia, sem lealdade familiar.",
+        "class_mechanic": "Fighter — stat block simplificado, nível 3"
+      }
+    },
+    {
+      "id": "fael-drevasson",
+      "name": "Fael Drevasson",
+      "companion_for": "drevamor",
+      "role": "estudioso-leitor-da-cronica",
+      "personality": "O único nas três vilas que sabe ler a Crônica com fluência. Leu coisas que não contou ao pai — incluindo a verdade completa sobre o cisma. Dividido entre revelar e proteger. A verdade poderia unir as vilas — ou destruí-las. Resistência a Brennan é real, mas a tentação também é.",
+      "knowledge": [
+        "SABE A VERDADE DO CISMA COMPLETA: Kaëla envenenou Valdrek, forçou a divisão, direcionou os artefatos para Dreva deliberadamente para evitar tirania",
+        "Sabe que a Crônica não mente — mostra o que aconteceu sem edição",
+        "Sabe que Brennan quer recrutar ele e que isso o tentou mais do que admite"
+      ],
+      "speech_style": "Articulado mas nervoso. Começa frases seguro e perde confiança no meio quando percebe as implicações. Exemplo: 'A Crônica mostra que... bem, mostra muitas coisas. Depende de onde você olha.' Pausas frequentes — não é hesitação, é cálculo.",
+      "honesty": 0.5,
+      "disposition": "friendly",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humano",
+        "age": 22,
+        "appearance": "Magro como o pai, olhos mais vivos. Manchas de tinta nos dedos. Cabelo castanho despenteado. Túnica com bolsos para pergaminhos.",
+        "motivation": "A verdade. Mas medo das consequências da verdade.",
+        "class_mechanic": "Lore Bard — stat block simplificado, nível 3"
+      }
+    }
+  ],
+
+  "entities": [
+    {
+      "id": "vyrmathax",
+      "name": "Vyrmathax",
+      "type": "criatura",
+      "description": "Dragoa vermelha adulta habitando o complexo de cavernas sob as Gargantas Vulcânicas. Não é aliada nem inimiga de Tharnvik — é uma força da natureza com memória. A 'dívida' pelo ovo salvo três gerações atrás nunca foi definida. Ninguém confirmou que o acordo funciona. CR 17 — muito acima do nível do jogador. Não aparece diretamente a menos que o conflito escale ao nível nuclear. Presença inferida: calor crescente nas profundezas, cheiro de enxofre intenso, sombra enorme no teto das gargantas.",
+      "abilities": [
+        "Adult Red Dragon — CR 17",
+        "Memória de três gerações",
+        "Controle total das gargantas vulcânicas",
+        "NÃO é para ser enfrentada — é para ser temida"
+      ]
+    }
+  ],
+
+  "factions": [
+    {
+      "id": "os-tharn",
+      "name": "Os Tharn — Facção de Tharnvik",
+      "goal": "Supremacia militar. Tomar os artefatos de Drevamor. Estabelecer Tharnvik como vila dominante.",
+      "members": ["bjorn-tharnsson", "runa-tharnsdottir", "soren-tharnsson", "halvard-o-cinza"],
+      "reputation_thresholds": {
+        "hostile": -20,
+        "neutral": 0,
+        "friendly": 20,
+        "allied": 50
+      }
+    },
+    {
+      "id": "os-kael",
+      "name": "Os Kaël — Facção de Kaëlmund",
+      "goal": "Segurança e autonomia. Obter o Cajado para não depender dos gigantes. Usar a Crônica para renegociar fronteiras.",
+      "members": ["senna-kaeldottir", "torvin-kaelsson", "gharen-braco-de-ferro"],
+      "reputation_thresholds": {
+        "hostile": -20,
+        "neutral": 0,
+        "friendly": 20,
+        "allied": 50
+      }
+    },
+    {
+      "id": "os-dreva",
+      "name": "Os Dreva — Facção de Drevamor",
+      "goal": "Manter o status quo. Guardar os artefatos. Evitar conflito.",
+      "members": ["aldric-drevasson", "maren-drevadottir", "fael-drevasson", "dalla-drevadottir", "osmund-o-exilado"],
+      "reputation_thresholds": {
+        "hostile": -20,
+        "neutral": 0,
+        "friendly": 20,
+        "allied": 50
+      }
+    },
+    {
+      "id": "os-sem-vila",
+      "name": "Os Sem-Vila — 4ª Facção",
+      "goal": "Reunificação forçada. Expor a verdade do cisma. Redistribuir os artefatos.",
+      "members": ["brennan-sem-vila"],
+      "reputation_thresholds": {
+        "hostile": -15,
+        "neutral": 0,
+        "friendly": 15,
+        "allied": 40
+      }
+    }
+  ],
+
+  "items": [
+    {
+      "id": "cajado-de-valdrek",
+      "name": "Cajado de Valdrek",
+      "description": "Gera um globo de força translúcido do diâmetro do salão comunal de Drevamor. Bloqueia completamente a passagem de humanoides — armas, projéteis, criaturas Médias ou menores não atravessam. Criaturas Grandes ou maiores podem quebrá-lo com esforço sustentado — tempo suficiente para evacuação. 10 charges, recarrega 1d6+4 ao amanhecer. 1 charge por hora de ativação. Ação para ativar, ação bônus para desativar. O globo é estacionário — não se move com o portador. Raio: 30 pés a partir do cajado (cajado deve ficar no centro).",
+      "properties": ["requires_attunement", "staff", "10_charges", "force_globe"],
+      "owner": "aldric-drevasson",
+      "unlock_conditions": null
+    },
+    {
+      "id": "cronica-de-valdrek",
+      "name": "A Crônica de Valdrek",
+      "description": "Livro grosso, encadernado em couro de criatura não identificada. Quem abre e pensa num evento da história da linhagem Valdrek vê o evento se desenrolar nas páginas como ilusão animada — imagens se movem, vozes sussurram, o cenário se forma. Requer attunement + 1 minuto de concentração por consulta. Não mente — mostra o que aconteceu, sem edição. Não mostra futuro nem presente — apenas passado da linhagem. Quem não tem sangue Valdrek (nem diluído) vê páginas em branco. Uso prolongado (>1 hora contínua) causa exaustão nível 1.",
+      "properties": ["requires_attunement", "wondrous_item", "valdrek_blood_required"],
+      "owner": null,
+      "unlock_conditions": {
+        "operator": "SINGLE",
+        "conditions": [
+          {"type": "player_action", "target": "ter-sangue-valdrek-e-attunement", "value": null}
+        ]
+      }
+    },
+    {
+      "id": "lamina-espectral",
+      "name": "A Lâmina Espectral",
+      "description": "Espada de força permanente. Translúcida, sem fio visível, corta como aço encantado. O portador pode manifestá-la e dissipá-la à vontade. Quando manifestada, brilha com cor que reflete o alinhamento do portador: dourado (bom), vermelho (mau), azul (neutro). Longsword +1, tipo de dano Force. Ação bônus para manifestar ou dissipar. Enquanto dissipada: não pesa, não ocupa espaço, indetectável. Ignora resistência a dano não-mágico.",
+      "properties": ["requires_attunement", "longsword_plus_1", "force_damage", "concealable"],
+      "owner": null,
+      "unlock_conditions": null
+    }
+  ],
+
+  "quests": [
+    {
+      "id": "combate-inicial",
+      "name": "Combate Inicial — Carniçais da Cinza",
+      "description": "Jogador voltando para sua vila encontra 2-3 Carniçais da Cinza na planície rochosa. Aquecer o jogador, testar pipeline de combate, estabelecer que a wasteland é perigosa.",
+      "stages": [
+        {
+          "id": "encontro-carnicais",
+          "description": "Sobreviver ao encontro com 2-3 Carniçais da Cinza na planície rochosa. Terreno com formações que servem de cobertura — teste de posicionamento.",
+          "on_complete": []
+        }
+      ]
+    },
+    {
+      "id": "o-reconhecimento",
+      "name": "Quest 1 — O Reconhecimento",
+      "description": "Líder da vila do jogador pede informação sobre as outras vilas. Visitar uma ou ambas, coletar informação, entender intenções. O jogador é primo de todo mundo — reconhecido, bem-vindo com desconfiança.",
+      "stages": [
+        {
+          "id": "receber-missao",
+          "description": "O líder da vila do jogador pede reconhecimento. Companheiro designado.",
+          "on_complete": []
+        },
+        {
+          "id": "visitar-vilas",
+          "description": "Visitar uma ou ambas as vilas. Cada vila tenta recrutar ou manipular.",
+          "on_complete": []
+        },
+        {
+          "id": "reportar",
+          "description": "O jogador decide o que reportar e para quem. Informação é poder, omissão é escolha.",
+          "on_complete": [
+            {"effect": "faction_standing_change", "target": "os-tharn", "value": 0},
+            {"effect": "faction_standing_change", "target": "os-kael", "value": 0},
+            {"effect": "faction_standing_change", "target": "os-dreva", "value": 0}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "o-pacto-rachado",
+      "name": "Quest 2 — O Pacto Rachado",
+      "description": "Mundr exige pagamento maior. Senna não pode pagar. Negociar com Mundr, encontrar recurso alternativo, ou resolver a dependência de outra forma. Liiv está no meio — Mundr protege Liiv independente do pacto.",
+      "stages": [
+        {
+          "id": "crise-pagamento",
+          "description": "Mundr exige pagamento maior. Senna convoca ajuda.",
+          "on_complete": []
+        },
+        {
+          "id": "negociar-mundr",
+          "description": "Negociar diretamente com Mundr. Ameaçar a relação entre Liiv e Mundr tem consequências imprevisíveis.",
+          "on_complete": []
+        },
+        {
+          "id": "pacto-resolvido",
+          "description": "Pacto renegociado, nova fonte de pagamento encontrada, ou Senna busca o Cajado como alternativa.",
+          "on_complete": [
+            {"effect": "faction_standing_change", "target": "os-kael", "value": 10}
+          ]
+        },
+        {
+          "id": "pacto-colapsou",
+          "description": "Pacto colapsa. Grothmar retiram proteção. Kaëlmund vulnerável.",
+          "on_complete": [
+            {"effect": "location_state_change", "target": "kaelmund", "value": "pacto-colapsou"},
+            {"effect": "npc_disposition_change", "target": "senna-kaeldottir", "value": "fearful"},
+            {"effect": "faction_standing_change", "target": "os-kael", "value": -10}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a-verdade-enterrada",
+      "name": "Quest 3 — A Verdade Enterrada",
+      "description": "Fael revela ao jogador que a Crônica contém algo que muda tudo. Decidir o que fazer com a verdade. Brennan quer a mesma informação. Aldric não sabe o que Fael encontrou.",
+      "stages": [
+        {
+          "id": "fael-revela",
+          "description": "Fael confia ao jogador que a Crônica contém uma verdade que muda tudo sobre o cisma.",
+          "on_complete": []
+        },
+        {
+          "id": "ler-cronica",
+          "description": "Jogador usa a Crônica para ver a verdade completa: Kaëla envenenou Valdrek, forçou a divisão, direcionou artefatos para Dreva.",
+          "on_complete": []
+        },
+        {
+          "id": "verdade-revelada-publicamente",
+          "description": "A verdade é revelada a todas as vilas. Tharnvik em fúria, Kaëlmund em crise, Drevamor humilhada, Sem-Vila vindicados.",
+          "on_complete": [
+            {"effect": "location_state_change", "target": "tharnvik", "value": "verdade-revelada-publicamente"},
+            {"effect": "location_state_change", "target": "drevamor", "value": "verdade-revelada-publicamente"},
+            {"effect": "npc_disposition_change", "target": "bjorn-tharnsson", "value": "hostile"},
+            {"effect": "npc_disposition_change", "target": "aldric-drevasson", "value": "fearful"},
+            {"effect": "faction_standing_change", "target": "os-sem-vila", "value": 20}
+          ]
+        },
+        {
+          "id": "verdade-revelada-parcial",
+          "description": "A verdade é revelada apenas a um líder. Efeitos dependem de qual líder recebeu a informação.",
+          "on_complete": []
+        },
+        {
+          "id": "verdade-entregue-brennan",
+          "description": "Jogador entrega a informação a Brennan. Os Sem-Vila ganham poder de barganha imediato.",
+          "on_complete": [
+            {"effect": "faction_standing_change", "target": "os-sem-vila", "value": 15},
+            {"effect": "npc_disposition_change", "target": "brennan-sem-vila", "value": "friendly"}
+          ]
+        }
+      ]
+    }
+  ],
+
+  "secrets": [
+    {
+      "id": "verdade-do-cisma",
+      "content": "Valdrek não morreu em combate. Nos últimos anos tornou-se tirano. Kaëla o envenenou com veneno lento que imitava febre. Forçou a divisão em três como trava contra tirania. Direcionou os artefatos para Dreva deliberadamente — o mais pacífico usaria o Cajado para defender, nunca dominar. Kaëla se matou com o mesmo composto 8 anos depois. Nota: 'Quem mata o pai para salvar o povo não merece governar o povo.'",
+      "lie_content": null,
+      "known_by": ["fael-drevasson"],
+      "min_trust_level": 3,
+      "trigger_condition": {
+        "operator": "OR",
+        "conditions": [
+          {"type": "item_used", "target": "cronica-de-valdrek", "value": null},
+          {"type": "npc_trust", "target": "fael-drevasson", "value": 3}
+        ]
+      }
+    },
+    {
+      "id": "runa-corresponde-senna",
+      "content": "Runa mantém correspondência secreta com Senna de Kaëlmund. Usa como seguro contra catástrofe — se Bjorn atacar e perder, Runa quer garantir que Tharnvik não seja destruída em retaliação. Há respeito mútuo real.",
+      "lie_content": "Runa nega qualquer contato com Kaëlmund. 'Não conheço Senna pessoalmente. Por que conheceria?'",
+      "known_by": ["runa-tharnsdottir", "senna-kaeldottir"],
+      "min_trust_level": 2,
+      "trigger_condition": {
+        "operator": "OR",
+        "conditions": [
+          {"type": "player_action", "target": "interceptar-mensageiro-entre-vilas", "value": null},
+          {"type": "npc_trust", "target": "runa-tharnsdottir", "value": 2},
+          {"type": "npc_trust", "target": "senna-kaeldottir", "value": 2}
+        ]
+      }
+    },
+    {
+      "id": "soren-dalla-encontros",
+      "content": "Soren de Tharnvik e Dalla de Drevamor se encontraram duas vezes em território neutro. Tensão entre rivalidade e atração. Os pais ficariam furiosos se soubessem.",
+      "lie_content": "Soren fica vermelho e nega tudo. 'Eu não tenho nada a ver com gente de Drevamor.'",
+      "known_by": ["soren-tharnsson", "dalla-drevadottir"],
+      "min_trust_level": 1,
+      "trigger_condition": {
+        "operator": "OR",
+        "conditions": [
+          {"type": "player_action", "target": "ver-soren-e-dalla-juntos", "value": null},
+          {"type": "npc_trust", "target": "soren-tharnsson", "value": 1},
+          {"type": "npc_trust", "target": "dalla-drevadottir", "value": 1}
+        ]
+      }
+    },
+    {
+      "id": "halvard-aprova-osmund",
+      "content": "Halvard acha que Osmund fez a escolha certa saindo de Tharnvik quando Bjorn quis atacar Drevamor. Nunca diria isso a Bjorn.",
+      "lie_content": null,
+      "known_by": ["halvard-o-cinza"],
+      "min_trust_level": 2,
+      "trigger_condition": {
+        "operator": "AND",
+        "conditions": [
+          {"type": "npc_trust", "target": "halvard-o-cinza", "value": 2},
+          {"type": "player_action", "target": "perguntar-sobre-osmund", "value": null}
+        ]
+      }
+    }
+  ],
+
+  "rules_references": [
+    {
+      "id": "carnicais-da-cinza",
+      "name": "Carniçais da Cinza",
+      "stat_block_base": "Ghoul",
+      "cr": 1,
+      "count_encounter": "2-3",
+      "reflavor": "Pele cinzenta, olhos opacos, cheiro de cinza queimada em vez de podridão. Reanimados por energia residual antiga no subsolo da wasteland.",
+      "notes": "Encontro de abertura — testar pipeline de combate"
+    },
+    {
+      "id": "cla-grothmar",
+      "name": "Clã Grothmar — Gigantes das Colinas",
+      "stat_block_base": "Hill Giant",
+      "cr": 5,
+      "count": 5,
+      "notes": "Liderados por Mundr. Juntos são uma força que nenhuma vila enfrenta sozinha. Ativados apenas se o pacto colapsar."
+    },
+    {
+      "id": "vyrmathax-stat",
+      "name": "Vyrmathax — Ameaça Nuclear",
+      "stat_block_base": "Adult Red Dragon",
+      "cr": 17,
+      "notes": "Muito acima do nível do jogador. NÃO é para ser enfrentada — é para ser temida. Aparece apenas se conflito escalar ao nível nuclear."
+    }
+  ],
+
+  "edges": [
+    {"from": "bjorn-tharnsson", "to": "runa-tharnsdottir", "type": "ally", "weight": 0.6},
+    {"from": "bjorn-tharnsson", "to": "soren-tharnsson", "type": "mentor", "weight": 0.5},
+    {"from": "bjorn-tharnsson", "to": "halvard-o-cinza", "type": "ally", "weight": 0.7},
+    {"from": "bjorn-tharnsson", "to": "aldric-drevasson", "type": "rival", "weight": -0.8},
+    {"from": "bjorn-tharnsson", "to": "senna-kaeldottir", "type": "rival", "weight": -0.3},
+    {"from": "bjorn-tharnsson", "to": "osmund-o-exilado", "type": "rival", "weight": -0.9},
+    {"from": "bjorn-tharnsson", "to": "yrsa-a-curandeira", "type": "ally", "weight": 0.3},
+
+    {"from": "runa-tharnsdottir", "to": "bjorn-tharnsson", "type": "ally", "weight": 0.4},
+    {"from": "runa-tharnsdottir", "to": "senna-kaeldottir", "type": "ally", "weight": 0.5},
+    {"from": "runa-tharnsdottir", "to": "halvard-o-cinza", "type": "mentor", "weight": 0.8},
+
+    {"from": "soren-tharnsson", "to": "bjorn-tharnsson", "type": "ally", "weight": 0.7},
+    {"from": "soren-tharnsson", "to": "dalla-drevadottir", "type": "rival", "weight": 0.3},
+
+    {"from": "halvard-o-cinza", "to": "bjorn-tharnsson", "type": "ally", "weight": 0.6},
+    {"from": "halvard-o-cinza", "to": "osmund-o-exilado", "type": "ally", "weight": 0.7},
+    {"from": "halvard-o-cinza", "to": "soren-tharnsson", "type": "guard", "weight": 0.5},
+
+    {"from": "yrsa-a-curandeira", "to": "edda-a-velha", "type": "ally", "weight": 0.9},
+    {"from": "yrsa-a-curandeira", "to": "bjorn-tharnsson", "type": "ally", "weight": 0.3},
+
+    {"from": "senna-kaeldottir", "to": "torvin-kaelsson", "type": "ally", "weight": 0.4},
+    {"from": "senna-kaeldottir", "to": "liiv", "type": "guard", "weight": 1.0},
+    {"from": "senna-kaeldottir", "to": "runa-tharnsdottir", "type": "ally", "weight": 0.5},
+    {"from": "senna-kaeldottir", "to": "aldric-drevasson", "type": "rival", "weight": -0.2},
+    {"from": "senna-kaeldottir", "to": "bjorn-tharnsson", "type": "rival", "weight": -0.3},
+    {"from": "senna-kaeldottir", "to": "gharen-braco-de-ferro", "type": "ally", "weight": 0.3},
+    {"from": "senna-kaeldottir", "to": "mundr", "type": "ally", "weight": 0.4},
+
+    {"from": "torvin-kaelsson", "to": "senna-kaeldottir", "type": "ally", "weight": 0.4},
+
+    {"from": "liiv", "to": "senna-kaeldottir", "type": "ally", "weight": 0.9},
+    {"from": "liiv", "to": "mundr", "type": "ally", "weight": 0.9},
+
+    {"from": "gharen-braco-de-ferro", "to": "senna-kaeldottir", "type": "ally", "weight": 0.3},
+    {"from": "gharen-braco-de-ferro", "to": "torvin-kaelsson", "type": "ally", "weight": 0.5},
+    {"from": "gharen-braco-de-ferro", "to": "halvard-o-cinza", "type": "ally", "weight": 0.4},
+
+    {"from": "edda-a-velha", "to": "yrsa-a-curandeira", "type": "ally", "weight": 0.9},
+    {"from": "edda-a-velha", "to": "senna-kaeldottir", "type": "mentor", "weight": 0.5},
+
+    {"from": "mundr", "to": "liiv", "type": "guard", "weight": 0.9},
+    {"from": "mundr", "to": "senna-kaeldottir", "type": "ally", "weight": 0.4},
+    {"from": "mundr", "to": "vyrmathax", "type": "rival", "weight": -0.6},
+
+    {"from": "aldric-drevasson", "to": "maren-drevadottir", "type": "ally", "weight": 0.8},
+    {"from": "aldric-drevasson", "to": "fael-drevasson", "type": "ally", "weight": 0.6},
+    {"from": "aldric-drevasson", "to": "dalla-drevadottir", "type": "guard", "weight": 0.6},
+    {"from": "aldric-drevasson", "to": "bjorn-tharnsson", "type": "rival", "weight": -0.7},
+    {"from": "aldric-drevasson", "to": "senna-kaeldottir", "type": "ally", "weight": 0.3},
+    {"from": "aldric-drevasson", "to": "osmund-o-exilado", "type": "ally", "weight": 0.4},
+
+    {"from": "maren-drevadottir", "to": "aldric-drevasson", "type": "ally", "weight": 0.8},
+    {"from": "maren-drevadottir", "to": "fael-drevasson", "type": "guard", "weight": 0.7},
+    {"from": "maren-drevadottir", "to": "dalla-drevadottir", "type": "ally", "weight": 0.7},
+
+    {"from": "fael-drevasson", "to": "aldric-drevasson", "type": "ally", "weight": 0.6},
+    {"from": "fael-drevasson", "to": "brennan-sem-vila", "type": "ally", "weight": 0.2},
+    {"from": "fael-drevasson", "to": "dalla-drevadottir", "type": "ally", "weight": 0.8},
+
+    {"from": "dalla-drevadottir", "to": "soren-tharnsson", "type": "rival", "weight": 0.3},
+    {"from": "dalla-drevadottir", "to": "fael-drevasson", "type": "ally", "weight": 0.8},
+
+    {"from": "osmund-o-exilado", "to": "bjorn-tharnsson", "type": "rival", "weight": -0.8},
+    {"from": "osmund-o-exilado", "to": "halvard-o-cinza", "type": "ally", "weight": 0.7},
+    {"from": "osmund-o-exilado", "to": "aldric-drevasson", "type": "ally", "weight": 0.4},
+
+    {"from": "brennan-sem-vila", "to": "fael-drevasson", "type": "ally", "weight": 0.4},
+    {"from": "brennan-sem-vila", "to": "torvin-kaelsson", "type": "ally", "weight": 0.5},
+    {"from": "brennan-sem-vila", "to": "aldric-drevasson", "type": "rival", "weight": -0.3},
+
+    {"from": "bjorn-tharnsson", "to": "os-tharn", "type": "member_of", "weight": 1.0},
+    {"from": "runa-tharnsdottir", "to": "os-tharn", "type": "member_of", "weight": 0.7},
+    {"from": "soren-tharnsson", "to": "os-tharn", "type": "member_of", "weight": 0.9},
+    {"from": "halvard-o-cinza", "to": "os-tharn", "type": "member_of", "weight": 0.6},
+
+    {"from": "senna-kaeldottir", "to": "os-kael", "type": "member_of", "weight": 1.0},
+    {"from": "gharen-braco-de-ferro", "to": "os-kael", "type": "member_of", "weight": 0.7},
+
+    {"from": "aldric-drevasson", "to": "os-dreva", "type": "member_of", "weight": 1.0},
+    {"from": "fael-drevasson", "to": "os-dreva", "type": "member_of", "weight": 0.7},
+    {"from": "osmund-o-exilado", "to": "os-dreva", "type": "member_of", "weight": 0.5},
+
+    {"from": "brennan-sem-vila", "to": "os-sem-vila", "type": "member_of", "weight": 1.0},
+
+    {"from": "bjorn-tharnsson", "to": "tharnvik", "type": "located_in", "weight": 1.0},
+    {"from": "runa-tharnsdottir", "to": "tharnvik", "type": "located_in", "weight": 1.0},
+    {"from": "soren-tharnsson", "to": "tharnvik", "type": "located_in", "weight": 1.0},
+    {"from": "halvard-o-cinza", "to": "tharnvik", "type": "located_in", "weight": 1.0},
+    {"from": "yrsa-a-curandeira", "to": "tharnvik", "type": "located_in", "weight": 1.0},
+    {"from": "vyrmathax", "to": "gargantas-vulcanicas", "type": "located_in", "weight": 1.0},
+    {"from": "senna-kaeldottir", "to": "kaelmund", "type": "located_in", "weight": 1.0},
+    {"from": "torvin-kaelsson", "to": "kaelmund", "type": "located_in", "weight": 1.0},
+    {"from": "liiv", "to": "kaelmund", "type": "located_in", "weight": 1.0},
+    {"from": "gharen-braco-de-ferro", "to": "kaelmund", "type": "located_in", "weight": 1.0},
+    {"from": "edda-a-velha", "to": "kaelmund", "type": "located_in", "weight": 1.0},
+    {"from": "mundr", "to": "formacoes-rochosas", "type": "located_in", "weight": 1.0},
+    {"from": "aldric-drevasson", "to": "drevamor", "type": "located_in", "weight": 1.0},
+    {"from": "maren-drevadottir", "to": "drevamor", "type": "located_in", "weight": 1.0},
+    {"from": "fael-drevasson", "to": "drevamor", "type": "located_in", "weight": 1.0},
+    {"from": "dalla-drevadottir", "to": "drevamor", "type": "located_in", "weight": 1.0},
+    {"from": "osmund-o-exilado", "to": "drevamor", "type": "located_in", "weight": 1.0},
+    {"from": "brennan-sem-vila", "to": "acampamento-sem-vila", "type": "located_in", "weight": 1.0},
+
+    {"from": "aldric-drevasson", "to": "cajado-de-valdrek", "type": "owns", "weight": 1.0},
+
+    {"from": "fael-drevasson", "to": "verdade-do-cisma", "type": "knows_secret", "weight": 1.0},
+    {"from": "runa-tharnsdottir", "to": "runa-corresponde-senna", "type": "knows_secret", "weight": 1.0},
+    {"from": "senna-kaeldottir", "to": "runa-corresponde-senna", "type": "knows_secret", "weight": 1.0},
+    {"from": "soren-tharnsson", "to": "soren-dalla-encontros", "type": "knows_secret", "weight": 1.0},
+    {"from": "dalla-drevadottir", "to": "soren-dalla-encontros", "type": "knows_secret", "weight": 1.0},
+    {"from": "halvard-o-cinza", "to": "halvard-aprova-osmund", "type": "knows_secret", "weight": 1.0}
+  ]
+}

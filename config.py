@@ -11,14 +11,15 @@ class Settings(BaseSettings):
     LANGCHAIN_API_KEY: str
 
     # OPCIONAIS — têm default, não travam o boot
-    GEMINI_API_KEY: str = ""  # pendente — decisão no claude.ai
+    GEMINI_API_KEY: str = ""  # deprecated — free tier extinto
     NEO4J_USER: str = "neo4j"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"  # centralizado aqui conforme DIRETRIZES
     LANGCHAIN_TRACING_V2: bool = True
     LANGCHAIN_PROJECT: str = "voxdm"
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False
-    DEFAULT_MODULE_PATH: str = "./modulo_teste/modulo_teste_v1.1.json"
+    DEFAULT_MODULE_PATH: str = "./modulo_teste/modulo_teste_v1.2.json"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
