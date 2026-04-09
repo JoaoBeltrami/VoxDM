@@ -161,7 +161,7 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 |---|---|---|
 | `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | ✅ Criado |
 | `ingestor/gemini_converter.py` | DEPRECATED — substituído por schema_converter.py | ⚠️ Remover Fase 2 |
-| `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.1 via Groq | ✅ Criado |
+| `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) | ✅ v1.2 |
 | `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
 | `ingestor/parser.py` | Valida estrutura do schema v1.1 | 🔴 |
 | `ingestor/chunker.py` | Divide em chunks semânticos | 🔴 |
@@ -211,7 +211,8 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 
 | Documento | Quando consultar |
 |---|---|
-| `docs/VOXDM_PROJETO.md` | Arquitetura, schema v1.1 completo, stack técnica |
+| `docs/VOXDM_PROJETO.md` | Arquitetura, schema v1.2 completo, stack técnica |
+| `docs/DIRETRIZES_IMPLEMENTACAO.md` | Diretrizes técnicas por arquivo — ler antes de implementar |
 | `docs/VOXDM_CHECKLIST.md` | Tarefas abertas por fase, o que fazer hoje |
 | `.internal/VOXDM_LOG.md` | O que já foi feito, armadilhas encontradas, sessões |
 | `.internal/VOXDM_PONTE.md` | Ponte técnico↔conteúdo, condições de secrets, ganchos YouTube |
