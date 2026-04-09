@@ -211,7 +211,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `engine/pronunciation/dictionary.json` — Strahd, Barovia, Fireball, D&D + termos de Os Filhos de Valdrek `[código]` `[claude.ai]` `[leve]`
 
 ### Integração
-- [ ] Integrar `stt + tts + language` em loop completo `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]` ← **gancho: "Dei voz à minha IA ao vivo com Claude Code"**
+- [ ] Integrar `stt + tts + language` em loop completo `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
 - [ ] Implementar SSML para termos em idioma misto `[código]` `[claude.ai ou claude code]` `[moderado]`
 
 ### Validação
@@ -231,7 +231,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ### Memória
 - [ ] `engine/memory/working_memory.py` — dataclass completo `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] `engine/memory/context_builder.py` — 3 camadas + budget de tokens + lógica de secrets (ver PONTE seção 9) `[código]` `[claude code]` `[intenso]` — sessão dedicada, fechar ao terminar `[roteiro]` ← **gancho: "Como dei memória real à minha IA — ao vivo com Claude Code"**
+- [ ] `engine/memory/context_builder.py` — 3 camadas + budget de tokens + lógica de secrets (ver PONTE seção 9) `[código]` `[claude code]` `[intenso]` — sessão dedicada, fechar ao terminar `[roteiro]`
 - [ ] `engine/memory/qdrant_client.py` — tenacity `[código]` `[claude code]`
 - [ ] `engine/memory/neo4j_client.py` — tenacity `[código]` `[claude code]`
 - [ ] `engine/memory/episodic_memory.py` — inclui rastreamento de trust_level por NPC `[código]` `[claude.ai ou claude code]` `[moderado]`
@@ -240,12 +240,12 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 ### LLM e Prompts
 - [ ] `engine/llm/groq_client.py` — tenacity + fallback Ollama `[código]` `[claude code]`
 - [ ] `engine/llm/prompt_builder.py` `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] **`engine/llm/prompts/master_system.md`** `[planejamento]` `[claude.ai]` `[intenso]` — sessão dedicada, o mais importante do projeto `[roteiro]` ← **gancho: "Escrevi o cérebro da minha IA — o prompt que faz tudo funcionar"**
+- [ ] **`engine/llm/prompts/master_system.md`** `[planejamento]` `[claude.ai]` `[intenso]` — sessão dedicada, o mais importante do projeto `[roteiro]`
 - [ ] Rascunho de `combat.md` e `social.md` via Claude Code → refinar com Claude.ai `[código]` `[claude code]` depois `[revisão]` `[claude.ai]` `[moderado]`
 - [ ] **`engine/llm/prompts/session_eval.md`** `[planejamento]` `[claude.ai]` `[moderado]`
 
 ### Sessão e Debug
-- [ ] `engine/memory/session_writer.py` com avaliador de relevância `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]` ← **gancho: "Ensinei minha IA a decidir o que vale lembrar"**
+- [ ] `engine/memory/session_writer.py` com avaliador de relevância `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
 - [ ] `api/routes/debug.py` — endpoints `/debug/*` `[código]` `[claude code]`
 - [ ] `dashboard.py` — Streamlit consumindo endpoints de debug `[código]` `[claude.ai ou claude code]` `[moderado]` `[roteiro]`
 
@@ -265,7 +265,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 - [ ] `api/main.py` + `api/models/schemas.py` `[código]` `[claude code]`
 - [ ] Rotas: `session.py`, `campaign.py`, `character.py`, `inventory.py` `[código]` `[claude code]`
-- [ ] `api/websocket.py` com streaming de áudio `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]` ← **gancho: "Coloquei o VoxDM no browser — WebSocket ao vivo"**
+- [ ] `api/websocket.py` com streaming de áudio `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
 - [ ] Next.js 14 setup + `VoiceButton.jsx` + `SessionStatus.jsx` `[código]` `[claude.ai ou claude code]` `[moderado]`
 - [ ] `CharacterPanel.jsx` + `InventoryModal.jsx` `[código]` `[claude code]`
 - [ ] Configurar Graphite Agent no GitHub *(sem Claude)*
