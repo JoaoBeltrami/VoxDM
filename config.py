@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"  # centralizado aqui conforme DIRETRIZES
     LANGCHAIN_TRACING_V2: bool = True
     LANGCHAIN_PROJECT: str = "voxdm"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False
