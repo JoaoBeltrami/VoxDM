@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 6 de abril de 2026
+> Atualizado: 10 de abril de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,9 +13,9 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 0 marco batido.** Fase 1 em andamento em paralelo.
-- Fase 0 (setup local, GPU): config.py ✅, venv ✅, CUDA ✅, .env ✅, connections ✅. Falta: nvcc, Ollama, Cloudflare Tunnel.
-- Fase 1 (ingestão): schema_converter.py ✅. Restam: pdf_reader, parser, chunker, embedder, uploaders, rules_loader, main.py.
+**Fase 0 concluída (34/34).** Fase 1 em andamento.
+- Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
+- Fase 1 (ingestão): pdf_reader ✅, schema_converter ✅. Próximo: chunker.py.
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
