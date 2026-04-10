@@ -92,12 +92,13 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ---
 
-## Fase 0 — Setup de Ambiente ✅ MARCO BATIDO
-> Semana de 1-6 de abril de 2026 · 100% local · Requer PC com GPU
+## Fase 0 — Setup de Ambiente ✅ CONCLUÍDA
+> Semana de 1-10 de abril de 2026 · 100% local · Requer PC com GPU
 > 🟢 Carga leve no pool — maioria das tarefas não precisa do Claude Pro
 > **Nota:** Fase 1 roda em paralelo no estágio via Codespaces (sem GPU)
 
 **Marco:** `make test` roda sem erro + `torch.cuda.is_available()` retorna `True` + repositório no GitHub
+**Validação final:** 34/34 checks OK *(10/04)*
 
 ### Ambiente Python e GPU
 - [x] `uv venv --python 3.12 .venv` *(30/03)*
@@ -107,12 +108,13 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `uv pip install -r requirements.txt` *(30/03)*
 
 ### Modelos locais
-- [ ] Instalar Ollama → `ollama pull codestral` → `ollama pull llama3.1:8b` *(sem Claude)*
+- [x] Ollama instalado + `ollama pull llama3.1:8b` (4.9GB) + `ollama pull codestral` (12GB) *(10/04)*
 
 ### Configuração do projeto
 
 - [x] Verificar `config.py` — deve falhar explicitamente sem `.env` *(30/03 — validator adicionado)*
-- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `ingest-rules`, `debug`, `backup` *(30/03)*
+- [x] `config.py`: OLLAMA_BASE_URL + OLLAMA_MODEL adicionados *(10/04)*
+- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `ingest-rules`, `debug`, `backup`, `docs-sync` *(30/03 + 10/04)*
 - [x] Criar estrutura de pastas completa incluindo `tests/` *(30/03)*
 - [x] Criar `tests/conftest.py` com fixtures base *(30/03)*
 - [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
@@ -122,26 +124,28 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] Testar cada conexão: Groq OK, Qdrant OK, Neo4j OK, LangSmith OK *(31/03)* — Gemini: free tier extinto, substituído por Groq
 
 ### GitHub MCP
-- [ ] Gerar PAT no GitHub (Settings → Developer settings → Tokens) `[roteiro]`
+- [x] PAT gerado no GitHub *(10/04)*
 - [x] Claude Code instalado *(02/04)* `[roteiro]`
-- [ ] GitHub MCP configurado no Claude Code `[roteiro]`
-- [ ] `claude mcp list` confirmado
-- [ ] Loop teste: issue → código → commit via MCP `[revisão]` `[roteiro]`
+- [x] GitHub MCP configurado no Claude Code via `claude mcp add` *(10/04)*
+- [x] `claude mcp list` → Connected *(10/04)*
+- [x] Loop teste: issue #1 criada → fix → commit `ede4c63` → pushed *(10/04)*
 
 ### Infraestrutura
-- [ ] Cloudflare Tunnel: instalar `cloudflared`, autenticar, criar túnel com URL permanente `[roteiro]` `[claude.ai]` `[leve]`
-- [ ] Linear: criar board VoxDM com cards para todas as fases *(sem Claude)*
+- [ ] Cloudflare Tunnel: `cloudflared tunnel login` → criar túnel com URL permanente `[roteiro]` ⏳ precisa browser
+- [ ] Linear: criar board VoxDM com cards para todas as fases *(sem Claude — opcional)*
 
 ### Repositório
 
 - [x] Confirmar `.gitignore` cobrindo `.env`, `__pycache__`, `.venv`, PDFs *(30/03)*
 - [x] `git push` funcionando *(30/03)*
-- [x] `git grep "gsk_"` — nenhuma chave vazada confirmado *(30/03)*
+- [x] `git grep "gsk_"` — nenhuma chave vazada confirmado *(10/04)*
+- [x] `make docs-sync` → Google Drive `voxdm-docs/` sincronizado *(10/04)*
 
 ### Validação
 
-- [x] Confirmar `modulo_teste/modulo_teste_v1.1.json` no repositório *(26/03)*
-- [x] `make test` rodando verde ← **marco** *(31/03)*
+- [x] Confirmar `modulo_teste/modulo_teste_v1.2.json` no repositório *(26/03)*
+- [x] `make test` rodando verde — 7/7 ← **marco** *(31/03)*
+- [x] Validação completa 34/34 checks OK *(10/04)*
 
 ---
 
