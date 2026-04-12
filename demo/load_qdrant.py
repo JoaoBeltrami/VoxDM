@@ -12,10 +12,14 @@ Exemplo:
 
 import asyncio
 import json
+import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+# Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import structlog
 from qdrant_client import QdrantClient

@@ -12,9 +12,13 @@ Exemplo:
 
 import asyncio
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
+
+# Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import structlog
 from neo4j import AsyncGraphDatabase
@@ -49,7 +53,7 @@ def _props_escalares(obj: dict[str, Any]) -> dict[str, Any]:
 
 async def _limpar_banco(session: Any) -> None:
     """Apaga todos os nós e arestas após confirmação interativa."""
-    resposta = input("\n⚠️  Apagar TODO o banco Neo4j antes de carregar? [s/N] ").strip().lower()
+    resposta = input("\n[!] Apagar TODO o banco Neo4j antes de carregar? [s/N] ").strip().lower()
     if resposta != "s":
         log.info("limpeza_cancelada", motivo="usuário cancelou")
         raise SystemExit("Operação cancelada pelo usuário.")
