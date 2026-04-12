@@ -19,12 +19,19 @@ from typing import Any
 # Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import os
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import structlog
 from neo4j import AsyncGraphDatabase
 from qdrant_client import QdrantClient
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+import transformers
+transformers.logging.set_verbosity_error()
 from sentence_transformers import SentenceTransformer
 
 from config import settings

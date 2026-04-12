@@ -21,11 +21,18 @@ from typing import Any
 # Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import os
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import structlog
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from rich.console import Console
 from rich.table import Table
+import transformers
+transformers.logging.set_verbosity_error()
 from sentence_transformers import SentenceTransformer
 
 from config import settings
