@@ -13,7 +13,11 @@ Exemplo:
 import asyncio
 import sys
 import time
+from pathlib import Path
 from typing import Any
+
+# Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import structlog
 from neo4j import AsyncGraphDatabase
@@ -85,12 +89,13 @@ async def main() -> None:
     t = time.perf_counter()
     try:
         client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-        resultados = client.search(
+        resposta = client.query_points(
             collection_name=COLLECTION_NAME,
-            query_vector=vetor.tolist(),
+            query=vetor.tolist(),
             limit=TOP_K,
             with_payload=True,
         )
+        resultados = resposta.points
     except Exception as e:
         console.print(Panel(
             f"[bold red]Erro ao conectar no Qdrant:[/bold red] {e}",
