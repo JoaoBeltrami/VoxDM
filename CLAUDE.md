@@ -170,6 +170,13 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | 🔴 |
 | `main.py` | Pipeline completo linha de comando | 🔴 |
 
+### Demo (Scripts de Vídeo)
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `demo/load_neo4j.py` | Carrega módulo completo no Neo4j AuraDB (nós + arestas) | ✅ Criado |
+| `demo/load_qdrant.py` | Gera embeddings e faz upsert no Qdrant Cloud | ✅ Criado |
+| `demo/query_demo.py` | Demo RAG ao vivo: Qdrant → Neo4j → output rich (para YouTube) | ✅ Criado |
+
 ### Voz (Fase 2)
 | Arquivo | O que faz | Status |
 |---|---|---|
