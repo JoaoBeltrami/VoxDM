@@ -48,7 +48,7 @@ Siga as convenções descritas aqui sem exceção.
 | Backend | FastAPI + WebSocket |
 | Frontend | Next.js 14 + Vercel free tier |
 | Python | 3.12.x |
-| Embeddings | sentence-transformers (`all-MiniLM-L6-v2`) |
+| Embeddings | sentence-transformers (`paraphrase-multilingual-MiniLM-L12-v2`) |
 | Módulo de trabalho | `modulo_teste/modulo_teste.json` — "Os Filhos de Valdrek" (original). Único módulo até engine validada |
 | Curse of Strahd | Adiado — copyright. Retomar quando engine funcionar em produção |
 | Idiomas | PT-BR e EN simultâneos com detecção automática |

@@ -133,7 +133,7 @@ chunks = await chunker.split(schema)
 ### `engine/ingestion/embedder.py`
 **O que faz:** converte cada chunk de texto em um vetor numérico (embedding).
 
-**Por que essa escolha:** sentence-transformers `all-MiniLM-L6-v2` roda local, é rápido, e é bom o suficiente para português e inglês. Não precisa de API key e não tem custo por uso.
+**Por que essa escolha:** sentence-transformers `paraphrase-multilingual-MiniLM-L12-v2` roda local, é rápido, e é bom o suficiente para português e inglês. Não precisa de API key e não tem custo por uso.
 
 **Exemplo:**
 ```python

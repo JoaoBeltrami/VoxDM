@@ -77,7 +77,7 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Banco vetorial | Qdrant Cloud free tier |
 | Banco de grafos | Neo4j AuraDB free tier |
 | Banco estruturado | SQLite local via aiosqlite |
-| Embeddings | sentence-transformers `all-MiniLM-L6-v2` |
+| Embeddings | sentence-transformers `paraphrase-multilingual-MiniLM-L12-v2` |
 | Backend | FastAPI + WebSocket |
 | Frontend | Next.js 14 |
 | Exposição de rede | Cloudflare Tunnel |
@@ -165,7 +165,7 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
 | `ingestor/parser.py` | Valida estrutura do schema v1.2 | ✅ Criado |
 | `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) | ✅ Criado |
-| `ingestor/embedder.py` | Gera embeddings via sentence-transformers all-MiniLM-L6-v2 | ✅ Criado |
+| `ingestor/embedder.py` | Gera embeddings via sentence-transformers paraphrase-multilingual-MiniLM-L12-v2 | ✅ Criado |
 | `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud (UUID v5 determinístico) | ✅ Criado |
 | `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | ✅ Criado |
 | `main.py` | Pipeline completo linha de comando (--dry-run, --skip-neo4j, --skip-qdrant) | ✅ Criado |

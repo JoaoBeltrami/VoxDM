@@ -75,17 +75,17 @@ async def main() -> None:
     # ── Etapa 1: Embedding ────────────────────────────────────────────────────
     t = time.perf_counter()
     try:
-        modelo = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+        modelo = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device="cuda")
     except Exception:
         log.warning("cuda_indisponivel", fallback="cpu")
-        modelo = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+        modelo = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
 
     vetor = modelo.encode([query])[0]
     tempos["embedding"] = time.perf_counter() - t
     log.info("embedding_gerado", dimensoes=len(vetor), tempo_s=round(tempos["embedding"], 3))
 
     console.print(Panel(
-        f"[cyan]Modelo:[/cyan]    all-MiniLM-L6-v2\n"
+        f"[cyan]Modelo:[/cyan]    paraphrase-multilingual-MiniLM-L12-v2\n"
         f"[cyan]Dimensões:[/cyan] {len(vetor)}\n"
         f"[cyan]Tempo:[/cyan]     [yellow]{tempos['embedding']:.3f}s[/yellow]",
         title="[bold green]  EMBEDDING  [/bold green]",
