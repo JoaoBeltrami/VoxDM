@@ -13,9 +13,9 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 0 concluída (34/34).** Fase 1 em andamento.
+**Fase 0 concluída (34/34). Fase 1 concluída.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
-- Fase 1 (ingestão): pdf_reader ✅, schema_converter ✅. Próximo: chunker.py.
+- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Testes 32/32 OK.
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -81,8 +81,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Backend | FastAPI + WebSocket |
 | Frontend | Next.js 14 |
 | Exposição de rede | Cloudflare Tunnel |
-| Schema | VoxDM Schema v1.1 — companions/entities separados de npcs, secrets centralizado |
-| Módulo de trabalho | `modulo_teste/modulo_teste.json` — "Os Filhos de Valdrek" (original) — único módulo usado até engine funcionar |
+| Schema | VoxDM Schema v1.2 — companions/entities separados de npcs, secrets com content, top-level edges[] |
+| Módulo de trabalho | `modulo_teste/modulo_teste_v1.2.json` — "Os Filhos de Valdrek" (original) — único módulo usado até engine funcionar |
 | Curse of Strahd | Adiado — copyright. Retomar só quando engine estiver validada |
 | Configuração | `pydantic-settings` em `config.py` |
 | Dashboard debug | Streamlit — `dashboard.py` na raiz |
@@ -154,7 +154,7 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### Módulo de Teste
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `modulo_teste/modulo_teste_v1.1.json` | Módulo "Os Filhos de Valdrek" — schema v1.1 completo | ✅ Criado |
+| `modulo_teste/modulo_teste_v1.2.json` | Módulo "Os Filhos de Valdrek" — schema v1.2 completo | ✅ Criado |
 
 ### Ingestão (Fase 1)
 | Arquivo | O que faz | Status |
@@ -163,12 +163,14 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `ingestor/gemini_converter.py` | DEPRECATED — substituído por schema_converter.py | ⚠️ Remover Fase 2 |
 | `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) | ✅ v1.2 |
 | `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
-| `ingestor/parser.py` | Valida estrutura do schema v1.1 | 🔴 |
-| `ingestor/chunker.py` | Divide em chunks semânticos | 🔴 |
-| `ingestor/embedder.py` | Gera embeddings via sentence-transformers | 🔴 |
-| `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud | 🔴 |
-| `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | 🔴 |
-| `main.py` | Pipeline completo linha de comando | 🔴 |
+| `ingestor/parser.py` | Valida estrutura do schema v1.2 | ✅ Criado |
+| `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) | ✅ Criado |
+| `ingestor/embedder.py` | Gera embeddings via sentence-transformers all-MiniLM-L6-v2 | ✅ Criado |
+| `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud (UUID v5 determinístico) | ✅ Criado |
+| `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | ✅ Criado |
+| `main.py` | Pipeline completo linha de comando (--dry-run, --skip-neo4j, --skip-qdrant) | ✅ Criado |
+| `tests/test_parser.py` | 19 testes para parser.py | ✅ Criado |
+| `tests/test_chunker.py` | 13 testes para chunker.py | ✅ Criado |
 
 ### Demo (Scripts de Vídeo)
 | Arquivo | O que faz | Status |

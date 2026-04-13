@@ -149,8 +149,8 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ---
 
-## Fase 1 — Pipeline de Ingestão
-> Abril · Codespaces (estágio) + casa · Sem GPU necessária
+## Fase 1 — Pipeline de Ingestão ✅ CONCLUÍDA
+> Abril · *(13/04/2026)*
 > 🟡 Carga moderada — Claude Code para os complexos, Codespaces manual para os diretos
 > **Roda em paralelo com Fase 0** — Codespaces não depende de GPU local
 
@@ -166,12 +166,12 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 | 1 | `ingestor/pdf_reader.py` — PyMuPDF, structlog | 🔴 | `[claude code]` `[roteiro]` |
 | 2 | `ingestor/schema_converter.py` — Groq llama-3.3-70b | ✅ Criado | `[claude code]` |
 | ⚠️ | `ingestor/gemini_converter.py` | DEPRECATED | Remover Fase 2 |
-| 3 | `ingestor/chunker.py` — chunks semânticos | 🔴 | `[claude code]` `[moderado]` |
-| 4 | `ingestor/embedder.py` — sentence-transformers | 🔴 | `[claude code]` |
-| 5 | `ingestor/qdrant_uploader.py` — tenacity | 🔴 | `[claude code]` |
-| 6 | `main.py` + `query_test.py` — pipeline completo | 🔴 | `[claude code]` `[moderado]` |
-| 7 | `ingestor/neo4j_uploader.py` — labels NPC/Companion/Entity | 🔴 não bloqueia | `[claude code]` |
-| 8 | `ingestor/parser.py` — validação schema v1.1 | 🔴 não bloqueia | `[claude code]` `[moderado]` |
+| 3 | `ingestor/chunker.py` — chunks semânticos | ✅ Criado | `[claude code]` |
+| 4 | `ingestor/embedder.py` — sentence-transformers | ✅ Criado | `[claude code]` |
+| 5 | `ingestor/qdrant_uploader.py` — tenacity | ✅ Criado | `[claude code]` |
+| 6 | `main.py` — pipeline completo | ✅ Criado | `[claude code]` |
+| 7 | `ingestor/neo4j_uploader.py` — labels NPC/Companion/Entity | ✅ Criado | `[claude code]` |
+| 8 | `ingestor/parser.py` — validação schema v1.2 | ✅ Criado | `[claude code]` |
 
 > `neo4j_uploader.py` e `parser.py` não bloqueiam o marco — pipeline funciona sem eles.
 
@@ -185,8 +185,9 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 > **Nota Fase 1:** o `neo4j_uploader.py` precisa criar labels separados para NPC, Companion e Entity conforme schema v1.1. Ver VOXDM_PONTE.md seção 9.5 para justificativa.
 
 ### Testes
-- [ ] Qodo: gerar testes para `parser.py` e `chunker.py` *(Qodo — sem Claude Pro)*
-- [ ] `make test` passando verde `[revisão]` `[claude.ai ou claude code]` `[leve]`
+- [x] Testes para `parser.py` — 19 testes ✅ *(13/04)*
+- [x] Testes para `chunker.py` — 13 testes ✅ *(13/04)*
+- [x] `make test` passando verde — 32/32 ✅ *(13/04)*
 
 ### Validação
 - [ ] Rodar pipeline com `modulo_teste/modulo_teste.json` `[revisão]` `[roteiro]` `[claude.ai]` `[moderado]`

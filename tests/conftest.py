@@ -31,4 +31,4 @@ def settings_mock(monkeypatch):
 @pytest.fixture
 def modulo_teste_path() -> str:
     """Caminho para o módulo de teste padrão."""
-    return "./modulo_teste/modulo_teste_v1.1.json"
+    return "./modulo_teste/modulo_teste_v1.2.json"
