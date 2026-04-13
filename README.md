@@ -22,7 +22,7 @@ VoxDM é uma engine de narração para RPG de mesa que responde por voz, lembra 
 | TTS | Edge TTS (Microsoft) + Kokoro fallback |
 | Memória vetorial | Qdrant Cloud (free tier) |
 | Grafo de relações | Neo4j AuraDB (free tier) |
-| Embeddings | sentence-transformers `all-MiniLM-L6-v2` |
+| Embeddings | sentence-transformers `paraphrase-multilingual-MiniLM-L12-v2` |
 | Backend | FastAPI + WebSocket |
 | Frontend | Next.js 14 |
 | Exposição de rede | Cloudflare Tunnel |

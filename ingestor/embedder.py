@@ -31,7 +31,7 @@ from sentence_transformers import SentenceTransformer
 
 log = structlog.get_logger()
 
-MODELO_NOME = "all-MiniLM-L6-v2"
+MODELO_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
 VECTOR_SIZE = 384
 BATCH_SIZE = 64
 

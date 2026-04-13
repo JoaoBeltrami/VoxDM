@@ -42,7 +42,7 @@ console = Console()
 
 JSON_PATH = Path(settings.DEFAULT_MODULE_PATH)
 COLLECTION_NAME = "voxdm_modules"
-VECTOR_SIZE = 384       # dimensão do all-MiniLM-L6-v2
+VECTOR_SIZE = 384       # dimensão do paraphrase-multilingual-MiniLM-L12-v2
 MAX_WORDS = 375         # proxy para ~500 tokens
 OVERLAP_WORDS = 50
 BATCH_SIZE = 64
@@ -145,11 +145,11 @@ async def main() -> None:
 
     # ── Carregar modelo de embeddings ─────────────────────────────────────────
     try:
-        modelo = SentenceTransformer("all-MiniLM-L6-v2", device="cuda")
+        modelo = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device="cuda")
         log.info("modelo_carregado", device="cuda")
     except Exception:
         log.warning("cuda_indisponivel", fallback="cpu")
-        modelo = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+        modelo = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
 
     # ── Gerar embeddings ──────────────────────────────────────────────────────
     t_embed = time.perf_counter()
