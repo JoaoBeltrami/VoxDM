@@ -190,11 +190,11 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `make test` passando verde — 32/32 ✅ *(13/04)*
 
 ### Validação
-- [ ] Rodar pipeline com `modulo_teste/modulo_teste.json` `[revisão]` `[roteiro]` `[claude.ai]` `[moderado]`
-- [ ] Confirmar chunks no Qdrant Cloud dashboard *(sem Claude)*
-- [ ] Confirmar entidades e relações no Neo4j Browser *(sem Claude)*
+- [x] Rodar pipeline com `modulo_teste/modulo_teste_v1.2.json` — 45 chunks, 40 nós, 90 arestas *(14/04)*
+- [x] Confirmar chunks no Qdrant Cloud — 45 pontos na coleção voxdm_modules *(14/04)*
+- [x] Confirmar entidades e relações no Neo4j — 40 nós + 90 arestas *(14/04)*
 - [ ] LangSmith mostrando latência por etapa `[revisão]` `[claude.ai]` `[leve]`
-- [ ] Query "onde está Bjorn?" retornando chunks corretos ← **marco** `[revisão]` `[claude.ai]` `[leve]`
+- [x] Query "onde está Bjorn?" retornando chunks corretos ← **marco** ✅ *(14/04)*
 
 ---
 
