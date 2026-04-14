@@ -23,6 +23,7 @@ import os
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import structlog
 from neo4j import AsyncGraphDatabase
@@ -37,7 +38,7 @@ from sentence_transformers import SentenceTransformer
 from config import settings
 
 log = structlog.get_logger()
-console = Console()
+console = Console(force_terminal=True)
 
 COLLECTION_NAME = "voxdm_modules"
 QUERY_DEFAULT = "onde esta Valdrek e o que ele quer?"

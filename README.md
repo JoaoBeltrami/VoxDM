@@ -36,7 +36,7 @@ VoxDM é uma engine de narração para RPG de mesa que responde por voz, lembra 
 **Em desenvolvimento ativo.**
 
 - ✅ Fase 0 — Setup de ambiente (Python 3.12, CUDA, API keys, Ollama, GitHub MCP)
-- 🔄 Fase 1 — Pipeline de ingestão (leitura de PDF → schema → chunks → Qdrant + Neo4j)
+- ✅ Fase 1 — Pipeline de ingestão (parser → chunker → embedder → Qdrant + Neo4j)
 - 🔴 Fase 2 — Pipeline de voz (STT + TTS + VAD)
 - 🔴 Fase 3 — Memória e LLM (context builder, working memory, session writer)
 - 🔴 Fase 4 — Interface web (FastAPI + WebSocket + Next.js)
