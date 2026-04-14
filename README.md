@@ -2,7 +2,7 @@
 
 Um Mestre de RPG de mesa controlado 100% por voz, construído do zero com custo de operação zero.
 
-> Desenvolvimento ao vivo — acompanhe no [YouTube](https://youtube.com/@Beltrami.dev)
+> Desenvolvimento ao vivo — acompanhe no [YouTube](https://www.youtube.com/@Beltramidev)
 
 ---
 
