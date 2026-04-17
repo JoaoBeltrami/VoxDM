@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 10 de abril de 2026
+> Atualizado: 17 de abril de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,9 +13,10 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 0 concluída (34/34). Fase 1 concluída.**
+**Fase 0 concluída. Fase 1 concluída. Fase 2 em andamento.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Testes 32/32 OK.
+- Fase 2 (voz): ⏳ EM ANDAMENTO. Arquivos criados e commitados. Pendente: testar `voice_loop.py` localmente com GPU (marco: "Fáierbol" pronunciado correto, latência <2s).
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -160,9 +161,8 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | ✅ Criado |
-| `ingestor/gemini_converter.py` | DEPRECATED — substituído por schema_converter.py | ⚠️ Remover Fase 2 |
 | `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) | ✅ v1.2 |
-| `ingestor/groq_refiner.py` | Refina schema via Groq | 🔴 |
+| `ingestor/groq_refiner.py` | Refina fragmentos de schema via Groq — corrige kebab-case, remove ruído, valida campos | ✅ Criado |
 | `ingestor/parser.py` | Valida estrutura do schema v1.2 | ✅ Criado |
 | `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) | ✅ Criado |
 | `ingestor/embedder.py` | Gera embeddings via sentence-transformers paraphrase-multilingual-MiniLM-L12-v2 | ✅ Criado |
@@ -178,15 +178,22 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `demo/load_neo4j.py` | Carrega módulo completo no Neo4j AuraDB (nós + arestas) | ✅ Criado |
 | `demo/load_qdrant.py` | Gera embeddings e faz upsert no Qdrant Cloud | ✅ Criado |
 | `demo/query_demo.py` | Demo RAG ao vivo: Qdrant → Neo4j → output rich (para YouTube) | ✅ Criado |
+| `demo/voice_loop.py` | Loop STT→mockLLM→TTS com relatório de latência — validação Fase 2 | ✅ Criado |
+| `connection_test.py` | Testa conectividade com Groq, Qdrant e Neo4j (3/3 OK) | ✅ Criado |
+
+### Documentação
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `docs/VOXDM_SCHEMA_v1.2.md` | Especificação formal do schema — seções, campos, tipos, exemplos | ✅ Criado |
 
 ### Voz (Fase 2)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `engine/voice/stt.py` | STT com RealtimeSTT + Faster-Whisper tiny GPU | 🔴 |
-| `engine/voice/language.py` | Detecção automática de idioma | 🔴 |
-| `engine/voice/tts.py` | TTS Edge TTS + Kokoro fallback | 🔴 |
-| `engine/voice/vad.py` | VAD embutido no RealtimeSTT | 🔴 |
-| `engine/pronunciation/dictionary.json` | Pronúncia customizada D&D + Valdrek | 🔴 |
+| `engine/voice/stt.py` | STT com RealtimeSTT + Faster-Whisper tiny GPU — asyncio.Queue, stream_transcricoes(), context manager | ✅ Criado |
+| `engine/voice/language.py` | Detecção de idioma PT-BR/EN por stopwords — tipo Idioma, detecção mista | ✅ Criado |
+| `engine/voice/tts.py` | TTS Edge TTS + Kokoro fallback — SSML, sintetizar_stream(), dicionário de pronúncia | ✅ Criado |
+| `engine/voice/vad.py` | VAD — VADConfig dataclass, perfis de sensibilidade | ✅ Criado |
+| `engine/pronunciation/dictionary.json` | ~120 termos D&D com IPA (magias, classes, monstros) + nomes de "Os Filhos de Valdrek" | ✅ Criado |
 
 ### Memória e LLM (Fase 3)
 | Arquivo | O que faz | Status |
