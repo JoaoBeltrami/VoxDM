@@ -19,11 +19,21 @@ from typing import Any
 # Garante que a raiz do projeto esteja no path (rodar de qualquer pasta)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Força UTF-8 no stdout/stderr do processo atual — necessário no Windows (cp1252 default).
+# Deve ser feito antes de qualquer import que use print/rich/structlog.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import os
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+# Evita timeout HTTP do transformers ao verificar adapter PEFT (modelo já está no cache local).
+# Bug em versões recentes: httpx síncrono tenta contato com HuggingFace mesmo com modelo cacheado.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 import structlog
 from neo4j import AsyncGraphDatabase
