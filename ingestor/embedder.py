@@ -23,6 +23,10 @@ import structlog
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+# Evita chamada HTTP do transformers para verificar adapter PEFT quando modelo está cacheado.
+# Versões recentes de transformers/huggingface_hub fazem essa chamada via httpx síncrono,
+# que falha dentro de contexto asyncio com "Cannot send a request, as the client has been closed."
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 import transformers
 transformers.logging.set_verbosity_error()

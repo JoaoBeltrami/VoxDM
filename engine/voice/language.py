@@ -1,99 +1,166 @@
 """
-Detecção automática de idioma para texto transcrito (PT-BR vs EN).
+engine/voice/language.py
+Detecção de idioma do texto transcrito pelo STT.
 
-Por que existe: O jogo roda em PT-BR mas termos D&D são em inglês — a engine
-precisa saber o idioma dominante para selecionar a voz TTS correta.
-Dependências: nenhuma externa — heurística baseada em stopwords.
-Armadilha: textos curtos (< 2 palavras) são ambíguos — padrão é pt-BR.
+O VoxDM opera em idioma misto: o jogador fala em PT-BR mas menciona
+termos técnicos em inglês (nomes de magias, monstros, classes, etc.).
 
-Exemplo:
-    idioma = detectar_idioma("eu lanço Fireball no goblin")
-    # → "pt-BR"
-    idioma = detectar_idioma("I cast fireball at the goblin")
-    # → "en"
+Este módulo detecta o idioma dominante do texto para:
+  1. Selecionar a voz TTS correta (pt-BR vs en-US)
+  2. Aplicar pronúncias corretas via SSML no Edge TTS
+  3. Formatar a resposta do Mestre no idioma adequado
+
+Design: heurísticas leves baseadas em palavras-chave PT-BR.
+Sem modelos externos — latência desprezível para frases curtas.
 """
 
 import re
-from typing import Literal
+from enum import StrEnum
 
 import structlog
 
-IdiomaDetectado = Literal["pt-BR", "en"]
+log = structlog.get_logger(__name__)
 
-_log = structlog.get_logger(__name__)
+# ---------------------------------------------------------------------------
+# Enum de idiomas
+# ---------------------------------------------------------------------------
 
-# Stopwords que identificam PT-BR com alta confiança
-_STOPWORDS_PT: frozenset[str] = frozenset({
-    "o", "a", "os", "as", "um", "uma", "uns", "umas",
-    "de", "da", "do", "das", "dos", "em", "no", "na", "nos", "nas",
-    "ao", "aos", "à", "às", "pelo", "pela", "pelos", "pelas",
-    "e", "ou", "mas", "se", "que", "com", "por", "para", "como",
-    "eu", "tu", "ele", "ela", "nós", "eles", "elas", "você", "vocês",
+
+class Idioma(StrEnum):
+    """Idiomas suportados pelo pipeline de voz do VoxDM."""
+
+    PTBR = "pt-BR"
+    EN = "en-US"
+    MISTO = "mixed"  # PT-BR dominante com termos EN
+
+
+# ---------------------------------------------------------------------------
+# Vocabulário de referência
+# ---------------------------------------------------------------------------
+
+# Termos D&D em inglês que NÃO indicam idioma inglês quando isolados.
+# Um jogador brasileiro diz "vou conjurar Fireball" → texto é PT-BR.
+_TERMOS_DND_NEUTROS: frozenset[str] = frozenset({
+    # Classes
+    "wizard", "cleric", "paladin", "ranger", "rogue", "barbarian",
+    "bard", "druid", "fighter", "monk", "sorcerer", "warlock",
+    # Magias comuns
+    "fireball", "shatter", "bless", "cure", "hold", "charm",
+    "sleep", "fly", "haste", "slow", "silence", "darkness",
+    # Termos técnicos
+    "dungeon", "master", "dm", "rpg", "hp", "ac", "dc",
+    "npc", "pc", "str", "dex", "con", "int", "wis", "cha",
+    "d4", "d6", "d8", "d10", "d12", "d20", "d100",
+    # Itens
+    "shortsword", "longsword", "rapier", "crossbow", "shield",
+    # Monstros comuns
+    "goblin", "orc", "troll", "dragon", "vampire", "zombie",
+})
+
+# Palavras funcionais comuns em PT-BR (artigos, pronomes, preposições, verbos).
+# Presença de 2+ indica texto em português.
+_PALAVRAS_PTBR: frozenset[str] = frozenset({
+    # Pronomes
+    "eu", "tu", "ele", "ela", "nós", "vós", "eles", "elas",
+    "me", "te", "se", "nos", "vos", "lhe", "lhes",
     "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
-    "isso", "este", "esta", "estes", "estas", "esse", "essa",
-    "aqui", "ali", "lá", "aquele", "aquela",
-    "não", "sim", "já", "ainda", "também", "só", "mais", "menos",
-    "muito", "pouco", "bem", "mal", "quando", "onde", "quem",
-    "quero", "vou", "tenho", "estou", "sou", "está", "são", "foi",
-    "lanço", "ataco", "movo", "uso", "falo", "vejo", "ouço",
-    "preciso", "posso", "quero", "devo", "seria", "seria",
+    "isso", "isto", "aquilo", "esse", "essa", "este", "esta",
+    # Artigos e determinantes
+    "um", "uma", "uns", "umas", "os", "as",
+    # Preposições e conjunções
+    "com", "para", "por", "sem", "sob", "sobre",
+    "que", "mas", "ou", "nem", "porque", "então",
+    "quando", "como", "onde", "quanto", "porém", "contudo",
+    # Verbos auxiliares e comuns
+    "não", "sim", "já", "ainda", "também", "sempre", "nunca",
+    "está", "estou", "estamos", "estão", "estive", "estava",
+    "vou", "vai", "vamos", "vão", "fui", "foi", "fomos",
+    "tenho", "tem", "temos", "têm", "tinha", "tive",
+    "posso", "pode", "podemos", "podem", "podia",
+    "quero", "quer", "queremos", "querem",
+    "faço", "faz", "fazemos", "fazem", "fiz", "fez",
+    "sou", "és", "somos", "são", "era", "eram",
+    # Advérbios e interjeições
+    "aqui", "ali", "lá", "aí", "agora", "depois", "antes",
+    "muito", "pouco", "mais", "menos", "bem", "mal",
+    "tá", "né", "cara", "opa", "uau", "pera",
 })
 
-# Stopwords que identificam EN com alta confiança
-_STOPWORDS_EN: frozenset[str] = frozenset({
-    "the", "a", "an", "of", "in", "on", "at", "to", "for", "with",
-    "and", "or", "but", "if", "that", "this", "it", "is", "are",
-    "was", "were", "be", "been", "have", "has", "do", "does", "did",
-    "i", "you", "he", "she", "we", "they", "my", "your", "his", "her",
-    "its", "our", "their", "me", "him", "us", "them",
-    "cast", "attack", "move", "want", "use", "roll", "look",
-    "go", "run", "fight", "hit", "kill", "search", "open",
-    "can", "will", "would", "could", "should", "shall", "may", "might",
-    "not", "no", "yes", "here", "there", "where", "when", "who", "what",
-})
+
+# ---------------------------------------------------------------------------
+# Funções públicas
+# ---------------------------------------------------------------------------
 
 
-def detectar_idioma(texto: str) -> IdiomaDetectado:
-    """Detecta PT-BR ou EN baseado em stopwords dominantes no texto."""
-    # Extrai apenas sequências de letras (ignora números, pontuação, espaços)
-    palavras = re.findall(r"\b[a-záéíóúâêîôûãõàèìòùçñ]+\b", texto.lower())
+def detectar_idioma(texto: str) -> Idioma:
+    """
+    Detecta o idioma dominante do texto transcrito.
 
-    if len(palavras) < 2:
-        # Texto curto — padrão PT-BR por ser o idioma do jogo
-        return "pt-BR"
+    Algoritmo:
+      1. Tokeniza texto em palavras minúsculas
+      2. Remove termos D&D neutros (não indicam idioma)
+      3. Conta interseção com palavras PT-BR conhecidas
+      4. Score >= 2 → PT-BR; score == 1 → MISTO; score == 0 → EN
 
-    score_pt = sum(1 for p in palavras if p in _STOPWORDS_PT)
-    score_en = sum(1 for p in palavras if p in _STOPWORDS_EN)
+    Args:
+        texto: Texto transcrito pelo STT (frase ou parágrafo curto).
 
-    idioma: IdiomaDetectado = "en" if score_en > score_pt else "pt-BR"
+    Returns:
+        Idioma detectado.
+    """
+    if not texto.strip():
+        return Idioma.PTBR  # fallback padrão para texto vazio
 
-    _log.debug(
-        "idioma.detectado",
+    palavras = frozenset(re.findall(r"\b\w+\b", texto.lower()))
+
+    # Remove termos neutros de D&D para não enviesar a detecção
+    palavras_relevantes = palavras - _TERMOS_DND_NEUTROS
+
+    score_ptbr = len(palavras_relevantes & _PALAVRAS_PTBR)
+
+    if score_ptbr >= 2:
+        idioma = Idioma.PTBR
+    elif score_ptbr == 1:
+        idioma = Idioma.MISTO
+    else:
+        idioma = Idioma.EN
+
+    log.debug(
+        "Idioma detectado",
         idioma=idioma,
-        score_pt=score_pt,
-        score_en=score_en,
-        palavras=len(palavras),
+        score_ptbr=score_ptbr,
+        texto_preview=texto[:60],
     )
-
     return idioma
 
 
-def e_termo_misto(texto: str) -> bool:
-    """Retorna True se o texto contém tanto palavras PT-BR quanto EN.
-
-    Útil para decidir se SSML é necessário na síntese TTS.
+def extrair_termos_en(texto: str) -> list[str]:
     """
-    palavras = re.findall(r"\b[a-záéíóúâêîôûãõàèìòùçñ]+\b", texto.lower())
-    if len(palavras) < 3:
-        return False
+    Extrai termos em inglês de um texto predominantemente PT-BR.
 
-    score_pt = sum(1 for p in palavras if p in _STOPWORDS_PT)
-    score_en = sum(1 for p in palavras if p in _STOPWORDS_EN)
+    Usado pelo TTS para aplicar SSML de pronúncia nos termos D&D
+    que aparecem dentro de frases em português.
 
-    # Considera misto se ambos os idiomas têm presença significativa
-    total = score_pt + score_en
-    if total == 0:
-        return False
+    Critério de extração:
+      - Palavra com 4+ caracteres (evita preposições curtas compartilhadas)
+      - Não está no vocabulário PT-BR comum
+      - Está na lista de termos D&D neutros (é um termo técnico em EN)
 
-    proporcao_menor = min(score_pt, score_en) / total
-    return proporcao_menor >= 0.2  # pelo menos 20% do idioma minoritário
+    Args:
+        texto: Texto para analisar.
+
+    Returns:
+        Lista de termos em inglês encontrados, preservando capitalização original.
+    """
+    # Encontra todas as palavras preservando capitalização
+    palavras_originais = re.findall(r"\b[a-zA-Z]{4,}\b", texto)
+
+    termos_en = [
+        p for p in palavras_originais
+        if p.lower() in _TERMOS_DND_NEUTROS
+    ]
+
+    if termos_en:
+        log.debug("Termos EN extraídos", termos=termos_en, total=len(termos_en))
+
+    return termos_en
