@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     DEFAULT_MODULE_PATH: str = "./modulo_teste/modulo_teste_v1.2.json"
 
+    # Fase 2 — Voz
+    STT_MODEL: str = "tiny"
+    STT_DEVICE: str = "cuda"
+    STT_LANGUAGE: str = "pt"
+    TTS_VOICE_PTBR: str = "pt-BR-FranciscaNeural"
+    TTS_VOICE_EN: str = "en-US-GuyNeural"
+    TTS_RATE: str = "+0%"
+    TTS_VOLUME: str = "+0%"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(
