@@ -38,22 +38,10 @@ log = structlog.get_logger("voice-loop-demo")
 # ---------------------------------------------------------------------------
 
 _RESPOSTAS_MOCK: dict[str, str] = {
-    "default": (
-        "Você entra no salão escuro. As tochas vacilam e uma sombra se move "
-        "além das colunas. O que você faz?"
-    ),
-    "fireball": (
-        "Você ergue as mãos e conjura um Fireball! A bola de fogo estoura no centro "
-        "do grupo de goblins — role 8d6 de dano, Constituição CD 15 para metade."
-    ),
-    "pergunta": (
-        "O ancião franze o cenho. 'Essa informação tem um preço,' ele sussurra. "
-        "'Traga-me a chave do cofre dos Valdrek, e te direi onde o Espelho foi escondido.'"
-    ),
-    "ataque": (
-        "Seu golpe acerta o hobgoblin no ombro. Ele grunhe de dor e recua, "
-        "mas seus companheiros avançam pela porta!"
-    ),
+    "default": "Uma sombra se move além das colunas. O que você faz?",
+    "fireball": "Fireball! Role 8d6 de dano de fogo.",
+    "pergunta": "O ancião franze o cenho. 'Essa informação tem um preço.'",
+    "ataque": "Seu golpe acerta! O hobgoblin recua.",
 }
 
 
