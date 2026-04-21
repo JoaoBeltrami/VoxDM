@@ -176,11 +176,11 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 > `neo4j_uploader.py` e `parser.py` não bloqueiam o marco — pipeline funciona sem eles.
 
 ### Ingestão de Regras (paralelo ao módulo)
-- [ ] Baixar `5e-bits/5e-database` — filtrar: spells, conditions, classes, equipment `[código]` `[claude code]`
-- [ ] `ingestor/rules_loader.py` — carrega JSONs do SRD, normaliza para chunks de texto `[código]` `[claude code]` `[moderado]`
-- [ ] Configurar coleção `voxdm_rules` no Qdrant (separada de `voxdm_modules`) `[código]` `[claude code]`
-- [ ] Rodar ingestão de regras com `make ingest-rules` `[revisão]` `[roteiro]`
-- [ ] Query "o que Fireball faz?" retornando entrada correta do SRD ← **marco** `[revisão]` `[claude.ai]` `[leve]`
+- [x] Baixar `5e-bits/5e-database` — filtrar: spells, conditions, classes, equipment *(21/04)*
+- [x] `ingestor/rules_loader.py` — carrega JSONs do SRD, normaliza para chunks de texto *(21/04)*
+- [x] Configurar coleção `voxdm_rules` no Qdrant (separada de `voxdm_modules`) *(21/04)*
+- [x] Rodar ingestão de regras com `make ingest-rules` — 585 pontos em voxdm_rules *(21/04)*
+- [x] Query "o que Fireball faz?" retornando entrada correta do SRD ← **marco** ✅ *(21/04)*
 
 > **Nota Fase 1:** o `neo4j_uploader.py` precisa criar labels separados para NPC, Companion e Entity conforme schema v1.1. Ver VOXDM_PONTE.md seção 9.5 para justificativa.
 

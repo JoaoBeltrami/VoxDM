@@ -169,6 +169,12 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud (UUID v5 determinístico) | ✅ Criado |
 | `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | ✅ Criado |
 | `main.py` | Pipeline completo linha de comando (--dry-run, --skip-neo4j, --skip-qdrant) | ✅ Criado |
+| `ingestor/rules_loader.py` | Carrega SRD 5e (spells/conditions/classes/equipment) → ChunkRecord para voxdm_rules | ✅ Criado |
+| `ingest_rules.py` | Pipeline SRD → Qdrant (coleção voxdm_rules) — --dry-run, --no-recriar | ✅ Criado |
+| `srd/5e-SRD-Spells.json` | 319 spells do SRD 5e (5e-bits/5e-database src/2014) | ✅ Baixado |
+| `srd/5e-SRD-Conditions.json` | 15 conditions do SRD 5e | ✅ Baixado |
+| `srd/5e-SRD-Classes.json` | 12 classes do SRD 5e | ✅ Baixado |
+| `srd/5e-SRD-Equipment.json` | 237 itens de equipment do SRD 5e | ✅ Baixado |
 | `tests/test_parser.py` | 19 testes para parser.py | ✅ Criado |
 | `tests/test_chunker.py` | 13 testes para chunker.py | ✅ Criado |
 
