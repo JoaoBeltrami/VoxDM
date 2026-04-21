@@ -60,30 +60,44 @@ _TERMOS_DND_NEUTROS: frozenset[str] = frozenset({
 # Palavras funcionais comuns em PT-BR (artigos, pronomes, preposições, verbos).
 # Presença de 2+ indica texto em português.
 _PALAVRAS_PTBR: frozenset[str] = frozenset({
-    # Pronomes
+    # Pronomes pessoais
     "eu", "tu", "ele", "ela", "nós", "vós", "eles", "elas",
+    "você", "voce", "vocês", "voces",
     "me", "te", "se", "nos", "vos", "lhe", "lhes",
     "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
     "isso", "isto", "aquilo", "esse", "essa", "este", "esta",
-    # Artigos e determinantes
-    "um", "uma", "uns", "umas", "os", "as",
-    # Preposições e conjunções
-    "com", "para", "por", "sem", "sob", "sobre",
-    "que", "mas", "ou", "nem", "porque", "então",
+    # Artigos — os mais frequentes do português
+    "o", "a", "os", "as", "um", "uma", "uns", "umas",
+    # Preposições e contrações — altíssima frequência
+    "de", "do", "da", "dos", "das",
+    "no", "na", "nos", "nas",
+    "ao", "à", "aos", "às",
+    "pelo", "pela", "pelos", "pelas",
+    "num", "numa",
+    "com", "para", "por", "sem", "sob", "sobre", "até", "após",
+    # Conjunções
+    "que", "mas", "ou", "nem", "porque", "então", "pois",
     "quando", "como", "onde", "quanto", "porém", "contudo",
-    # Verbos auxiliares e comuns
+    "embora", "enquanto", "portanto", "logo",
+    # Verbos — formas mais frequentes
     "não", "sim", "já", "ainda", "também", "sempre", "nunca",
-    "está", "estou", "estamos", "estão", "estive", "estava",
-    "vou", "vai", "vamos", "vão", "fui", "foi", "fomos",
-    "tenho", "tem", "temos", "têm", "tinha", "tive",
-    "posso", "pode", "podemos", "podem", "podia",
-    "quero", "quer", "queremos", "querem",
-    "faço", "faz", "fazemos", "fazem", "fiz", "fez",
-    "sou", "és", "somos", "são", "era", "eram",
-    # Advérbios e interjeições
+    "está", "estou", "estamos", "estão", "estive", "estava", "estavam",
+    "vou", "vai", "vamos", "vão", "fui", "foi", "fomos", "foram",
+    "tenho", "tem", "temos", "têm", "tinha", "tive", "tivemos",
+    "posso", "pode", "podemos", "podem", "podia", "podiam",
+    "quero", "quer", "queremos", "querem", "queria",
+    "faço", "faz", "fazemos", "fazem", "fiz", "fez", "fizemos",
+    "sou", "és", "somos", "são", "era", "eram", "serão",
+    "disse", "diz", "dizem", "fala", "falou", "falam",
+    "lança", "lançou", "conjura", "conjurou", "ataca", "atacou",
+    "entra", "entrou", "sai", "saiu", "corre", "correu",
+    # Advérbios e interjeições comuns
     "aqui", "ali", "lá", "aí", "agora", "depois", "antes",
     "muito", "pouco", "mais", "menos", "bem", "mal",
     "tá", "né", "cara", "opa", "uau", "pera",
+    # Substantivos de alta frequência em contexto de RPG PT-BR
+    "mão", "mãos", "olhos", "voz", "porta", "sala", "lugar",
+    "grupo", "volta", "lado", "vez", "tempo", "tipo",
 })
 
 

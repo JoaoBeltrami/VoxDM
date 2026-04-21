@@ -64,7 +64,11 @@ _DICIONARIO: dict[str, str] | None = None
 
 
 def _get_dicionario() -> dict[str, str]:
-    """Carrega o dicionário de pronúncia IPA na primeira chamada (lazy load)."""
+    """Carrega o dicionário de pronúncia na primeira chamada (lazy load).
+
+    O JSON é organizado em seções (chaves de categoria → dict de termos).
+    Chaves que começam com '_' são metadados e são ignoradas.
+    """
     global _DICIONARIO
     if _DICIONARIO is None:
         if not _DICT_PATH.exists():
@@ -72,7 +76,15 @@ def _get_dicionario() -> dict[str, str]:
             _DICIONARIO = {}
         else:
             with open(_DICT_PATH, encoding="utf-8") as f:
-                _DICIONARIO = json.load(f)
+                raw: dict = json.load(f)
+            # Flatten: itera seções e mescla os termos em um dict plano
+            plano: dict[str, str] = {}
+            for chave, valor in raw.items():
+                if chave.startswith("_"):
+                    continue  # metadado — ignorar
+                if isinstance(valor, dict):
+                    plano.update(valor)
+            _DICIONARIO = plano
             log.info("Dicionário de pronúncia carregado", termos=len(_DICIONARIO))
     return _DICIONARIO
 
