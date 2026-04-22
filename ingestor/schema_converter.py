@@ -57,11 +57,6 @@ logger = structlog.get_logger(__name__)
 # Semáforo global — limita chamadas paralelas ao Groq (conservador para free tier)
 _GROQ_SEMAPHORE = asyncio.Semaphore(5)
 
-# Modelo Groq — decisão travada.
-# TODO: mover para config.py como settings.GROQ_MODEL quando groq_refiner.py
-# ou groq_client.py forem implementados — centralizar num lugar só
-_GROQ_MODEL: str = "llama-3.3-70b-versatile"
-
 # =============================================================================
 # SYSTEM PROMPT — VoxDM Schema v1.2
 # =============================================================================
@@ -329,7 +324,7 @@ async def convert_chunk_to_schema(
 
     async with _GROQ_SEMAPHORE:
         resposta = await cliente.chat.completions.create(
-            model=_GROQ_MODEL,
+            model=settings.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": f"Converta este trecho:\n\n{chunk}"},

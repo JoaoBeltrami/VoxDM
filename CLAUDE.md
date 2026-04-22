@@ -161,14 +161,16 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `ingestor/pdf_reader.py` | Lê PDF, extrai texto por página via PyMuPDF | ✅ Criado |
-| `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) | ✅ v1.2 |
+| `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) — usa settings.GROQ_MODEL | ✅ v1.2 |
 | `ingestor/groq_refiner.py` | Refina fragmentos de schema via Groq — corrige kebab-case, remove ruído, valida campos | ✅ Criado |
 | `ingestor/parser.py` | Valida estrutura do schema v1.2 | ✅ Criado |
 | `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) | ✅ Criado |
 | `ingestor/embedder.py` | Gera embeddings via sentence-transformers paraphrase-multilingual-MiniLM-L12-v2 | ✅ Criado |
 | `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud (UUID v5 determinístico) | ✅ Criado |
 | `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | ✅ Criado |
+| `ingestor/rules_loader.py` | Baixa JSONs do SRD 5e (5e-bits/5e-database), normaliza spells/conditions/equipment/classes para chunks | ✅ Criado |
 | `main.py` | Pipeline completo linha de comando (--dry-run, --skip-neo4j, --skip-qdrant) | ✅ Criado |
+| `ingest_rules.py` | Pipeline SRD 5e → Qdrant voxdm_rules (--dry-run, --skip-download, --srd-dir) | ✅ Criado |
 | `tests/test_parser.py` | 19 testes para parser.py | ✅ Criado |
 | `tests/test_chunker.py` | 13 testes para chunker.py | ✅ Criado |
 
@@ -198,16 +200,16 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### Memória e LLM (Fase 3)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `engine/memory/working_memory.py` | Dataclass da cena atual — nunca cortada | 🔴 |
-| `engine/memory/context_builder.py` | Monta prompt com 3 camadas + budget de tokens | 🔴 |
-| `engine/memory/qdrant_client.py` | Cliente Qdrant com tenacity | 🔴 |
-| `engine/memory/neo4j_client.py` | Cliente Neo4j com tenacity | 🔴 |
+| `engine/memory/working_memory.py` | Dataclass da cena atual — janela deslizante de diálogo, trust levels, quest stages, para_texto() | ✅ Criado |
+| `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico | ✅ Criado |
+| `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local() | ✅ Criado |
+| `engine/memory/context_builder.py` | Monta contexto 3 camadas — avalia trigger_conditions AND/OR, secrets, busca paralela Qdrant | ✅ Criado |
 | `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores | 🔴 |
 | `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j | 🔴 |
 | `engine/memory/session_writer.py` | Comprime sessão + avalia relevância | 🔴 |
-| `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama | 🔴 |
-| `engine/llm/prompt_builder.py` | Monta prompt final para o LLM | 🔴 |
-| `engine/llm/prompts/master_system.md` | Prompt do mestre — escrito manualmente | 🔴 |
+| `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
+| `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, puro sem I/O | ✅ Criado |
+| `engine/llm/prompts/master_system.md` | Prompt do mestre — rascunho funcional (refinar no claude.ai) | ✅ Rascunho |
 | `engine/llm/prompts/combat.md` | Regras de combate | 🔴 |
 | `engine/llm/prompts/social.md` | Regras de interação social | 🔴 |
 | `engine/llm/prompts/session_eval.md` | Avaliação de sessão | 🔴 |
