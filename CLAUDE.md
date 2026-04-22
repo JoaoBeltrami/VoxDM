@@ -200,16 +200,16 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### Memória e LLM (Fase 3)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `engine/memory/working_memory.py` | Dataclass da cena atual — nunca cortada | 🔴 |
-| `engine/memory/context_builder.py` | Monta prompt com 3 camadas + budget de tokens | 🔴 |
-| `engine/memory/qdrant_client.py` | Cliente Qdrant com tenacity | 🔴 |
-| `engine/memory/neo4j_client.py` | Cliente Neo4j com tenacity | 🔴 |
+| `engine/memory/working_memory.py` | Dataclass da cena atual — janela deslizante de diálogo, trust levels, quest stages, para_texto() | ✅ Criado |
+| `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico | ✅ Criado |
+| `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local() | ✅ Criado |
+| `engine/memory/context_builder.py` | Monta contexto 3 camadas — avalia trigger_conditions AND/OR, secrets, busca paralela Qdrant | ✅ Criado |
 | `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores | 🔴 |
 | `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j | 🔴 |
 | `engine/memory/session_writer.py` | Comprime sessão + avalia relevância | 🔴 |
-| `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama | 🔴 |
-| `engine/llm/prompt_builder.py` | Monta prompt final para o LLM | 🔴 |
-| `engine/llm/prompts/master_system.md` | Prompt do mestre — escrito manualmente | 🔴 |
+| `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
+| `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, puro sem I/O | ✅ Criado |
+| `engine/llm/prompts/master_system.md` | Prompt do mestre — rascunho funcional (refinar no claude.ai) | ✅ Rascunho |
 | `engine/llm/prompts/combat.md` | Regras de combate | 🔴 |
 | `engine/llm/prompts/social.md` | Regras de interação social | 🔴 |
 | `engine/llm/prompts/session_eval.md` | Avaliação de sessão | 🔴 |
