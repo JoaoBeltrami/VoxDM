@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     DEFAULT_MODULE_PATH: str = "./modulo_teste/modulo_teste_v1.2.json"
 
+    # Fase 1 — Regras SRD
+    SRD_DATA_DIR: str = "./srd_data"
+    QDRANT_COLECAO_RULES: str = "voxdm_rules"
+
     # Fase 2 — Voz
     STT_MODEL: str = "tiny"
     STT_DEVICE: str = "cuda"

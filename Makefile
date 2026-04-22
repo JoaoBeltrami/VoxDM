@@ -1,4 +1,4 @@
-.PHONY: run test ingest debug backup docs-sync
+.PHONY: run test ingest ingest-rules debug backup docs-sync
 
 PYTHON := .venv/Scripts/python
 PYTEST := .venv/Scripts/pytest
@@ -11,6 +11,9 @@ test:
 
 ingest:
 	$(PYTHON) main.py
+
+ingest-rules:
+	$(PYTHON) ingest_rules.py
 
 debug:
 	$(PYTHON) dashboard.py
