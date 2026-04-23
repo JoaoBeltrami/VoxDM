@@ -209,10 +209,10 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
 | `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
 | `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, puro sem I/O | ✅ Criado |
-| `engine/llm/prompts/master_system.md` | Prompt do mestre — rascunho funcional (refinar no claude.ai) | ✅ Rascunho |
-| `engine/llm/prompts/combat.md` | Regras de combate | 🔴 |
-| `engine/llm/prompts/social.md` | Regras de interação social | 🔴 |
-| `engine/llm/prompts/session_eval.md` | Avaliação de sessão | 🔴 |
+| `engine/llm/prompts/master_system.md` | Prompt do mestre — identidade humana, voz falada PT-BR, 5 hábitos de narração, secrets, pacing, limite 80 palavras | ✅ v2 |
+| `engine/llm/prompts/combat.md` | Camada de combate — teatro da mente, sem mecânica visível, ritmo música/batimento, variedade de verbos, HP como sensação | ✅ Criado |
+| `engine/llm/prompts/social.md` | Camada social — assinatura de voz por NPC, trust→transparência, corpo que contradiz fala, barganha/interrogatório | ✅ Criado |
+| `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
 | `dashboard.py` | Dashboard Streamlit de debug — conexões, busca semântica, sessões episódicas | ✅ Criado |
 
 ### API e Frontend (Fase 4)
