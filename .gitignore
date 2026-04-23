@@ -19,3 +19,6 @@ venv/
 
 # PDFs — módulos licenciados não sobem
 *.pdf
+
+# Claude Code — worktrees temporários de agentes
+.claude/worktrees/

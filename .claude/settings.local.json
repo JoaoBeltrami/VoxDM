@@ -4,7 +4,22 @@
       "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_PROJETO.md\")",
       "Bash(\"c:/Users/Beltrami/Projetos/VoxDM/VoxDM/docs/VOXDM_CHECKLIST.md\")",
       "Bash(python -m py_compile config.py)",
-      "Bash(uv --version)"
+      "Bash(uv --version)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v --tb=short)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(uv run *)",
+      "Bash(cat requirements.txt)",
+      "Bash(ls *.txt *.toml)",
+      "Bash(.venv/Scripts/python.exe -c \"import RealtimeSTT\")",
+      "Bash(.venv/Scripts/pip show *)",
+      "Bash(.venv/Scripts/python.exe -c \"import torch; print\\('torch:', torch.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pip show torchaudio)",
+      "Bash(uv pip *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python -m py_compile engine/voice/stt.py engine/voice/tts.py demo/voice_loop.py engine/memory/qdrant_client.py)",
+      "Bash(.venv/Scripts/python.exe -m py_compile engine/voice/stt.py engine/voice/tts.py demo/voice_loop.py engine/memory/qdrant_client.py)"
     ]
   }
 }
