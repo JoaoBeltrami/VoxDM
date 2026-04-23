@@ -19,8 +19,12 @@ de voz da latência do Groq. Para testar com LLM real, veja Fase 3.
 
 import argparse
 import asyncio
+import sys
 import time
 from pathlib import Path
+
+# Garante que a raiz do projeto está no sys.path ao rodar direto de demo/
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import structlog
 
@@ -38,10 +42,10 @@ log = structlog.get_logger("voice-loop-demo")
 # ---------------------------------------------------------------------------
 
 _RESPOSTAS_MOCK: dict[str, str] = {
-    "default": "Uma sombra se move além das colunas. O que você faz?",
-    "fireball": "Fireball! Role 8d6 de dano de fogo.",
-    "pergunta": "O ancião franze o cenho. 'Essa informação tem um preço.'",
-    "ataque": "Seu golpe acerta! O hobgoblin recua.",
+    "default": "Uma sombra se move além das colunas de pedra. O silêncio pesa no ar. O que você faz?",
+    "fireball": "Uma esfera de fogo explode no centro da sala! As chamas consomem tudo ao redor. Os inimigos gritam enquanto recuam.",
+    "pergunta": "O ancião franze o cenho e cruza os braços. Essa informação tem um preço, aventureiro. Um preço alto.",
+    "ataque": "Seu golpe acerta em cheio! O inimigo tropeça para trás, claramente abalado pelo impacto.",
 }
 
 
@@ -145,14 +149,7 @@ async def _modo_tts_apenas(texto: str) -> None:
 
 async def _loop_completo(max_iteracoes: int | None) -> None:
     """
-    Executa o loop completo de voz do VoxDM.
-
-    Cada iteração:
-      1. Aguarda transcrição do STT
-      2. Gera resposta (mock LLM)
-      3. Sintetiza resposta (TTS)
-      4. Reproduz áudio
-      5. Registra latência total
+    Loop completo de voz: STT -> WorkingMemory -> ContextBuilder -> Groq -> TTS.
 
     Args:
         max_iteracoes: Número máximo de ciclos. None = loop infinito (Ctrl+C para parar).
@@ -160,8 +157,19 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
     from engine.voice.language import detectar_idioma
     from engine.voice.stt import STTEngine
     from engine.voice.tts import TTSEngine
+    from engine.memory.working_memory import WorkingMemory
+    from engine.memory.context_builder import ContextBuilder
+    from engine.llm.prompt_builder import montar_mensagens
+    from engine.llm.groq_client import GroqClient
 
     tts = TTSEngine()
+    groq = GroqClient()
+    context_builder = ContextBuilder()
+    working_mem = WorkingMemory.nova_sessao(
+        location_id="aldeia-valdrek",
+        location_nome="Aldeia de Valdrek",
+        session_id="demo-voz-01",
+    )
     iteracao = 0
     latencias: list[int] = []
 
@@ -170,7 +178,7 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
         max_iteracoes=max_iteracoes or "infinito",
         meta_latencia_ms=2000,
     )
-    print("\n🎙️  Fale ao microfone. Ctrl+C para encerrar.\n")
+    print("\nFale ao microfone. Ctrl+C para encerrar.\n")
 
     async with STTEngine() as stt:
         async for texto_jogador in stt.stream_transcricoes():
@@ -179,26 +187,34 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
 
             log.info("Jogador disse", texto=texto_jogador, iteracao=iteracao)
 
-            # Detecta idioma
+            # Registra fala na working memory
+            working_mem.registrar_fala("player", texto_jogador)
             idioma = detectar_idioma(texto_jogador)
 
-            # Mock LLM (substituir por Groq na Fase 3)
+            # Contexto + Groq
             t_llm = time.perf_counter()
-            resposta_mestre = _mock_llm(texto_jogador)
+            try:
+                contexto = await context_builder.montar(texto_jogador, working_mem)
+                mensagens = montar_mensagens(contexto)
+                resposta_mestre = await groq.completar(mensagens, temperatura=0.8, max_tokens=200)
+            except Exception as e:
+                log.error("Groq falhou", erro=str(e))
+                resposta_mestre = "O mestre hesita por um momento antes de continuar."
             latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
 
-            log.info("Mestre responde", resposta=resposta_mestre[:60] + "...", latencia_llm_ms=latencia_llm_ms)
+            # Registra resposta na working memory
+            working_mem.registrar_fala("mestre", resposta_mestre)
+            log.info("Mestre responde", resposta=resposta_mestre[:80], latencia_llm_ms=latencia_llm_ms)
 
-            # Síntese de voz
+            # TTS
             t_tts = time.perf_counter()
             audio_bytes = await tts.sintetizar(resposta_mestre, idioma)
             latencia_tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
-            # Latência total (sem reprodução — reprodução é paralela ao jogo)
             latencia_total_ms = int((time.perf_counter() - t0) * 1000)
             latencias.append(latencia_total_ms)
 
-            status_latencia = "✅" if latencia_total_ms < 2000 else "⚠️ ACIMA DO LIMITE"
+            status_latencia = "OK" if latencia_total_ms < 2000 else "ACIMA DO LIMITE"
             log.info(
                 "Ciclo completo",
                 latencia_total_ms=latencia_total_ms,
@@ -208,8 +224,10 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
                 status=status_latencia,
             )
 
-            # Reproduz áudio
+            # Silencia STT durante reprodução para evitar feedback do speaker
+            stt.silenciar()
             await _reproduzir_audio(audio_bytes)
+            stt.reativar()
 
             if max_iteracoes and iteracao >= max_iteracoes:
                 break
