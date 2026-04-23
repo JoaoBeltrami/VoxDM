@@ -91,26 +91,26 @@ def _get_dicionario() -> dict[str, str]:
 
 def _aplicar_pronuncias(texto: str) -> str:
     """
-    Substitui termos D&D por tags SSML <phoneme> com pronúncia IPA correta.
+    Substitui termos D&D pela grafia fonética PT-BR do dicionário.
 
-    Edge TTS interpreta SSML phoneme e pronuncia conforme o IPA informado,
-    garantindo que "Fireball" soe como "Fáierbol" mesmo em voz PT-BR.
+    Substituição direta no texto — mais simples e mais confiável que tags
+    <phoneme alphabet="ipa">, que exigem IPA real e distorcem o áudio quando
+    recebem grafia fonética PT-BR (ex: "Fáier Bol" não é IPA válido).
 
     Args:
-        texto: Texto do Mestre sem tags SSML.
+        texto: Texto do Mestre.
 
     Returns:
-        Texto com tags <phoneme> inseridas para termos conhecidos.
+        Texto com termos substituídos pela pronúncia fonética.
     """
     dicionario = _get_dicionario()
     if not dicionario:
         return texto
 
     resultado = texto
-    for termo, ipa in dicionario.items():
+    for termo, fonetica in dicionario.items():
         padrao = re.compile(re.escape(termo), re.IGNORECASE)
-        tag = f'<phoneme alphabet="ipa" ph="{ipa}">{termo}</phoneme>'
-        resultado = padrao.sub(tag, resultado)
+        resultado = padrao.sub(fonetica, resultado)
 
     return resultado
 
