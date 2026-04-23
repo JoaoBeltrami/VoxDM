@@ -204,16 +204,16 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico | ✅ Criado |
 | `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local() | ✅ Criado |
 | `engine/memory/context_builder.py` | Monta contexto 3 camadas — avalia trigger_conditions AND/OR, secrets, busca paralela Qdrant | ✅ Criado |
-| `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores | 🔴 |
-| `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j | 🔴 |
-| `engine/memory/session_writer.py` | Comprime sessão + avalia relevância | 🔴 |
+| `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores — busca voxdm_episodic, filtro por NPC, listar_sessoes() | ✅ Criado |
+| `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j — enriquece chunks com relações do grafo, buscar_npc() | ✅ Criado |
+| `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
 | `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
 | `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, puro sem I/O | ✅ Criado |
 | `engine/llm/prompts/master_system.md` | Prompt do mestre — rascunho funcional (refinar no claude.ai) | ✅ Rascunho |
 | `engine/llm/prompts/combat.md` | Regras de combate | 🔴 |
 | `engine/llm/prompts/social.md` | Regras de interação social | 🔴 |
 | `engine/llm/prompts/session_eval.md` | Avaliação de sessão | 🔴 |
-| `dashboard.py` | Dashboard Streamlit de debug | 🔴 |
+| `dashboard.py` | Dashboard Streamlit de debug — conexões, busca semântica, sessões episódicas | ✅ Criado |
 
 ### API e Frontend (Fase 4)
 | Arquivo | O que faz | Status |
