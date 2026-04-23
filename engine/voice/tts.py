@@ -115,6 +115,24 @@ def _aplicar_pronuncias(texto: str) -> str:
     return resultado
 
 
+def _limpar_markdown(texto: str) -> str:
+    """Remove formatação markdown que o Edge TTS leria literalmente."""
+    # Remove bold e italic: **texto** → texto, *texto* → texto
+    texto = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', texto)
+    # Remove headers: # Título → Título
+    texto = re.sub(r'^#{1,6}\s+', '', texto, flags=re.MULTILINE)
+    # Remove listas com hífen ou asterisco no início de linha
+    texto = re.sub(r'^\s*[-*]\s+', '', texto, flags=re.MULTILINE)
+    # Remove parênteses e colchetes com conteúdo (metagame, notas)
+    texto = re.sub(r'\[.*?\]|\(.*?\)', '', texto)
+    # Remove notação de dados: 1d6, 3d8, etc.
+    texto = re.sub(r'\b\d+d\d+\b', '', texto)
+    # Colapsa múltiplos espaços e linhas em branco
+    texto = re.sub(r'\n{3,}', '\n\n', texto)
+    texto = re.sub(r'  +', ' ', texto)
+    return texto.strip()
+
+
 def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
     """
     Monta documento SSML completo para Edge TTS.
@@ -129,7 +147,7 @@ def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
     Returns:
         String SSML pronta para o Edge TTS.
     """
-    texto_com_pronuncia = _aplicar_pronuncias(texto)
+    texto_com_pronuncia = _aplicar_pronuncias(_limpar_markdown(texto))
 
     return (
         f"<speak version='1.0' "

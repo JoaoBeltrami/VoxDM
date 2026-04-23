@@ -90,6 +90,7 @@ class STTEngine:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._rodando: bool = False
+        self._silenciado: bool = False  # True enquanto TTS está tocando
 
     # -----------------------------------------------------------------------
     # Callback interno (roda na thread do STT)
@@ -103,8 +104,16 @@ class STTEngine:
         Usa call_soon_threadsafe para injetar na fila de forma segura.
         """
         texto = texto.strip()
-        if not texto:
+        if not texto or self._silenciado:
             return
+
+        # Whisper alucina repetindo palavras quando ouve áudio distorcido
+        palavras = texto.split()
+        if len(palavras) > 8:
+            contagem = max(palavras.count(p) for p in set(palavras))
+            if contagem >= 4:
+                log.warning("Transcricao descartada — alucinacao detectada", preview=texto[:60])
+                return
 
         log.info("Transcrição recebida", texto=texto)
 
@@ -235,6 +244,14 @@ class STTEngine:
         except asyncio.TimeoutError:
             return None
 
+    def silenciar(self) -> None:
+        """Muda o STT durante reprodução de áudio — evita feedback do speaker."""
+        self._silenciado = True
+
+    def reativar(self) -> None:
+        """Reativa o STT após o áudio terminar."""
+        self._silenciado = False
+
     async def stream_transcricoes(self) -> AsyncIterator[str]:
         """
         AsyncIterator de transcrições contínuas do microfone.
@@ -245,10 +262,13 @@ class STTEngine:
             async for texto in stt.stream_transcricoes():
                 await processar(texto)
         """
-        while self._rodando:
-            texto = await self.transcrever(timeout=0.5)
-            if texto:
-                yield texto
+        try:
+            while self._rodando:
+                texto = await self.transcrever(timeout=0.5)
+                if texto:
+                    yield texto
+        except asyncio.CancelledError:
+            pass  # encerramento limpo via Ctrl+C ou cancelamento de task
 
     # -----------------------------------------------------------------------
     # Context manager
