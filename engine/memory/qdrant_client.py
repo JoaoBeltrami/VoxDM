@@ -27,6 +27,10 @@ from tenacity import (
     wait_exponential,
 )
 
+def _nao_e_404(exc: BaseException) -> bool:
+    """Não faz retry em 404 — coleção ausente não vai aparecer sozinha."""
+    return "Not found" not in str(exc) and "404" not in str(exc)
+
 from config import settings
 from ingestor.embedder import Embedder
 
@@ -62,7 +66,7 @@ class QdrantMemoryClient:
         return self._embedder
 
     @retry(
-        retry=retry_if_exception_type(Exception),
+        retry=lambda rs: retry_if_exception_type(Exception)(rs) and _nao_e_404(rs.outcome.exception()),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=8),
         before_sleep=_logar_tentativa,
@@ -76,24 +80,42 @@ class QdrantMemoryClient:
         filtro: dict[str, Any] | None,
     ) -> list[ScoredPoint]:
         """Busca síncrona com retry — executada em thread pool."""
-        kwargs: dict[str, Any] = {
-            "collection_name": colecao,
-            "query_vector": vetor,
-            "limit": top_k,
-            "with_payload": True,
-        }
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        query_filter = None
         if filtro:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            kwargs["query_filter"] = Filter(
+            query_filter = Filter(
                 must=[
-                    FieldCondition(
-                        key=k,
-                        match=MatchValue(value=v),
-                    )
+                    FieldCondition(key=k, match=MatchValue(value=v))
                     for k, v in filtro.items()
                 ]
             )
-        return self._get_client().search(**kwargs)
+
+        client = self._get_client()
+
+        # query_points() é a API atual (qdrant-client >= 1.7)
+        # search() foi removido nas versões recentes
+        if hasattr(client, "query_points"):
+            from qdrant_client.models import Query
+            resultado = client.query_points(
+                collection_name=colecao,
+                query=vetor,
+                limit=top_k,
+                with_payload=True,
+                query_filter=query_filter,
+            )
+            return resultado.points
+        else:
+            # fallback para versões antigas
+            kwargs: dict[str, Any] = {
+                "collection_name": colecao,
+                "query_vector": vetor,
+                "limit": top_k,
+                "with_payload": True,
+            }
+            if query_filter:
+                kwargs["query_filter"] = query_filter
+            return client.search(**kwargs)
 
     async def buscar(
         self,
