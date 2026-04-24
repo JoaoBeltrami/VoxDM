@@ -1,0 +1,49 @@
+# Gabarito de retrieval — VoxDM benchmark
+# Cada pergunta define source_ids_esperados que DEVEM estar no top-5
+# e a coleção onde buscar.
+
+perguntas:
+
+  # === Módulo: personagens ===
+  - pergunta: "quem é Fael Drevasson?"
+    source_ids_esperados: [fael-drevasson]
+    colecao: voxdm_modules
+
+  - pergunta: "quem é Bjorn Tharnsson?"
+    source_ids_esperados: [bjorn-tharnsson]
+    colecao: voxdm_modules
+
+  - pergunta: "me fale sobre Runa"
+    source_ids_esperados: [runa-tharnsdottir]
+    colecao: voxdm_modules
+
+  - pergunta: "quem é Brennan Sem-Vila?"
+    source_ids_esperados: [brennan-sem-vila]
+    colecao: voxdm_modules
+
+  # === Módulo: localizações ===
+  - pergunta: "O que eu vejo quando chego em Tharnvik?"
+    source_ids_esperados: [tharnvik]
+    colecao: voxdm_modules
+
+  - pergunta: "como é a vila de Drevamor?"
+    source_ids_esperados: [drevamor]
+    colecao: voxdm_modules
+
+  # === Módulo: itens e quests ===
+  - pergunta: "o que é a Crônica de Valdrek?"
+    source_ids_esperados: [cronica-de-valdrek]
+    colecao: voxdm_modules
+
+  - pergunta: "quem é Halvard o Cinza?"
+    source_ids_esperados: [halvard-o-cinza]
+    colecao: voxdm_modules
+
+  # === Regras SRD ===
+  - pergunta: "como funciona a magia Fireball?"
+    source_ids_esperados: [fireball]
+    colecao: voxdm_rules
+
+  - pergunta: "o que é a condição envenenado?"
+    source_ids_esperados: [poisoned]
+    colecao: voxdm_rules

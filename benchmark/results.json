@@ -1,0 +1,177 @@
+{
+  "timestamp": "2026-04-24T14:58:04.302622+00:00",
+  "media_recall_at_5": 1.0,
+  "media_mrr": 1.0,
+  "perguntas": [
+    {
+      "pergunta": "quem é Fael Drevasson?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "fael-drevasson"
+      ],
+      "top5": [
+        "fael-drevasson",
+        "fael-drevasson",
+        "aldric-drevasson",
+        "dalla-drevadottir",
+        "aldric-drevasson"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 3002
+    },
+    {
+      "pergunta": "quem é Bjorn Tharnsson?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "bjorn-tharnsson"
+      ],
+      "top5": [
+        "bjorn-tharnsson",
+        "bjorn-tharnsson",
+        "soren-tharnsson",
+        "runa-tharnsdottir",
+        "soren-tharnsson"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 56
+    },
+    {
+      "pergunta": "me fale sobre Runa",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "runa-tharnsdottir"
+      ],
+      "top5": [
+        "runa-tharnsdottir",
+        "runa-corresponde-senna",
+        "runa-corresponde-senna",
+        "senna-kaeldottir",
+        "senna-kaeldottir"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 54
+    },
+    {
+      "pergunta": "quem é Brennan Sem-Vila?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "brennan-sem-vila"
+      ],
+      "top5": [
+        "brennan-sem-vila",
+        "brennan-sem-vila",
+        "gharen-braco-de-ferro",
+        "maren-drevadottir",
+        "senna-kaeldottir"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 49
+    },
+    {
+      "pergunta": "O que eu vejo quando chego em Tharnvik?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "tharnvik"
+      ],
+      "top5": [
+        "tharnvik",
+        "tharnvik",
+        "gargantas-vulcanicas",
+        "vyrmathax",
+        "kaelmund"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 57
+    },
+    {
+      "pergunta": "como é a vila de Drevamor?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "drevamor"
+      ],
+      "top5": [
+        "drevamor",
+        "tharnvik",
+        "dalla-drevadottir",
+        "drevamor",
+        "fael-drevasson"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 51
+    },
+    {
+      "pergunta": "o que é a Crônica de Valdrek?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "cronica-de-valdrek"
+      ],
+      "top5": [
+        "cronica-de-valdrek",
+        "verdade-do-cisma",
+        "fael-drevasson",
+        "gharen-braco-de-ferro",
+        "edda-a-velha"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 53
+    },
+    {
+      "pergunta": "quem é Halvard o Cinza?",
+      "colecao": "voxdm_modules",
+      "esperados": [
+        "halvard-o-cinza"
+      ],
+      "top5": [
+        "halvard-o-cinza",
+        "halvard-o-cinza",
+        "halvard-aprova-osmund",
+        "gharen-braco-de-ferro",
+        "torvin-kaelsson"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 51
+    },
+    {
+      "pergunta": "como funciona a magia Fireball?",
+      "colecao": "voxdm_rules",
+      "esperados": [
+        "fireball"
+      ],
+      "top5": [
+        "fireball",
+        "burning-hands",
+        "continual-flame",
+        "flaming-sphere",
+        "sacred-flame"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 47
+    },
+    {
+      "pergunta": "o que é a condição envenenado?",
+      "colecao": "voxdm_rules",
+      "esperados": [
+        "poisoned"
+      ],
+      "top5": [
+        "poisoned",
+        "protection-from-poison",
+        "detect-poison-and-disease",
+        "contagion",
+        "poison-spray"
+      ],
+      "recall@5": 1.0,
+      "MRR": 1.0,
+      "tempo_ms": 52
+    }
+  ]
+}
