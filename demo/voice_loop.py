@@ -22,6 +22,7 @@ import asyncio
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # Garante que a raiz do projeto está no sys.path ao rodar direto de demo/
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -147,6 +148,43 @@ async def _modo_tts_apenas(texto: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _warmup(context_builder: Any, groq: Any) -> None:
+    """Aquece todos os componentes antes do 1º input para zerar cold start."""
+    from engine.memory.context_builder import ContextBuilder as _CB
+    from engine.llm.groq_client import GroqClient as _GC
+
+    t_total = time.perf_counter()
+
+    for componente, coro in [
+        ("embedder+qdrant_modules", context_builder._qdrant.buscar_modulo("warmup", top_k=1)),
+        ("qdrant_rules", context_builder._qdrant.buscar_regras("warmup", top_k=1)),
+    ]:
+        t = time.perf_counter()
+        try:
+            await coro
+        except Exception as e:
+            log.warning("warmup_falhou", componente=componente, erro=str(e))
+        log.info("warmup_feito", componente=componente, tempo_ms=int((time.perf_counter() - t) * 1000))
+
+    # Neo4j — nó inexistente só para estabelecer a conexão TCP+auth
+    t = time.perf_counter()
+    try:
+        await context_builder._neo4j.buscar_relacionamentos("__warmup__")
+    except Exception:
+        pass
+    log.info("warmup_feito", componente="neo4j", tempo_ms=int((time.perf_counter() - t) * 1000))
+
+    # Groq — TLS handshake + validação de chave
+    t = time.perf_counter()
+    try:
+        await groq.completar([{"role": "user", "content": "ok"}], max_tokens=5)
+        log.info("warmup_feito", componente="groq", tempo_ms=int((time.perf_counter() - t) * 1000))
+    except Exception as e:
+        log.warning("warmup_falhou", componente="groq", erro=str(e))
+
+    log.info("warmup_completo", tempo_total_ms=int((time.perf_counter() - t_total) * 1000))
+
+
 async def _loop_completo(max_iteracoes: int | None) -> None:
     """
     Loop completo de voz: STT -> WorkingMemory -> ContextBuilder -> Groq -> TTS.
@@ -178,6 +216,10 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
         max_iteracoes=max_iteracoes or "infinito",
         meta_latencia_ms=2000,
     )
+
+    log.info("Iniciando warmup de componentes...")
+    await _warmup(context_builder, groq)
+
     print("\nFale ao microfone. Ctrl+C para encerrar.\n")
 
     async with STTEngine() as stt:
