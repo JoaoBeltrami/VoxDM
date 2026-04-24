@@ -20,10 +20,12 @@ RealtimeSTT
 faster-whisper==1.2.1
 edge-tts
 kokoro
+pygame
 
 # ─── Fase 3 — LLM e Memória ─────────────────────────────────────────────────���
 langsmith
 streamlit
+streamlit-autorefresh
 
 # ─── Fase 4 — API ───────────────────────────────────���────────────────────────
 fastapi
