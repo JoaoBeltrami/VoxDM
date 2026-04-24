@@ -1,7 +1,13 @@
 .PHONY: run test ingest ingest-rules debug backup docs-sync
 
-PYTHON := .venv/Scripts/python
-PYTEST := .venv/Scripts/pytest
+# Detecta Windows vs Unix para caminhos do venv
+ifeq ($(OS),Windows_NT)
+    PYTHON := .venv/Scripts/python
+    PYTEST := .venv/Scripts/pytest
+else
+    PYTHON := .venv/bin/python
+    PYTEST := .venv/bin/pytest
+endif
 
 run:
 	$(PYTHON) -m uvicorn api.main:app --reload
