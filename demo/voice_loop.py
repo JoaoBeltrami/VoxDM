@@ -210,6 +210,7 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
     )
     iteracao = 0
     latencias: list[int] = []
+    primeiros_audios: list[int] = []
 
     log.info(
         "Loop de voz iniciado",
@@ -233,43 +234,100 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
             working_mem.registrar_fala("player", texto_jogador)
             idioma = detectar_idioma(texto_jogador)
 
-            # Contexto + Groq
+            # Contexto → Groq streaming → TTS por sentença (primeiro áudio < 1200ms)
             t_llm = time.perf_counter()
+            resposta_mestre = ""
+            primeiro_audio_ms = -1
+            latencia_llm_ms = 0
+            stt_silenciado = False
+            mensagens: list[dict[str, str]] = []
+
             try:
                 contexto = await context_builder.montar(texto_jogador, working_mem)
                 mensagens = montar_mensagens(contexto)
-                resposta_mestre = await groq.completar(mensagens, temperatura=0.8, max_tokens=200)
             except Exception as e:
-                log.error("Groq falhou", erro=str(e))
-                resposta_mestre = "O mestre hesita por um momento antes de continuar."
-            latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                log.error("Contexto falhou", erro=str(e))
+                mensagens = [{"role": "user", "content": texto_jogador}]
+
+            try:
+                buffer = ""
+                primeiro_audio = True
+
+                async for token in groq.completar_stream(mensagens, temperatura=0.8, max_tokens=200):
+                    buffer += token
+                    resposta_mestre += token
+                    palavras = buffer.split()
+                    fim_sentenca = bool(buffer.rstrip()) and buffer.rstrip()[-1] in ".!?"
+
+                    if (fim_sentenca and len(palavras) >= 3) or len(palavras) >= 20:
+                        sentenca = buffer.strip()
+                        buffer = ""
+                        if not stt_silenciado:
+                            stt.silenciar()
+                            stt_silenciado = True
+                            latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                        audio_bytes = await tts.sintetizar(sentenca, idioma)
+                        if primeiro_audio:
+                            primeiro_audio_ms = int((time.perf_counter() - t0) * 1000)
+                            log.info(
+                                "primeiro_audio",
+                                primeiro_audio_ms=primeiro_audio_ms,
+                                meta_ms=1200,
+                                ok=primeiro_audio_ms < 1200,
+                            )
+                            primeiro_audio = False
+                        await _reproduzir_audio(audio_bytes)
+
+                # Flush de tokens restantes no buffer
+                if buffer.strip():
+                    if not stt_silenciado:
+                        stt.silenciar()
+                        stt_silenciado = True
+                        latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                    audio_bytes = await tts.sintetizar(buffer.strip(), idioma)
+                    if primeiro_audio:
+                        primeiro_audio_ms = int((time.perf_counter() - t0) * 1000)
+                        primeiro_audio = False
+                    await _reproduzir_audio(audio_bytes)
+
+                if not latencia_llm_ms:
+                    latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+
+            except Exception as e:
+                log.error("Streaming falhou — fallback bloqueante", erro=str(e))
+                if not resposta_mestre:
+                    try:
+                        resposta_mestre = await groq.completar(mensagens, temperatura=0.8, max_tokens=200)
+                    except Exception as e2:
+                        log.error("Fallback também falhou", erro=str(e2))
+                        resposta_mestre = "O mestre hesita por um momento antes de continuar."
+                latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                if not stt_silenciado:
+                    stt.silenciar()
+                    stt_silenciado = True
+                audio_bytes = await tts.sintetizar(resposta_mestre, idioma)
+                await _reproduzir_audio(audio_bytes)
+
+            if stt_silenciado:
+                stt.reativar()
 
             # Registra resposta na working memory
             working_mem.registrar_fala("mestre", resposta_mestre)
             log.info("Mestre responde", resposta=resposta_mestre[:80], latencia_llm_ms=latencia_llm_ms)
 
-            # TTS
-            t_tts = time.perf_counter()
-            audio_bytes = await tts.sintetizar(resposta_mestre, idioma)
-            latencia_tts_ms = int((time.perf_counter() - t_tts) * 1000)
-
             latencia_total_ms = int((time.perf_counter() - t0) * 1000)
             latencias.append(latencia_total_ms)
+            if primeiro_audio_ms >= 0:
+                primeiros_audios.append(primeiro_audio_ms)
 
             status_latencia = "OK" if latencia_total_ms < 2000 else "ACIMA DO LIMITE"
             log.info(
                 "Ciclo completo",
                 latencia_total_ms=latencia_total_ms,
-                latencia_tts_ms=latencia_tts_ms,
                 latencia_llm_ms=latencia_llm_ms,
-                bytes_audio=len(audio_bytes),
+                primeiro_audio_ms=primeiro_audio_ms,
                 status=status_latencia,
             )
-
-            # Silencia STT durante reprodução para evitar feedback do speaker
-            stt.silenciar()
-            await _reproduzir_audio(audio_bytes)
-            stt.reativar()
 
             if max_iteracoes and iteracao >= max_iteracoes:
                 break
@@ -289,6 +347,11 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
         print(f"  Latência mínima:  {minimo}ms")
         print(f"  Latência máxima:  {maximo}ms")
         print(f"  Ciclos abaixo 2s: {ciclos_ok}/{len(latencias)}")
+        if primeiros_audios:
+            media_pa = sum(primeiros_audios) // len(primeiros_audios)
+            ciclos_pa_ok = sum(1 for p in primeiros_audios if p < 1200)
+            print(f"  Primeiro áudio médio: {media_pa}ms (meta: <1200ms)")
+            print(f"  Primeiro áudio <1.2s: {ciclos_pa_ok}/{len(primeiros_audios)}")
         print("=" * 60 + "\n")
 
 
