@@ -73,31 +73,42 @@ class ContextBuilder:
         tipo: str = cond.get("type", "")
         valor: Any = cond.get("value")
 
+        # Schema usa "target" para o ID da entidade e "value" para o limiar numérico
+        alvo: str = cond.get("target", "")
+
         if tipo == "npc_trust":
-            npc_id: str = cond.get("npc_id", "")
             trust_min: int = int(valor or 0)
-            return working_mem.trust_levels.get(npc_id, 0) >= trust_min
+            return working_mem.trust_levels.get(alvo, 0) >= trust_min
 
         if tipo == "location_visited":
-            return cond.get("location_id", "") == working_mem.location_id
+            return alvo == working_mem.location_id
 
         if tipo == "player_action":
-            # Verifica se a ação está no diálogo recente (simplificado)
-            acao = str(valor or "").lower()
+            # Verifica se o target (slug da ação) está mencionado no diálogo recente
+            if not alvo:
+                return False
+            palavras_alvo = set(alvo.replace("-", " ").lower().split())
             return any(
-                acao in turno.texto.lower()
+                palavras_alvo & set(turno.texto.lower().split())
                 for turno in working_mem.dialogo_recente
             )
 
         if tipo == "quest_stage":
-            quest_id: str = cond.get("quest_id", "")
             stage_id: str = str(valor or "")
-            return working_mem.quest_stages.get(quest_id, "") == stage_id
+            return working_mem.quest_stages.get(alvo, "") == stage_id
 
         if tipo == "faction_standing":
-            faction_id: str = cond.get("faction_id", "")
             minimo: int = int(valor or 0)
-            return working_mem.faction_standings.get(faction_id, 0) >= minimo
+            return working_mem.faction_standings.get(alvo, 0) >= minimo
+
+        if tipo == "item_used":
+            # Verifica menção direta ao item no diálogo recente
+            if not alvo:
+                return False
+            return any(
+                alvo in turno.texto.lower()
+                for turno in working_mem.dialogo_recente
+            )
 
         # Tipo desconhecido → não satisfeita (seguro)
         log.warning("trigger_tipo_desconhecido", tipo=tipo)
@@ -143,7 +154,8 @@ class ContextBuilder:
         visiveis: list[SecretVisivel] = []
 
         for secret in secrets_raw:
-            npc_id: str = secret.get("npc_id", "")
+            # Schema v1.2 usa "known_by" (lista de NPCs que conhecem o secret)
+            known_by: list[str] = secret.get("known_by", [])
             trigger: dict[str, Any] | None = secret.get("trigger_condition")
 
             # Sem trigger → nunca revelado automaticamente
@@ -153,18 +165,24 @@ class ContextBuilder:
             if not await self._avaliar_condicao(trigger, working_mem):
                 continue
 
-            trust_atual = working_mem.trust_levels.get(npc_id, 0)
             trust_minimo: int = int(secret.get("min_trust_level", _TRUST_PADRAO))
 
-            if trust_atual < trust_minimo:
-                continue  # trust insuficiente — ignora
+            # Verifica se algum NPC presente tem trust suficiente
+            npc_id_revelador = ""
+            for npc_id in known_by:
+                if working_mem.trust_levels.get(npc_id, 0) >= trust_minimo:
+                    npc_id_revelador = npc_id
+                    break
+
+            if not npc_id_revelador:
+                continue  # nenhum NPC com trust suficiente presente
 
             # Trust OK — decidir se NPC é honesto ou mente
-            npc_honesty = _buscar_honesty_npc(schema, npc_id)
+            npc_honesty = _buscar_honesty_npc(schema, npc_id_revelador)
             revelar = npc_honesty >= 0.5
 
             visiveis.append(SecretVisivel(
-                npc_id=npc_id,
+                npc_id=npc_id_revelador,
                 content=secret.get("content", ""),
                 lie_content=secret.get("lie_content"),
                 revelar=revelar,
