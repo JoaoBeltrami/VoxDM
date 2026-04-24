@@ -110,6 +110,10 @@ class Neo4jUploader:
                     log.warning("neo4j_no_sem_id", categoria=categoria, elem=str(elem)[:80])
                     continue
 
+                # Garantir name em todo nó — secrets não têm campo name
+                if "name" not in props:
+                    props["name"] = source_id.replace("-", " ").title()
+
                 await self._executar_query(
                     session,
                     f"MERGE (n:{label} {{id: $id}}) SET n += $props",
