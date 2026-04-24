@@ -241,6 +241,7 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
             latencia_llm_ms = 0
             stt_silenciado = False
             mensagens: list[dict[str, str]] = []
+            contexto = None
 
             try:
                 contexto = await context_builder.montar(texto_jogador, working_mem)
@@ -328,6 +329,22 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
                 primeiro_audio_ms=primeiro_audio_ms,
                 status=status_latencia,
             )
+
+            # Publica métricas e contexto do ciclo para o dashboard em tempo real
+            from engine.telemetry import emit as _emit
+            _emit({
+                "evento": "ciclo",
+                "iteracao": iteracao,
+                "texto_jogador": texto_jogador,
+                "resposta_mestre": resposta_mestre,
+                "total_ms": latencia_total_ms,
+                "llm_ms": latencia_llm_ms,
+                "primeiro_audio_ms": primeiro_audio_ms,
+                "status": status_latencia,
+                "chunks_regras": [c.get("text", "")[:120] for c in (contexto.chunks_regras if contexto else [])],
+                "chunks_lore": [c.get("text", "")[:120] for c in (contexto.chunks_semanticos if contexto else [])],
+                "relacoes_grafo": contexto.relacoes_grafo if contexto else [],
+            })
 
             if max_iteracoes and iteracao >= max_iteracoes:
                 break
