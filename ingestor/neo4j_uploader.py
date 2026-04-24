@@ -83,6 +83,26 @@ class Neo4jUploader:
         """Executa uma query com retry automático."""
         return await session.run(query, **(params or {}))
 
+    async def _criar_indexes(self, session: Any) -> None:
+        """Cria indexes em id e name para todos os labels — idempotente."""
+        indexes = [
+            ("NPC", "id"), ("NPC", "name"),
+            ("Location", "id"), ("Location", "name"),
+            ("Companion", "id"), ("Companion", "name"),
+            ("Entity", "id"), ("Entity", "name"),
+            ("Faction", "id"), ("Faction", "name"),
+            ("Item", "id"), ("Item", "name"),
+            ("Quest", "id"), ("Quest", "name"),
+            ("Secret", "id"), ("Secret", "name"),
+        ]
+        for label, prop in indexes:
+            nome = f"voxdm_{label.lower()}_{prop}"
+            await self._executar_query(
+                session,
+                f"CREATE INDEX {nome} IF NOT EXISTS FOR (n:{label}) ON (n.{prop})",
+            )
+        log.info("neo4j_indexes_criados", total=len(indexes))
+
     async def _limpar_banco(self, session: Any) -> None:
         """Remove todos os nós e arestas existentes."""
         await self._executar_query(session, "MATCH (n) DETACH DELETE n")
@@ -193,6 +213,8 @@ class Neo4jUploader:
 
         try:
             async with driver.session() as session:
+                await self._criar_indexes(session)
+
                 if limpar_antes:
                     await self._limpar_banco(session)
 
