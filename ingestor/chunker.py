@@ -28,8 +28,8 @@ MIN_PALAVRAS = 10
 # Campos de texto a extrair por categoria (em ordem de prioridade)
 _CAMPOS_POR_CATEGORIA: dict[str, list[str]] = {
     "locations":   ["description", "atmosphere"],
-    "npcs":        ["description", "backstory", "personality"],
-    "companions":  ["description", "backstory", "personality"],
+    "npcs":        ["description", "backstory", "personality", "speech_style"],
+    "companions":  ["description", "backstory", "personality", "speech_style"],
     "entities":    ["description"],
     "factions":    ["description", "goals"],
     "items":       ["description", "lore"],
@@ -116,6 +116,73 @@ def _dividir_em_chunks(
     return chunks
 
 
+def _limpar_role(role: str, locais_ids: set[str]) -> str:
+    """Remove termos de localização do role para não poluir queries geográficas.
+
+    Strip tanto o ID completo (ex: 'gargantas-vulcanicas') quanto palavras
+    individuais longas (ex: 'gargantas') para cobrir roles como 'comandante-guarda-gargantas'.
+    """
+    termos: set[str] = set()
+    for local_id in locais_ids:
+        termos.add(local_id)
+        for palavra in local_id.split("-"):
+            if len(palavra) > 4:  # evitar strip de palavras curtas como "de", "da"
+                termos.add(palavra)
+    for termo in termos:
+        role = role.replace(f"-{termo}", "").replace(termo, "")
+    # Remover preposições soltas no final após o strip ("lider de" → "lider")
+    role = role.strip("-").replace("-", " ").strip()
+    palavras = role.split()
+    preposicoes = {"de", "da", "do", "dos", "das", "em", "na", "no"}
+    while palavras and palavras[-1] in preposicoes:
+        palavras.pop()
+    return " ".join(palavras)
+
+
+def _construir_prefixo(
+    elem: dict[str, Any],
+    source_name: str,
+    source_id: str,
+    categoria: str,
+    locais_ids: set[str],
+) -> str:
+    """
+    Gera prefixo em linguagem natural com identidade do elemento.
+
+    Inclui role e tipo para que o embedding do chunk corresponda a queries
+    como "quem é X?" e "o que é X?" sem depender só do nome.
+    Remove IDs de localização dos roles de NPCs/companions para evitar
+    que queries geográficas retornem personagens.
+    """
+    if categoria in ("companions", "npcs"):
+        role_raw = elem.get("role", "")
+        companion_for = elem.get("companion_for", "")
+        all_locais = locais_ids | ({companion_for} if companion_for else set())
+        role_clean = _limpar_role(role_raw, all_locais)
+        tipo = "companion" if categoria == "companions" else "NPC"
+        base = f"{source_name} é um {tipo}"
+        if role_clean:
+            base += f", papel de {role_clean}"
+        return base + ". "
+    elif categoria == "locations":
+        return f"{source_name} é uma localização na região. "
+    elif categoria == "factions":
+        return f"{source_name} é uma facção. "
+    elif categoria == "items":
+        return f"{source_name} é um item. "
+    elif categoria == "artifacts":
+        return f"{source_name} é um artefato. "
+    elif categoria == "quests":
+        return f"{source_name} é uma quest. "
+    elif categoria == "secrets":
+        return f"Segredo ({source_id}): "
+    elif categoria == "entities":
+        tipo = elem.get("type", "entidade")
+        return f"{source_name} é uma {tipo}. "
+    else:
+        return f"{source_name} ({source_id}). "
+
+
 def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
     """
     Percorre todas as categorias do schema e extrai chunks de todos os campos de texto.
@@ -124,6 +191,13 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
     """
     todos: list[ChunkRecord] = []
     total_por_categoria: dict[str, int] = {}
+
+    # IDs de localização para strip dos roles de NPCs/companions
+    locais_ids: set[str] = {
+        str(loc.get("id", ""))
+        for loc in schema.get("locations", [])
+        if isinstance(loc, dict) and loc.get("id")
+    }
 
     for categoria, campos in _CAMPOS_POR_CATEGORIA.items():
         elementos: list[dict[str, Any]] = schema.get(categoria, [])
@@ -146,8 +220,10 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
                 if not texto or not isinstance(texto, str):
                     continue
 
+                # Prefixar com identidade enriquecida: nome + role/tipo para reforçar retrieval
+                prefixo = _construir_prefixo(elem, source_name, source_id, categoria, locais_ids)
                 novos_chunks = _dividir_em_chunks(
-                    texto=texto.strip(),
+                    texto=prefixo + texto.strip(),
                     source_id=source_id,
                     source_name=source_name,
                     source_type=source_type,
