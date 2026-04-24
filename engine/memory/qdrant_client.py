@@ -137,10 +137,12 @@ class QdrantMemoryClient:
             Lista de dicts com payload + score de cada resultado.
         """
         embedder = self._get_embedder()
-        vetor_array = embedder.gerar([query])
+        loop = asyncio.get_running_loop()
+
+        # Embedding em executor — sentence-transformers bloqueia CPU por 200-500ms
+        vetor_array = await loop.run_in_executor(None, embedder.gerar, [query])
         vetor: list[float] = vetor_array[0].tolist()
 
-        loop = asyncio.get_event_loop()
         resultados = await loop.run_in_executor(
             None, self._buscar_sync, vetor, colecao, top_k, filtro
         )
