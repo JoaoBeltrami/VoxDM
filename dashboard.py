@@ -74,8 +74,8 @@ with tab_video:
 
     from engine.telemetry import read_latest
 
-    eventos = read_latest(n=1)
-    evento = eventos[-1] if eventos else {}
+    historico = read_latest(n=3)
+    evento = historico[-1] if historico else {}
 
     # ── Cabeçalho com métricas de latência ───────────────────────────────────
 
@@ -87,26 +87,44 @@ with tab_video:
     llm_ms = evento.get("llm_ms", 0)
     pa_ms = evento.get("primeiro_audio_ms", -1)
     status = evento.get("status", "—")
+    pa_str = f"{pa_ms}ms" if pa_ms >= 0 else "—"
 
     total_cls = "vox-ok" if total_ms < 2000 else "vox-err"
-    pa_cls = "vox-ok" if 0 <= pa_ms < 1200 else ("vox-warn" if pa_ms == -1 else "vox-err")
+    pa_cls = "vox-ok" if 0 <= pa_ms < 1200 else ("vox-warn" if pa_ms < 0 else "vox-err")
 
     mc1.markdown(f'<div class="vox-label">Total</div><div class="vox-stat {total_cls}">{total_ms}ms</div>', unsafe_allow_html=True)
     mc2.markdown(f'<div class="vox-label">LLM</div><div class="vox-stat">{llm_ms}ms</div>', unsafe_allow_html=True)
-    mc3.markdown(f'<div class="vox-label">1o Audio</div><div class="vox-stat {pa_cls}">{pa_ms}ms</div>', unsafe_allow_html=True)
+    mc3.markdown(f'<div class="vox-label">1o Audio</div><div class="vox-stat {pa_cls}">{pa_str}</div>', unsafe_allow_html=True)
     mc4.markdown(f'<div class="vox-label">Status</div><div class="vox-stat {"vox-ok" if status == "OK" else "vox-err"}">{status}</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Falas ─────────────────────────────────────────────────────────────────
+    # ── Falas (último ciclo) + histórico compacto ──────────────────────────────
 
-    fa1, fa2 = st.columns(2)
+    fa1, fa2 = st.columns([3, 2])
     with fa1:
         st.markdown('<div class="vox-label">Jogador disse</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="vox-fala">{evento.get("texto_jogador", "—")}</div>', unsafe_allow_html=True)
-    with fa2:
-        st.markdown('<div class="vox-label">Mestre respondeu</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vox-label" style="margin-top:0.8rem">Mestre respondeu</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="vox-fala">{evento.get("resposta_mestre", "—")}</div>', unsafe_allow_html=True)
+
+    with fa2:
+        st.markdown('<div class="vox-label">Historico</div>', unsafe_allow_html=True)
+        anteriores = historico[:-1] if len(historico) > 1 else []
+        if anteriores:
+            for ev in reversed(anteriores):
+                jogador = ev.get("texto_jogador", "")[:50]
+                mestre = ev.get("resposta_mestre", "")[:80]
+                t = ev.get("total_ms", 0)
+                st.markdown(
+                    f'<div class="vox-chunk" style="opacity:0.65;font-size:0.9rem">'
+                    f'<span style="color:#a78bfa">#{ev.get("iteracao","?")} [{t}ms]</span> '
+                    f'{jogador} → {mestre}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("historico aparece apos 2+ ciclos")
 
     st.divider()
 

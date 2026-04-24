@@ -212,6 +212,9 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
     latencias: list[int] = []
     primeiros_audios: list[int] = []
 
+    from engine.telemetry import purge_old as _purge_telemetry
+    _purge_telemetry()
+
     log.info(
         "Loop de voz iniciado",
         max_iteracoes=max_iteracoes or "infinito",
