@@ -146,6 +146,43 @@ class Neo4jMemoryClient:
         before_sleep=_logar_tentativa,
         reraise=True,
     )
+    async def buscar_por_ids(self, ids: list[str]) -> list[dict[str, Any]]:
+        """
+        Retorna propriedades de múltiplos nós em uma única query.
+
+        Mais eficiente que N chamadas a buscar_entidade() em sequência.
+        Útil quando o context_builder detecta múltiplas entidades mencionadas
+        na transcrição e precisa enriquecer o contexto de todas de uma vez.
+
+        Args:
+            ids: Lista de IDs kebab-case (ex: ["bjorn-tharnsson", "aldeia-valdrek"]).
+
+        Returns:
+            Lista de dicts com propriedades de cada nó encontrado.
+        """
+        if not ids:
+            return []
+        driver = await self._get_driver()
+        async with driver.session() as session:
+            result = await session.run(
+                "UNWIND $ids AS eid MATCH (n {id: eid}) RETURN properties(n) AS props",
+                {"ids": ids},
+            )
+            registros = await result.data()
+
+        entidades: list[dict[str, Any]] = [
+            dict(r["props"]) for r in registros if r.get("props")
+        ]
+        log.info("neo4j_batch_ids", total_pedido=len(ids), total_encontrado=len(entidades))
+        return entidades
+
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        before_sleep=_logar_tentativa,
+        reraise=True,
+    )
     async def buscar_npcs_no_local(self, location_id: str) -> list[dict[str, Any]]:
         """
         Retorna todos os NPCs/Companions relacionados a um local.
