@@ -60,6 +60,7 @@ class WorkingMemory:
     player_hp: int
     player_hp_max: int
     player_conditions: list[str]       # ex: ["envenenado", "exausto"]
+    player_inventory: list[str]        # ids de itens portados — usado por trigger item_used
     active_quest_hooks: list[str]      # ids de quests/stages ativos
 
     # Progresso de quests — quest_id → stage_id atual
@@ -93,6 +94,7 @@ class WorkingMemory:
             player_hp=player_hp,
             player_hp_max=player_hp_max,
             player_conditions=[],
+            player_inventory=[],
             active_quest_hooks=[],
             quest_stages={},
             session_id=session_id,
@@ -111,6 +113,16 @@ class WorkingMemory:
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado
+
+    def adicionar_item(self, item_id: str) -> None:
+        """Adiciona item ao inventário se ainda não estiver presente."""
+        if item_id not in self.player_inventory:
+            self.player_inventory.append(item_id)
+
+    def remover_item(self, item_id: str) -> None:
+        """Remove item do inventário se presente."""
+        if item_id in self.player_inventory:
+            self.player_inventory.remove(item_id)
 
     def atualizar_quest_stage(self, quest_id: str, stage_id: str) -> None:
         self.quest_stages[quest_id] = stage_id
