@@ -104,6 +104,26 @@ def test_start_location_personalizada(client):
     assert resp.json()["location_id"] == "torre-negra"
 
 
+def test_start_limite_sessoes_503(client):
+    """Atingir MAX_SESSOES → 503 na próxima criação."""
+    from api.state import MAX_SESSOES, sessions, SessaoAtiva
+    from unittest.mock import MagicMock
+    import time
+
+    # Preenche o store até o limite sem passar pela rota (evita cold start real)
+    for i in range(MAX_SESSOES):
+        sessions[f"fake-{i}"] = SessaoAtiva(
+            session_id=f"fake-{i}",
+            working_mem=MagicMock(),
+            context_builder=MagicMock(),
+            groq=MagicMock(),
+        )
+
+    resp = client.post("/session/start", json={"session_id": "sess-extra"})
+    assert resp.status_code == 503
+    assert str(MAX_SESSOES) in resp.json()["detail"]
+
+
 # ── Testes: POST /session/{id}/turn ──────────────────────────────────────────
 
 def test_turn_retorna_resposta(client):

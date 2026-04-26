@@ -78,7 +78,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             if not texto_jogador:
                 continue
 
+            if len(texto_jogador) > 500:
+                await websocket.send_text(
+                    MensagemWS(
+                        tipo="erro",
+                        conteudo="Texto muito longo — máximo 500 caracteres",
+                    ).model_dump_json()
+                )
+                continue
+
             t0 = time.perf_counter()
+            sessao.ultima_atividade = time.time()
             sessao.working_mem.registrar_fala("player", texto_jogador)
 
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
