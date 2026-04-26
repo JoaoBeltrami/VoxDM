@@ -21,7 +21,7 @@ import structlog
 from fastapi import APIRouter, HTTPException
 
 from api.models.schemas import ComandoJogador, RespostaMestre, SessaoConfig, SessaoInfo
-from api.state import SessaoAtiva, sessions
+from api.state import MAX_SESSOES, SessaoAtiva, sessions
 from engine.llm.groq_client import GroqClient
 from engine.llm.prompt_builder import montar_mensagens
 from engine.memory.context_builder import ContextBuilder
@@ -39,6 +39,12 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         raise HTTPException(
             status_code=409,
             detail=f"Sessão '{config.session_id}' já existe — DELETE para encerrar antes de criar nova",
+        )
+
+    if len(sessions) >= MAX_SESSOES:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Limite de {MAX_SESSOES} sessões simultâneas atingido — encerre uma sessão antes de criar nova",
         )
 
     working_mem = WorkingMemory.nova_sessao(
