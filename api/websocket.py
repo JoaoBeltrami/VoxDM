@@ -136,6 +136,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 ).model_dump_json()
             )
 
+            # Campos alinhados com voice_loop.py para compatibilidade com dashboard.py
             _emit({
                 "evento": "ws_ciclo",
                 "session_id": session_id,
@@ -143,9 +144,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "texto_jogador": texto_jogador,
                 "resposta_mestre": resposta_completa,
                 "total_ms": latencia_ms,
-                "latencia_primeiro_token_ms": latencia_primeiro_token,
+                "llm_ms": latencia_primeiro_token,   # proxy: tempo até 1º token ≈ tempo de LLM
+                "primeiro_audio_ms": -1,             # sem áudio no modo API
+                "status": "OK" if latencia_ms < 2000 else "ACIMA DO LIMITE",
                 "chunks_lore": chunks_lore,
                 "chunks_regras": chunks_regras,
+                "relacoes_grafo": relacoes,
             })
 
             log.info(
