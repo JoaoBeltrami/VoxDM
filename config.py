@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"
 
+    # Fase 4 — API
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(
