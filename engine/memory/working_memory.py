@@ -117,8 +117,14 @@ class WorkingMemory:
         if quest_id not in self.active_quest_hooks:
             self.active_quest_hooks.append(quest_id)
 
-    def para_texto(self) -> str:
-        """Serializa o estado atual para texto formatado para o prompt."""
+    def para_texto(self, incluir_dialogo: bool = False) -> str:
+        """Serializa o estado atual para texto formatado para o prompt.
+
+        Args:
+            incluir_dialogo: Se True, inclui DIÁLOGO RECENTE no texto.
+                             Por padrão False — o histórico é passado como
+                             pares user/assistant reais pelo prompt_builder.
+        """
         linhas: list[str] = [
             f"=== CENA ATUAL ===",
             f"Local: {self.location_nome} ({self.location_id})",
@@ -136,14 +142,14 @@ class WorkingMemory:
             linhas.append("Estados emocionais:")
             for npc_id, estado in self.npc_estados_emocionais.items():
                 trust = self.trust_levels.get(npc_id, 0)
-                linhas.append(f"  {npc_id}: {estado} (confiança: {trust}/5)")
+                linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/5)")
 
         if self.active_quest_hooks:
             linhas.append(f"\nQuests ativas: {', '.join(self.active_quest_hooks)}")
             for qid, stage in self.quest_stages.items():
                 linhas.append(f"  {qid} → estágio: {stage}")
 
-        if self.dialogo_recente:
+        if incluir_dialogo and self.dialogo_recente:
             linhas.append("\n=== DIÁLOGO RECENTE ===")
             for turno in self.dialogo_recente:
                 prefixo = "Jogador" if turno.falante == "player" else turno.falante
