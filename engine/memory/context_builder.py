@@ -14,7 +14,9 @@ Exemplo:
     resposta = await groq.completar(msgs)
 """
 
+import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +46,12 @@ class ContextBuilder:
     Instanciar uma vez por sessão e reutilizar — os clientes mantêm conexões abertas.
     """
 
+    # Palavras sem semântica para ignorar ao extrair keywords de player_action
+    _STOP_PT: frozenset[str] = frozenset({
+        "de", "do", "da", "dos", "das", "e", "o", "a", "os", "as",
+        "em", "no", "na", "para", "por", "com", "entre", "sobre", "ver",
+    })
+
     def __init__(self) -> None:
         self._qdrant = QdrantMemoryClient()
         self._neo4j = Neo4jMemoryClient()
@@ -69,11 +77,13 @@ class ContextBuilder:
         cond: dict[str, Any],
         working_mem: WorkingMemory,
     ) -> bool:
-        """Avalia uma condição folha (sem filhos) contra o estado atual."""
+        """Avalia uma condição folha (sem filhos) contra o estado atual.
+
+        Schema v1.2 usa "target" como campo genérico em vez de npc_id/location_id.
+        """
         tipo: str = cond.get("type", "")
         valor: Any = cond.get("value")
-
-        # Schema usa "target" para o ID da entidade e "value" para o limiar numérico
+        # "target" é o campo usado pelo schema v1.2
         alvo: str = cond.get("target", "")
 
         if tipo == "npc_trust":
@@ -84,14 +94,24 @@ class ContextBuilder:
             return alvo == working_mem.location_id
 
         if tipo == "player_action":
-            # Verifica se o target (slug da ação) está mencionado no diálogo recente
+            # alvo é kebab-case descrevendo a ação (ex: "perguntar-sobre-osmund")
+            # Extrai palavras-chave (sem stopwords) e verifica no diálogo recente
             if not alvo:
                 return False
-            palavras_alvo = set(alvo.replace("-", " ").lower().split())
+            palavras = [
+                p for p in alvo.replace("-", " ").split()
+                if p not in self._STOP_PT and len(p) > 2
+            ]
+            if not palavras:
+                return False
             return any(
-                palavras_alvo & set(turno.texto.lower().split())
+                any(p in turno.texto.lower() for p in palavras)
                 for turno in working_mem.dialogo_recente
+                if turno.falante == "player"
             )
+
+        if tipo == "item_used":
+            return alvo in working_mem.player_inventory
 
         if tipo == "quest_stage":
             stage_id: str = str(valor or "")
@@ -100,15 +120,6 @@ class ContextBuilder:
         if tipo == "faction_standing":
             minimo: int = int(valor or 0)
             return working_mem.faction_standings.get(alvo, 0) >= minimo
-
-        if tipo == "item_used":
-            # Verifica menção direta ao item no diálogo recente
-            if not alvo:
-                return False
-            return any(
-                alvo in turno.texto.lower()
-                for turno in working_mem.dialogo_recente
-            )
 
         # Tipo desconhecido → não satisfeita (seguro)
         log.warning("trigger_tipo_desconhecido", tipo=tipo)
@@ -155,10 +166,10 @@ class ContextBuilder:
 
         for secret in secrets_raw:
             # Schema v1.2 usa "known_by" (lista de NPCs que conhecem o secret)
-            known_by: list[str] = secret.get("known_by", [])
-            trigger: dict[str, Any] | None = secret.get("trigger_condition")
+            known_by: list[str] = secret.get("known_by") or []
+            npc_id_raw: str = secret.get("npc_id") or (known_by[0] if known_by else "")
 
-            # Sem trigger → nunca revelado automaticamente
+            trigger: dict[str, Any] | None = secret.get("trigger_condition")
             if not trigger:
                 continue
 
@@ -166,23 +177,27 @@ class ContextBuilder:
                 continue
 
             trust_minimo: int = int(secret.get("min_trust_level", _TRUST_PADRAO))
+            # Trust OK se qualquer NPC do known_by tem confiança suficiente
+            npcs_para_checar: list[str] = known_by or ([npc_id_raw] if npc_id_raw else [])
+            if trust_minimo > 0 and npcs_para_checar:
+                if not any(
+                    working_mem.trust_levels.get(n, 0) >= trust_minimo
+                    for n in npcs_para_checar
+                ):
+                    continue
 
-            # Verifica se algum NPC presente tem trust suficiente
-            npc_id_revelador = ""
-            for npc_id in known_by:
-                if working_mem.trust_levels.get(npc_id, 0) >= trust_minimo:
-                    npc_id_revelador = npc_id
+            # Preferir NPC presente na cena; fallback para o primeiro do known_by
+            npc_ativo = npc_id_raw
+            for n in npcs_para_checar:
+                if n in working_mem.npcs_presentes:
+                    npc_ativo = n
                     break
 
-            if not npc_id_revelador:
-                continue  # nenhum NPC com trust suficiente presente
-
-            # Trust OK — decidir se NPC é honesto ou mente
-            npc_honesty = _buscar_honesty_npc(schema, npc_id_revelador)
+            npc_honesty = _buscar_honesty_npc(schema, npc_ativo)
             revelar = npc_honesty >= 0.5
 
             visiveis.append(SecretVisivel(
-                npc_id=npc_id_revelador,
+                npc_id=npc_ativo,
                 content=secret.get("content", ""),
                 lie_content=secret.get("lie_content"),
                 revelar=revelar,
@@ -190,6 +205,33 @@ class ContextBuilder:
 
         log.info("secrets_avaliados", total=len(visiveis))
         return visiveis
+
+    # ── Warmup de conexões ────────────────────────────────────────────────────
+
+    async def inferir_npcs_presentes(self, location_id: str) -> list[str]:
+        """Retorna ids dos NPCs/Companions presentes no local via grafo Neo4j."""
+        try:
+            npcs = await self._neo4j.buscar_npcs_no_local(location_id)
+            ids = [n["id"] for n in npcs if n.get("id")]
+            log.info("npcs_inferidos", location=location_id, total=len(ids))
+            return ids
+        except Exception as e:
+            log.warning("npcs_inferir_falhou", location=location_id, erro=str(e))
+            return []
+
+    async def warmup(self) -> None:
+        """Aquece Qdrant e Neo4j antes do primeiro ciclo real."""
+        t0 = time.perf_counter()
+        await asyncio.gather(
+            self._qdrant.buscar_modulo("warmup", top_k=1),
+            self._qdrant.buscar_regras("warmup", top_k=1),
+            return_exceptions=True,
+        )
+        try:
+            await self._neo4j.buscar_relacionamentos("__warmup__")
+        except Exception:
+            pass
+        log.info("context_builder_warmup", ms=int((time.perf_counter() - t0) * 1000))
 
     # ── Montagem do contexto completo ─────────────────────────────────────────
 
@@ -209,10 +251,8 @@ class ContextBuilder:
             ContextoMontado pronto para o prompt_builder.
         """
         # ── Buscas em paralelo (Qdrant) ───────────────────────────────────────
-        # Construir query combinando transcrição + localização atual
         query = f"{transcricao} {working_mem.location_nome}"
 
-        import asyncio
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
             self._qdrant.buscar_modulo(query, top_k=TOP_K_SEMANTICO),
             self._qdrant.buscar(
@@ -235,14 +275,19 @@ class ContextBuilder:
             log.warning("qdrant_regras_falhou", erro=str(chunks_reg))
             chunks_reg = []
 
-        # ── Relações do grafo para NPCs presentes ────────────────────────────
+        # ── Relações do grafo para NPCs presentes (paralelo) ─────────────────
         relacoes: list[dict[str, Any]] = []
-        for npc_id in working_mem.npcs_presentes[:3]:  # limitar a 3 NPCs
-            try:
-                rels = await self._neo4j.buscar_relacionamentos(npc_id)
-                relacoes.extend(rels)
-            except Exception as e:
-                log.warning("neo4j_relacoes_falhou", npc=npc_id, erro=str(e))
+        npcs_a_buscar = working_mem.npcs_presentes[:3]
+        if npcs_a_buscar:
+            resultados_neo4j = await asyncio.gather(
+                *[self._neo4j.buscar_relacionamentos(npc_id) for npc_id in npcs_a_buscar],
+                return_exceptions=True,
+            )
+            for npc_id, resultado in zip(npcs_a_buscar, resultados_neo4j):
+                if isinstance(resultado, Exception):
+                    log.warning("neo4j_relacoes_falhou", npc=npc_id, erro=str(resultado))
+                else:
+                    relacoes.extend(resultado)
 
         # ── Avaliação de secrets ──────────────────────────────────────────────
         secrets = await self._avaliar_secrets(working_mem)
