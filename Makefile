@@ -1,4 +1,4 @@
-.PHONY: run test ingest ingest-rules debug backup docs-sync
+.PHONY: run run-api test ingest ingest-rules debug backup docs-sync
 
 # Detecta Windows vs Unix para caminhos do venv
 ifeq ($(OS),Windows_NT)
@@ -9,8 +9,10 @@ else
     PYTEST := .venv/bin/pytest
 endif
 
-run:
-	$(PYTHON) -m uvicorn api.main:app --reload
+run: run-api
+
+run-api:
+	$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 test:
 	$(PYTEST) tests/ -v
