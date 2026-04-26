@@ -57,9 +57,11 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+_origens = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # fixar para domínio do frontend em produção
+    allow_origins=_origens,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
