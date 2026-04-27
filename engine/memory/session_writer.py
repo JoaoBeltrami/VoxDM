@@ -146,7 +146,7 @@ class SessionWriter:
         dim = len(vetor)
 
         client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         # Garantir que a coleção existe (idempotente)
         try:
