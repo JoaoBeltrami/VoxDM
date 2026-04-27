@@ -30,6 +30,7 @@ _master_system_cache: str | None = None
 BUDGET_WORKING   = 1600   # 40% — nunca cortado
 BUDGET_EPISODICO = 1200   # 30%
 BUDGET_SEMANTICO = 1200   # 30%
+BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chunks SRD
 
 # Lembrete de formato — posicionado ao fim do system prompt para garantir aderência.
 # Repetir aqui compensa o fato de o contexto (lore, regras, secrets) ser injetado
@@ -163,10 +164,10 @@ def montar_mensagens(
     if sem_texto:
         secoes.append(f"\n=== CONTEÚDO DO MÓDULO ===\n{sem_texto}")
 
-    # Regras SRD relevantes
-    regras_texto = _formatar_chunks(contexto.chunks_regras, limite_chars=600)
+    # Regras SRD relevantes (combate, saves, condições)
+    regras_texto = _formatar_chunks(contexto.chunks_regras, limite_chars=BUDGET_REGRAS * 4)
     if regras_texto:
-        secoes.append(f"\n=== REGRAS RELEVANTES ===\n{regras_texto}")
+        secoes.append(f"\nREGRAS DE JOGO:\n{regras_texto}")
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

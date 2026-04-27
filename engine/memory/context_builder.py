@@ -33,7 +33,7 @@ log = structlog.get_logger()
 # Número de resultados por camada de memória
 TOP_K_SEMANTICO  = 5
 TOP_K_EPISODICO  = 3
-TOP_K_REGRAS     = 2
+TOP_K_REGRAS     = 3
 
 # Trust mínimo padrão quando secret não define min_trust_level
 _TRUST_PADRAO = 2
