@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"
 
+    # Fase 4 — API
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    # Origens permitidas para CORS — separadas por vírgula no .env
+    # Ex: CORS_ORIGINS=http://localhost:3000,https://meudominio.com
+    CORS_ORIGINS: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(

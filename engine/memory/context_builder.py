@@ -38,6 +38,11 @@ TOP_K_REGRAS     = 2
 # Trust mínimo padrão quando secret não define min_trust_level
 _TRUST_PADRAO = 2
 
+# Tamanho mínimo da transcrição (palavras) para não incluir localização na query.
+# Queries curtas ("ajuda", "ok") se beneficiam do contexto de localização;
+# queries longas já têm contexto suficiente.
+_QUERY_CURTA_LIMITE = 5
+
 
 class ContextBuilder:
     """
@@ -206,7 +211,37 @@ class ContextBuilder:
         log.info("secrets_avaliados", total=len(visiveis))
         return visiveis
 
-    # ── Warmup de conexões ────────────────────────────────────────────────────
+    # ── Extração de entidades mencionadas ────────────────────────────────────
+
+    def _extrair_entidades_mencionadas(self, transcricao: str) -> list[str]:
+        """
+        Detecta IDs de entidades do schema citadas na transcrição.
+
+        Compara tokens da transcrição contra nomes do schema (case-insensitive).
+        Retorna lista de IDs kebab-case das entidades encontradas.
+
+        Usado para enriquecer a query do Neo4j mesmo quando npcs_presentes está vazio.
+        """
+        schema = self._carregar_schema()
+        transcricao_lower = transcricao.lower()
+        encontrados: list[str] = []
+
+        for categoria in ("npcs", "companions", "entities", "locations", "factions"):
+            for elem in schema.get(categoria, []):
+                if not isinstance(elem, dict):
+                    continue
+                nome: str = str(elem.get("name", "")).lower()
+                eid: str = str(elem.get("id", ""))
+                if not nome or not eid:
+                    continue
+                primeiro_nome = nome.split()[0] if nome else ""
+                if (nome in transcricao_lower or
+                        (len(primeiro_nome) >= 3 and primeiro_nome in transcricao_lower)):
+                    encontrados.append(eid)
+
+        return encontrados
+
+    # ── Warmup e inferência ───────────────────────────────────────────────────
 
     async def inferir_npcs_presentes(self, location_id: str) -> list[str]:
         """Retorna ids dos NPCs/Companions presentes no local via grafo Neo4j."""
@@ -243,6 +278,12 @@ class ContextBuilder:
         """
         Monta o contexto completo para um turno de jogo.
 
+        Melhorias vs. v1:
+        - Query inteligente: localização só é adicionada em queries curtas
+        - Deduplicação por source_id: evita que o mesmo NPC ocupe 3 slots do top-5
+        - Lookup de entidades mencionadas: consulta Neo4j para IDs citados na fala
+          mesmo quando npcs_presentes está vazio
+
         Args:
             transcricao: O que o jogador disse (saída do STT).
             working_mem: Estado atual da sessão.
@@ -250,11 +291,17 @@ class ContextBuilder:
         Returns:
             ContextoMontado pronto para o prompt_builder.
         """
-        # ── Buscas em paralelo (Qdrant) ───────────────────────────────────────
-        query = f"{transcricao} {working_mem.location_nome}"
+        # ── Query semântica inteligente ───────────────────────────────────────
+        # Queries curtas ganham contexto de localização; queries longas não precisam
+        palavras = transcricao.split()
+        if len(palavras) <= _QUERY_CURTA_LIMITE:
+            query_modulo = f"{transcricao} {working_mem.location_nome}"
+        else:
+            query_modulo = transcricao
 
+        # ── Buscas em paralelo (Qdrant) ───────────────────────────────────────
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
-            self._qdrant.buscar_modulo(query, top_k=TOP_K_SEMANTICO),
+            self._qdrant.buscar_modulo(query_modulo, top_k=TOP_K_SEMANTICO + 2),
             self._qdrant.buscar(
                 transcricao,
                 colecao="voxdm_episodic",
@@ -275,19 +322,24 @@ class ContextBuilder:
             log.warning("qdrant_regras_falhou", erro=str(chunks_reg))
             chunks_reg = []
 
-        # ── Relações do grafo para NPCs presentes (paralelo) ─────────────────
+        # ── Deduplicação por source_id — mantém chunk de maior score por entidade ──
+        chunks_sem = _deduplicar_por_source_id(chunks_sem)[:TOP_K_SEMANTICO]  # type: ignore[arg-type]
+
+        # ── Entidades para consulta no Neo4j ─────────────────────────────────
+        # Combina npcs_presentes + entidades mencionadas na transcrição
+        entidades_mencionadas = self._extrair_entidades_mencionadas(transcricao)
+        ids_para_grafo: list[str] = list(
+            dict.fromkeys(working_mem.npcs_presentes[:3] + entidades_mencionadas[:3])
+        )  # dict.fromkeys preserva ordem e deduplica
+
+        # ── Relações do grafo ─────────────────────────────────────────────────
         relacoes: list[dict[str, Any]] = []
-        npcs_a_buscar = working_mem.npcs_presentes[:3]
-        if npcs_a_buscar:
-            resultados_neo4j = await asyncio.gather(
-                *[self._neo4j.buscar_relacionamentos(npc_id) for npc_id in npcs_a_buscar],
-                return_exceptions=True,
-            )
-            for npc_id, resultado in zip(npcs_a_buscar, resultados_neo4j):
-                if isinstance(resultado, Exception):
-                    log.warning("neo4j_relacoes_falhou", npc=npc_id, erro=str(resultado))
-                else:
-                    relacoes.extend(resultado)
+        for entidade_id in ids_para_grafo[:4]:  # cap em 4 para não sobrecarregar
+            try:
+                rels = await self._neo4j.buscar_relacionamentos(entidade_id)
+                relacoes.extend(rels)
+            except Exception as e:
+                log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
 
         # ── Avaliação de secrets ──────────────────────────────────────────────
         secrets = await self._avaliar_secrets(working_mem)
@@ -309,6 +361,7 @@ class ContextBuilder:
             reg=len(chunks_reg),   # type: ignore[arg-type]
             rels=len(relacoes),
             secrets=len(secrets),
+            entidades_detectadas=entidades_mencionadas,
         )
         return contexto
 
@@ -322,3 +375,22 @@ def _buscar_honesty_npc(schema: dict[str, Any], npc_id: str) -> float:
             if entidade.get("id") == npc_id:
                 return float(entidade.get("honesty", 0.5))
     return 0.5
+
+
+def _deduplicar_por_source_id(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Remove chunks duplicados pelo mesmo source_id, mantendo o de maior _score.
+
+    Evita que um NPC com description + backstory + personality apareça 3×
+    no top-5, desperdiçando budget de tokens com variações do mesmo conteúdo.
+    """
+    vistos: dict[str, dict[str, Any]] = {}
+    for chunk in chunks:
+        sid = chunk.get("source_id", "")
+        if not sid:
+            continue
+        score = float(chunk.get("_score", 0.0))
+        if sid not in vistos or score > float(vistos[sid].get("_score", 0.0)):
+            vistos[sid] = chunk
+    # Reordena por score descendente para manter a ordem original de relevância
+    return sorted(vistos.values(), key=lambda c: float(c.get("_score", 0.0)), reverse=True)

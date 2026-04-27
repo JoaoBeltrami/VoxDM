@@ -3,14 +3,27 @@ Fixtures base para pytest.
 
 Por que existe: centraliza mocks e dados de teste reutilizados em todos os módulos.
 Dependências: pytest
-Armadilha: não importar `config.settings` aqui diretamente — usa monkeypatch para sobrescrever variáveis.
+Armadilha: config.py instancia settings no import — as variáveis de ambiente precisam
+    estar definidas ANTES da coleta de testes (não apenas por monkeypatch por fixture).
+    O bloco os.environ abaixo garante isso para qualquer ambiente sem .env.
 
 Exemplo:
     def test_algo(settings_mock):
         assert settings_mock.LOG_LEVEL == "DEBUG"
 """
 
+import os
+
 import pytest
+
+# Vars obrigatórias para Settings() não explodir durante a coleta de testes.
+# setdefault preserva valores reais do .env quando existem.
+os.environ.setdefault("GROQ_API_KEY",       "test-groq-key")
+os.environ.setdefault("QDRANT_URL",          "https://test.qdrant.io")
+os.environ.setdefault("QDRANT_API_KEY",      "test-qdrant-key")
+os.environ.setdefault("NEO4J_URI",           "neo4j+s://test.databases.neo4j.io")
+os.environ.setdefault("NEO4J_PASSWORD",      "test-neo4j-password")
+os.environ.setdefault("LANGCHAIN_API_KEY",   "test-langchain-key")
 
 
 @pytest.fixture

@@ -26,10 +26,11 @@ OVERLAP_PALAVRAS = 50
 MIN_PALAVRAS = 10
 
 # Campos de texto a extrair por categoria (em ordem de prioridade)
+# knowledge é lista → normalizado para string em _extrair_texto_campo()
 _CAMPOS_POR_CATEGORIA: dict[str, list[str]] = {
     "locations":   ["description", "atmosphere"],
-    "npcs":        ["description", "backstory", "personality", "speech_style"],
-    "companions":  ["description", "backstory", "personality", "speech_style"],
+    "npcs":        ["description", "backstory", "personality", "speech_style", "knowledge"],
+    "companions":  ["description", "backstory", "personality", "speech_style", "knowledge"],
     "entities":    ["description"],
     "factions":    ["description", "goals"],
     "items":       ["description", "lore"],
@@ -183,10 +184,42 @@ def _construir_prefixo(
         return f"{source_name} ({source_id}). "
 
 
+def _extrair_texto_campo(elem: dict[str, Any], campo: str) -> str | None:
+    """
+    Extrai e normaliza o valor de um campo para string embedável.
+
+    Trata os casos especiais:
+    - knowledge: lista de strings → joined com "; "
+    - _ext.appearance: campo aninhado em _ext
+    - strings normais: retorna diretamente
+    """
+    if campo == "knowledge":
+        val = elem.get("knowledge")
+        if isinstance(val, list):
+            itens = [str(v).strip() for v in val if v]
+            return "; ".join(itens) if itens else None
+        if isinstance(val, str):
+            return val.strip() or None
+        return None
+
+    if campo == "_ext_appearance":
+        ext = elem.get("_ext")
+        if isinstance(ext, dict):
+            ap = ext.get("appearance", "")
+            return str(ap).strip() or None
+        return None
+
+    val = elem.get(campo)
+    if not val or not isinstance(val, str):
+        return None
+    return val.strip() or None
+
+
 def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
     """
     Percorre todas as categorias do schema e extrai chunks de todos os campos de texto.
 
+    Inclui knowledge (lista → string), _ext.appearance e campos texto normais.
     Retorna lista plana de ChunkRecord prontos para embedding.
     """
     todos: list[ChunkRecord] = []
@@ -199,6 +232,13 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
         if isinstance(loc, dict) and loc.get("id")
     }
 
+    # Campos extras implícitos para NPCs e companions (não declarados em _CAMPOS_POR_CATEGORIA
+    # para manter retrocompatibilidade — injetados por categoria aqui)
+    _CAMPOS_EXTRAS: dict[str, list[str]] = {
+        "npcs":       ["_ext_appearance"],
+        "companions": ["_ext_appearance"],
+    }
+
     for categoria, campos in _CAMPOS_POR_CATEGORIA.items():
         elementos: list[dict[str, Any]] = schema.get(categoria, [])
         if not isinstance(elementos, list):
@@ -206,6 +246,7 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
 
         source_type = _normalizar_source_type(categoria)
         chunks_categoria = 0
+        campos_efetivos = campos + _CAMPOS_EXTRAS.get(categoria, [])
 
         for elem in elementos:
             if not isinstance(elem, dict):
@@ -215,15 +256,20 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
             source_name: str = str(elem.get("name", source_id))
             chunk_index_offset = 0
 
-            for campo in campos:
-                texto: Any = elem.get(campo)
-                if not texto or not isinstance(texto, str):
+            for campo in campos_efetivos:
+                texto = _extrair_texto_campo(elem, campo)
+                if not texto:
                     continue
 
-                # Prefixar com identidade enriquecida: nome + role/tipo para reforçar retrieval
+                # Prefixo enriquecido: nome + role/tipo para reforçar retrieval por identidade
                 prefixo = _construir_prefixo(elem, source_name, source_id, categoria, locais_ids)
+
+                # Para knowledge, o prefixo indica explicitamente que é conhecimento do NPC
+                if campo == "knowledge":
+                    prefixo = f"{source_name} sabe: "
+
                 novos_chunks = _dividir_em_chunks(
-                    texto=prefixo + texto.strip(),
+                    texto=prefixo + texto,
                     source_id=source_id,
                     source_name=source_name,
                     source_type=source_type,
@@ -232,7 +278,6 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
                 )
                 todos.extend(novos_chunks)
                 chunks_categoria += len(novos_chunks)
-                # Próximo campo do mesmo elemento continua a numeração
                 chunk_index_offset += len(novos_chunks)
 
         if chunks_categoria:

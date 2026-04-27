@@ -78,6 +78,7 @@ class QdrantMemoryClient:
         colecao: str,
         top_k: int,
         filtro: dict[str, Any] | None,
+        score_threshold: float,
     ) -> list[ScoredPoint]:
         """Busca síncrona com retry — executada em thread pool."""
         from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -96,13 +97,13 @@ class QdrantMemoryClient:
         # query_points() é a API atual (qdrant-client >= 1.7)
         # search() foi removido nas versões recentes
         if hasattr(client, "query_points"):
-            from qdrant_client.models import Query
             resultado = client.query_points(
                 collection_name=colecao,
                 query=vetor,
                 limit=top_k,
                 with_payload=True,
                 query_filter=query_filter,
+                score_threshold=score_threshold,
             )
             return resultado.points
         else:
@@ -112,10 +113,17 @@ class QdrantMemoryClient:
                 "query_vector": vetor,
                 "limit": top_k,
                 "with_payload": True,
+                "score_threshold": score_threshold,
             }
             if query_filter:
                 kwargs["query_filter"] = query_filter
             return client.search(**kwargs)
+
+    # Score mínimo de cosseno para aceitar um chunk como relevante.
+    # Chunks abaixo deste limiar são descartados — evita poluir o prompt
+    # com conteúdo tangencialmente relacionado à query.
+    # Calibrado empiricamente para paraphrase-multilingual-MiniLM-L12-v2.
+    SCORE_THRESHOLD_DEFAULT: float = 0.45
 
     async def buscar(
         self,
@@ -123,19 +131,22 @@ class QdrantMemoryClient:
         colecao: str,
         top_k: int = 5,
         filtro: dict[str, Any] | None = None,
+        score_threshold: float | None = None,
     ) -> list[dict[str, Any]]:
         """
-        Busca semântica por similaridade de cosseno.
+        Busca semântica por similaridade de cosseno com filtro de qualidade.
 
         Args:
             query: Texto da pergunta ou contexto da busca.
             colecao: Nome da coleção Qdrant (ex: "voxdm_modules", "voxdm_rules").
             top_k: Número máximo de resultados.
             filtro: Filtro por campo de payload (ex: {"source_type": "npc"}).
+            score_threshold: Score mínimo (0-1). None usa SCORE_THRESHOLD_DEFAULT.
 
         Returns:
             Lista de dicts com payload + score de cada resultado.
         """
+        threshold = score_threshold if score_threshold is not None else self.SCORE_THRESHOLD_DEFAULT
         embedder = self._get_embedder()
         loop = asyncio.get_running_loop()
 
@@ -144,7 +155,7 @@ class QdrantMemoryClient:
         vetor: list[float] = vetor_array[0].tolist()
 
         resultados = await loop.run_in_executor(
-            None, self._buscar_sync, vetor, colecao, top_k, filtro
+            None, self._buscar_sync, vetor, colecao, top_k, filtro, threshold
         )
 
         chunks: list[dict[str, Any]] = []
@@ -158,6 +169,7 @@ class QdrantMemoryClient:
             colecao=colecao,
             query_resumida=query[:60],
             resultados=len(chunks),
+            threshold=threshold,
         )
         return chunks
 
