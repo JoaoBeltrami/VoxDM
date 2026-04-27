@@ -1,20 +1,20 @@
 """
 demo/voice_loop.py
-Loop de validação da Fase 2: STT → mock LLM → TTS → reprodução.
+Loop completo de voz: STT → ContextBuilder → Groq → TTS → reprodução.
 
-Valida:
-  - Transcrição em tempo real (RealtimeSTT + Faster-Whisper tiny)
-  - Detecção de idioma (PT-BR vs EN)
-  - Síntese de voz (Edge TTS com SSML + Kokoro fallback)
-  - Latência total por ciclo (meta: < 2000ms)
+Pipeline real (sem mocks):
+  - STT: RealtimeSTT + Faster-Whisper tiny (GPU)
+  - Contexto: ContextBuilder — 3 camadas (lore + episódico + regras)
+  - LLM: Groq llama-3.3-70b-versatile em modo streaming
+  - TTS: Edge TTS PT-BR com SSML + Kokoro fallback
+  - Latência alvo: < 2000ms total, < 1200ms até primeiro áudio
+  - Ao encerrar (Ctrl+C): salva resumo da sessão no Qdrant (memória episódica)
 
 Uso:
     uv run demo/voice_loop.py
     uv run demo/voice_loop.py --iteracoes 5
+    uv run demo/voice_loop.py --location-id taverna-ferreiro --location-nome "Taverna do Ferreiro"
     uv run demo/voice_loop.py --tts-apenas "Você lança Fireball!"
-
-O "mock LLM" retorna respostas pré-definidas para isolar o pipeline
-de voz da latência do Groq. Para testar com LLM real, veja Fase 3.
 """
 
 import argparse
@@ -37,42 +37,6 @@ structlog.configure(
     ]
 )
 log = structlog.get_logger("voice-loop-demo")
-
-# ---------------------------------------------------------------------------
-# Mock LLM — respostas pré-definidas para teste de latência pura do pipeline
-# ---------------------------------------------------------------------------
-
-_RESPOSTAS_MOCK: dict[str, str] = {
-    "default": "Uma sombra se move além das colunas de pedra. O silêncio pesa no ar. O que você faz?",
-    "fireball": "Uma esfera de fogo explode no centro da sala! As chamas consomem tudo ao redor. Os inimigos gritam enquanto recuam.",
-    "pergunta": "O ancião franze o cenho e cruza os braços. Essa informação tem um preço, aventureiro. Um preço alto.",
-    "ataque": "Seu golpe acerta em cheio! O inimigo tropeça para trás, claramente abalado pelo impacto.",
-}
-
-
-def _mock_llm(texto_jogador: str) -> str:
-    """
-    Simula resposta do Mestre sem chamar Groq.
-
-    Seleciona resposta por palavra-chave simples.
-
-    Args:
-        texto_jogador: Texto transcrito do jogador.
-
-    Returns:
-        Resposta do Mestre (string).
-    """
-    texto_lower = texto_jogador.lower()
-
-    if any(p in texto_lower for p in ("fireball", "bola de fogo", "fogo")):
-        return _RESPOSTAS_MOCK["fireball"]
-    elif any(p in texto_lower for p in ("pergunto", "onde", "sabe", "quem")):
-        return _RESPOSTAS_MOCK["pergunta"]
-    elif any(p in texto_lower for p in ("ataco", "golpeio", "ataque", "espada")):
-        return _RESPOSTAS_MOCK["ataque"]
-    else:
-        return _RESPOSTAS_MOCK["default"]
-
 
 # ---------------------------------------------------------------------------
 # Reprodução de áudio
@@ -148,65 +112,39 @@ async def _modo_tts_apenas(texto: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _warmup(context_builder: Any, groq: Any) -> None:
-    """Aquece todos os componentes antes do 1º input para zerar cold start."""
-    from engine.memory.context_builder import ContextBuilder as _CB
-    from engine.llm.groq_client import GroqClient as _GC
-
-    t_total = time.perf_counter()
-
-    for componente, coro in [
-        ("embedder+qdrant_modules", context_builder._qdrant.buscar_modulo("warmup", top_k=1)),
-        ("qdrant_rules", context_builder._qdrant.buscar_regras("warmup", top_k=1)),
-    ]:
-        t = time.perf_counter()
-        try:
-            await coro
-        except Exception as e:
-            log.warning("warmup_falhou", componente=componente, erro=str(e))
-        log.info("warmup_feito", componente=componente, tempo_ms=int((time.perf_counter() - t) * 1000))
-
-    # Neo4j — nó inexistente só para estabelecer a conexão TCP+auth
-    t = time.perf_counter()
-    try:
-        await context_builder._neo4j.buscar_relacionamentos("__warmup__")
-    except Exception:
-        pass
-    log.info("warmup_feito", componente="neo4j", tempo_ms=int((time.perf_counter() - t) * 1000))
-
-    # Groq — TLS handshake + validação de chave
-    t = time.perf_counter()
-    try:
-        await groq.completar([{"role": "user", "content": "ok"}], max_tokens=5)
-        log.info("warmup_feito", componente="groq", tempo_ms=int((time.perf_counter() - t) * 1000))
-    except Exception as e:
-        log.warning("warmup_falhou", componente="groq", erro=str(e))
-
-    log.info("warmup_completo", tempo_total_ms=int((time.perf_counter() - t_total) * 1000))
-
-
-async def _loop_completo(max_iteracoes: int | None) -> None:
+async def _loop_completo(
+    max_iteracoes: int | None,
+    location_id: str,
+    location_nome: str,
+) -> None:
     """
-    Loop completo de voz: STT -> WorkingMemory -> ContextBuilder -> Groq -> TTS.
+    Loop completo de voz: STT → WorkingMemory → ContextBuilder → Groq → TTS.
+
+    Ao encerrar (Ctrl+C ou max_iteracoes atingido), comprime a sessão via Groq
+    e salva no Qdrant como memória episódica para sessões futuras.
 
     Args:
         max_iteracoes: Número máximo de ciclos. None = loop infinito (Ctrl+C para parar).
+        location_id:   ID kebab-case do local inicial.
+        location_nome: Nome legível do local (vai para o prompt).
     """
     from engine.voice.language import detectar_idioma
     from engine.voice.stt import STTEngine
     from engine.voice.tts import TTSEngine
     from engine.memory.working_memory import WorkingMemory
     from engine.memory.context_builder import ContextBuilder
+    from engine.memory.session_writer import SessionWriter
     from engine.llm.prompt_builder import montar_mensagens
     from engine.llm.groq_client import GroqClient
 
     tts = TTSEngine()
     groq = GroqClient()
     context_builder = ContextBuilder()
+    session_id = f"voz-{int(time.time())}"
     working_mem = WorkingMemory.nova_sessao(
-        location_id="aldeia-valdrek",
-        location_nome="Aldeia de Valdrek",
-        session_id="demo-voz-01",
+        location_id=location_id,
+        location_nome=location_nome,
+        session_id=session_id,
     )
     iteracao = 0
     latencias: list[int] = []
@@ -217,140 +155,158 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
 
     log.info(
         "Loop de voz iniciado",
+        session_id=session_id,
+        location=location_nome,
         max_iteracoes=max_iteracoes or "infinito",
         meta_latencia_ms=2000,
     )
 
+    # Warmup: Qdrant + Neo4j via context_builder, depois Groq separado
     log.info("Iniciando warmup de componentes...")
-    await _warmup(context_builder, groq)
+    await context_builder.warmup()
+    t_groq = time.perf_counter()
+    try:
+        await groq.completar([{"role": "user", "content": "ok"}], max_tokens=5)
+        log.info("warmup_feito", componente="groq", tempo_ms=int((time.perf_counter() - t_groq) * 1000))
+    except Exception as e:
+        log.warning("warmup_falhou", componente="groq", erro=str(e))
 
     print("\nFale ao microfone. Ctrl+C para encerrar.\n")
 
     async with STTEngine() as stt:
-        async for texto_jogador in stt.stream_transcricoes():
-            t0 = time.perf_counter()
-            iteracao += 1
+        try:
+            async for texto_jogador in stt.stream_transcricoes():
+                t0 = time.perf_counter()
+                iteracao += 1
 
-            log.info("Jogador disse", texto=texto_jogador, iteracao=iteracao)
+                log.info("Jogador disse", texto=texto_jogador, iteracao=iteracao)
 
-            # Registra fala na working memory
-            working_mem.registrar_fala("player", texto_jogador)
-            idioma = detectar_idioma(texto_jogador)
+                working_mem.registrar_fala("player", texto_jogador)
+                idioma = detectar_idioma(texto_jogador)
 
-            # Contexto → Groq streaming → TTS por sentença (primeiro áudio < 1200ms)
-            t_llm = time.perf_counter()
-            resposta_mestre = ""
-            primeiro_audio_ms = -1
-            latencia_llm_ms = 0
-            stt_silenciado = False
-            mensagens: list[dict[str, str]] = []
-            contexto = None
+                # Contexto → Groq streaming → TTS por sentença (primeiro áudio < 1200ms)
+                t_llm = time.perf_counter()
+                resposta_mestre = ""
+                primeiro_audio_ms = -1
+                latencia_llm_ms = 0
+                stt_silenciado = False
+                mensagens: list[dict[str, str]] = []
+                contexto = None
 
-            try:
-                contexto = await context_builder.montar(texto_jogador, working_mem)
-                mensagens = montar_mensagens(contexto)
-            except Exception as e:
-                log.error("Contexto falhou", erro=str(e))
-                mensagens = [{"role": "user", "content": texto_jogador}]
+                try:
+                    contexto = await context_builder.montar(texto_jogador, working_mem)
+                    mensagens = montar_mensagens(contexto)
+                except Exception as e:
+                    log.error("Contexto falhou", erro=str(e))
+                    mensagens = [{"role": "user", "content": texto_jogador}]
 
-            try:
-                buffer = ""
-                primeiro_audio = True
+                try:
+                    buffer = ""
+                    primeiro_audio = True
 
-                async for token in groq.completar_stream(mensagens, temperatura=0.8, max_tokens=200):
-                    buffer += token
-                    resposta_mestre += token
-                    palavras = buffer.split()
-                    fim_sentenca = bool(buffer.rstrip()) and buffer.rstrip()[-1] in ".!?"
+                    async for token in groq.completar_stream(mensagens, temperatura=0.8, max_tokens=200):
+                        buffer += token
+                        resposta_mestre += token
+                        palavras = buffer.split()
+                        fim_sentenca = bool(buffer.rstrip()) and buffer.rstrip()[-1] in ".!?"
 
-                    if (fim_sentenca and len(palavras) >= 3) or len(palavras) >= 20:
-                        sentenca = buffer.strip()
-                        buffer = ""
+                        if (fim_sentenca and len(palavras) >= 3) or len(palavras) >= 20:
+                            sentenca = buffer.strip()
+                            buffer = ""
+                            if not stt_silenciado:
+                                stt.silenciar()
+                                stt_silenciado = True
+                                latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                            audio_bytes = await tts.sintetizar(sentenca, idioma)
+                            if primeiro_audio:
+                                primeiro_audio_ms = int((time.perf_counter() - t0) * 1000)
+                                log.info(
+                                    "primeiro_audio",
+                                    primeiro_audio_ms=primeiro_audio_ms,
+                                    meta_ms=1200,
+                                    ok=primeiro_audio_ms < 1200,
+                                )
+                                primeiro_audio = False
+                            await _reproduzir_audio(audio_bytes)
+
+                    # Flush de tokens restantes no buffer
+                    if buffer.strip():
                         if not stt_silenciado:
                             stt.silenciar()
                             stt_silenciado = True
                             latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
-                        audio_bytes = await tts.sintetizar(sentenca, idioma)
+                        audio_bytes = await tts.sintetizar(buffer.strip(), idioma)
                         if primeiro_audio:
                             primeiro_audio_ms = int((time.perf_counter() - t0) * 1000)
-                            log.info(
-                                "primeiro_audio",
-                                primeiro_audio_ms=primeiro_audio_ms,
-                                meta_ms=1200,
-                                ok=primeiro_audio_ms < 1200,
-                            )
                             primeiro_audio = False
                         await _reproduzir_audio(audio_bytes)
 
-                # Flush de tokens restantes no buffer
-                if buffer.strip():
+                    if not latencia_llm_ms:
+                        latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+
+                except Exception as e:
+                    log.error("Streaming falhou — fallback bloqueante", erro=str(e))
+                    if not resposta_mestre:
+                        try:
+                            resposta_mestre = await groq.completar(mensagens, temperatura=0.8, max_tokens=200)
+                        except Exception as e2:
+                            log.error("Fallback também falhou", erro=str(e2))
+                            resposta_mestre = "O mestre hesita por um momento antes de continuar."
+                    latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
                     if not stt_silenciado:
                         stt.silenciar()
                         stt_silenciado = True
-                        latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
-                    audio_bytes = await tts.sintetizar(buffer.strip(), idioma)
-                    if primeiro_audio:
-                        primeiro_audio_ms = int((time.perf_counter() - t0) * 1000)
-                        primeiro_audio = False
+                    audio_bytes = await tts.sintetizar(resposta_mestre, idioma)
                     await _reproduzir_audio(audio_bytes)
 
-                if not latencia_llm_ms:
-                    latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
+                if stt_silenciado:
+                    stt.reativar()
 
-            except Exception as e:
-                log.error("Streaming falhou — fallback bloqueante", erro=str(e))
-                if not resposta_mestre:
-                    try:
-                        resposta_mestre = await groq.completar(mensagens, temperatura=0.8, max_tokens=200)
-                    except Exception as e2:
-                        log.error("Fallback também falhou", erro=str(e2))
-                        resposta_mestre = "O mestre hesita por um momento antes de continuar."
-                latencia_llm_ms = int((time.perf_counter() - t_llm) * 1000)
-                if not stt_silenciado:
-                    stt.silenciar()
-                    stt_silenciado = True
-                audio_bytes = await tts.sintetizar(resposta_mestre, idioma)
-                await _reproduzir_audio(audio_bytes)
+                working_mem.registrar_fala("mestre", resposta_mestre)
+                log.info("Mestre responde", resposta=resposta_mestre[:80], latencia_llm_ms=latencia_llm_ms)
 
-            if stt_silenciado:
-                stt.reativar()
+                latencia_total_ms = int((time.perf_counter() - t0) * 1000)
+                latencias.append(latencia_total_ms)
+                if primeiro_audio_ms >= 0:
+                    primeiros_audios.append(primeiro_audio_ms)
 
-            # Registra resposta na working memory
-            working_mem.registrar_fala("mestre", resposta_mestre)
-            log.info("Mestre responde", resposta=resposta_mestre[:80], latencia_llm_ms=latencia_llm_ms)
+                status_latencia = "OK" if latencia_total_ms < 2000 else "ACIMA DO LIMITE"
+                log.info(
+                    "Ciclo completo",
+                    latencia_total_ms=latencia_total_ms,
+                    latencia_llm_ms=latencia_llm_ms,
+                    primeiro_audio_ms=primeiro_audio_ms,
+                    status=status_latencia,
+                )
 
-            latencia_total_ms = int((time.perf_counter() - t0) * 1000)
-            latencias.append(latencia_total_ms)
-            if primeiro_audio_ms >= 0:
-                primeiros_audios.append(primeiro_audio_ms)
+                from engine.telemetry import emit as _emit
+                _emit({
+                    "evento": "ciclo",
+                    "iteracao": iteracao,
+                    "texto_jogador": texto_jogador,
+                    "resposta_mestre": resposta_mestre,
+                    "total_ms": latencia_total_ms,
+                    "llm_ms": latencia_llm_ms,
+                    "primeiro_audio_ms": primeiro_audio_ms,
+                    "status": status_latencia,
+                    "chunks_regras": [c.get("text", "")[:120] for c in (contexto.chunks_regras if contexto else [])],
+                    "chunks_lore": [c.get("text", "")[:120] for c in (contexto.chunks_semanticos if contexto else [])],
+                    "relacoes_grafo": contexto.relacoes_grafo if contexto else [],
+                })
 
-            status_latencia = "OK" if latencia_total_ms < 2000 else "ACIMA DO LIMITE"
-            log.info(
-                "Ciclo completo",
-                latencia_total_ms=latencia_total_ms,
-                latencia_llm_ms=latencia_llm_ms,
-                primeiro_audio_ms=primeiro_audio_ms,
-                status=status_latencia,
-            )
+                if max_iteracoes and iteracao >= max_iteracoes:
+                    break
 
-            # Publica métricas e contexto do ciclo para o dashboard em tempo real
-            from engine.telemetry import emit as _emit
-            _emit({
-                "evento": "ciclo",
-                "iteracao": iteracao,
-                "texto_jogador": texto_jogador,
-                "resposta_mestre": resposta_mestre,
-                "total_ms": latencia_total_ms,
-                "llm_ms": latencia_llm_ms,
-                "primeiro_audio_ms": primeiro_audio_ms,
-                "status": status_latencia,
-                "chunks_regras": [c.get("text", "")[:120] for c in (contexto.chunks_regras if contexto else [])],
-                "chunks_lore": [c.get("text", "")[:120] for c in (contexto.chunks_semanticos if contexto else [])],
-                "relacoes_grafo": contexto.relacoes_grafo if contexto else [],
-            })
-
-            if max_iteracoes and iteracao >= max_iteracoes:
-                break
+        finally:
+            # Salva memória episódica ao encerrar — próxima sessão terá contexto desta
+            if iteracao > 0:
+                log.info("Salvando memória episódica...", session_id=session_id)
+                try:
+                    writer = SessionWriter()
+                    await writer.fechar_sessao(working_mem, session_id=session_id)
+                    log.info("Memória episódica salva", session_id=session_id)
+                except Exception as e:
+                    log.warning("Falha ao salvar memória episódica", erro=str(e))
 
     # Relatório final
     if latencias:
@@ -382,20 +338,32 @@ async def _loop_completo(max_iteracoes: int | None) -> None:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Demo do pipeline de voz VoxDM — Fase 2"
+        description="VoxDM — loop de voz completo: STT → RAG → Groq → TTS"
     )
     parser.add_argument(
         "--iteracoes",
         type=int,
         default=None,
-        help="Número máximo de ciclos STT→TTS (padrão: infinito)",
+        help="Número máximo de ciclos (padrão: infinito, Ctrl+C para parar)",
+    )
+    parser.add_argument(
+        "--location-id",
+        type=str,
+        default="aldeia-valdrek",
+        help="ID kebab-case do local inicial (padrão: aldeia-valdrek)",
+    )
+    parser.add_argument(
+        "--location-nome",
+        type=str,
+        default="Aldeia de Valdrek",
+        help="Nome do local para o prompt (padrão: 'Aldeia de Valdrek')",
     )
     parser.add_argument(
         "--tts-apenas",
         type=str,
         default=None,
         metavar="TEXTO",
-        help="Sintetiza texto diretamente sem usar o microfone",
+        help="Sintetiza texto diretamente sem microfone (valida pronúncia)",
     )
     args = parser.parse_args()
 
@@ -403,7 +371,11 @@ async def main() -> None:
         await _modo_tts_apenas(args.tts_apenas)
     else:
         try:
-            await _loop_completo(args.iteracoes)
+            await _loop_completo(
+                max_iteracoes=args.iteracoes,
+                location_id=args.location_id,
+                location_nome=args.location_nome,
+            )
         except KeyboardInterrupt:
             log.info("Loop encerrado pelo usuário")
 
