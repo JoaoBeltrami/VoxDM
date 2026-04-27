@@ -19,20 +19,32 @@ Exemplo:
 import argparse
 import asyncio
 import io
+import logging
+import os
 import sys
 import time
 from pathlib import Path
+
+# Suprime "Hello from the pygame community" antes de qualquer import pygame
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+# Suprime barras de progresso do sentence-transformers/safetensors durante voz
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("TQDM_DISABLE", "1")
 
 import structlog
 
 # Raiz do projeto no path ao executar diretamente de engine/
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import settings as _s
+
+_log_level = getattr(logging, _s.LOG_LEVEL.upper(), logging.INFO)
 structlog.configure(
+    wrapper_class=structlog.make_filtering_bound_logger(_log_level),
     processors=[
         structlog.processors.TimeStamper(fmt="%H:%M:%S"),
         structlog.dev.ConsoleRenderer(),
-    ]
+    ],
 )
 log = structlog.get_logger("voxdm.runner")
 
