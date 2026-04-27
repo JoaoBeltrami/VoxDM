@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 17 de abril de 2026
+> Atualizado: 26 de abril de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,10 +13,12 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 0 concluída. Fase 1 concluída. Fase 2 em andamento.**
+**Fase 0 concluída. Fase 1 concluída. Fase 2 em andamento. Fase 4 MVP concluída.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Testes 32/32 OK.
 - Fase 2 (voz): ⏳ EM ANDAMENTO. Arquivos criados e commitados. Pendente: testar `voice_loop.py` localmente com GPU (marco: "Fáierbol" pronunciado correto, latência <2s).
+- Fase 3 (memória + LLM): ✅ CONCLUÍDA (arquivos criados e commitados). Pendente: integração e2e com Fase 2.
+- Fase 4 (API + Frontend): ✅ MVP CONCLUÍDO. API FastAPI completa (REST + WebSocket), Frontend Next.js 14 com streaming token-a-token, testes 29/29 OK. Pendente: testar localmente com GPU + re-ingerir Qdrant após melhorias de chunker.
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -134,6 +136,11 @@ NÃO usar material licenciado → apenas SRD aberto (5e-bits/5e-database)
 NÃO expor /debug/* em prod  → proteger com settings.debug
 NÃO commitar chaves API     → git grep "gsk_" antes de push
 NÃO armazenar senha em plaintext → bcrypt via passlib
+NÃO usar allow_origins=["*"] → CORS_ORIGINS no .env, parse por vírgula em api/main.py
+
+# Git
+NÃO commitar MDs de planejamento → apenas código funcional e docs técnicas
+NÃO começar tarefa que estoure janela de contexto → fracionar em commits menores
 ```
 
 ---
@@ -145,12 +152,14 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### Configuração (Fase 0)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `config.py` | Configuração centralizada via pydantic-settings | ✅ Criado |
-| `.env.example` | Template de variáveis de ambiente documentado | ✅ Criado |
+| `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT | ✅ Atualizado |
+| `.env.example` | Template de variáveis de ambiente documentado — inclui CORS_ORIGINS | ✅ Atualizado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
-| `Makefile` | Targets: run, test, ingest, debug, backup | ✅ Criado |
-| `tests/conftest.py` | Fixtures base para pytest | ✅ Criado |
+| `Makefile` | Targets: run, run-api, test, ingest, debug, backup | ✅ Atualizado |
+| `tests/conftest.py` | Fixtures base + os.environ.setdefault antes dos imports (fix pydantic ValidationError no pytest) | ✅ Atualizado |
 | `tests/test_config.py` | Smoke tests — config carrega e falha corretamente | ✅ Criado |
+| `QUICKSTART.md` | Guia de uso local com GPU — Windows/RTX, ordem dos terminais, problemas comuns | ✅ Criado |
+| `docs/GUIA_USO.md` | Roteiro de gravação — 8 cenas, terminal por cena, duração estimada | ✅ Criado |
 
 ### Módulo de Teste
 | Arquivo | O que faz | Status |
@@ -164,7 +173,7 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `ingestor/schema_converter.py` | Converte chunks para VoxDM Schema v1.2 via Groq (paralelo, semáforo, edges) — usa settings.GROQ_MODEL | ✅ v1.2 |
 | `ingestor/groq_refiner.py` | Refina fragmentos de schema via Groq — corrige kebab-case, remove ruído, valida campos | ✅ Criado |
 | `ingestor/parser.py` | Valida estrutura do schema v1.2 | ✅ Criado |
-| `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) | ✅ Criado |
+| `ingestor/chunker.py` | Divide em chunks semânticos (MAX=375, OVERLAP=50) — inclui campo `knowledge` de NPCs e `_ext.appearance` | ✅ Atualizado |
 | `ingestor/embedder.py` | Gera embeddings via sentence-transformers paraphrase-multilingual-MiniLM-L12-v2 | ✅ Criado |
 | `ingestor/qdrant_uploader.py` | Upload de chunks para Qdrant Cloud (UUID v5 determinístico) | ✅ Criado |
 | `ingestor/neo4j_uploader.py` | Upload de entidades para Neo4j (labels: NPC, Companion, Entity separados) | ✅ Criado |
@@ -201,9 +210,9 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `engine/memory/working_memory.py` | Dataclass da cena atual — janela deslizante de diálogo, trust levels, quest stages, para_texto() | ✅ Criado |
-| `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico | ✅ Criado |
-| `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local() | ✅ Criado |
-| `engine/memory/context_builder.py` | Monta contexto 3 camadas — avalia trigger_conditions AND/OR, secrets, busca paralela Qdrant | ✅ Criado |
+| `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico + score_threshold=0.45 | ✅ Atualizado |
+| `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local(), buscar_por_ids() | ✅ Atualizado |
+| `engine/memory/context_builder.py` | Monta contexto 3 camadas — query inteligente (curta/longa), dedup por source_id, extração de entidades da transcrição | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores — busca voxdm_episodic, filtro por NPC, listar_sessoes() | ✅ Criado |
 | `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j — enriquece chunks com relações do grafo, buscar_npc() | ✅ Criado |
 | `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
@@ -217,6 +226,19 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 | `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo (3 cols, histórico, auto-refresh 500ms) | ✅ Atualizado |
 | `.streamlit/config.toml` | Tema escuro roxo (#7c3aed) para dashboard no vídeo | ✅ Criado |
 
+### Melhorias RAG (Sessão 26/04)
+> ⚠️ Após estas mudanças é necessário rodar `make ingest` para reindexar o Qdrant.
+
+| Melhoria | Arquivo | Descrição |
+|---|---|---|
+| Campo `knowledge` nos chunks | `ingestor/chunker.py` | O que NPCs sabem — era ignorado. Agora gera chunk com prefixo "{nome} sabe: " |
+| `_ext.appearance` nos chunks | `ingestor/chunker.py` | Aparência física dos NPCs vira texto indexável |
+| Score threshold 0.45 | `engine/memory/qdrant_client.py` | Filtra chunks irrelevantes antes de chegarem ao LLM |
+| Query inteligente | `engine/memory/context_builder.py` | Location só é adicionada em queries curtas (≤5 palavras), evita poluição em queries de regras |
+| Dedup por source_id | `engine/memory/context_builder.py` | Mesmo NPC aparecia 3× no top-5; agora mantém só o chunk de maior score |
+| Extração de entidades | `engine/memory/context_builder.py` | Extrai menções do texto do jogador para enriquecer lookup Neo4j |
+| Batch Neo4j lookup | `engine/memory/neo4j_client.py` | `buscar_por_ids()` — 1 query para múltiplas entidades em vez de N queries |
+
 ### Benchmark e Scripts
 | Arquivo | O que faz | Status |
 |---|---|---|
@@ -229,10 +251,20 @@ NÃO armazenar senha em plaintext → bcrypt via passlib
 ### API e Frontend (Fase 4)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `api/main.py` | FastAPI app principal | 🔴 |
-| `api/models/schemas.py` | Schemas Pydantic da API | 🔴 |
-| `api/websocket.py` | WebSocket streaming de áudio | 🔴 |
-| `api/routes/debug.py` | Endpoints /debug/* (protegidos) | 🔴 |
+| `api/main.py` | FastAPI app — CORS seguro (CORS_ORIGINS via env), lifespan, /health, /ws/game/{id}, /debug/* só em DEBUG=True | ✅ Criado |
+| `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket | ✅ Criado |
+| `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (kebab-case), ComandoJogador, RespostaMestre, MensagemWS | ✅ Criado |
+| `api/routes/session.py` | POST /session/start, POST /session/{id}/turn, GET /session/{id}/status, DELETE /session/{id} | ✅ Criado |
+| `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
+| `api/websocket.py` | WebSocket streaming token-a-token — {"tipo":"token"/"fim"/"erro"}, emite telemetria JSONL | ✅ Criado |
+| `frontend/lib/api.ts` | Funções REST: criarSessao(), encerrarSessao(), wsUrl() — NEXT_PUBLIC_API_URL configurável | ✅ Criado |
+| `frontend/hooks/useGameSession.ts` | Hook React — gerencia WebSocket, estado de sessão, streaming de tokens, historico | ✅ Criado |
+| `frontend/components/VoiceButton.tsx` | Textarea + Enviar — Enter sem Shift envia, desabilitado durante streaming | ✅ Criado |
+| `frontend/components/MasterResponse.tsx` | Bolhas de diálogo — player (direita) / mestre (esquerda), cursor piscante durante streaming, métricas RAG | ✅ Criado |
+| `frontend/app/page.tsx` | Página principal — tela de conexão + tela de jogo com header, scrollable e VoiceButton fixo | ✅ Criado |
+| `frontend/app/layout.tsx` | Layout root Next.js 14 com fontes Geist | ✅ Criado |
+| `tests/test_api_session.py` | 16 testes REST — start/turn/status/delete com TestClient + AsyncMock de ContextBuilder e Groq | ✅ Criado |
+| `tests/test_context_builder.py` | 13 testes — dedup por source_id, extração de entidades, query curta/longa | ✅ Criado |
 
 ---
 
