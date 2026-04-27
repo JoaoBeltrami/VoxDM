@@ -10,6 +10,48 @@
   .animate-blink {
     animation: blink 1s step-end infinite;
   }
+
+  /* Orb: respiração suave — estado idle */
+  @keyframes breathe {
+    0%, 100% { transform: scale(0.92); opacity: 0.65; }
+    50%       { transform: scale(1.08); opacity: 1; }
+  }
+  .animate-breathe {
+    animation: breathe 3.2s ease-in-out infinite;
+  }
+
+  /* Orb: pulso rápido + leve rotação — estado ouvindo */
+  @keyframes listen {
+    0%   { transform: scale(0.96) rotate(0deg); }
+    25%  { transform: scale(1.14) rotate(4deg); }
+    50%  { transform: scale(1.06) rotate(0deg); }
+    75%  { transform: scale(1.16) rotate(-4deg); }
+    100% { transform: scale(0.96) rotate(0deg); }
+  }
+  .animate-listen {
+    animation: listen 0.9s ease-in-out infinite;
+  }
+
+  /* Orb: pulso rápido — estado falando */
+  @keyframes speak {
+    0%, 100% { transform: scale(0.97); opacity: 0.85; }
+    50%       { transform: scale(1.13); opacity: 1; }
+  }
+  .animate-speak {
+    animation: speak 0.55s ease-in-out infinite;
+  }
+
+  /* Anel de ripple — expande e some */
+  @keyframes ripple {
+    0%   { transform: scale(0.7); opacity: 0.55; }
+    100% { transform: scale(2.0); opacity: 0; }
+  }
+  .animate-ripple {
+    animation: ripple 1.6s ease-out infinite;
+  }
+  .animate-ripple-delay {
+    animation: ripple 1.6s ease-out 0.55s infinite;
+  }
 }
 
 :root {
