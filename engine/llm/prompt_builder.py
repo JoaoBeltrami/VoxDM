@@ -31,6 +31,19 @@ BUDGET_WORKING   = 1600   # 40% — nunca cortado
 BUDGET_EPISODICO = 1200   # 30%
 BUDGET_SEMANTICO = 1200   # 30%
 
+# Lembrete de formato — posicionado ao fim do system prompt para garantir aderência.
+# Repetir aqui compensa o fato de o contexto (lore, regras, secrets) ser injetado
+# depois do master_system.md e "soterrar" a Regra Zero original.
+_LEMBRETE_SAIDA = (
+    "\n---\n"
+    "[LEMBRETE DE SAÍDA — OBRIGATÓRIO]\n"
+    "Responda em prosa falada. Proibido: markdown, asteriscos, listas, "
+    "parênteses técnicos, travessões de diálogo, cabeçalhos, negrito, itálico.\n"
+    "Use apenas vírgulas, reticências, dois-pontos e pontos finais.\n"
+    "Máximo 2 a 3 frases curtas por resposta. "
+    "Escreva como narrador humano falando em voz alta — não como texto impresso."
+)
+
 
 @dataclass
 class SecretVisivel:
@@ -165,7 +178,7 @@ def montar_mensagens(
     if secrets_texto:
         secoes.append(f"\n{secrets_texto}")
 
-    system_content = "\n".join(secoes)
+    system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
 
     # ── Histórico de diálogo como pares user/assistant ────────────────────────
     # dialogo_recente[-1] é o turno atual do jogador (já registrado antes de montar).
