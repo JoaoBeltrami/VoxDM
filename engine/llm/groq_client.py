@@ -61,7 +61,7 @@ class GroqClient:
     @retry(
         retry=retry_if_exception_type(_ERROS_RETRY),
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
         before_sleep=_logar_tentativa,
         reraise=True,
     )

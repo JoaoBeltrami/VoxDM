@@ -88,12 +88,16 @@ class Neo4jMemoryClient:
                 """
                 MATCH (a {id: $id})-[r]->(b)
                 RETURN type(r) AS tipo, b.id AS alvo_id, b.name AS alvo_nome,
-                       r.weight AS weight
+                       r.weight AS weight, a.name AS npc_nome
                 ORDER BY r.weight DESC
                 """,
                 {"id": entidade_id},
             )
             registros = await result.data()
+
+        # KNOWS_SECRET expõe IDs de secrets antes de serem revelados pelo trigger.
+        # LOCATED_IN é ruído redundante — localização já está na working memory.
+        _RELACOES_FILTRADAS = {"KNOWS_SECRET", "LOCATED_IN"}
 
         relacoes: list[dict[str, Any]] = [
             {
@@ -101,8 +105,10 @@ class Neo4jMemoryClient:
                 "alvo_id": r["alvo_id"],
                 "alvo_nome": r["alvo_nome"],
                 "weight": float(r["weight"] or 0.0),
+                "npc_nome": r.get("npc_nome") or entidade_id,
             }
             for r in registros
+            if r["tipo"] not in _RELACOES_FILTRADAS
         ]
         log.info(
             "neo4j_relacionamentos",
@@ -194,7 +200,7 @@ class Neo4jMemoryClient:
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (n)-[r:ESTA_EM|HABITA|RESIDE]->(l {id: $location_id})
+                MATCH (n)-[:LOCATED_IN]->(l {id: $location_id})
                 RETURN n.id AS id, n.name AS nome, labels(n)[0] AS tipo
                 """,
                 {"location_id": location_id},

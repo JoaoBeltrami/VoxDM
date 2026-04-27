@@ -148,6 +148,10 @@ def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
         String SSML pronta para o Edge TTS.
     """
     texto_com_pronuncia = _aplicar_pronuncias(_limpar_markdown(texto))
+    # Escapa &, <, > antes de inserir no XML — sem isso qualquer "&" no texto
+    # do mestre produz SSML inválido e o Edge TTS lê o XML literalmente
+    import html as _html
+    texto_seguro = _html.escape(texto_com_pronuncia)
 
     return (
         f"<speak version='1.0' "
@@ -156,7 +160,7 @@ def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
         f"xml:lang='{idioma.value}'>"
         f"<voice name='{voz}'>"
         f"<prosody rate='{EDGE_RATE}' pitch='{EDGE_PITCH}'>"
-        f"{texto_com_pronuncia}"
+        f"{texto_seguro}"
         f"</prosody>"
         f"</voice>"
         f"</speak>"
@@ -192,11 +196,6 @@ class EdgeTTSEngine:
             return self._voz_en
         return self._voz_ptbr  # PT-BR e MISTO usam voz PT
 
-    @retry(
-        retry=retry_if_exception_type(Exception),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
-        stop=stop_after_attempt(3),
-    )
     async def sintetizar(
         self,
         texto: str,

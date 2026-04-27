@@ -122,20 +122,24 @@ def montar_mensagens(
     """
     Monta a lista de mensagens para o LLM a partir do contexto pré-montado.
 
+    O histórico de diálogo é passado como pares user/assistant reais — não como
+    texto no system prompt — para aproveitar o modo de chat nativo do modelo.
+
     Args:
         contexto: ContextoMontado produzido pelo context_builder.
         master_system_override: Substitui o master_system.md (útil em testes).
 
     Returns:
         Lista de dicts {role, content} prontos para o Groq/Ollama.
+        Estrutura: [system, user?, assistant?, ..., user_atual]
     """
     master_system = master_system_override or _carregar_master_system()
 
-    # ── System message: prompt do mestre + contexto da cena ──────────────────
+    # ── System message: identidade + estado da cena (sem diálogo) ────────────
     secoes: list[str] = [master_system, ""]
 
-    # Working memory — sempre completa (prioridade máxima)
-    secoes.append(contexto.working_memory.para_texto())
+    # Working memory sem diálogo — histórico vai como pares de mensagem abaixo
+    secoes.append(contexto.working_memory.para_texto(incluir_dialogo=False))
 
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:
@@ -163,15 +167,29 @@ def montar_mensagens(
 
     system_content = "\n".join(secoes)
 
+    # ── Histórico de diálogo como pares user/assistant ────────────────────────
+    # dialogo_recente[-1] é o turno atual do jogador (já registrado antes de montar).
+    # Passamos [-1] como a mensagem final; os anteriores viram histórico real.
+    turnos = contexto.working_memory.dialogo_recente
+    historico = turnos[:-1] if turnos else []  # tudo exceto o turno atual
+
+    mensagens: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+
+    for turno in historico:
+        role = "user" if turno.falante == "player" else "assistant"
+        mensagens.append({"role": role, "content": turno.texto})
+
+    # Turno atual — se dialogo_recente está vazio (chamada direta sem voice_runner)
+    # usa transcricao_atual diretamente
+    mensagens.append({"role": "user", "content": contexto.transcricao_atual})
+
     log.info(
         "prompt_montado",
         chars_system=len(system_content),
+        turnos_historico=len(historico),
         chunks_semanticos=len(contexto.chunks_semanticos),
         chunks_episodicos=len(contexto.chunks_episodicos),
         secrets=len(contexto.secrets_visiveis),
     )
 
-    return [
-        {"role": "system", "content": system_content},
-        {"role": "user", "content": contexto.transcricao_atual},
-    ]
+    return mensagens
