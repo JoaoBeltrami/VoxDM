@@ -20,5 +20,6 @@ venv/
 # PDFs — módulos licenciados não sobem
 *.pdf
 
-# Claude Code — worktrees temporários de agentes
+# Claude Code — worktrees temporários e settings locais
 .claude/worktrees/
+.claude/settings.local.json

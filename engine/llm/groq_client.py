@@ -144,13 +144,14 @@ class GroqClient:
         Versão streaming — yield de tokens conforme chegam do Groq.
         Sem fallback Ollama: streaming requer Groq disponível.
         """
-        async with self._get_groq().chat.completions.stream(
+        stream = await self._get_groq().chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=mensagens,  # type: ignore[arg-type]
             temperature=temperatura,
             max_tokens=max_tokens,
-        ) as stream:
-            async for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
