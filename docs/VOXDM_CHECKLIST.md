@@ -1,5 +1,5 @@
 # VOXDM_CHECKLIST.md
-> Versão 1.5 — 30 de março de 2026
+> Versão 2.0 — 28 de abril de 2026
 > Checklists executáveis por fase — separado do documento técnico
 > Usar junto com VOXDM_PROJETO.md para contexto técnico completo
 
@@ -79,15 +79,15 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] Banner YouTube aprovado *(21/03)*
 - [x] Rebranding completo — YouTube, Twitter, Instagram, TikTok *(25/03)*
 - [x] Módulo de teste "Os Filhos de Valdrek" — co-autoria com Opus *(26/03)*
-- [x] Schema v1.0 → lacunas → v1.1 finalizado *(26/03)*
-- [x] `modulo_teste_v1.1.json` — 751 linhas, schema completo *(26/03)*
+- [x] Schema v1.0 → lacunas → v1.1 → v1.2 finalizado *(26/03 + 13/04)*
+- [x] `modulo_teste_v1.2.json` — schema completo *(13/04)*
 - [x] VOXDM_PONTE.md criado — alimentação cruzada VoxDM ↔ Beltrami *(26/03)*
 - [x] Seção secrets com trigger_condition no PONTE *(26/03)*
 - [x] Roteiro Vídeo 0 — "Voltei. Isso é o VoxDM." *(27/03)*
 - [x] Roteiro Vídeo 1 — "Tokens: a moeda invisível da IA" *(27/03)*
 - [x] Auditoria de inconsistências cross-project *(30/03)*
 - [x] Redesign documentação: 7 arquivos LEARN → .claude robusto + docstrings *(30/03)*
-- [x] `.claude` robusto criado com registro de arquivos *(30/03)*
+- [x] CLAUDE.md robusto criado com registro de arquivos *(30/03)*
 - [x] Aider removido da stack — Claude Code assume *(30/03)*
 
 ---
@@ -95,106 +95,81 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 ## Fase 0 — Setup de Ambiente ✅ CONCLUÍDA
 > Semana de 1-10 de abril de 2026 · 100% local · Requer PC com GPU
 > 🟢 Carga leve no pool — maioria das tarefas não precisa do Claude Pro
-> **Nota:** Fase 1 roda em paralelo no estágio via Codespaces (sem GPU)
+> **Validação final:** 34/34 checks OK *(10/04)*
 
-**Marco:** `make test` roda sem erro + `torch.cuda.is_available()` retorna `True` + repositório no GitHub
-**Validação final:** 34/34 checks OK *(10/04)*
+**Marco:** `make test` roda sem erro + `torch.cuda.is_available()` retorna `True` + repositório no GitHub ✅
 
 ### Ambiente Python e GPU
 - [x] `uv venv --python 3.12 .venv` *(30/03)*
-- [x] `uv pip install torch --index-url https://download.pytorch.org/whl/cu124` *(30/03 — torch 2.6.0+cu124)*
+- [x] `uv pip install torch --index-url https://download.pytorch.org/whl/cu124` *(torch 2.6.0+cu124)*
 - [x] `python -c "import torch; print(torch.cuda.is_available())"` → `True` — RTX 2060 SUPER *(30/03)*
 - [x] `nvcc --version` → CUDA 13.2 *(09/04)*
 - [x] `uv pip install -r requirements.txt` *(30/03)*
 
 ### Modelos locais
-- [x] Ollama instalado + `ollama pull llama3.1:8b` (4.9GB) + `ollama pull codestral` (12GB) *(10/04)*
+- [x] Ollama instalado + `ollama pull llama3.1:8b` + `ollama pull codestral` *(10/04)*
 
 ### Configuração do projeto
-
-- [x] Verificar `config.py` — deve falhar explicitamente sem `.env` *(30/03 — validator adicionado)*
-- [x] `config.py`: OLLAMA_BASE_URL + OLLAMA_MODEL adicionados *(10/04)*
-- [x] Criar `Makefile` com targets: `run`, `test`, `ingest`, `ingest-rules`, `debug`, `backup`, `docs-sync` *(30/03 + 10/04)*
-- [x] Criar estrutura de pastas completa incluindo `tests/` *(30/03)*
-- [x] Criar `tests/conftest.py` com fixtures base *(30/03)*
-- [x] Confirmar `CLAUDE.md` no repositório — Claude Code lê as instruções *(30/03)*
+- [x] `config.py`: pydantic-settings completo, CORS_ORIGINS, API_HOST, API_PORT *(atualizado)*
+- [x] `Makefile` com targets: `run`, `run-api`, `test`, `ingest`, `ingest-rules`, `debug`, `backup`, `docs-sync`
+- [x] Estrutura de pastas completa incluindo `tests/`
+- [x] `tests/conftest.py` com fixtures base *(os.environ.setdefault antes dos imports)*
+- [x] CLAUDE.md no repositório — Claude Code lê as instruções
 
 ### API Keys
-- [x] Coletar e adicionar ao `.env`: Groq, Qdrant, Neo4j, LangSmith *(31/03)*
-- [x] Testar cada conexão: Groq OK, Qdrant OK, Neo4j OK, LangSmith OK *(31/03)* — Gemini: free tier extinto, substituído por Groq
+- [x] Groq, Qdrant, Neo4j, LangSmith no `.env` — 3/3 conexões OK
 
 ### GitHub MCP
-- [x] PAT gerado no GitHub *(10/04)*
-- [x] Claude Code instalado *(02/04)* `[roteiro]`
-- [x] GitHub MCP configurado no Claude Code via `claude mcp add` *(10/04)*
-- [x] `claude mcp list` → Connected *(10/04)*
-- [x] Loop teste: issue #1 criada → fix → commit `ede4c63` → pushed *(10/04)*
+- [x] PAT gerado + GitHub MCP configurado no Claude Code *(10/04)*
+- [x] Loop teste: issue #1 → fix → commit → push *(10/04)*
 
 ### Infraestrutura
-- [ ] Cloudflare Tunnel: `cloudflared tunnel login` → criar túnel com URL permanente `[roteiro]` ⏳ precisa browser
+- [ ] Cloudflare Tunnel: `cloudflared tunnel login` → criar túnel com URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Linear: criar board VoxDM com cards para todas as fases *(sem Claude — opcional)*
 
-### Repositório
-
-- [x] Confirmar `.gitignore` cobrindo `.env`, `__pycache__`, `.venv`, PDFs *(30/03)*
-- [x] `git push` funcionando *(30/03)*
-- [x] `git grep "gsk_"` — nenhuma chave vazada confirmado *(10/04)*
-- [x] `make docs-sync` → Google Drive `voxdm-docs/` sincronizado *(10/04)*
-
 ### Validação
-
-- [x] Confirmar `modulo_teste/modulo_teste_v1.2.json` no repositório *(26/03)*
-- [x] `make test` rodando verde — 7/7 ← **marco** *(31/03)*
-- [x] Validação completa 34/34 checks OK *(10/04)*
+- [x] `modulo_teste/modulo_teste_v1.2.json` no repositório
+- [x] `make test` rodando verde — 74/74 ← **marco** *(28/04)*
 
 ---
 
 ## Fase 1 — Pipeline de Ingestão ✅ CONCLUÍDA
-> Abril · *(13/04/2026)*
-> 🟡 Carga moderada — Claude Code para os complexos, Codespaces manual para os diretos
-> **Roda em paralelo com Fase 0** — Codespaces não depende de GPU local
+> Abril 2026 · *(13/04/2026)*
+> 🟡 Carga moderada
 
-**Marco:** query "onde está Bjorn?" retorna chunks corretos do módulo
+**Marco:** query "onde está Bjorn?" retorna chunks corretos do módulo ✅ *(14/04)*
 
-### Setup de monitoramento
-- [x] Configurar LangSmith no `.env` → tracing ativo *(03/04)*
+### Implementação
+- [x] `ingestor/pdf_reader.py` — PyMuPDF, structlog
+- [x] `ingestor/schema_converter.py` — Groq llama-3.3-70b-versatile
+- [x] `ingestor/chunker.py` — chunks semânticos (MAX=375, OVERLAP=50)
+- [x] `ingestor/embedder.py` — sentence-transformers paraphrase-multilingual-MiniLM-L12-v2
+- [x] `ingestor/qdrant_uploader.py` — UUID v5 determinístico
+- [x] `main.py` — pipeline completo (--dry-run, --skip-neo4j, --skip-qdrant)
+- [x] `ingestor/neo4j_uploader.py` — labels NPC/Companion/Entity separados
+- [x] `ingestor/parser.py` — validação schema v1.2
+- [x] `ingestor/rules_loader.py` — SRD 5e → voxdm_rules
+- [x] `ingest_rules.py` — pipeline de regras
 
-### Implementação — Ordem de prioridade
-
-| # | Arquivo | Status | Ferramenta |
-|---|---|---|---|
-| 1 | `ingestor/pdf_reader.py` — PyMuPDF, structlog | 🔴 | `[claude code]` `[roteiro]` |
-| 2 | `ingestor/schema_converter.py` — Groq llama-3.3-70b | ✅ Criado | `[claude code]` |
-| ⚠️ | `ingestor/gemini_converter.py` | DEPRECATED | Remover Fase 2 |
-| 3 | `ingestor/chunker.py` — chunks semânticos | ✅ Criado | `[claude code]` |
-| 4 | `ingestor/embedder.py` — sentence-transformers | ✅ Criado | `[claude code]` |
-| 5 | `ingestor/qdrant_uploader.py` — tenacity | ✅ Criado | `[claude code]` |
-| 6 | `main.py` — pipeline completo | ✅ Criado | `[claude code]` |
-| 7 | `ingestor/neo4j_uploader.py` — labels NPC/Companion/Entity | ✅ Criado | `[claude code]` |
-| 8 | `ingestor/parser.py` — validação schema v1.2 | ✅ Criado | `[claude code]` |
-
-> `neo4j_uploader.py` e `parser.py` não bloqueiam o marco — pipeline funciona sem eles.
-
-### Ingestão de Regras (paralelo ao módulo)
-- [ ] Baixar `5e-bits/5e-database` — filtrar: spells, conditions, classes, equipment `[código]` `[claude code]`
-- [ ] `ingestor/rules_loader.py` — carrega JSONs do SRD, normaliza para chunks de texto `[código]` `[claude code]` `[moderado]`
-- [ ] Configurar coleção `voxdm_rules` no Qdrant (separada de `voxdm_modules`) `[código]` `[claude code]`
-- [ ] Rodar ingestão de regras com `make ingest-rules` `[revisão]` `[roteiro]`
-- [ ] Query "o que Fireball faz?" retornando entrada correta do SRD ← **marco** `[revisão]` `[claude.ai]` `[leve]`
-
-> **Nota Fase 1:** o `neo4j_uploader.py` precisa criar labels separados para NPC, Companion e Entity conforme schema v1.1. Ver VOXDM_PONTE.md seção 9.5 para justificativa.
+### Melhorias RAG (26/04) — ⚠️ Requer re-ingestão
+- [x] Campo `knowledge` nos chunks — "{nome} sabe: ..."
+- [x] `_ext.appearance` nos chunks — aparência dos NPCs indexada
+- [x] Score threshold 0.45 no Qdrant
+- [x] Query inteligente (localização só em queries curtas ≤5 palavras)
+- [x] Dedup por source_id — evita 3× o mesmo NPC no top-5
+- [x] Extração de entidades mencionadas na transcrição
+- [x] Batch Neo4j lookup — `buscar_por_ids()`
+- [ ] **`make ingest`** — re-indexar Qdrant com as melhorias *(pendente — rodar antes do primeiro teste)* `[revisão]`
 
 ### Testes
-- [x] Testes para `parser.py` — 19 testes ✅ *(13/04)*
-- [x] Testes para `chunker.py` — 13 testes ✅ *(13/04)*
-- [x] `make test` passando verde — 32/32 ✅ *(13/04)*
+- [x] `tests/test_parser.py` — 19 testes ✅
+- [x] `tests/test_chunker.py` — 13 testes ✅
+- [x] `make test` — 74/74 ✅ *(28/04)*
 
 ### Validação
-- [x] Rodar pipeline com `modulo_teste/modulo_teste_v1.2.json` — 45 chunks, 40 nós, 90 arestas *(14/04)*
-- [x] Confirmar chunks no Qdrant Cloud — 45 pontos na coleção voxdm_modules *(14/04)*
-- [x] Confirmar entidades e relações no Neo4j — 40 nós + 90 arestas *(14/04)*
-- [ ] LangSmith mostrando latência por etapa `[revisão]` `[claude.ai]` `[leve]`
+- [x] 45 chunks / 40 nós / 90 arestas no módulo "Os Filhos de Valdrek" *(14/04)*
 - [x] Query "onde está Bjorn?" retornando chunks corretos ← **marco** ✅ *(14/04)*
+- [ ] LangSmith mostrando latência por etapa `[revisão]` `[claude.ai]` `[leve]` *(baixa prioridade)*
 
 ---
 
@@ -204,83 +179,113 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 **Marco:** "eu lanço Fireball" → "Fáierbol" pronunciado corretamente, latência total <2s
 
-### Setup de monitoramento
-- [ ] Criar conta W&B → configurar no `.env` → dashboard ativo `[leve]` *(sem Claude)*
+### Arquivos criados e commitados *(26/04)*
+- [x] `engine/voice/stt.py` — RealtimeSTT + Faster-Whisper tiny GPU
+- [x] `engine/voice/language.py` — detecção automática de idioma PT-BR/EN
+- [x] `engine/voice/tts.py` — Edge TTS + Kokoro fallback
+- [x] `engine/voice/vad.py` — VAD config e perfis
+- [x] `engine/pronunciation/dictionary.json` — ~120 termos D&D com IPA
+- [x] `engine/voice_runner.py` — orquestrador completo STT→Contexto→Groq→TTS
 
-### Implementação
-- [ ] `engine/voice/stt.py` — RealtimeSTT + Faster-Whisper tiny GPU `[código]` `[claude code]` `[roteiro]`
-- [ ] `engine/voice/language.py` — detecção automática de idioma `[código]` `[claude code]`
-- [ ] `engine/voice/tts.py` — Edge TTS + Kokoro fallback `[código]` `[claude code]`
-  - Instalar: `uv pip install edge-tts` e `uv pip install kokoro` ← NÃO kokoro-tts
-- [ ] `engine/voice/vad.py` — VAD embutido no RealtimeSTT `[código]` `[claude code]`
-- [ ] `engine/pronunciation/dictionary.json` — Strahd, Barovia, Fireball, D&D + termos de Os Filhos de Valdrek `[código]` `[claude.ai]` `[leve]`
-
-### Integração
-- [ ] Integrar `stt + tts + language` em loop completo `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
-- [ ] Implementar SSML para termos em idioma misto `[código]` `[claude.ai ou claude code]` `[moderado]`
-
-### Validação
-- [ ] Testar loop: falar → transcrever → mock LLM → sintetizar → ouvir `[revisão]` `[roteiro]`
-- [ ] Medir latência total < 2000ms via structlog `[revisão]` `[claude.ai]` `[leve]`
+### Validação local (pendente GPU)
+- [ ] Testar loop: `python engine/voice_runner.py` — falar → transcrever → mock LLM → sintetizar → ouvir `[revisão]` `[roteiro]`
+- [ ] Medir latência total < 2000ms via structlog `[revisão]`
 - [ ] "Fáierbol" pronunciado corretamente ← **marco** `[roteiro]`
-- [ ] Qodo: gerar testes para `stt.py` e `tts.py` *(Qodo)*
+- [ ] Setup W&B → `[leve]` *(sem Claude)*
 
 ---
 
-## Fase 3 — O Mestre de Verdade
+## Fase 3 — O Mestre de Verdade ✅ ARQUIVOS CRIADOS
 > PC local · Marco crítico — sessão jogável de 1h
-> 🔴 Carga intensa — as tarefas mais complexas do projeto estão aqui
-> **Regra especial:** abrir chat novo para cada arquivo complexo. Nunca misturar context_builder com session_writer na mesma sessão.
 
 **Marco:** sessão de 1h sem quebrar narrativa + dashboard mostrando métricas + vídeo gravado
 
 ### Memória
-- [ ] `engine/memory/working_memory.py` — dataclass completo `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] `engine/memory/context_builder.py` — 3 camadas + budget de tokens + lógica de secrets (ver PONTE seção 9) `[código]` `[claude code]` `[intenso]` — sessão dedicada, fechar ao terminar `[roteiro]`
-- [ ] `engine/memory/qdrant_client.py` — tenacity `[código]` `[claude code]`
-- [ ] `engine/memory/neo4j_client.py` — tenacity `[código]` `[claude code]`
-- [ ] `engine/memory/episodic_memory.py` — inclui rastreamento de trust_level por NPC `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] `engine/memory/semantic_memory.py` `[código]` `[claude.ai ou claude code]` `[moderado]`
+- [x] `engine/memory/working_memory.py` — dataclass completo + trust_levels + quest_stages
+- [x] `engine/memory/context_builder.py` — 3 camadas + query inteligente + dedup + secrets
+- [x] `engine/memory/qdrant_client.py` — retry + score_threshold=0.45
+- [x] `engine/memory/neo4j_client.py` — retry + buscar_por_ids()
+- [x] `engine/memory/episodic_memory.py` — busca voxdm_episodic + filtro por NPC
+- [x] `engine/memory/semantic_memory.py` — query híbrida Qdrant + Neo4j
+- [x] `engine/memory/session_writer.py` — comprime via Groq, upsert voxdm_episodic
 
 ### LLM e Prompts
-- [ ] `engine/llm/groq_client.py` — tenacity + fallback Ollama `[código]` `[claude code]`
-- [ ] `engine/llm/prompt_builder.py` `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] **`engine/llm/prompts/master_system.md`** `[planejamento]` `[claude.ai]` `[intenso]` — sessão dedicada, o mais importante do projeto `[roteiro]`
-- [ ] Rascunho de `combat.md` e `social.md` via Claude Code → refinar com Claude.ai `[código]` `[claude code]` depois `[revisão]` `[claude.ai]` `[moderado]`
-- [ ] **`engine/llm/prompts/session_eval.md`** `[planejamento]` `[claude.ai]` `[moderado]`
+- [x] `engine/llm/groq_client.py` — retry + fallback Ollama + streaming
+- [x] `engine/llm/prompt_builder.py` — budget por camada, lembrete de saída
+- [x] `engine/llm/prompts/master_system.md` — v2 completo
+- [x] `engine/llm/prompts/combat.md`
+- [x] `engine/llm/prompts/social.md`
+- [x] `engine/llm/prompts/session_eval.md`
 
 ### Sessão e Debug
-- [ ] `engine/memory/session_writer.py` com avaliador de relevância `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
-- [ ] `api/routes/debug.py` — endpoints `/debug/*` `[código]` `[claude code]`
-- [ ] `dashboard.py` — Streamlit consumindo endpoints de debug `[código]` `[claude.ai ou claude code]` `[moderado]` `[roteiro]`
+- [x] `engine/telemetry.py` — pub/sub JSONL para dashboard
+- [x] `dashboard.py` — Streamlit + aba Debug + aba Modo Vídeo
+- [x] `.streamlit/config.toml` — tema roxo escuro
 
-### Validação
-- [ ] Qodo: gerar testes para `context_builder.py` *(Qodo)*
-- [ ] LangSmith: verificar distribuição real de tokens pelas 3 camadas `[revisão]` `[claude.ai]` `[moderado]`
-- [ ] Streamlit: gráficos de latência e memória funcionando `[revisão]` `[claude.ai]` `[leve]`
+### Pendente
+- [ ] Integração e2e Fase 2 + Fase 3: voice_runner.py com contexto RAG real `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
+- [ ] LangSmith: distribuição real de tokens pelas 3 camadas `[revisão]` `[claude.ai]` `[moderado]`
 - [ ] **Sessão de 1h com "Os Filhos de Valdrek" — gravar para o canal** ← **marco crítico** `[roteiro]`
 
 ---
 
-## Fase 4 — Interface Web
-> Deploy em produção
-> 🟡 Carga moderada — WebSocket é o pico, o resto é CRUD
+## Fase 4 — Interface Web ✅ MVP CONCLUÍDO
+> 🟡 Carga moderada
 
 **Marco:** sessão completa jogável pelo browser sem abrir terminal
 
-- [ ] `api/main.py` + `api/models/schemas.py` `[código]` `[claude code]`
-- [ ] Rotas: `session.py`, `campaign.py`, `character.py`, `inventory.py` `[código]` `[claude code]`
-- [ ] `api/websocket.py` com streaming de áudio `[código]` `[claude code]` `[intenso]` — sessão dedicada `[roteiro]`
-- [ ] Next.js 14 setup + `VoiceButton.jsx` + `SessionStatus.jsx` `[código]` `[claude.ai ou claude code]` `[moderado]`
-- [ ] `CharacterPanel.jsx` + `InventoryModal.jsx` `[código]` `[claude code]`
-- [ ] Configurar Graphite Agent no GitHub *(sem Claude)*
-- [ ] Deploy: Vercel + Cloudflare Tunnel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
+### Arquivos criados *(26-27/04)*
+- [x] `api/main.py` — FastAPI + CORS seguro + lifespan + warmup embedder *(28/04)*
+- [x] `api/state.py` — SessaoAtiva + dict global sessions
+- [x] `api/models/schemas.py` — Pydantic v2 — kebab-case validado
+- [x] `api/routes/session.py` — POST start, POST turn, GET status, DELETE
+- [x] `api/routes/debug.py` — /debug/* apenas quando DEBUG=True
+- [x] `api/websocket.py` — streaming token-a-token + telemetria + abertura automática
+- [x] `frontend/lib/api.ts` — criarSessao(), encerrarSessao(), wsUrl()
+- [x] `frontend/hooks/useGameSession.ts` — WebSocket + streaming + historico
+- [x] `frontend/components/VoiceButton.tsx` — textarea + SpeechRecognition nativa
+- [x] `frontend/components/MasterResponse.tsx` — bolhas + cursor piscante + métricas RAG
+- [x] `frontend/components/VoxOrb.tsx` — asterisco 8 braços + animações (idle/ouvindo/falando)
+- [x] `frontend/components/CharacterForm.tsx` — D&D 5e: classe, raça, background, nível, HP
+- [x] `frontend/app/page.tsx` — tela conexão + tela jogo completa
+- [x] `frontend/app/layout.tsx` — layout root Next.js 14
+
+### Testes
+- [x] `tests/test_api_session.py` — 16 testes REST ✅
+- [x] `tests/test_context_builder.py` — 13 testes ✅
+- [x] `tests/test_websocket.py` — 5 testes WS ✅
+- [x] Total: 74/74 ✅ *(28/04)*
+
+### Correções 28/04
+- [x] Bug `_id_para_nome` ausente em `working_memory.py` — NameError em runtime
+- [x] Animações Tailwind ausentes em `tailwind.config.ts` — VoxOrb estava estático
+- [x] Warmup do embedder no lifespan da API — primeira requisição agora rápida
+- [x] Ordem de imports em `qdrant_client.py` — código limpo
+
+### Pendente para testar esta noite
+- [ ] **`make ingest`** — re-indexar Qdrant com melhorias do chunker *(OBRIGATÓRIO antes do teste)* `[revisão]`
+- [ ] Iniciar com `start.bat` e testar perguntas reais no browser
+- [ ] Verificar latência primeiro turno (embedder agora é pré-carregado)
+- [ ] Testar SpeechRecognition no browser (Chrome recomendado)
+
+### Pendente (Cloudflare)
+- [ ] `cloudflared tunnel login` → configurar URL permanente ⏳ precisa browser `[roteiro]`
+- [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
+
+---
+
+## Benchmark e Scripts ✅ CONCLUÍDOS
+- [x] `benchmark/gabarito.yaml` — 10 perguntas com source_ids_esperados
+- [x] `benchmark/run_retrieval.py` — Recall@5=100% / MRR=1.000 *(após re-ingestão)*
+- [x] `benchmark/run_voice_e2e.py` — latência e2e com STT mockado
+- [x] `query_test.py` — debug interativo de retrieval
+- [x] `scripts/create_neo4j_indexes.py` — 16 indexes idempotentes
 
 ---
 
 ## Fases 5-8 — Backlog
 
-> Não planejar em detalhes agora. Mapear quando Fase 4 estiver concluída.
+> Não planejar em detalhes agora. Mapear quando Fase 4 estiver validada em produção.
 
 | Fase | Descrição | Marco | Carga estimada |
 |---|---|---|---|

@@ -13,6 +13,8 @@ Exemplo:
     GET /docs   → Swagger UI com todos os endpoints documentados
 """
 
+import asyncio
+import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -35,8 +37,28 @@ _VERSAO = "0.1.0"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup e shutdown controlados pela engine."""
     log.info("voxdm_api_iniciando", versao=_VERSAO, debug=settings.DEBUG)
+    await _warmup_embedder()
     yield
     log.info("voxdm_api_encerrando", sessoes_abertas=len(_sessoes_ativas()))
+
+
+async def _warmup_embedder() -> None:
+    """
+    Pré-carrega o modelo sentence-transformers no startup.
+
+    Sem isso, a primeira requisição leva 5-10s extras enquanto o modelo
+    é baixado/inicializado. Com isso, o primeiro turno do jogador fica
+    no mesmo tempo que os seguintes.
+    """
+    t0 = time.perf_counter()
+    try:
+        from ingestor.embedder import Embedder
+        loop = asyncio.get_running_loop()
+        embedder = Embedder()
+        await loop.run_in_executor(None, embedder.gerar, ["warmup"])
+        log.info("embedder_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
+    except Exception as e:
+        log.warning("embedder_warmup_falhou", erro=str(e), dica="primeira requisição será mais lenta")
 
 
 def _sessoes_ativas() -> dict:
