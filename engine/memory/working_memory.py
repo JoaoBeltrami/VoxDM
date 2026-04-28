@@ -22,6 +22,11 @@ from dataclasses import dataclass, field
 MAX_DIALOGOS = 8  # últimas N trocas mantidas em RAM
 
 
+def _id_para_nome(id_kebab: str) -> str:
+    """Converte 'fael-valdreksson' → 'Fael Valdreksson'."""
+    return " ".join(parte.capitalize() for parte in id_kebab.split("-"))
+
+
 @dataclass
 class DialogueTurn:
     """Uma linha de diálogo na cena atual."""

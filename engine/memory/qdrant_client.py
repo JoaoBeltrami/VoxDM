@@ -27,12 +27,13 @@ from tenacity import (
     wait_exponential,
 )
 
+from config import settings
+from ingestor.embedder import Embedder
+
+
 def _nao_e_404(exc: BaseException) -> bool:
     """Não faz retry em 404 — coleção ausente não vai aparecer sozinha."""
     return "Not found" not in str(exc) and "404" not in str(exc)
-
-from config import settings
-from ingestor.embedder import Embedder
 
 log = structlog.get_logger()
 
