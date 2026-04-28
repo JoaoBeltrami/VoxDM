@@ -28,6 +28,12 @@ class SessaoConfig(BaseModel):
     weather: str = "frio"
     player_hp: int = Field(default=30, ge=1, le=999)
     player_hp_max: int = Field(default=30, ge=1, le=999)
+    # Personagem D&D 5e — opcionais na criação, mestre pergunta se ausentes
+    player_name: str = ""
+    player_race: str = ""
+    player_class: str = ""
+    player_background: str = ""
+    player_level: int = Field(default=1, ge=1, le=20)
 
 
 class SessaoInfo(BaseModel):

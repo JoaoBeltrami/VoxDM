@@ -5,6 +5,8 @@ import { useGameSession } from "@/hooks/useGameSession";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
+import { CharacterForm } from "@/components/CharacterForm";
+import type { PersonagemConfig } from "@/lib/api";
 
 export default function Home() {
   const {
@@ -13,7 +15,8 @@ export default function Home() {
   } = useGameSession();
 
   const [sessionInput, setSessionInput] = useState("sess-01");
-  const [ouvindo,      setOuvindo]      = useState(false);
+  const [personagem, setPersonagem] = useState<PersonagemConfig>({});
+  const [ouvindo, setOuvindo] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,7 +32,6 @@ export default function Home() {
   if (!conectado) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-950 px-4">
-        {/* Orb decorativo na tela inicial */}
         <VoxOrb estado="idle" tamanho={72} />
 
         <div className="w-full max-w-xs space-y-5 text-center">
@@ -43,18 +45,23 @@ export default function Home() {
             <input
               value={sessionInput}
               onChange={e => setSessionInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") conectar(sessionInput.trim() || "sess-01"); }}
+              onKeyDown={e => {
+                if (e.key === "Enter") conectar(sessionInput.trim() || "sess-01", personagem);
+              }}
               placeholder="sess-01"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-500"
             />
           </div>
+
+          {/* Formulário de personagem D&D */}
+          <CharacterForm onChange={setPersonagem} />
 
           {erro && (
             <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-300">{erro}</p>
           )}
 
           <button
-            onClick={() => conectar(sessionInput.trim() || "sess-01")}
+            onClick={() => conectar(sessionInput.trim() || "sess-01", personagem)}
             disabled={carregando}
             className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40"
           >
@@ -73,9 +80,9 @@ export default function Home() {
       <header className="flex items-center justify-between border-b border-zinc-800/60 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full transition-colors duration-500 ${
-            orbEstado === "idle" ? "bg-emerald-500" :
+            orbEstado === "idle"    ? "bg-emerald-500" :
             orbEstado === "ouvindo" ? "bg-violet-400 animate-pulse" :
-            "bg-violet-300 animate-pulse"
+                                     "bg-violet-300 animate-pulse"
           }`} />
           <span className="text-xs text-zinc-500">{sessionId}</span>
         </div>
@@ -94,7 +101,7 @@ export default function Home() {
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {historico.length === 0 && !respostaAtual && (
           <p className="mt-6 text-center text-xs text-zinc-700">
-            Sessão iniciada — fale ou escreva algo para começar
+            Sessão iniciada — aguardando o mestre...
           </p>
         )}
         <MasterResponse historico={historico} respostaAtual={respostaAtual} />

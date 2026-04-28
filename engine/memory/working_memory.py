@@ -56,6 +56,13 @@ class WorkingMemory:
     # Diálogo recente — janela deslizante de MAX_DIALOGOS trocas
     dialogo_recente: list[DialogueTurn]
 
+    # Personagem do jogador (D&D 5e)
+    player_name: str
+    player_race: str
+    player_class: str
+    player_background: str
+    player_level: int
+
     # Estado do jogador
     player_hp: int
     player_hp_max: int
@@ -79,6 +86,11 @@ class WorkingMemory:
         weather: str = "Limpo",
         player_hp: int = 30,
         player_hp_max: int = 30,
+        player_name: str = "",
+        player_race: str = "",
+        player_class: str = "",
+        player_background: str = "",
+        player_level: int = 1,
     ) -> "WorkingMemory":
         """Cria uma WorkingMemory com estado inicial zerado."""
         return cls(
@@ -91,6 +103,11 @@ class WorkingMemory:
             trust_levels={},
             faction_standings={},
             dialogo_recente=[],
+            player_name=player_name,
+            player_race=player_race,
+            player_class=player_class,
+            player_background=player_background,
+            player_level=player_level,
             player_hp=player_hp,
             player_hp_max=player_hp_max,
             player_conditions=[],
@@ -137,11 +154,27 @@ class WorkingMemory:
                              Por padrão False — o histórico é passado como
                              pares user/assistant reais pelo prompt_builder.
         """
+        # Bloco do personagem — mostrado apenas se nome foi definido
+        if self.player_name:
+            partes_personagem = [self.player_name]
+            if self.player_race:
+                partes_personagem.append(self.player_race)
+            if self.player_class:
+                partes_personagem.append(self.player_class)
+            if self.player_level > 1:
+                partes_personagem.append(f"Nível {self.player_level}")
+            if self.player_background:
+                partes_personagem.append(f"Background: {self.player_background}")
+            bloco_personagem = f"Personagem: {' | '.join(partes_personagem)}"
+        else:
+            bloco_personagem = "Personagem: desconhecido (aguardando apresentação)"
+
         linhas: list[str] = [
             f"=== CENA ATUAL ===",
+            bloco_personagem,
             f"Local: {self.location_nome} ({self.location_id})",
             f"Hora: {self.time_of_day} | Clima: {self.weather}",
-            f"Jogador: {self.player_hp}/{self.player_hp_max} HP",
+            f"HP: {self.player_hp}/{self.player_hp_max}",
         ]
 
         if self.player_conditions:

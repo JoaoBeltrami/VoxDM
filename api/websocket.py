@@ -29,11 +29,76 @@ import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
 from api.models.schemas import MensagemWS
-from api.state import sessions
+from api.state import SessaoAtiva, sessions
 from engine.llm.prompt_builder import montar_mensagens
 from engine.telemetry import emit as _emit
 
 log = structlog.get_logger()
+
+# Prompt de abertura — gerado apenas uma vez por sessão (iteracoes == 0)
+_INTRO_SYSTEM = """\
+Você é VoxDM, mestre de RPG de mesa. Abra a sessão em 2 a 3 frases curtas.
+Descreva o ambiente de forma sensorial e termine com algo que naturalmente \
+convida o jogador a se apresentar — através de um NPC, uma situação ou um objeto \
+que peça identificação. Nunca use markdown, listas ou parênteses. \
+Responda em português brasileiro falado. Máximo 60 palavras."""
+
+
+async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
+    """
+    Gera e transmite a mensagem de abertura do mestre quando iteracoes == 0.
+
+    Usa um prompt simplificado (sem RAG) para garantir baixa latência na abertura.
+    Se o personagem já foi definido, inclui o nome no contexto.
+    """
+    t0 = time.perf_counter()
+    wm = sessao.working_mem
+
+    # Contexto da cena para o prompt de abertura
+    contexto_abertura = wm.para_texto(incluir_dialogo=False)
+    if wm.player_name:
+        intro_user = (
+            f"Abra a sessão. O personagem do jogador é {wm.player_name}, "
+            f"{wm.player_race} {wm.player_class} de background {wm.player_background or 'desconhecido'}. "
+            f"Cumprimente-o pelo nome e situe a cena."
+        )
+    else:
+        intro_user = (
+            "Abra a sessão. O personagem do jogador ainda é desconhecido. "
+            "Descreva o ambiente e termine com algo que convide o jogador a se apresentar."
+        )
+
+    mensagens_intro = [
+        {"role": "system", "content": f"{_INTRO_SYSTEM}\n\n{contexto_abertura}"},
+        {"role": "user", "content": intro_user},
+    ]
+
+    resposta_intro = ""
+    try:
+        async for token in sessao.groq.completar_stream(
+            mensagens_intro, temperatura=0.7, max_tokens=120
+        ):
+            resposta_intro += token
+            await websocket.send_text(
+                MensagemWS(tipo="token", conteudo=token).model_dump_json()
+            )
+    except Exception as e:
+        log.error("ws_abertura_falhou", session_id=sessao.session_id, erro=str(e))
+        msg_fallback = "Bem-vindo. O mundo aguarda. Quem é você?"
+        resposta_intro = msg_fallback
+        await websocket.send_text(
+            MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()
+        )
+
+    latencia_ms = int((time.perf_counter() - t0) * 1000)
+    await websocket.send_text(
+        MensagemWS(tipo="fim", latencia_ms=latencia_ms).model_dump_json()
+    )
+
+    if resposta_intro:
+        wm.registrar_fala("mestre", resposta_intro)
+
+    log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
 
 async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
@@ -66,6 +131,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             try:
                 dados: dict[str, Any] = json.loads(dados_raw)
                 texto_jogador: str = str(dados.get("texto", "")).strip()
+                tipo_msg: str = str(dados.get("tipo", "")).strip()
             except (json.JSONDecodeError, TypeError):
                 await websocket.send_text(
                     MensagemWS(
@@ -73,6 +139,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         conteudo='Formato inválido — enviar JSON com chave "texto"',
                     ).model_dump_json()
                 )
+                continue
+
+            # Mensagem de inicialização: frontend conectou, mestre abre a cena
+            if tipo_msg == "init":
+                await _enviar_abertura(websocket, sessao)
                 continue
 
             if not texto_jogador:

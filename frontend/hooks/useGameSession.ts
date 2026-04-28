@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { criarSessao, encerrarSessao, wsUrl, type MensagemWS } from "@/lib/api";
+import { criarSessao, encerrarSessao, wsUrl, type MensagemWS, type PersonagemConfig } from "@/lib/api";
 
 export interface TurnoHistorico {
   id: number;
-  jogador: string;
+  jogador: string;   // "" quando é mensagem de abertura do mestre
   mestre: string;
   latencia_ms: number;
   chunks_lore: string[];
@@ -35,14 +35,16 @@ export function useGameSession() {
   const textoAtualRef = useRef("");
   const turnoAtualRef = useRef<{ jogador: string; id: number } | null>(null);
 
-  const conectar = useCallback(async (sessionId: string) => {
+  const conectar = useCallback(async (sessionId: string, personagem?: PersonagemConfig) => {
     setEstado(s => ({ ...s, carregando: true, erro: null }));
     try {
-      await criarSessao(sessionId);
+      await criarSessao(sessionId, personagem);
       const ws = new WebSocket(wsUrl(sessionId));
 
       ws.onopen = () => {
         setEstado(s => ({ ...s, sessionId, conectado: true, carregando: false }));
+        // Dispara mensagem de abertura automática: o mestre saúda o jogador
+        ws.send(JSON.stringify({ tipo: "init" }));
       };
 
       ws.onmessage = (ev) => {
@@ -54,8 +56,16 @@ export function useGameSession() {
         }
 
         if (msg.tipo === "fim") {
+          // IMPORTANTE: capturar ANTES de limpar os refs.
+          // React 18 batcheia setEstado — o updater executa após o handler retornar.
+          // Se limpássemos textoAtualRef antes, 'mestre' seria sempre "".
           const turno = turnoAtualRef.current;
+          const textoFinal = textoAtualRef.current;
+          textoAtualRef.current = "";
+          turnoAtualRef.current = null;
+
           if (turno) {
+            // Turno normal: jogador enviou um comando
             setEstado(s => ({
               ...s,
               respostaAtual: "",
@@ -64,16 +74,31 @@ export function useGameSession() {
                 {
                   id: turno.id,
                   jogador: turno.jogador,
-                  mestre: textoAtualRef.current,
+                  mestre: textoFinal,
                   latencia_ms: msg.latencia_ms ?? 0,
                   chunks_lore: msg.chunks_lore ?? [],
                   chunks_regras: msg.chunks_regras ?? [],
                 },
               ],
             }));
+          } else if (textoFinal) {
+            // Mensagem de abertura do mestre (sem comando do jogador)
+            setEstado(s => ({
+              ...s,
+              respostaAtual: "",
+              historico: [
+                ...s.historico,
+                {
+                  id: Date.now(),
+                  jogador: "",
+                  mestre: textoFinal,
+                  latencia_ms: msg.latencia_ms ?? 0,
+                  chunks_lore: [],
+                  chunks_regras: [],
+                },
+              ],
+            }));
           }
-          textoAtualRef.current = "";
-          turnoAtualRef.current = null;
         }
 
         if (msg.tipo === "erro") {
