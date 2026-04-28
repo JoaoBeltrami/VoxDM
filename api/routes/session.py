@@ -55,6 +55,11 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         weather=config.weather,
         player_hp=config.player_hp,
         player_hp_max=config.player_hp_max,
+        player_name=config.player_name,
+        player_race=config.player_race,
+        player_class=config.player_class,
+        player_background=config.player_background,
+        player_level=config.player_level,
     )
 
     sessao = SessaoAtiva(

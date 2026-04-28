@@ -29,11 +29,25 @@ export interface MensagemWS {
   iteracao?: number;
 }
 
-export async function criarSessao(session_id: string): Promise<SessaoInfo> {
+export interface PersonagemConfig {
+  player_name?: string;
+  player_race?: string;
+  player_class?: string;
+  player_background?: string;
+  player_level?: number;
+  player_hp?: number;
+  player_hp_max?: number;
+}
+
+export async function criarSessao(
+  session_id: string,
+  personagem?: PersonagemConfig,
+): Promise<SessaoInfo> {
+  const body: Record<string, unknown> = { session_id, ...personagem };
   const resp = await fetch(`${API_BASE}/session/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) throw new Error(await resp.text());
   return resp.json();
