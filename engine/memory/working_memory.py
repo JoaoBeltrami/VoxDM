@@ -55,7 +55,7 @@ class WorkingMemory:
     npc_estados_emocionais: dict[str, str]
 
     # Relações jogador↔mundo (persistem entre cenas, zeradas entre sessões)
-    trust_levels: dict[str, int]       # npc_id → 0-5
+    trust_levels: dict[str, int]       # npc_id → 0-3 (Schema v1.2)
     faction_standings: dict[str, int]  # faction_id → pontos
 
     # Diálogo recente — janela deslizante de MAX_DIALOGOS trocas
@@ -129,9 +129,9 @@ class WorkingMemory:
             self.dialogo_recente.pop(0)
 
     def atualizar_trust(self, npc_id: str, delta: int) -> None:
-        """Ajusta trust de um NPC, limitando ao intervalo [0, 5]."""
+        """Ajusta trust de um NPC, limitando ao intervalo [0, 3] conforme Schema v1.2."""
         atual = self.trust_levels.get(npc_id, 0)
-        self.trust_levels[npc_id] = max(0, min(5, atual + delta))
+        self.trust_levels[npc_id] = max(0, min(3, atual + delta))
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado
@@ -192,7 +192,7 @@ class WorkingMemory:
             linhas.append("Estados emocionais:")
             for npc_id, estado in self.npc_estados_emocionais.items():
                 trust = self.trust_levels.get(npc_id, 0)
-                linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/5)")
+                linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/3)")
 
         if self.active_quest_hooks:
             linhas.append(f"\nQuests ativas: {', '.join(self.active_quest_hooks)}")

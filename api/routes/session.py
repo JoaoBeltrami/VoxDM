@@ -62,12 +62,24 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         player_level=config.player_level,
     )
 
+    context_builder = ContextBuilder()
     sessao = SessaoAtiva(
         session_id=config.session_id,
         working_mem=working_mem,
-        context_builder=ContextBuilder(),
+        context_builder=context_builder,
         groq=GroqClient(),
     )
+
+    # Pré-popular NPCs do local inicial via Neo4j
+    npcs_iniciais = await context_builder.inferir_npcs_presentes(working_mem.location_id)
+    working_mem.npcs_presentes = npcs_iniciais
+    log.info(
+        "npcs_iniciais_carregados",
+        session_id=config.session_id,
+        location_id=working_mem.location_id,
+        total=len(npcs_iniciais),
+    )
+
     sessions[config.session_id] = sessao
     log.info("sessao_criada", session_id=config.session_id, location=config.location_id)
 

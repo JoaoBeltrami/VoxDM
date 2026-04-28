@@ -33,6 +33,7 @@ def mock_context_builder():
     contexto.secrets_visiveis = []
     builder = MagicMock()
     builder.montar = AsyncMock(return_value=contexto)
+    builder.inferir_npcs_presentes = AsyncMock(return_value=[])
     return builder
 
 

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     SRD_DATA_DIR: str = "./srd_data"
     QDRANT_COLECAO_RULES: str = "voxdm_rules"
 
+    # Fase 1 — Embeddings
+    EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
+
     # Fase 2 — Voz
     STT_MODEL: str = "tiny"
     STT_DEVICE: str = "cuda"

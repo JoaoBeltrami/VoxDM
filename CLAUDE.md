@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 26 de abril de 2026
+> Atualizado: 28 de abril de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -152,7 +152,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 ### Configuração (Fase 0)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT | ✅ Atualizado |
+| `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT, EMBEDDING_MODEL, GROQ_MODEL | ✅ Atualizado |
 | `.env.example` | Template de variáveis de ambiente documentado — inclui CORS_ORIGINS | ✅ Atualizado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
 | `Makefile` | Targets: run, run-api, test, ingest, debug, backup | ✅ Atualizado |
@@ -222,6 +222,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `engine/llm/prompts/combat.md` | Camada de combate — teatro da mente, sem mecânica visível, ritmo música/batimento, variedade de verbos, HP como sensação | ✅ Criado |
 | `engine/llm/prompts/social.md` | Camada social — assinatura de voz por NPC, trust→transparência, corpo que contradiz fala, barganha/interrogatório | ✅ Criado |
 | `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
+| `engine/llm/prompts/intro_system.md` | Prompt de abertura de sessão — extraído de `api/websocket.py` para edição sem tocar em código | ✅ Criado |
 | `engine/telemetry.py` | Pub/sub leve via JSONL — emit(), read_latest(), purge_old() para voice_loop → dashboard | ✅ Criado |
 | `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo (3 cols, histórico, auto-refresh 500ms) | ✅ Atualizado |
 | `.streamlit/config.toml` | Tema escuro roxo (#7c3aed) para dashboard no vídeo | ✅ Criado |
@@ -238,6 +239,30 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Dedup por source_id | `engine/memory/context_builder.py` | Mesmo NPC aparecia 3× no top-5; agora mantém só o chunk de maior score |
 | Extração de entidades | `engine/memory/context_builder.py` | Extrai menções do texto do jogador para enriquecer lookup Neo4j |
 | Batch Neo4j lookup | `engine/memory/neo4j_client.py` | `buscar_por_ids()` — 1 query para múltiplas entidades em vez de N queries |
+
+### Correções de Convenção (Sessão 28/04)
+
+| Correção | Arquivo | Descrição |
+|---|---|---|
+| `EMBEDDING_MODEL` centralizado | `config.py`, `ingestor/embedder.py` | Modelo antes hardcoded em `embedder.py`; agora via `settings.EMBEDDING_MODEL` |
+| `trust_level` clamped 0–3 | `engine/memory/working_memory.py` | Era `min(5,...)`, Schema v1.2 define escala 0–3 |
+| `inferir_npcs_presentes` no start | `api/routes/session.py` | NPCs do local inicial agora populados via Neo4j ao criar sessão |
+| `_INTRO_SYSTEM` para arquivo | `api/websocket.py`, `engine/llm/prompts/intro_system.md` | Prompt de abertura extraído para `.md` editável |
+| Mocks AsyncMock em testes | `tests/test_api_session.py`, `tests/test_websocket.py` | `inferir_npcs_presentes` adicionado como `AsyncMock(return_value=[])` |
+
+### Diagnóstico de Arquitetura — Voice Gap (28/04)
+> Resultado de diagnóstico para decisão no Claude.ai antes de implementar.
+
+```
+LACUNA IDENTIFICADA:
+voice_runner.py (microfone OS → Faster-Whisper GPU → TTS pygame) e
+api/websocket.py (browser SpeechRecognition JS → Groq → texto) são dois
+sistemas completamente desconexos. STTEngine não expõe interface para receber
+bytes externos — só lê microfone local. Frontend usa Web Speech API (texto,
+não bytes). Para conectar: opção A = WS de áudio (MediaRecorder → Faster-Whisper),
+opção B = POST multipart /transcribe, opção C = manter dois modos separados.
+Decisão de arquitetura pendente via Claude.ai.
+```
 
 ### Benchmark e Scripts
 | Arquivo | O que faz | Status |

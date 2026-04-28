@@ -23,6 +23,7 @@ Exemplo:
 
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -35,13 +36,10 @@ from engine.telemetry import emit as _emit
 
 log = structlog.get_logger()
 
-# Prompt de abertura — gerado apenas uma vez por sessão (iteracoes == 0)
-_INTRO_SYSTEM = """\
-Você é VoxDM, mestre de RPG de mesa. Abra a sessão em 2 a 3 frases curtas.
-Descreva o ambiente de forma sensorial e termine com algo que naturalmente \
-convida o jogador a se apresentar — através de um NPC, uma situação ou um objeto \
-que peça identificação. Nunca use markdown, listas ou parênteses. \
-Responda em português brasileiro falado. Máximo 60 palavras."""
+# Prompt de abertura — carregado de arquivo para poder editar sem tocar em código
+_INTRO_SYSTEM: str = (
+    Path(__file__).parent.parent / "engine/llm/prompts/intro_system.md"
+).read_text(encoding="utf-8").strip()
 
 
 async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:

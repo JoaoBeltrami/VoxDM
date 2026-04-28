@@ -33,9 +33,11 @@ transformers.logging.set_verbosity_error()
 
 from sentence_transformers import SentenceTransformer
 
+from config import settings
+
 log = structlog.get_logger()
 
-MODELO_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
+MODELO_NOME: str = settings.EMBEDDING_MODEL
 VECTOR_SIZE = 384
 BATCH_SIZE = 64
 

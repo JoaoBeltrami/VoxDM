@@ -1,5 +1,5 @@
 # VOXDM_CHECKLIST.md
-> Versão 2.0 — 28 de abril de 2026
+> Versão 2.4 — 27 de abril de 2026
 > Checklists executáveis por fase — separado do documento técnico
 > Usar junto com VOXDM_PROJETO.md para contexto técnico completo
 
