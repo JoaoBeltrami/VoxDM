@@ -118,3 +118,73 @@ class EpisodicMemory:
             return sorted(sessoes)
         except Exception:
             return []
+
+    async def listar_com_metadata(self) -> list[dict[str, Any]]:
+        """
+        Retorna lista de sessões com metadados para exibição no seletor de sessão.
+
+        Para cada session_id, retorna o ponto mais recente com:
+        session_id, timestamp, location_final, npcs_mencionados, resumo_curto.
+        Ordenado por timestamp descendente (mais recente primeiro).
+        """
+        try:
+            import asyncio
+            from config import settings
+            from qdrant_client import QdrantClient
+
+            client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+            loop = asyncio.get_running_loop()
+
+            pontos, _ = await loop.run_in_executor(
+                None,
+                lambda: client.scroll(
+                    collection_name=_COLECAO,
+                    limit=200,
+                    with_payload=True,
+                    with_vectors=False,
+                ),
+            )
+
+            # Agrupa por session_id, mantém ponto mais recente por sessão
+            por_sessao: dict[str, dict[str, Any]] = {}
+            for p in pontos:
+                if not p.payload:
+                    continue
+                sid = str(p.payload.get("session_id", ""))
+                if not sid:
+                    continue
+                ts = float(p.payload.get("timestamp", 0))
+                existente = por_sessao.get(sid)
+                if existente is None or ts > existente["timestamp"]:
+                    texto = str(p.payload.get("text", ""))
+                    por_sessao[sid] = {
+                        "session_id": sid,
+                        "timestamp": ts,
+                        "location_final": str(p.payload.get("location_final", "")),
+                        "npcs_mencionados": list(p.payload.get("npcs_mencionados", [])),
+                        "resumo_curto": texto[:200],
+                    }
+
+            resultado = sorted(por_sessao.values(), key=lambda x: x["timestamp"], reverse=True)
+            log.info("episodic_listar_metadata", total_sessoes=len(resultado))
+            return resultado
+        except Exception as e:
+            log.info("episodic_listar_metadata_ausente", motivo=str(e))
+            return []
+
+    async def buscar_por_session_id(self, session_id: str) -> dict[str, Any] | None:
+        """
+        Recupera a entrada de memória episódica mais recente de uma sessão específica.
+
+        Usado para restaurar trust_levels e quest_stages ao continuar uma sessão.
+        Retorna None se não houver memória episódica para a sessão.
+        """
+        try:
+            resultados = await self.buscar(
+                query=session_id,
+                top_k=1,
+                session_id_filtro=session_id,
+            )
+            return resultados[0] if resultados else None
+        except Exception:
+            return None

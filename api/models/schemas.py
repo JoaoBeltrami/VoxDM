@@ -15,7 +15,7 @@ Exemplo:
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SessaoConfig(BaseModel):
@@ -34,6 +34,16 @@ class SessaoConfig(BaseModel):
     player_class: str = ""
     player_background: str = ""
     player_level: int = Field(default=1, ge=1, le=20)
+    # Continuação de sessão anterior — pré-popula trust_levels e quest_stages
+    session_anterior_id: str | None = None
+
+    @model_validator(mode="after")
+    def validar_session_anterior(self) -> "SessaoConfig":
+        if self.session_anterior_id and not __import__("re").fullmatch(
+            r"[a-z0-9-]+", self.session_anterior_id
+        ):
+            raise ValueError("session_anterior_id deve estar em kebab-case")
+        return self
 
 
 class SessaoInfo(BaseModel):
@@ -65,11 +75,30 @@ class RespostaMestre(BaseModel):
     iteracao: int
 
 
+class SessaoListaItem(BaseModel):
+    """Item de uma sessão disponível para carregar."""
+
+    session_id: str
+    timestamp: float
+    location_final: str
+    npcs_mencionados: list[str]
+    resumo_curto: str  # Primeiros 200 chars do resumo narrativo
+
+
+class TranscricaoResponse(BaseModel):
+    """Resultado da transcrição de áudio via Faster-Whisper."""
+
+    texto: str
+    idioma: str
+
+
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
-    tipo: str  # "token" | "fim" | "erro" | "metricas"
+    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk"
     conteudo: str = ""
+    conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
+    sequencia: int = 0       # índice sequencial do chunk de áudio
     latencia_ms: int = 0
     chunks_lore: list[str] = Field(default_factory=list)
     chunks_regras: list[str] = Field(default_factory=list)

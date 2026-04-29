@@ -200,7 +200,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 ### Voz (Fase 2)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `engine/voice/stt.py` | STT com RealtimeSTT + Faster-Whisper tiny GPU — asyncio.Queue, stream_transcricoes(), context manager | ✅ Criado |
+| `engine/voice/stt.py` | STT com RealtimeSTT + Faster-Whisper tiny GPU — asyncio.Queue, stream_transcricoes(), context manager + `transcrever_bytes()` para POST /transcribe (singleton GPU) | ✅ Atualizado |
 | `engine/voice/language.py` | Detecção de idioma PT-BR/EN por stopwords — tipo Idioma, detecção mista | ✅ Criado |
 | `engine/voice/tts.py` | TTS Edge TTS + Kokoro fallback — SSML, sintetizar_stream(), dicionário de pronúncia | ✅ Criado |
 | `engine/voice/vad.py` | VAD — VADConfig dataclass, perfis de sensibilidade | ✅ Criado |
@@ -217,8 +217,9 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j — enriquece chunks com relações do grafo, buscar_npc() | ✅ Criado |
 | `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
 | `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
-| `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, puro sem I/O | ✅ Criado |
-| `engine/llm/prompts/master_system.md` | Prompt do mestre — identidade humana, voz falada PT-BR, 5 hábitos de narração, secrets, pacing, limite 80 palavras | ✅ v2 |
+| `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, cache de prompts com `invalidar_cache()`, injeção condicional de dice.md via regex | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Prompt do mestre — identidade humana, voz falada PT-BR, 5 hábitos de narração, secrets, pacing, limite 80 palavras, seção de rolagem de dados | ✅ v3 |
+| `engine/llm/prompts/dice.md` | Guia de rolagem de dados — escala narrativa d20 (1=fumble, 2-9=falha, 10-14=custo, 15-19=limpo, 20=crítico), danos, d100, nunca expor número | ✅ Criado |
 | `engine/llm/prompts/combat.md` | Camada de combate — teatro da mente, sem mecânica visível, ritmo música/batimento, variedade de verbos, HP como sensação | ✅ Criado |
 | `engine/llm/prompts/social.md` | Camada social — assinatura de voz por NPC, trust→transparência, corpo que contradiz fala, barganha/interrogatório | ✅ Criado |
 | `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
@@ -250,19 +251,20 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `_INTRO_SYSTEM` para arquivo | `api/websocket.py`, `engine/llm/prompts/intro_system.md` | Prompt de abertura extraído para `.md` editável |
 | Mocks AsyncMock em testes | `tests/test_api_session.py`, `tests/test_websocket.py` | `inferir_npcs_presentes` adicionado como `AsyncMock(return_value=[])` |
 
-### Diagnóstico de Arquitetura — Voice Gap (28/04)
-> Resultado de diagnóstico para decisão no Claude.ai antes de implementar.
+### Voice Loop Fechado + Features UI (Sessão 29/04)
+> Voice gap resolvido. Loop completo: browser MediaRecorder → POST /transcribe → Faster-Whisper GPU → WebSocket → Edge TTS → audio_chunk base64 → Web Audio API.
 
-```
-LACUNA IDENTIFICADA:
-voice_runner.py (microfone OS → Faster-Whisper GPU → TTS pygame) e
-api/websocket.py (browser SpeechRecognition JS → Groq → texto) são dois
-sistemas completamente desconexos. STTEngine não expõe interface para receber
-bytes externos — só lê microfone local. Frontend usa Web Speech API (texto,
-não bytes). Para conectar: opção A = WS de áudio (MediaRecorder → Faster-Whisper),
-opção B = POST multipart /transcribe, opção C = manter dois modos separados.
-Decisão de arquitetura pendente via Claude.ai.
-```
+| Feature | O que foi feito |
+|---|---|
+| STT via GPU (POST /transcribe) | `transcrever_bytes()` + endpoint multipart, 10MB limit, singleton WhisperModel |
+| TTS de volta ao browser | sentence buffer no WS, `sintetizar_e_enviar_chunk()`, `audio_chunk` base64 messages |
+| Nome do personagem na UI | `playerName` no header e bolha do jogador |
+| Seletor de sessão passada | `SessionPicker` + `GET /session/list` + restauração de trust/quest via episodic memory |
+| Ficha do personagem | `CharacterSheet` colapsável com HP bar |
+| Sistema de dados integrado | botões d4-d100, envia `[Rolagem: dX = Y]`, `dice.md` injetado condicionalmente via regex |
+| Prompt do mestre v3 | seção de rolagem de dados + `dice.md` com escala narrativa de veterano |
+| Testes de segurança de prompt | `tests/test_master_prompt.py` — 32 testes, cache, regex, fallback |
+| **Total testes** | **106 passed, 0 failed** |
 
 ### Benchmark e Scripts
 | Arquivo | O que faz | Status |
@@ -278,18 +280,24 @@ Decisão de arquitetura pendente via Claude.ai.
 |---|---|---|
 | `api/main.py` | FastAPI app — CORS seguro (CORS_ORIGINS via env), lifespan, /health, /ws/game/{id}, /debug/* só em DEBUG=True | ✅ Criado |
 | `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket | ✅ Criado |
-| `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (kebab-case), ComandoJogador, RespostaMestre, MensagemWS | ✅ Criado |
-| `api/routes/session.py` | POST /session/start, POST /session/{id}/turn, GET /session/{id}/status, DELETE /session/{id} | ✅ Criado |
+| `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
+| `api/routes/session.py` | POST /session/start (+ restauração episódica), POST /{id}/transcribe (10MB limit), GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id} | ✅ Atualizado |
 | `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
-| `api/websocket.py` | WebSocket streaming token-a-token — {"tipo":"token"/"fim"/"erro"}, emite telemetria JSONL | ✅ Criado |
-| `frontend/lib/api.ts` | Funções REST: criarSessao(), encerrarSessao(), wsUrl() — NEXT_PUBLIC_API_URL configurável | ✅ Criado |
-| `frontend/hooks/useGameSession.ts` | Hook React — gerencia WebSocket, estado de sessão, streaming de tokens, historico | ✅ Criado |
-| `frontend/components/VoiceButton.tsx` | Textarea + Enviar — Enter sem Shift envia, desabilitado durante streaming | ✅ Criado |
-| `frontend/components/MasterResponse.tsx` | Bolhas de diálogo — player (direita) / mestre (esquerda), cursor piscante durante streaming, métricas RAG | ✅ Criado |
-| `frontend/app/page.tsx` | Página principal — tela de conexão + tela de jogo com header, scrollable e VoiceButton fixo | ✅ Criado |
+| `api/websocket.py` | WebSocket streaming — sentence buffer + TTS sintetizar_stream() + audio_chunk base64 messages paralelo a tokens | ✅ Atualizado |
+| `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
+| `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk no WS | ✅ Atualizado |
+| `frontend/hooks/useAudio.ts` | NOVO — fila sequencial MP3 via Web Audio API, tocarChunk(), pararTudo() | ✅ Criado |
+| `frontend/components/VoiceButton.tsx` | Reescrito — MediaRecorder primary (GPU), Web Speech API fallback, sessionId prop, "Transcrevendo via GPU…" | ✅ Atualizado |
+| `frontend/components/MasterResponse.tsx` | + playerName prop, exibe nome na bolha do jogador | ✅ Atualizado |
+| `frontend/components/SessionPicker.tsx` | NOVO — lista sessões passadas, "Continuar" preenche form com session_anterior_id | ✅ Criado |
+| `frontend/components/CharacterSheet.tsx` | NOVO — ficha colapsável, HP bar, botões de dados (d4-d100), envia [Rolagem: dX = Y] ao chat | ✅ Criado |
+| `frontend/app/page.tsx` | + SessionPicker, CharacterSheet, playerName no header, handleContinuarSessao | ✅ Atualizado |
 | `frontend/app/layout.tsx` | Layout root Next.js 14 com fontes Geist | ✅ Criado |
+| `requirements.txt` | + python-multipart (necessário para FastAPI UploadFile) | ✅ Atualizado |
 | `tests/test_api_session.py` | 16 testes REST — start/turn/status/delete com TestClient + AsyncMock de ContextBuilder e Groq | ✅ Criado |
 | `tests/test_context_builder.py` | 13 testes — dedup por source_id, extração de entidades, query curta/longa | ✅ Criado |
+| `tests/test_master_prompt.py` | 32 testes — existência/conteúdo dos .md, regex rolagem, cache, montar_mensagens c/ e s/ dado | ✅ Criado |
 
 ---
 

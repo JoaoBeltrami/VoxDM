@@ -14,13 +14,22 @@ Exemplo:
     DELETE /session/sess-01       → 204 (salva memória episódica)
 """
 
+import tempfile
 import time
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from api.models.schemas import ComandoJogador, RespostaMestre, SessaoConfig, SessaoInfo
+from api.models.schemas import (
+    ComandoJogador,
+    RespostaMestre,
+    SessaoConfig,
+    SessaoInfo,
+    SessaoListaItem,
+    TranscricaoResponse,
+)
+from engine.memory.episodic_memory import EpisodicMemory
 from api.state import MAX_SESSOES, SessaoAtiva, sessions
 from engine.llm.groq_client import GroqClient
 from engine.llm.prompt_builder import montar_mensagens
@@ -30,6 +39,26 @@ from engine.memory.working_memory import WorkingMemory
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/session", tags=["session"])
+
+# Limite máximo de upload de áudio: 10 MB
+_MAX_AUDIO_BYTES = 10 * 1024 * 1024
+
+
+@router.get("/list", response_model=list[SessaoListaItem])
+async def listar_sessoes_salvas() -> list[SessaoListaItem]:
+    """Lista sessões disponíveis na memória episódica para exibir no seletor."""
+    mem = EpisodicMemory()
+    entradas = await mem.listar_com_metadata()
+    return [
+        SessaoListaItem(
+            session_id=e["session_id"],
+            timestamp=e["timestamp"],
+            location_final=e["location_final"],
+            npcs_mencionados=e["npcs_mencionados"],
+            resumo_curto=e["resumo_curto"],
+        )
+        for e in entradas
+    ]
 
 
 @router.post("/start", response_model=SessaoInfo, status_code=201)
@@ -79,6 +108,29 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         location_id=working_mem.location_id,
         total=len(npcs_iniciais),
     )
+
+    # Restaurar trust_levels e quest_stages de sessão anterior, se fornecida
+    if config.session_anterior_id:
+        try:
+            mem_episodica = EpisodicMemory()
+            entrada = await mem_episodica.buscar_por_session_id(config.session_anterior_id)
+            if entrada:
+                working_mem.trust_levels = {
+                    k: int(v) for k, v in entrada.get("trust_levels", {}).items()
+                }
+                working_mem.quest_stages = {
+                    k: str(v) for k, v in entrada.get("quest_stages", {}).items()
+                }
+                working_mem.active_quest_hooks = list(working_mem.quest_stages.keys())
+                log.info(
+                    "sessao_anterior_restaurada",
+                    session_id=config.session_id,
+                    session_anterior_id=config.session_anterior_id,
+                    trust_restaurado=len(working_mem.trust_levels),
+                    quests_restauradas=len(working_mem.quest_stages),
+                )
+        except Exception as e:
+            log.warning("restauracao_sessao_falhou", erro=str(e))
 
     sessions[config.session_id] = sessao
     log.info("sessao_criada", session_id=config.session_id, location=config.location_id)
@@ -133,6 +185,35 @@ async def processar_turno(session_id: str, comando: ComandoJogador) -> RespostaM
         latencia_ms=latencia_ms,
         iteracao=sessao.iteracoes,
     )
+
+
+@router.post("/{session_id}/transcribe", response_model=TranscricaoResponse)
+async def transcrever_audio(
+    session_id: str,
+    audio: UploadFile = File(..., description="Arquivo de áudio webm/opus do MediaRecorder"),
+) -> TranscricaoResponse:
+    """Transcreve áudio via Faster-Whisper GPU e retorna texto.
+
+    Recebe bytes de áudio do browser (MediaRecorder opus/webm), transcreve com
+    Faster-Whisper tiny na GPU e retorna o texto para envio pelo WebSocket.
+    Limite: 10 MB. Sessão deve existir.
+    """
+    _get_sessao(session_id)  # garante sessão válida antes de processar áudio
+
+    audio_bytes = await audio.read(_MAX_AUDIO_BYTES + 1)
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Áudio excede limite de 10 MB")
+    if len(audio_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Arquivo de áudio vazio")
+
+    try:
+        from engine.voice.stt import transcrever_bytes
+        texto = await transcrever_bytes(audio_bytes)
+        log.info("transcricao_ok", session_id=session_id, chars=len(texto))
+        return TranscricaoResponse(texto=texto, idioma="pt")
+    except Exception as e:
+        log.error("transcricao_falhou", session_id=session_id, erro=str(e))
+        raise HTTPException(status_code=503, detail=f"Falha na transcrição: {e}")
 
 
 @router.get("/{session_id}/status", response_model=SessaoInfo)

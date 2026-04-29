@@ -12,6 +12,7 @@ Exemplo:
     # → [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,9 +23,19 @@ from engine.memory.working_memory import WorkingMemory
 
 log = structlog.get_logger()
 
-# Caminho do prompt do mestre — lido uma vez e cacheado
+# Caminhos dos prompts
 _MASTER_SYSTEM_PATH = Path(__file__).parent / "prompts" / "master_system.md"
+_DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
+
+# Caches — None = ainda não lido; str vazia = lido mas ausente/falho
 _master_system_cache: str | None = None
+_dice_cache: str | None = None
+
+# Detecta o formato [Rolagem: dX = Y] enviado pelo CharacterSheet
+_RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
+
+# Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
+_PROMPT_MIN_CHARS = 100
 
 # Budget de tokens por camada (aproximado — 1 token ≈ 4 chars)
 BUDGET_WORKING   = 1600   # 40% — nunca cortado
@@ -71,15 +82,68 @@ def _carregar_master_system() -> str:
     """Carrega e cacheia o prompt do mestre em disco."""
     global _master_system_cache
     if _master_system_cache is None:
-        if _MASTER_SYSTEM_PATH.exists():
-            _master_system_cache = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
-        else:
-            log.warning("master_system_ausente", path=str(_MASTER_SYSTEM_PATH))
+        try:
+            if _MASTER_SYSTEM_PATH.exists():
+                conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+                if len(conteudo) >= _PROMPT_MIN_CHARS:
+                    _master_system_cache = conteudo
+                else:
+                    log.warning("master_system_muito_curto", chars=len(conteudo))
+            else:
+                log.warning("master_system_ausente", path=str(_MASTER_SYSTEM_PATH))
+        except Exception as e:
+            log.error("master_system_falhou_leitura", erro=str(e))
+
+        if _master_system_cache is None:
             _master_system_cache = (
                 "Você é VoxDM, um mestre de RPG de mesa narrando em português brasileiro. "
-                "Seja imersivo, conciso e consistente com o contexto fornecido."
+                "Seja imersivo, conciso e consistente com o contexto fornecido. "
+                "Nunca use markdown, asteriscos, listas ou parênteses técnicos. "
+                "Máximo 80 palavras por resposta."
             )
     return _master_system_cache
+
+
+def _carregar_dice() -> str | None:
+    """Carrega e cacheia o guia de rolagem de dados. Retorna None se ausente."""
+    global _dice_cache
+    if _dice_cache is None:
+        try:
+            if _DICE_PATH.exists():
+                conteudo = _DICE_PATH.read_text(encoding="utf-8")
+                if len(conteudo) >= _PROMPT_MIN_CHARS:
+                    _dice_cache = conteudo
+                    return _dice_cache
+            log.info("dice_md_ausente", path=str(_DICE_PATH))
+        except Exception as e:
+            log.warning("dice_md_falhou_leitura", erro=str(e))
+        _dice_cache = ""   # marca como "tentado, não disponível"
+    return _dice_cache if _dice_cache else None
+
+
+def invalidar_cache() -> None:
+    """Invalida caches de prompts — útil em testes e em hot-reload."""
+    global _master_system_cache, _dice_cache
+    _master_system_cache = None
+    _dice_cache = None
+
+
+def validar_master_system() -> tuple[bool, str]:
+    """
+    Verifica se master_system.md existe e tem conteúdo mínimo.
+
+    Returns:
+        (ok, mensagem) — ok=True se válido, mensagem descreve o problema caso contrário.
+    """
+    if not _MASTER_SYSTEM_PATH.exists():
+        return False, f"Arquivo ausente: {_MASTER_SYSTEM_PATH}"
+    try:
+        conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    except Exception as e:
+        return False, f"Erro de leitura: {e}"
+    if len(conteudo) < _PROMPT_MIN_CHARS:
+        return False, f"Arquivo muito curto ({len(conteudo)} chars — mínimo {_PROMPT_MIN_CHARS})"
+    return True, "ok"
 
 
 def _formatar_chunks(chunks: list[dict[str, Any]], limite_chars: int) -> str:
@@ -168,6 +232,13 @@ def montar_mensagens(
     regras_texto = _formatar_chunks(contexto.chunks_regras, limite_chars=BUDGET_REGRAS * 4)
     if regras_texto:
         secoes.append(f"\nREGRAS DE JOGO:\n{regras_texto}")
+
+    # Guia de rolagem de dados — injetado apenas quando o jogador rola um dado
+    if _RE_ROLAGEM.search(contexto.transcricao_atual):
+        dice_texto = _carregar_dice()
+        if dice_texto:
+            secoes.append(f"\n{dice_texto}")
+            log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

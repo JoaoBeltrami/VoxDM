@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { criarSessao, encerrarSessao, wsUrl, type MensagemWS, type PersonagemConfig } from "@/lib/api";
+import { useAudio } from "@/hooks/useAudio";
 
 export interface TurnoHistorico {
   id: number;
@@ -14,6 +15,7 @@ export interface TurnoHistorico {
 
 interface EstadoSessao {
   sessionId: string | null;
+  playerName: string | null;
   conectado: boolean;
   carregando: boolean;
   respostaAtual: string;
@@ -22,8 +24,10 @@ interface EstadoSessao {
 }
 
 export function useGameSession() {
+  const { tocarChunk, pararTudo } = useAudio();
   const [estado, setEstado] = useState<EstadoSessao>({
     sessionId: null,
+    playerName: null,
     conectado: false,
     carregando: false,
     respostaAtual: "",
@@ -42,13 +46,18 @@ export function useGameSession() {
       const ws = new WebSocket(wsUrl(sessionId));
 
       ws.onopen = () => {
-        setEstado(s => ({ ...s, sessionId, conectado: true, carregando: false }));
+        const nome = personagem?.player_name?.trim() || null;
+        setEstado(s => ({ ...s, sessionId, playerName: nome, conectado: true, carregando: false }));
         // Dispara mensagem de abertura automática: o mestre saúda o jogador
         ws.send(JSON.stringify({ tipo: "init" }));
       };
 
       ws.onmessage = (ev) => {
         const msg: MensagemWS = JSON.parse(ev.data);
+
+        if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
+          tocarChunk(msg.conteudo_b64);
+        }
 
         if (msg.tipo === "token" && msg.conteudo) {
           textoAtualRef.current += msg.conteudo;

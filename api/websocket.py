@@ -21,6 +21,7 @@ Exemplo:
     # Enviar:   {"texto": "O que vejo ao entrar na taverna?"}
 """
 
+import base64
 import json
 import time
 from pathlib import Path
@@ -35,6 +36,54 @@ from engine.llm.prompt_builder import montar_mensagens
 from engine.telemetry import emit as _emit
 
 log = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# TTS — singleton lazy, graceful se edge_tts não estiver instalado
+# ---------------------------------------------------------------------------
+
+_tts_engine: Any = None
+_tts_tentou_inicializar = False
+
+_CHUNK_MIN_PALAVRAS: int = 3    # mínimo de palavras antes de sintetizar sentença
+_CHUNK_MAX_PALAVRAS: int = 20   # força flush mesmo sem pontuação
+_FINAIS_SENTENCA = frozenset(".!?:…")
+
+
+def _obter_tts() -> Any:
+    """Retorna TTSEngine singleton ou None se TTS indisponível."""
+    global _tts_engine, _tts_tentou_inicializar
+    if _tts_tentou_inicializar:
+        return _tts_engine
+    _tts_tentou_inicializar = True
+    try:
+        from engine.voice.tts import TTSEngine  # type: ignore
+        _tts_engine = TTSEngine()
+        log.info("tts_engine_carregado")
+    except Exception as e:
+        log.warning("tts_engine_indisponivel", erro=str(e))
+    return _tts_engine
+
+
+async def _sintetizar_e_enviar_chunk(
+    ws: WebSocket, tts: Any, sentenca: str, seq: int
+) -> int:
+    """Sintetiza sentença via Edge TTS e envia como audio_chunk base64. Retorna próximo seq."""
+    try:
+        chunks = [c async for c in tts.sintetizar_stream(sentenca)]
+        audio_bytes = b"".join(chunks)
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+            await ws.send_text(
+                MensagemWS(
+                    tipo="audio_chunk",
+                    conteudo_b64=audio_b64,
+                    sequencia=seq,
+                ).model_dump_json()
+            )
+            return seq + 1
+    except Exception as e:
+        log.warning("tts_chunk_falhou", sentenca_resumida=sentenca[:40], erro=str(e))
+    return seq
 
 # Prompt de abertura — carregado de arquivo para poder editar sem tocar em código
 _INTRO_SYSTEM: str = (
@@ -169,9 +218,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
                 mensagens = [{"role": "user", "content": texto_jogador}]
 
-            # Groq streaming — cada token vai ao cliente imediatamente
+            # Groq streaming — tokens ao cliente + TTS por sentença (pipeline)
             resposta_completa = ""
             latencia_primeiro_token = -1
+            tts = _obter_tts()
+            buffer_tts = ""
+            buffer_palavras = 0
+            audio_seq = 0
 
             try:
                 async for token in sessao.groq.completar_stream(
@@ -183,12 +236,33 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     await websocket.send_text(
                         MensagemWS(tipo="token", conteudo=token).model_dump_json()
                     )
+
+                    # Acumula sentença para TTS e sintetiza ao completar
+                    if tts:
+                        buffer_tts += token
+                        buffer_palavras += max(1, len(token.split()))
+                        deve_flush = (
+                            buffer_palavras >= _CHUNK_MIN_PALAVRAS
+                            and token.rstrip()[-1:] in _FINAIS_SENTENCA
+                        ) or buffer_palavras >= _CHUNK_MAX_PALAVRAS
+
+                        if deve_flush and buffer_tts.strip():
+                            audio_seq = await _sintetizar_e_enviar_chunk(
+                                websocket, tts, buffer_tts.strip(), audio_seq
+                            )
+                            buffer_tts = ""
+                            buffer_palavras = 0
+
             except Exception as e:
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
                 await websocket.send_text(
                     MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                 )
                 continue
+
+            # Flush do buffer TTS restante (última sentença sem pontuação final)
+            if tts and buffer_tts.strip():
+                await _sintetizar_e_enviar_chunk(websocket, tts, buffer_tts.strip(), audio_seq)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
             sessao.iteracoes += 1

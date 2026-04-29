@@ -5,17 +5,23 @@ import type { TurnoHistorico } from "@/hooks/useGameSession";
 interface Props {
   historico: TurnoHistorico[];
   respostaAtual: string;
+  playerName?: string | null;
 }
 
-export function MasterResponse({ historico, respostaAtual }: Props) {
+export function MasterResponse({ historico, respostaAtual, playerName }: Props) {
   return (
     <div className="flex flex-col gap-4 overflow-y-auto">
       {historico.map((turno) => (
         <div key={turno.id} className="flex flex-col gap-2">
           {/* Fala do jogador — omitida em mensagens de abertura (jogador == "") */}
           {turno.jogador && (
-            <div className="self-end max-w-[75%] rounded-xl bg-violet-900/60 px-4 py-2 text-sm text-violet-100">
-              {turno.jogador}
+            <div className="self-end flex flex-col items-end gap-0.5">
+              {playerName && (
+                <span className="mr-1 text-xs text-violet-400/70">{playerName}</span>
+              )}
+              <div className="max-w-[75%] rounded-xl bg-violet-900/60 px-4 py-2 text-sm text-violet-100">
+                {turno.jogador}
+              </div>
             </div>
           )}
 

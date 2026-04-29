@@ -22,8 +22,10 @@ Instalação:
 """
 
 import asyncio
+import tempfile
 import threading
-from typing import AsyncIterator
+from pathlib import Path
+from typing import AsyncIterator, Any
 
 import structlog
 
@@ -42,6 +44,71 @@ POST_SPEECH_SILENCE: float = 0.7  # 700ms — balanceia naturalidade e responsiv
 
 # Duração mínima de gravação para disparar transcrição
 MIN_RECORDING_DURATION: float = 0.2  # 200ms — evita transcrever ruídos curtos
+
+
+# ---------------------------------------------------------------------------
+# Transcrição de bytes — caminho API (MediaRecorder → GPU)
+# ---------------------------------------------------------------------------
+
+# Singleton do WhisperModel para transcrição de bytes — carregado uma vez na GPU.
+# Separado do AudioToTextRecorder que o STTEngine usa para microfone local.
+_whisper_singleton: Any = None
+_whisper_lock = threading.Lock()
+
+
+def _obter_whisper() -> Any:
+    """Retorna o singleton WhisperModel, inicializando na GPU se necessário."""
+    global _whisper_singleton
+    if _whisper_singleton is None:
+        with _whisper_lock:
+            if _whisper_singleton is None:
+                from faster_whisper import WhisperModel
+                _whisper_singleton = WhisperModel(
+                    WHISPER_MODEL,
+                    device=COMPUTE_DEVICE,
+                    compute_type=COMPUTE_TYPE,
+                )
+                log.info("whisper_singleton_carregado", modelo=WHISPER_MODEL, device=COMPUTE_DEVICE)
+    return _whisper_singleton
+
+
+async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
+    """
+    Transcreve bytes de áudio (webm/opus do MediaRecorder) via Faster-Whisper GPU.
+
+    Grava os bytes em arquivo temporário, transcreve e apaga o arquivo.
+    Usa singleton do WhisperModel para evitar reload a cada chamada (~latência 150-300ms).
+
+    Args:
+        audio_bytes: Bytes de áudio no formato webm/opus do MediaRecorder do browser.
+        idioma: Código ISO 639-1 do idioma esperado (padrão "pt").
+
+    Returns:
+        Texto transcrito, ou string vazia se áudio inaudível.
+    """
+    loop = asyncio.get_running_loop()
+
+    def _transcrever() -> str:
+        modelo = _obter_whisper()
+        # Arquivo temporário deletado automaticamente ao sair do bloco
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+            tmp.write(audio_bytes)
+
+        try:
+            segmentos, _ = modelo.transcribe(
+                str(tmp_path),
+                language=idioma,
+                beam_size=1,        # beam=1 para latência mínima
+                vad_filter=True,    # remove silêncio no início/fim
+            )
+            return " ".join(seg.text.strip() for seg in segmentos).strip()
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    texto = await loop.run_in_executor(None, _transcrever)
+    log.info("transcrever_bytes_ok", chars=len(texto), idioma=idioma)
+    return texto
 
 
 # ---------------------------------------------------------------------------

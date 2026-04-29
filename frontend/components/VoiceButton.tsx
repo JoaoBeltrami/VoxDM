@@ -1,26 +1,83 @@
 "use client";
 
 import { KeyboardEvent, useCallback, useRef, useState } from "react";
+import { transcrever } from "@/lib/api";
 
 interface Props {
   onEnviar:         (texto: string) => void;
   onOuvindoChange?: (ouvindo: boolean) => void;
   desabilitado?:    boolean;
+  /** ID da sessão ativa — habilita path Faster-Whisper GPU via POST /transcribe */
+  sessionId?:       string | null;
 }
 
-export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false }: Props) {
-  const [texto,   setTexto]   = useState("");
-  const [ouvindo, setOuvindo] = useState(false);
-  const [preview, setPreview] = useState("");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recRef   = useRef<any>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId }: Props) {
+  const [texto,        setTexto]        = useState("");
+  const [ouvindo,      setOuvindo]      = useState(false);
+  const [preview,      setPreview]      = useState("");
+  const [transcrevendo, setTranscrevendo] = useState(false);
 
-  const temVoz = typeof window !== "undefined" &&
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef        = useRef<any>(null);
+  const mediaRecRef   = useRef<MediaRecorder | null>(null);
+  const chunksRef     = useRef<Blob[]>([]);
+  const inputRef      = useRef<HTMLTextAreaElement>(null);
+
+  const temMediaRec = typeof window !== "undefined" && !!window.MediaRecorder && !!sessionId;
+  const temWebSpeech = typeof window !== "undefined" &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
-  const iniciarVoz = useCallback(() => {
+  const _setOuvindo = (v: boolean) => { setOuvindo(v); onOuvindoChange?.(v); };
+
+  // ── Caminho primário: MediaRecorder → POST /transcribe → Faster-Whisper GPU ──
+
+  const iniciarMediaRec = useCallback(async () => {
+    if (desabilitado || !sessionId) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const mr = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        _setOuvindo(false);
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (blob.size < 1000) { setPreview(""); return; } // muito curto, provavelmente silêncio
+        setPreview("Transcrevendo…");
+        setTranscrevendo(true);
+        try {
+          const texto = await transcrever(sessionId, blob);
+          setPreview("");
+          if (texto.trim()) onEnviar(texto.trim());
+        } catch {
+          // Falha na transcrição — fallback silencioso (texto ainda disponível)
+          setPreview("");
+        } finally {
+          setTranscrevendo(false);
+        }
+      };
+      mr.start(200); // coleta chunks a cada 200ms
+      mediaRecRef.current = mr;
+      _setOuvindo(true);
+    } catch {
+      // Sem permissão de microfone ou MediaRecorder falhou — tenta Web Speech API
+      iniciarWebSpeech();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desabilitado, sessionId, onEnviar]);
+
+  const pararMediaRec = useCallback(() => {
+    mediaRecRef.current?.stop();
+    mediaRecRef.current = null;
+  }, []);
+
+  // ── Caminho fallback: Web Speech API (browser transcreve localmente) ──
+
+  const iniciarWebSpeech = useCallback(() => {
     if (desabilitado) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
@@ -31,19 +88,17 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false }:
     rec.continuous     = false;
     rec.interimResults = true;
 
-    rec.onstart = () => { setOuvindo(true);  onOuvindoChange?.(true); };
-    rec.onend   = () => { setOuvindo(false); onOuvindoChange?.(false); setPreview(""); };
-    rec.onerror = () => { setOuvindo(false); onOuvindoChange?.(false); setPreview(""); };
+    rec.onstart = () => _setOuvindo(true);
+    rec.onend   = () => { _setOuvindo(false); setPreview(""); };
+    rec.onerror = () => { _setOuvindo(false); setPreview(""); };
 
     rec.onresult = (ev: { results: SpeechRecognitionResultList }) => {
       const transcript = Array.from(ev.results)
         .map((r: SpeechRecognitionResult) => r[0].transcript)
         .join("");
-
       if (ev.results[ev.results.length - 1].isFinal) {
         setPreview("");
-        setOuvindo(false);
-        onOuvindoChange?.(false);
+        _setOuvindo(false);
         if (transcript.trim()) onEnviar(transcript.trim());
       } else {
         setPreview(transcript);
@@ -52,19 +107,30 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false }:
 
     rec.start();
     recRef.current = rec;
-  }, [desabilitado, onEnviar, onOuvindoChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desabilitado, onEnviar]);
 
-  const pararVoz = useCallback(() => {
+  const pararWebSpeech = useCallback(() => {
     recRef.current?.stop();
     recRef.current = null;
-    setOuvindo(false);
-    onOuvindoChange?.(false);
+    _setOuvindo(false);
     setPreview("");
-  }, [onOuvindoChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const toggleVoz = () => ouvindo ? pararVoz() : iniciarVoz();
+  // ── Toggle unificado ────────────────────────────────────────────────────────
 
-  // ── Fallback texto ─────────────────────────────────────────────────────────
+  const toggleVoz = () => {
+    if (ouvindo) {
+      if (mediaRecRef.current) pararMediaRec();
+      else pararWebSpeech();
+    } else {
+      if (temMediaRec) iniciarMediaRec();
+      else if (temWebSpeech) iniciarWebSpeech();
+    }
+  };
+
+  // ── Fallback texto ──────────────────────────────────────────────────────────
 
   const enviarTexto = () => {
     const t = texto.trim();
@@ -81,42 +147,52 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false }:
     }
   };
 
+  const semVoz = !temMediaRec && !temWebSpeech;
+  const botaoDesabilitado = desabilitado || transcrevendo;
+
   return (
     <div className="flex flex-col items-center gap-3 w-full">
 
-      {/* Botão de falar — principal */}
-      <button
-        onClick={toggleVoz}
-        disabled={desabilitado}
-        title={ouvindo ? "Parar de ouvir" : "Falar"}
-        className={`relative flex items-center justify-center rounded-full transition-all duration-300
-          w-14 h-14
-          ${ouvindo
-            ? "bg-violet-500 shadow-[0_0_24px_6px_rgba(139,92,246,0.5)] scale-110"
-            : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
+      {/* Botão de falar */}
+      {!semVoz && (
+        <button
+          onClick={toggleVoz}
+          disabled={botaoDesabilitado}
+          title={
+            transcrevendo ? "Transcrevendo…" :
+            ouvindo ? "Parar de ouvir" : "Falar"
           }
-          disabled:opacity-30 disabled:cursor-not-allowed`}
-      >
-        {ouvindo ? (
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-white">
-            <rect x="3" y="3" width="12" height="12" rx="2" />
-          </svg>
-        ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-               className="text-zinc-300">
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M5 10a7 7 0 0 0 14 0" />
-            <line x1="12" y1="20" x2="12" y2="23" />
-            <line x1="9"  y1="23" x2="15" y2="23" />
-          </svg>
-        )}
-      </button>
+          className={`relative flex items-center justify-center rounded-full transition-all duration-300
+            w-14 h-14
+            ${ouvindo
+              ? "bg-violet-500 shadow-[0_0_24px_6px_rgba(139,92,246,0.5)] scale-110"
+              : transcrevendo
+              ? "bg-violet-800 animate-pulse"
+              : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
+            }
+            disabled:opacity-30 disabled:cursor-not-allowed`}
+        >
+          {ouvindo ? (
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-white">
+              <rect x="3" y="3" width="12" height="12" rx="2" />
+            </svg>
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                 className="text-zinc-300">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 10a7 7 0 0 0 14 0" />
+              <line x1="12" y1="20" x2="12" y2="23" />
+              <line x1="9"  y1="23" x2="15" y2="23" />
+            </svg>
+          )}
+        </button>
+      )}
 
-      {/* Preview interim */}
-      {preview && (
+      {/* Preview / status de transcrição */}
+      {(preview || transcrevendo) && (
         <p className="max-w-xs text-center text-xs text-violet-300 animate-pulse">
-          {preview}
+          {transcrevendo ? "Transcrevendo via GPU…" : preview}
         </p>
       )}
 
@@ -127,7 +203,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false }:
           value={texto}
           onChange={e => setTexto(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={temVoz ? "ou escreva aqui… (Enter para enviar)" : "O que você faz? (Enter para enviar)"}
+          placeholder={semVoz ? "O que você faz? (Enter para enviar)" : "ou escreva aqui… (Enter para enviar)"}
           disabled={desabilitado}
           rows={1}
           className="flex-1 resize-none bg-transparent text-xs text-zinc-300 placeholder-zinc-600 outline-none disabled:opacity-40"

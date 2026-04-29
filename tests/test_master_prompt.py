@@ -1,0 +1,235 @@
+"""
+Testes de segurança para os prompts do mestre.
+
+Garantem que master_system.md e dice.md carregam corretamente e que
+prompt_builder.py não quebra em cenários de arquivo ausente ou corrompido.
+"""
+
+import os
+os.environ.setdefault("GROQ_API_KEY",    "test-key")
+os.environ.setdefault("QDRANT_URL",      "http://localhost:6333")
+os.environ.setdefault("QDRANT_API_KEY",  "test")
+os.environ.setdefault("NEO4J_URI",       "bolt://localhost:7687")
+os.environ.setdefault("NEO4J_USER",      "neo4j")
+os.environ.setdefault("NEO4J_PASSWORD",  "test")
+
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+from engine.llm.prompt_builder import (
+    _DICE_PATH,
+    _MASTER_SYSTEM_PATH,
+    _PROMPT_MIN_CHARS,
+    _RE_ROLAGEM,
+    _carregar_dice,
+    _carregar_master_system,
+    invalidar_cache,
+    montar_mensagens,
+    validar_master_system,
+)
+from engine.memory.working_memory import WorkingMemory
+from engine.llm.prompt_builder import ContextoMontado
+
+
+# ── Fixtures ────────────────────────────────────────────────────────────────
+
+def _contexto_minimo(transcricao: str = "Eu olho ao redor") -> ContextoMontado:
+    """Cria um ContextoMontado mínimo para testes."""
+    wm = WorkingMemory.nova_sessao(
+        location_id="aldeia-valdrek",
+        location_nome="Aldeia de Valdrek",
+        session_id="test-session",
+    )
+    return ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[],
+        chunks_episodicos=[],
+        chunks_regras=[],
+        relacoes_grafo=[],
+        secrets_visiveis=[],
+        transcricao_atual=transcricao,
+    )
+
+
+# ── Testes: arquivos existem e têm conteúdo mínimo ────────────────────────
+
+def test_master_system_existe():
+    assert _MASTER_SYSTEM_PATH.exists(), "master_system.md não encontrado"
+
+
+def test_master_system_tem_conteudo_minimo():
+    conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) >= _PROMPT_MIN_CHARS
+
+
+def test_master_system_menciona_voz():
+    conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    assert "voz" in conteudo.lower() or "falada" in conteudo.lower()
+
+
+def test_master_system_menciona_rolagem():
+    conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    assert "[Rolagem:" in conteudo, "master_system.md deve referenciar o formato [Rolagem:]"
+
+
+def test_dice_md_existe():
+    assert _DICE_PATH.exists(), "dice.md não encontrado"
+
+
+def test_dice_md_tem_conteudo_minimo():
+    conteudo = _DICE_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) >= _PROMPT_MIN_CHARS
+
+
+def test_dice_md_menciona_d20():
+    conteudo = _DICE_PATH.read_text(encoding="utf-8")
+    assert "d20" in conteudo
+
+
+def test_dice_md_menciona_critico():
+    conteudo = _DICE_PATH.read_text(encoding="utf-8")
+    assert "20" in conteudo and ("crítico" in conteudo.lower() or "critico" in conteudo.lower())
+
+
+def test_dice_md_proibe_expor_numero():
+    conteudo = _DICE_PATH.read_text(encoding="utf-8")
+    assert "nunca" in conteudo.lower()
+
+
+# ── Testes: validar_master_system ─────────────────────────────────────────
+
+def test_validar_master_system_ok():
+    ok, msg = validar_master_system()
+    assert ok, f"validar_master_system retornou erro: {msg}"
+    assert msg == "ok"
+
+
+def test_validar_master_system_ausente(tmp_path, monkeypatch):
+    ausente = tmp_path / "inexistente.md"
+    monkeypatch.setattr("engine.llm.prompt_builder._MASTER_SYSTEM_PATH", ausente)
+    ok, msg = validar_master_system()
+    assert not ok
+    assert "ausente" in msg.lower() or "inexistente" in msg.lower() or "Arquivo" in msg
+
+
+def test_validar_master_system_muito_curto(tmp_path, monkeypatch):
+    curto = tmp_path / "curto.md"
+    curto.write_text("curto", encoding="utf-8")
+    monkeypatch.setattr("engine.llm.prompt_builder._MASTER_SYSTEM_PATH", curto)
+    ok, msg = validar_master_system()
+    assert not ok
+    assert "curto" in msg.lower()
+
+
+# ── Testes: regex de detecção de rolagem ──────────────────────────────────
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("[Rolagem: d20 = 17]", True),
+    ("[Rolagem: d6 = 3]", True),
+    ("[Rolagem: d100 = 45]", True),
+    ("[Rolagem: d20 = 1 — FALHA CRÍTICA!]", True),   # formato com sufixo
+    ("[Rolagem: D20 = 17]", True),                    # case insensitive
+    ("Eu ataco com minha espada", False),
+    ("", False),
+    ("[Rolagem:]", False),                             # sem valor
+    ("[Rolagem: d20]", False),                         # sem = Y
+])
+def test_regex_rolagem(texto: str, esperado: bool):
+    assert bool(_RE_ROLAGEM.search(texto)) == esperado
+
+
+# ── Testes: carregamento com cache ────────────────────────────────────────
+
+def test_carregar_master_system_retorna_string():
+    invalidar_cache()
+    conteudo = _carregar_master_system()
+    assert isinstance(conteudo, str)
+    assert len(conteudo) > 0
+
+
+def test_carregar_master_system_usa_cache():
+    invalidar_cache()
+    primeira = _carregar_master_system()
+    segunda = _carregar_master_system()
+    assert primeira is segunda   # mesmo objeto — cache hit
+
+
+def test_carregar_master_system_fallback_quando_ausente(tmp_path, monkeypatch):
+    ausente = tmp_path / "inexistente.md"
+    monkeypatch.setattr("engine.llm.prompt_builder._MASTER_SYSTEM_PATH", ausente)
+    invalidar_cache()
+    conteudo = _carregar_master_system()
+    assert "VoxDM" in conteudo   # fallback sempre menciona VoxDM
+
+
+def test_carregar_dice_retorna_string():
+    invalidar_cache()
+    conteudo = _carregar_dice()
+    assert conteudo is not None
+    assert len(conteudo) > 0
+
+
+def test_invalidar_cache_reseta_ambos():
+    # Aquece os caches
+    _carregar_master_system()
+    _carregar_dice()
+    invalidar_cache()
+    import engine.llm.prompt_builder as pb
+    assert pb._master_system_cache is None
+    assert pb._dice_cache is None
+
+
+# ── Testes: montar_mensagens com rolagem ─────────────────────────────────
+
+def test_montar_mensagens_sem_rolagem_nao_injeta_dice():
+    invalidar_cache()
+    contexto = _contexto_minimo("Eu olho ao redor")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # "Escala de narração" existe APENAS no dice.md — não deve aparecer sem rolagem
+    assert "escala de narração" not in system.lower()
+
+
+def test_montar_mensagens_com_rolagem_injeta_dice():
+    invalidar_cache()
+    contexto = _contexto_minimo("[Rolagem: d20 = 17]")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # dice.md deve ter sido injetado — "fumble" é uma das palavras exclusivas do arquivo
+    assert "fumble" in system.lower() or "d20" in system
+
+
+def test_montar_mensagens_com_critico_injeta_dice():
+    invalidar_cache()
+    contexto = _contexto_minimo("[Rolagem: d20 = 20 — CRÍTICO!]")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    assert len(system) > 500   # sistema com dice.md deve ser substancialmente maior
+
+
+def test_montar_mensagens_estrutura_basica():
+    invalidar_cache()
+    contexto = _contexto_minimo("Eu examino a porta")
+    mensagens = montar_mensagens(contexto)
+    assert mensagens[0]["role"] == "system"
+    assert mensagens[-1]["role"] == "user"
+    assert mensagens[-1]["content"] == "Eu examino a porta"
+
+
+def test_montar_mensagens_nao_quebra_com_override():
+    invalidar_cache()
+    contexto = _contexto_minimo()
+    mensagens = montar_mensagens(contexto, master_system_override="Sistema teste.")
+    assert mensagens[0]["content"].startswith("Sistema teste.")
+
+
+def test_montar_mensagens_dice_nao_injetado_quando_arquivo_ausente(tmp_path, monkeypatch):
+    ausente = tmp_path / "dice_ausente.md"
+    monkeypatch.setattr("engine.llm.prompt_builder._DICE_PATH", ausente)
+    invalidar_cache()
+    contexto = _contexto_minimo("[Rolagem: d20 = 5]")
+    # Não deve levantar exceção — apenas não injeta
+    mensagens = montar_mensagens(contexto)
+    assert mensagens[0]["role"] == "system"

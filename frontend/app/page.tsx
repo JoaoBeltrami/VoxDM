@@ -6,17 +6,24 @@ import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { CharacterForm } from "@/components/CharacterForm";
-import type { PersonagemConfig } from "@/lib/api";
+import { SessionPicker } from "@/components/SessionPicker";
+import { CharacterSheet } from "@/components/CharacterSheet";
+import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 export default function Home() {
   const {
-    sessionId, conectado, carregando, respostaAtual,
+    sessionId, playerName, conectado, carregando, respostaAtual,
     historico, erro, conectar, enviarComando, desconectar,
   } = useGameSession();
 
   const [sessionInput, setSessionInput] = useState("sess-01");
   const [personagem, setPersonagem] = useState<PersonagemConfig>({});
   const [ouvindo, setOuvindo] = useState(false);
+
+  const handleContinuarSessao = (sessao: SessaoListaItem) => {
+    setSessionInput(sessao.session_id);
+    setPersonagem(p => ({ ...p, session_anterior_id: sessao.session_id }));
+  };
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +60,9 @@ export default function Home() {
             />
           </div>
 
+          {/* Seletor de sessão anterior */}
+          <SessionPicker onContinuar={handleContinuarSessao} />
+
           {/* Formulário de personagem D&D */}
           <CharacterForm onChange={setPersonagem} />
 
@@ -74,7 +84,7 @@ export default function Home() {
 
   // ── Tela de jogo ───────────────────────────────────────────────────────────
   return (
-    <main className="flex h-screen flex-col bg-zinc-950">
+    <main className="relative flex h-screen flex-col bg-zinc-950">
 
       {/* Header */}
       <header className="flex items-center justify-between border-b border-zinc-800/60 px-4 py-3">
@@ -84,7 +94,9 @@ export default function Home() {
             orbEstado === "ouvindo" ? "bg-violet-400 animate-pulse" :
                                      "bg-violet-300 animate-pulse"
           }`} />
-          <span className="text-xs text-zinc-500">{sessionId}</span>
+          <span className="text-xs text-zinc-500">
+            {sessionId}{playerName ? ` · ${playerName}` : ""}
+          </span>
         </div>
 
         <span className="text-xs font-semibold tracking-widest text-violet-400/70">VOXDM</span>
@@ -97,6 +109,9 @@ export default function Home() {
         </button>
       </header>
 
+      {/* Ficha do personagem + dados — painel flutuante no canto direito */}
+      <CharacterSheet personagem={personagem} onRolar={enviarComando} />
+
       {/* Histórico — scrollable */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {historico.length === 0 && !respostaAtual && (
@@ -104,7 +119,7 @@ export default function Home() {
             Sessão iniciada — aguardando o mestre...
           </p>
         )}
-        <MasterResponse historico={historico} respostaAtual={respostaAtual} />
+        <MasterResponse historico={historico} respostaAtual={respostaAtual} playerName={playerName} />
         <div ref={bottomRef} />
       </div>
 
@@ -115,6 +130,7 @@ export default function Home() {
           onEnviar={enviarComando}
           onOuvindoChange={setOuvindo}
           desabilitado={!!respostaAtual}
+          sessionId={sessionId}
         />
       </div>
     </main>

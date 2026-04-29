@@ -31,6 +31,7 @@ streamlit-autorefresh
 fastapi
 uvicorn[standard]
 websockets
+python-multipart
 
 # ─── Segurança ─────────────────────────────────���─────────────────────────────
 passlib[bcrypt]
