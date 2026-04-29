@@ -223,7 +223,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `engine/llm/prompts/combat.md` | Camada de combate — teatro da mente, sem mecânica visível, ritmo música/batimento, variedade de verbos, HP como sensação | ✅ Criado |
 | `engine/llm/prompts/social.md` | Camada social — assinatura de voz por NPC, trust→transparência, corpo que contradiz fala, barganha/interrogatório | ✅ Criado |
 | `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
-| `engine/llm/prompts/intro_system.md` | Prompt de abertura de sessão — extraído de `api/websocket.py` para edição sem tocar em código | ✅ Criado |
+| `engine/llm/prompts/intro_system.md` | Prompt de abertura de sessão — calibrado por classe D&D (lente perceptual), sabedoria de mestre veterano, sessão nova vs. continuação | ✅ v2 |
 | `engine/telemetry.py` | Pub/sub leve via JSONL — emit(), read_latest(), purge_old() para voice_loop → dashboard | ✅ Criado |
 | `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo (3 cols, histórico, auto-refresh 500ms) | ✅ Atualizado |
 | `.streamlit/config.toml` | Tema escuro roxo (#7c3aed) para dashboard no vídeo | ✅ Criado |
@@ -283,7 +283,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
 | `api/routes/session.py` | POST /session/start (+ restauração episódica), POST /{id}/transcribe (10MB limit), GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id} | ✅ Atualizado |
 | `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
-| `api/websocket.py` | WebSocket streaming — sentence buffer + TTS sintetizar_stream() + audio_chunk base64 messages paralelo a tokens | ✅ Atualizado |
+| `api/websocket.py` | WebSocket streaming — sentence buffer + TTS sintetizar_stream() + audio_chunk base64 + abertura classe-aware (quests/NPCs/continuação no intro_user) | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
 | `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk no WS | ✅ Atualizado |

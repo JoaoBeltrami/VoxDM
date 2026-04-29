@@ -103,17 +103,41 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     # Contexto da cena para o prompt de abertura
     contexto_abertura = wm.para_texto(incluir_dialogo=False)
+
+    # Sinais de continuação: session restaurada pré-popula quest_stages do episódico
+    eh_continuacao = bool(wm.quest_stages)
+
+    partes: list[str] = []
+
     if wm.player_name:
-        intro_user = (
-            f"Abra a sessão. O personagem do jogador é {wm.player_name}, "
-            f"{wm.player_race} {wm.player_class} de background {wm.player_background or 'desconhecido'}. "
-            f"Cumprimente-o pelo nome e situe a cena."
+        classe_info = " ".join(filter(None, [wm.player_race, wm.player_class]))
+        partes.append(
+            f"O personagem é {wm.player_name}"
+            + (f", {classe_info}" if classe_info else "")
+            + (f", background {wm.player_background}" if wm.player_background else "")
+            + "."
         )
+        if wm.active_quest_hooks:
+            partes.append(f"Quests ativas que o personagem conhece: {', '.join(wm.active_quest_hooks)}.")
+        if wm.npcs_presentes:
+            partes.append(f"NPCs presentes no local: {', '.join(wm.npcs_presentes)}.")
+        if eh_continuacao:
+            partes.append(
+                "É uma continuação de sessão anterior. "
+                "Reabra a atmosfera sem resumir — volte direto para dentro da cena."
+            )
+        else:
+            partes.append(
+                "É a primeira cena. Abra com impacto sensorial calibrado pela classe do personagem "
+                "e termine com um gancho que o convide a agir."
+            )
     else:
-        intro_user = (
-            "Abra a sessão. O personagem do jogador ainda é desconhecido. "
-            "Descreva o ambiente e termine com algo que convide o jogador a se apresentar."
+        partes.append(
+            "O personagem ainda é desconhecido. "
+            "Abra com descrição sensorial do local e termine com algo que convide o jogador a se apresentar."
         )
+
+    intro_user = " ".join(partes)
 
     mensagens_intro = [
         {"role": "system", "content": f"{_INTRO_SYSTEM}\n\n{contexto_abertura}"},
@@ -123,7 +147,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     resposta_intro = ""
     try:
         async for token in sessao.groq.completar_stream(
-            mensagens_intro, temperatura=0.7, max_tokens=120
+            mensagens_intro, temperatura=0.8, max_tokens=150
         ):
             resposta_intro += token
             await websocket.send_text(
