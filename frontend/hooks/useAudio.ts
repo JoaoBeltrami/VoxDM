@@ -12,9 +12,12 @@ import { useCallback, useRef } from "react";
  * não múltiplas sobrepostas.
  */
 export function useAudio() {
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioCtxRef   = useRef<AudioContext | null>(null);
+  const sourceAtualRef = useRef<AudioBufferSourceNode | null>(null);
   // Cauda da Promise chain — garante execução sequencial
   const filaRef = useRef<Promise<void>>(Promise.resolve());
+  // Flag de parada — quando true, chunks na fila são descartados
+  const parandoRef = useRef(false);
 
   const obterCtx = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
@@ -29,6 +32,8 @@ export function useAudio() {
 
   const tocarChunk = useCallback((base64mp3: string) => {
     filaRef.current = filaRef.current.then(async () => {
+      // Descarta chunk se pararTudo() foi chamado
+      if (parandoRef.current) return;
       try {
         const ctx = await obterCtx();
         const binStr = atob(base64mp3);
@@ -40,7 +45,11 @@ export function useAudio() {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
           source.connect(ctx.destination);
-          source.onended = () => resolve();
+          sourceAtualRef.current = source;
+          source.onended = () => {
+            sourceAtualRef.current = null;
+            resolve();
+          };
           source.start();
         });
       } catch (err) {
@@ -51,8 +60,18 @@ export function useAudio() {
   }, [obterCtx]);
 
   const pararTudo = useCallback(() => {
-    // Reseta a fila sem interromper o chunk atual (fade natural)
-    filaRef.current = Promise.resolve();
+    // Para o chunk atual imediatamente
+    parandoRef.current = true;
+    try {
+      sourceAtualRef.current?.stop();
+    } catch {
+      // Ignorar — stop() em source já encerrado lança exceção
+    }
+    sourceAtualRef.current = null;
+    // Reseta a fila (chunks pendentes serão descartados via parandoRef)
+    filaRef.current = Promise.resolve().then(() => {
+      parandoRef.current = false; // libera fila para próxima sessão
+    });
   }, []);
 
   return { tocarChunk, pararTudo };

@@ -48,8 +48,9 @@ EDGE_VOZ_PTBR: str = "pt-BR-FranciscaNeural"
 EDGE_VOZ_EN: str = "en-US-GuyNeural"
 
 # Ajustes de prosódia para soar mais como um narrador de RPG
-EDGE_RATE: str = "-5%"    # levemente mais lento
-EDGE_PITCH: str = "-2Hz"  # levemente mais grave
+# Valores conservadores: alterações grandes distorcem a voz neural
+EDGE_RATE: str = "0%"     # velocidade natural — alterações > ±10% soam robóticas
+EDGE_PITCH: str = "0Hz"   # tom natural — FranciscaNeural já tem timbre narrativo
 
 # Caminho do dicionário de pronúncia D&D
 _DICT_PATH: Path = Path(__file__).parent.parent / "pronunciation" / "dictionary.json"
@@ -116,19 +117,28 @@ def _aplicar_pronuncias(texto: str) -> str:
 
 
 def _limpar_markdown(texto: str) -> str:
-    """Remove formatação markdown que o Edge TTS leria literalmente."""
+    """Remove formatação que o Edge TTS leria literalmente.
+
+    Cobre: markdown, separadores de contexto (=== ... ===), chaves JSON,
+    metadados técnicos — qualquer coisa que soe como 'código' se lida em voz alta.
+    """
+    # Remove separadores de seção do contexto: === CENA ATUAL ===
+    texto = re.sub(r'===.*?===', '', texto)
+    # Remove chaves/colchetes JSON: { ... } e [ ... ]
+    texto = re.sub(r'\{[^}]{0,200}\}', '', texto)
+    texto = re.sub(r'\[[^\]]{0,200}\]', '', texto)
     # Remove bold e italic: **texto** → texto, *texto* → texto
     texto = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', texto)
-    # Remove headers: # Título → Título
+    # Remove headers markdown: # Título → Título
     texto = re.sub(r'^#{1,6}\s+', '', texto, flags=re.MULTILINE)
     # Remove listas com hífen ou asterisco no início de linha
     texto = re.sub(r'^\s*[-*]\s+', '', texto, flags=re.MULTILINE)
-    # Remove parênteses e colchetes com conteúdo (metagame, notas)
-    texto = re.sub(r'\[.*?\]|\(.*?\)', '', texto)
+    # Remove padrões de estado técnico: HP: 10/10, Local: xxx, Hora: xxx
+    texto = re.sub(r'^(?:HP|Local|Hora|Clima|Personagem|Condições):.+$', '', texto, flags=re.MULTILINE)
     # Remove notação de dados: 1d6, 3d8, etc.
     texto = re.sub(r'\b\d+d\d+\b', '', texto)
     # Colapsa múltiplos espaços e linhas em branco
-    texto = re.sub(r'\n{3,}', '\n\n', texto)
+    texto = re.sub(r'\n{2,}', ' ', texto)
     texto = re.sub(r'  +', ' ', texto)
     return texto.strip()
 

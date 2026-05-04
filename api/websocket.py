@@ -73,6 +73,7 @@ async def _sintetizar_e_enviar_chunk(
     decodificável por AudioContext.decodeAudioData() no browser.
     """
     try:
+        log.info("tts_sintetizando", chars=len(sentenca), preview=sentenca[:80])
         audio_bytes: bytes = await tts.sintetizar(sentenca)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

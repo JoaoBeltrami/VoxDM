@@ -139,10 +139,11 @@ export function useGameSession() {
   }, []);
 
   const desconectar = useCallback(async () => {
+    pararTudo(); // para o áudio imediatamente antes de fechar
     wsRef.current?.close();
     if (estado.sessionId) await encerrarSessao(estado.sessionId);
     setEstado(s => ({ ...s, sessionId: null, conectado: false, historico: [], respostaAtual: "" }));
-  }, [estado.sessionId]);
+  }, [estado.sessionId, pararTudo]);
 
   useEffect(() => {
     return () => { wsRef.current?.close(); };
