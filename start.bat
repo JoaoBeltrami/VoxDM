@@ -22,7 +22,7 @@ if not exist "%ROOT%frontend\node_modules" (
 )
 
 :: ── API ──────────────────────────────────────────────────────────────────────
-start "VoxDM API" /d "%ROOT%" cmd /k "uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8000"
+start "VoxDM API" /d "%ROOT%" cmd /k "uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
 
 timeout /t 3 /nobreak >nul
 
