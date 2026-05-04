@@ -145,6 +145,11 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     ]
 
     resposta_intro = ""
+    tts = _obter_tts()
+    buffer_tts = ""
+    buffer_palavras = 0
+    audio_seq = 0
+
     try:
         async for token in sessao.groq.completar_stream(
             mensagens_intro, temperatura=0.8, max_tokens=150
@@ -153,6 +158,20 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             await websocket.send_text(
                 MensagemWS(tipo="token", conteudo=token).model_dump_json()
             )
+            # TTS por sentença — mesmo pipeline do turno normal
+            if tts:
+                buffer_tts += token
+                buffer_palavras += max(1, len(token.split()))
+                deve_flush = (
+                    buffer_palavras >= _CHUNK_MIN_PALAVRAS
+                    and token.rstrip()[-1:] in _FINAIS_SENTENCA
+                ) or buffer_palavras >= _CHUNK_MAX_PALAVRAS
+                if deve_flush and buffer_tts.strip():
+                    audio_seq = await _sintetizar_e_enviar_chunk(
+                        websocket, tts, buffer_tts.strip(), audio_seq
+                    )
+                    buffer_tts = ""
+                    buffer_palavras = 0
     except Exception as e:
         log.error("ws_abertura_falhou", session_id=sessao.session_id, erro=str(e))
         msg_fallback = "Bem-vindo. O mundo aguarda. Quem é você?"
@@ -160,6 +179,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         await websocket.send_text(
             MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()
         )
+
+    # Flush do restante (última sentença sem pontuação final)
+    if tts and buffer_tts.strip():
+        await _sintetizar_e_enviar_chunk(websocket, tts, buffer_tts.strip(), audio_seq)
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
