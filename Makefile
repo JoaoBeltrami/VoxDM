@@ -14,7 +14,7 @@ run: run-api
 run-api:
 	$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-test:
+test: ingest
 	$(PYTEST) tests/ -v
 
 ingest:
