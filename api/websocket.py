@@ -67,10 +67,13 @@ def _obter_tts() -> Any:
 async def _sintetizar_e_enviar_chunk(
     ws: WebSocket, tts: Any, sentenca: str, seq: int
 ) -> int:
-    """Sintetiza sentença via Edge TTS e envia como audio_chunk base64. Retorna próximo seq."""
+    """Sintetiza sentença via Edge TTS e envia como audio_chunk base64. Retorna próximo seq.
+
+    Usa sintetizar() em vez de sintetizar_stream() para garantir MP3 completo e
+    decodificável por AudioContext.decodeAudioData() no browser.
+    """
     try:
-        chunks = [c async for c in tts.sintetizar_stream(sentenca)]
-        audio_bytes = b"".join(chunks)
+        audio_bytes: bytes = await tts.sintetizar(sentenca)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             await ws.send_text(

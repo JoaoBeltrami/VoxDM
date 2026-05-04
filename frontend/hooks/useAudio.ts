@@ -16,12 +16,13 @@ export function useAudio() {
   // Cauda da Promise chain — garante execução sequencial
   const filaRef = useRef<Promise<void>>(Promise.resolve());
 
-  const obterCtx = useCallback((): AudioContext => {
+  const obterCtx = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
       audioCtxRef.current = new AudioContext();
     }
+    // Browsers bloqueiam AudioContext até interação do usuário — resume() é async
     if (audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
+      await audioCtxRef.current.resume();
     }
     return audioCtxRef.current;
   }, []);
@@ -29,7 +30,7 @@ export function useAudio() {
   const tocarChunk = useCallback((base64mp3: string) => {
     filaRef.current = filaRef.current.then(async () => {
       try {
-        const ctx = obterCtx();
+        const ctx = await obterCtx();
         const binStr = atob(base64mp3);
         const bytes = new Uint8Array(binStr.length);
         for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
@@ -42,8 +43,9 @@ export function useAudio() {
           source.onended = () => resolve();
           source.start();
         });
-      } catch {
-        // Falha silenciosa — texto já está visível, áudio é bônus
+      } catch (err) {
+        // Log visível para debugging — texto ainda está na tela
+        console.warn("[useAudio] falha ao tocar chunk:", err);
       }
     });
   }, [obterCtx]);
