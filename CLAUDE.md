@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 28 de abril de 2026
+> Atualizado: 4 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,12 +13,12 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 0 concluída. Fase 1 concluída. Fase 2 em andamento. Fase 4 MVP concluída.**
+**Todas as fases concluídas. Pendente: teste e2e local com GPU + push para remote.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
-- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Testes 32/32 OK.
-- Fase 2 (voz): ⏳ EM ANDAMENTO. Arquivos criados e commitados. Pendente: testar `voice_loop.py` localmente com GPU (marco: "Fáierbol" pronunciado correto, latência <2s).
-- Fase 3 (memória + LLM): ✅ CONCLUÍDA (arquivos criados e commitados). Pendente: integração e2e com Fase 2.
-- Fase 4 (API + Frontend): ✅ MVP CONCLUÍDO. API FastAPI completa (REST + WebSocket), Frontend Next.js 14 com streaming token-a-token, testes 29/29 OK. Pendente: testar localmente com GPU + re-ingerir Qdrant após melhorias de chunker.
+- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. 32 testes OK.
+- Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
+- Fase 3 (memória + LLM): ✅ CONCLUÍDA. RAG 3 camadas, episodic memory, prompt mestre v3 com dice.md condicional.
+- Fase 4 (API + Frontend): ✅ CONCLUÍDA. 106 testes OK. Ficha, dados, seletor de sessão, abertura classe-aware. Pendente: teste e2e local + push para remote.
 Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -265,6 +265,18 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Prompt do mestre v3 | seção de rolagem de dados + `dice.md` com escala narrativa de veterano |
 | Testes de segurança de prompt | `tests/test_master_prompt.py` — 32 testes, cache, regex, fallback |
 | **Total testes** | **106 passed, 0 failed** |
+
+### Abertura Classe-Aware + Limpeza (Sessão 04/05)
+
+| O que foi feito | Detalhe |
+|---|---|
+| `intro_system.md` v2 | 8 princípios de mestre veterano (in medias res, detalhe assimétrico, tensão mínima) + lente perceptual por classe D&D |
+| `websocket.py` enriquecido | `intro_user` inclui quests ativas, NPCs presentes, detecta continuação de sessão |
+| Merge worktree → main (fast-forward) | Branch `claude/great-cori-13b83b` → main; branch `MVP` preserva estado pré-sessão |
+| Branches antigas removidas | `claude/beautiful-germain`, `epic-black`, `focused-raman`, `frosty-lichterman`, `feat/streaming-tts` |
+| `diag_llm.py` removido | Script de diagnóstico temporário, função já incorporada nos prompts |
+| `benchmark/results.json` gitignored | Saída gerada, não deve ser rastreada |
+| `start.bat` funciona em worktree | `uv run` + auto-copia `.env` + `npm install` automático |
 
 ### Benchmark e Scripts
 | Arquivo | O que faz | Status |
