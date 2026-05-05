@@ -210,6 +210,7 @@ class EdgeTTSEngine:
         self,
         texto: str,
         idioma: Idioma = Idioma.PTBR,
+        voice_override: str | None = None,
     ) -> bytes:
         """
         Sintetiza texto completo em áudio MP3.
@@ -217,15 +218,16 @@ class EdgeTTSEngine:
         Para respostas curtas do Mestre. Para streaming, usar sintetizar_stream().
 
         Args:
-            texto:  Texto do Mestre a sintetizar.
-            idioma: Idioma para seleção de voz e xml:lang do SSML.
+            texto:          Texto do Mestre a sintetizar.
+            idioma:         Idioma para seleção de voz e xml:lang do SSML.
+            voice_override: Se fornecido, substitui a voz padrão (ex: "pt-BR-AntonioNeural").
 
         Returns:
             bytes de áudio MP3.
         """
         import edge_tts
 
-        voz = self._selecionar_voz(idioma)
+        voz = voice_override or self._selecionar_voz(idioma)
         ssml = _montar_ssml(texto, voz, idioma)
 
         logger = log.bind(voz=voz, chars=len(texto), idioma=idioma)
@@ -402,6 +404,7 @@ class TTSEngine:
         self,
         texto: str,
         idioma: Idioma = Idioma.PTBR,
+        voice: str | None = None,
     ) -> bytes:
         """
         Sintetiza texto com fallback automático Edge TTS → Kokoro.
@@ -409,12 +412,13 @@ class TTSEngine:
         Args:
             texto:  Fala do Mestre a sintetizar.
             idioma: Idioma do texto (afeta voz e pronúncias SSML).
+            voice:  Voz Edge TTS a usar (ex: "pt-BR-AntonioNeural"). None = padrão da sessão.
 
         Returns:
             bytes de áudio (MP3 via Edge TTS ou WAV via Kokoro).
         """
         try:
-            return await self._edge.sintetizar(texto, idioma)
+            return await self._edge.sintetizar(texto, idioma, voice_override=voice)
         except Exception as e:
             log.warning(
                 "Edge TTS falhou — ativando Kokoro fallback",

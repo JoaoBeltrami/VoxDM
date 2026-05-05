@@ -36,6 +36,8 @@ class SessaoConfig(BaseModel):
     player_level: int = Field(default=3, ge=1, le=20)  # personagens começam no nível 3
     # Continuação de sessão anterior — pré-popula trust_levels e quest_stages
     session_anterior_id: str | None = None
+    # Voz Edge TTS escolhida pelo jogador nas Opções
+    tts_voice: str = "pt-BR-FranciscaNeural"
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":

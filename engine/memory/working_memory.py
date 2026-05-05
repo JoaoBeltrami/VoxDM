@@ -80,6 +80,8 @@ class WorkingMemory:
 
     # Metadados da sessão
     session_id: str
+    # Voz Edge TTS selecionada nas Opções (padrão: Francisca Neural)
+    tts_voice: str = "pt-BR-FranciscaNeural"
 
     @classmethod
     def nova_sessao(
@@ -96,6 +98,7 @@ class WorkingMemory:
         player_class: str = "",
         player_background: str = "",
         player_level: int = 1,
+        tts_voice: str = "pt-BR-FranciscaNeural",
     ) -> "WorkingMemory":
         """Cria uma WorkingMemory com estado inicial zerado."""
         return cls(
@@ -120,6 +123,7 @@ class WorkingMemory:
             active_quest_hooks=[],
             quest_stages={},
             session_id=session_id,
+            tts_voice=tts_voice,
         )
 
     def registrar_fala(self, falante: str, texto: str) -> None:

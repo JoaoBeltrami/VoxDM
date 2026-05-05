@@ -60,7 +60,9 @@ def _obter_tts() -> Any:
     return _tts_engine
 
 
-async def _sintetizar_e_enviar(ws: WebSocket, tts: Any, texto: str) -> None:
+async def _sintetizar_e_enviar(
+    ws: WebSocket, tts: Any, texto: str, voice: str | None = None
+) -> None:
     """Sintetiza o texto completo via Edge TTS e envia UM audio_chunk base64.
 
     Uma única chamada TTS por resposta — mais simples, menos fragmentação,
@@ -70,7 +72,7 @@ async def _sintetizar_e_enviar(ws: WebSocket, tts: Any, texto: str) -> None:
         return
     try:
         log.info("tts_sintetizando", chars=len(texto), preview=texto[:80])
-        audio_bytes: bytes = await tts.sintetizar(texto)
+        audio_bytes: bytes = await tts.sintetizar(texto, voice=voice)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             await ws.send_text(
@@ -163,7 +165,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     # Uma única síntese TTS do texto completo — sem fragmentação em sentenças
     if tts:
-        await _sintetizar_e_enviar(websocket, tts, resposta_intro)
+        await _sintetizar_e_enviar(websocket, tts, resposta_intro, voice=wm.tts_voice)
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
@@ -271,7 +273,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # TTS: uma única síntese do texto completo após o stream terminar
             if tts:
-                await _sintetizar_e_enviar(websocket, tts, resposta_completa)
+                await _sintetizar_e_enviar(
+                    websocket, tts, resposta_completa, voice=sessao.working_mem.tts_voice
+                )
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
             sessao.iteracoes += 1

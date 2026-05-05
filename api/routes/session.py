@@ -89,6 +89,7 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         player_class=config.player_class,
         player_background=config.player_background,
         player_level=config.player_level,
+        tts_voice=config.tts_voice,
     )
 
     context_builder = ContextBuilder()

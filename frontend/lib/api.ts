@@ -48,6 +48,7 @@ export interface PersonagemConfig {
   player_hp?: number;
   player_hp_max?: number;
   session_anterior_id?: string;
+  tts_voice?: string;
 }
 
 export async function criarSessao(
