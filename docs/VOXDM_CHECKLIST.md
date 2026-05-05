@@ -229,48 +229,75 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ---
 
-## Fase 4 — Interface Web ✅ MVP CONCLUÍDO
+## Fase 4 — Interface Web ✅ MVP CONCLUÍDO + LOOP DE VOZ FECHADO
 > 🟡 Carga moderada
+> **Última atualização:** 05/05/2026 — 106/106 testes OK
 
-**Marco:** sessão completa jogável pelo browser sem abrir terminal
+**Marco:** sessão completa jogável pelo browser sem abrir terminal ✅
 
-### Arquivos criados *(26-27/04)*
-- [x] `api/main.py` — FastAPI + CORS seguro + lifespan + warmup embedder *(28/04)*
-- [x] `api/state.py` — SessaoAtiva + dict global sessions
-- [x] `api/models/schemas.py` — Pydantic v2 — kebab-case validado
-- [x] `api/routes/session.py` — POST start, POST turn, GET status, DELETE
+### MVP inicial *(26-28/04)*
+- [x] `api/main.py`, `api/state.py`, `api/models/schemas.py`
+- [x] `api/routes/session.py` (start/turn/status/delete + restauração episódica + POST /transcribe)
 - [x] `api/routes/debug.py` — /debug/* apenas quando DEBUG=True
-- [x] `api/websocket.py` — streaming token-a-token + telemetria + abertura automática
-- [x] `frontend/lib/api.ts` — criarSessao(), encerrarSessao(), wsUrl()
-- [x] `frontend/hooks/useGameSession.ts` — WebSocket + streaming + historico
-- [x] `frontend/components/VoiceButton.tsx` — textarea + SpeechRecognition nativa
-- [x] `frontend/components/MasterResponse.tsx` — bolhas + cursor piscante + métricas RAG
-- [x] `frontend/components/VoxOrb.tsx` — asterisco 8 braços + animações (idle/ouvindo/falando)
-- [x] `frontend/components/CharacterForm.tsx` — D&D 5e: classe, raça, background, nível, HP
-- [x] `frontend/app/page.tsx` — tela conexão + tela jogo completa
+- [x] `api/websocket.py` — streaming + TTS audio_chunk (UMA síntese pós-stream) + abertura classe-aware
+- [x] `frontend/lib/api.ts` — criarSessao, encerrarSessao, wsUrl, listarSessoes, transcrever
+- [x] `frontend/hooks/useGameSession.ts` — WS + streaming + historico + audio_chunk handler
+- [x] `frontend/hooks/useAudio.ts` — fila MP3 Web Audio API, pararTudo(), AudioContext.resume() aguardado
+- [x] `frontend/components/VoiceButton.tsx` — MediaRecorder (GPU) + Web Speech API fallback
+- [x] `frontend/components/MasterResponse.tsx` — bolhas + playerName + métricas RAG
+- [x] `frontend/components/VoxOrb.tsx` — asterisco 8 braços + animações
+- [x] `frontend/components/CharacterForm.tsx` — D&D 5e (nível 3 default)
+- [x] `frontend/components/CharacterSheet.tsx` — ficha colapsável, HP bar, dados d4-d100
+- [x] `frontend/components/SessionPicker.tsx` — lista sessões passadas, "Continuar"
+- [x] `frontend/app/page.tsx` — session ID auto-gerado, SessionPicker primeiro, "Entrar no Mundo"
 - [x] `frontend/app/layout.tsx` — layout root Next.js 14
+- [x] `engine/voice/tts.py` — EDGE_RATE="0%", EDGE_PITCH="0Hz" (voz natural), _limpar_markdown ampliado
+- [x] `start.bat` — mata portas 8000/3000, limpa .next, uv run, delay 20s
+- [x] `Makefile` — uv run, ingest como prerequisito de test
+- [x] `api/models/schemas.py` — player_level default=3, MensagemWS com audio_chunk/conteudo_b64
 
 ### Testes
 - [x] `tests/test_api_session.py` — 16 testes REST ✅
 - [x] `tests/test_context_builder.py` — 13 testes ✅
 - [x] `tests/test_websocket.py` — 5 testes WS ✅
-- [x] Total: 74/74 ✅ *(28/04)*
+- [x] `tests/test_master_prompt.py` — 32 testes ✅
+- [x] Total: **106/106** ✅ *(05/05/2026)*
 
-### Correções 28/04
-- [x] Bug `_id_para_nome` ausente em `working_memory.py` — NameError em runtime
-- [x] Animações Tailwind ausentes em `tailwind.config.ts` — VoxOrb estava estático
-- [x] Warmup do embedder no lifespan da API — primeira requisição agora rápida
-- [x] Ordem de imports em `qdrant_client.py` — código limpo
-
-### Pendente para testar esta noite
-- [ ] **`make ingest`** — re-indexar Qdrant com melhorias do chunker *(OBRIGATÓRIO antes do teste)* `[revisão]`
-- [ ] Iniciar com `start.bat` e testar perguntas reais no browser
-- [ ] Verificar latência primeiro turno (embedder agora é pré-carregado)
-- [ ] Testar SpeechRecognition no browser (Chrome recomendado)
-
-### Pendente (Cloudflare)
-- [ ] `cloudflared tunnel login` → configurar URL permanente ⏳ precisa browser `[roteiro]`
+### Pendente
+- [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
+- [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
+- [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
+
+---
+
+## Fase 4.5 — Main Menu + Ficha Completa + Persistência 🔲 PRÓXIMA
+> Pré-requisito: loop de voz validado (áudio OK no browser)
+
+**Marco:** personagem criado em "Nova Sessão" persiste ao "Carregar Sessão" — sem redigitar nada
+
+### Tela de Início (Nova/Carregar/Opções)
+- [ ] `frontend/app/page.tsx` — refatorar em 3 telas: menu → nova/carregar/opções `[código]` `[claude code]`
+- [ ] Menu inicial: 3 botões grandes (Nova Sessão / Carregar Sessão / Opções) `[código]`
+- [ ] "Nova Sessão" → CharacterForm completo → "Entrar no Mundo" `[código]`
+- [ ] "Carregar Sessão" → SessionPicker → restaura personagem vinculado `[código]`
+- [ ] "Opções" → seletor de voz Edge TTS (lista `pt-BR-*Neural`) `[código]`
+
+### HP Tracking Dinâmico
+- [ ] `frontend/components/CharacterSheet.tsx` — botões +/- HP durante o jogo `[código]`
+- [ ] HP atual se separa do HP max — pode mudar em tempo de jogo `[código]`
+- [ ] Envia atualização de HP para o backend via WebSocket ou REST `[código]`
+
+### Inventário Básico
+- [ ] `frontend/components/CharacterSheet.tsx` — seção inventário: add/remove itens `[código]`
+- [ ] Lista simples: nome do item + quantidade + botão remover `[código]`
+- [ ] Estado local por enquanto (sem persistência ainda) `[código]`
+
+### Persistência (Backend)
+- [ ] `engine/persistence/character_store.py` — SQLite + aiosqlite: salva ficha vinculada a session_id `[código]` `[claude code]`
+- [ ] `api/routes/session.py` — GET/PUT /{id}/character (carrega/salva ficha) `[código]`
+- [ ] Restauração em "Carregar Sessão": puxa ficha salva + pré-popula CharacterSheet `[código]`
+- [ ] Testes: `tests/test_character_store.py` + `tests/test_api_character.py` `[código]`
 
 ---
 
