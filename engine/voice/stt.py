@@ -35,7 +35,7 @@ log = structlog.get_logger(__name__)
 # Constantes
 # ---------------------------------------------------------------------------
 
-WHISPER_MODEL: str = "tiny"       # Fastest — qualidade suficiente para comandos curtos
+WHISPER_MODEL: str = "small"      # Melhor qualidade PT-BR; RTX 2060 Super suporta confortavelmente
 COMPUTE_DEVICE: str = "cuda"      # RTX 2060 Super
 COMPUTE_TYPE: str = "float16"     # Otimizado para GPU Nvidia — reduz VRAM e latência
 
@@ -99,7 +99,7 @@ async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
             segmentos, _ = modelo.transcribe(
                 str(tmp_path),
                 language=idioma,
-                beam_size=1,        # beam=1 para latência mínima
+                beam_size=5,        # beam=5 — melhor acurácia PT-BR com latência aceitável na GPU
                 vad_filter=True,    # remove silêncio no início/fim
             )
             return " ".join(seg.text.strip() for seg in segmentos).strip()

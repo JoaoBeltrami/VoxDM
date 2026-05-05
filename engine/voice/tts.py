@@ -117,36 +117,79 @@ def _aplicar_pronuncias(texto: str) -> str:
 
 
 def _limpar_markdown(texto: str) -> str:
-    """Remove formatação que o Edge TTS leria literalmente.
+    """Remove tudo que não é narrativa pura antes de chegar ao TTS.
 
-    Cobre: markdown, separadores de contexto (=== ... ===), cabeçalhos de
-    system prompt que o LLM às vezes ecoa na resposta, chaves JSON e
-    metadados técnicos — qualquer coisa que soe como 'código' se lida em voz alta.
+    Cobre: markdown, eco de seções do prompt (=== ... ===), metadados de
+    working memory (HP/Local/Hora), JSON, URLs, frases de recusa de IA e
+    qualquer conteúdo técnico que soe como 'código' se lido em voz alta.
     """
-    # Remove cabeçalhos de system prompt que o LLM pode ecoar na resposta
-    # Ex: "=== CENA ATUAL ===" ou "=== SESSÕES ANTERIORES ==="
+    # ── Frases de quebra de personagem / recusa de IA ───────────────────────
+    # Remove parágrafo inteiro que começa com padrão de meta-comentário do LLM.
+    # Captura variações PT e EN mais comuns do llama/GPT safety layer.
+    _RECUSA = re.compile(
+        r'(?:^|\n)(?:'
+        # Meta-identidade de IA
+        r'(?:Como|Enquanto)\s+(?:IA|inteligência artificial|assistente|modelo|VoxDM|narrador)[^.!?\n]*[.!?]'
+        r'|Minha\s+função\s+é\s+(?:narrar|criar|gerar)[^.!?\n]*[.!?]'
+        # Recusas EN
+        r'|(?:I\'?m\s+(?:sorry|unable|not able)|I cannot|I won\'?t|I must|I should not)[^.!?\n]*[.!?]'
+        # Recusas PT
+        r'|(?:Não posso|Não é possível|Lamento|Desculpe|Preciso esclarecer|Devo mencionar)'
+        r'[^.!?\n]*[.!?]'
+        # Meta-comentário sobre narração
+        r'|(?:Como narrador|Enquanto narrador|Como mestre|Enquanto mestre)'
+        r'[^.!?\n]*[.!?]'
+        r')',
+        re.IGNORECASE | re.MULTILINE,
+    )
+    texto = _RECUSA.sub('', texto)
+
+    # ── URLs: https://..., http://... ────────────────────────────────────────
+    texto = re.sub(r'https?://\S+', '', texto)
+
+    # ── Separadores e cabeçalhos de seção do prompt ──────────────────────────
+    # Ex: "=== CENA ATUAL ===" ou "--- seção ---"
     texto = re.sub(r'===.*?===', '', texto, flags=re.DOTALL)
-    # Remove blocos de instrução interna (prompt leak)
+    texto = re.sub(r'^---+\s*$', '', texto, flags=re.MULTILINE)
+
+    # ── Blocos de instrução interna (prompt leak) ────────────────────────────
     texto = re.sub(r'\[LEMBRETE DE SAÍDA.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
     texto = re.sub(r'\[INSTRUÇÕES INTERNAS.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
-    # Remove linhas de cabeçalho de contexto: "REGRAS DE JOGO:", "CONTEÚDO DO MÓDULO:"
-    texto = re.sub(r'^(?:REGRAS DE JOGO|CONTEÚDO DO MÓDULO|SESSÕES ANTERIORES)\s*:.*$', '',
-                   texto, flags=re.MULTILINE | re.IGNORECASE)
-    # Remove chaves/colchetes JSON: { ... } e [ ... ] (inclui [Rolagem: dX = Y])
+
+    # ── Linhas de cabeçalho de contexto injetado ────────────────────────────
+    # Ex: "REGRAS DE JOGO:", "CONTEÚDO DO MÓDULO:", "SESSÕES ANTERIORES:"
+    texto = re.sub(
+        r'^(?:REGRAS DE JOGO|CONTEÚDO DO MÓDULO|SESSÕES ANTERIORES|CONTEXTO DA CENA'
+        r'|INSTRUÇÕES|SYSTEM|ASSISTANT|USER)\s*:.*$',
+        '',
+        texto,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+
+    # ── Metadados de estado da cena (working memory echo) ───────────────────
+    texto = re.sub(
+        r'^(?:HP|Local|Hora|Clima|Personagem|Condições|NPCs|Quests|Session|session_id'
+        r'|Iteração|Status|Trust|Faction):.+$',
+        '',
+        texto,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+
+    # ── JSON e colchetes técnicos ────────────────────────────────────────────
     texto = re.sub(r'\{[^}]{0,200}\}', '', texto)
     texto = re.sub(r'\[[^\]]{0,200}\]', '', texto)
-    # Remove bold e italic: **texto** → texto, *texto* → texto
-    texto = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', texto)
-    # Remove headers markdown: # Título → Título
-    texto = re.sub(r'^#{1,6}\s+', '', texto, flags=re.MULTILINE)
-    # Remove listas com hífen ou asterisco no início de linha
-    texto = re.sub(r'^\s*[-*]\s+', '', texto, flags=re.MULTILINE)
-    # Remove padrões de estado técnico: HP: 10/10, Local: xxx, Hora: xxx
-    texto = re.sub(r'^(?:HP|Local|Hora|Clima|Personagem|Condições|NPCs|Quests):.+$',
-                   '', texto, flags=re.MULTILINE)
-    # Remove notação de dados: 1d6, 3d8, etc.
-    texto = re.sub(r'\b\d+d\d+\b', '', texto)
-    # Colapsa múltiplos espaços e linhas em branco
+
+    # ── Markdown ─────────────────────────────────────────────────────────────
+    texto = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', texto)       # bold/italic
+    texto = re.sub(r'^#{1,6}\s+', '', texto, flags=re.MULTILINE)  # headers
+    texto = re.sub(r'^\s*[-*]\s+', '', texto, flags=re.MULTILINE)  # listas
+    texto = re.sub(r'`[^`]+`', '', texto)                         # inline code
+    texto = re.sub(r'```[\s\S]*?```', '', texto)                  # code blocks
+
+    # ── Notação de dados e números técnicos ─────────────────────────────────
+    texto = re.sub(r'\b\d+d\d+\b', '', texto)   # 1d6, 3d8, etc.
+
+    # ── Colapsa espaços e quebras de linha ───────────────────────────────────
     texto = re.sub(r'\n{2,}', ' ', texto)
     texto = re.sub(r'  +', ' ', texto)
     return texto.strip()
