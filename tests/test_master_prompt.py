@@ -19,10 +19,13 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from engine.llm.prompt_builder import (
+    _COMBAT_PATH,
     _DICE_PATH,
     _MASTER_SYSTEM_PATH,
     _PROMPT_MIN_CHARS,
+    _RE_COMBATE,
     _RE_ROLAGEM,
+    _carregar_combat,
     _carregar_dice,
     _carregar_master_system,
     invalidar_cache,
@@ -233,3 +236,95 @@ def test_montar_mensagens_dice_nao_injetado_quando_arquivo_ausente(tmp_path, mon
     # Não deve levantar exceção — apenas não injeta
     mensagens = montar_mensagens(contexto)
     assert mensagens[0]["role"] == "system"
+
+
+# ── Testes: combat.md ────────────────────────────────────────────────────────
+
+def test_combat_md_existe():
+    assert _COMBAT_PATH.exists(), "combat.md não encontrado"
+
+
+def test_combat_md_tem_conteudo_minimo():
+    conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) >= _PROMPT_MIN_CHARS
+
+
+def test_combat_md_menciona_lente_de_classe():
+    conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
+    assert "guerreiro" in conteudo.lower() or "ladino" in conteudo.lower()
+
+
+def test_combat_md_menciona_critico():
+    conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
+    assert "20" in conteudo or "crítico" in conteudo.lower()
+
+
+def test_carregar_combat_retorna_string():
+    invalidar_cache()
+    conteudo = _carregar_combat()
+    assert conteudo is not None
+    assert len(conteudo) > 0
+
+
+def test_invalidar_cache_reseta_combat():
+    _carregar_combat()
+    invalidar_cache()
+    import engine.llm.prompt_builder as pb
+    assert pb._combat_cache is None
+
+
+# ── Testes: regex de detecção de combate ─────────────────────────────────────
+
+@pytest.mark.parametrize("texto,esperado", [
+    ("ataco o inimigo com minha espada", True),
+    ("golpeio o guarda na cabeça", True),
+    ("lanço um feitiço de fogo", True),
+    ("ativo minha espada mágica", True),
+    ("luto contra os dois ao mesmo tempo", True),
+    ("eu falo com o ferreiro", False),
+    ("olho ao redor da sala", False),
+    ("examino a porta", False),
+    ("", False),
+])
+def test_regex_combate(texto: str, esperado: bool):
+    assert bool(_RE_COMBATE.search(texto)) == esperado
+
+
+def test_montar_mensagens_com_acao_combate_injeta_combat_md():
+    invalidar_cache()
+    contexto = _contexto_minimo("ataco o goblin com minha espada")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # "lente de classe" ou "teatro da mente" são exclusivos do combat.md
+    assert "teatro da mente" in system.lower() or "lente" in system.lower()
+
+
+def test_montar_mensagens_sem_combate_nao_injeta_combat_md():
+    invalidar_cache()
+    contexto = _contexto_minimo("eu falo com o ferreiro sobre o martelo")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    assert "teatro da mente" not in system.lower()
+
+
+def test_montar_mensagens_em_combate_ativo_injeta_combat_md():
+    invalidar_cache()
+    wm = WorkingMemory.nova_sessao(
+        location_id="aldeia-valdrek",
+        location_nome="Aldeia de Valdrek",
+        session_id="test-session",
+    )
+    wm.entrar_combate()
+    # Texto neutro — mas em_combate=True deve forçar injeção
+    contexto = ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[],
+        chunks_episodicos=[],
+        chunks_regras=[],
+        relacoes_grafo=[],
+        secrets_visiveis=[],
+        transcricao_atual="o que faço agora?",
+    )
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    assert "teatro da mente" in system.lower() or "lente" in system.lower()

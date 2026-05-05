@@ -26,13 +26,22 @@ log = structlog.get_logger()
 # Caminhos dos prompts
 _MASTER_SYSTEM_PATH = Path(__file__).parent / "prompts" / "master_system.md"
 _DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
+_COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 
 # Caches — None = ainda não lido; str vazia = lido mas ausente/falho
 _master_system_cache: str | None = None
 _dice_cache: str | None = None
+_combat_cache: str | None = None
 
 # Detecta o formato [Rolagem: dX = Y] enviado pelo CharacterSheet
 _RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
+
+# Detecta ação de combate no texto do jogador (verbos e substantivos de conflito físico)
+_RE_COMBATE = re.compile(
+    r"\b(atac[oa]r?|golpe[io]+|firo|fere[i]?|mato|luto|combate|inimigo|espada|adaga|"
+    r"arco|flecha|magia|feitiço|briga|soco|chuto|defendo|paro o golpe|escudo)\b",
+    re.IGNORECASE,
+)
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
@@ -121,11 +130,29 @@ def _carregar_dice() -> str | None:
     return _dice_cache if _dice_cache else None
 
 
+def _carregar_combat() -> str | None:
+    """Carrega e cacheia o guia de combate. Retorna None se ausente."""
+    global _combat_cache
+    if _combat_cache is None:
+        try:
+            if _COMBAT_PATH.exists():
+                conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
+                if len(conteudo) >= _PROMPT_MIN_CHARS:
+                    _combat_cache = conteudo
+                    return _combat_cache
+            log.info("combat_md_ausente", path=str(_COMBAT_PATH))
+        except Exception as e:
+            log.warning("combat_md_falhou_leitura", erro=str(e))
+        _combat_cache = ""
+    return _combat_cache if _combat_cache else None
+
+
 def invalidar_cache() -> None:
     """Invalida caches de prompts — útil em testes e em hot-reload."""
-    global _master_system_cache, _dice_cache
+    global _master_system_cache, _dice_cache, _combat_cache
     _master_system_cache = None
     _dice_cache = None
+    _combat_cache = None
 
 
 def validar_master_system() -> tuple[bool, str]:
@@ -239,6 +266,20 @@ def montar_mensagens(
         if dice_texto:
             secoes.append(f"\n{dice_texto}")
             log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
+
+    # Camada de combate — injetada quando em_combate ativo OU texto contém ação de combate
+    _em_combate_ativo = contexto.working_memory.em_combate
+    _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
+    if _em_combate_ativo or _acao_combate:
+        combat_texto = _carregar_combat()
+        if combat_texto:
+            secoes.append(f"\n{combat_texto}")
+            log.info(
+                "combat_md_injetado",
+                em_combate=_em_combate_ativo,
+                acao_detectada=_acao_combate,
+                transcricao=contexto.transcricao_atual[:60],
+            )
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

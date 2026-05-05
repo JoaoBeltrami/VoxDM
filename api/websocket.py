@@ -30,10 +30,19 @@ from typing import Any
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
+import re
+
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
-from engine.llm.prompt_builder import montar_mensagens
+from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE
+from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
+
+# Detecta sinais de fim de combate para desativar em_combate na WorkingMemory
+_RE_FIM_COMBATE = re.compile(
+    r"\b(morreu|caiu|fugiu|rendeu|acabou o combate|saio de combate|paramos de lutar|paz)\b",
+    re.IGNORECASE,
+)
 
 log = structlog.get_logger()
 
@@ -239,6 +248,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             sessao.ultima_atividade = time.time()
             sessao.working_mem.registrar_fala("player", texto_jogador)
 
+            # Detecta entrada/saída de combate pelo texto do jogador
+            if _RE_COMBATE.search(texto_jogador):
+                sessao.working_mem.entrar_combate()
+            elif _RE_FIM_COMBATE.search(texto_jogador):
+                sessao.working_mem.sair_combate()
+
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
             contexto = None
             try:
@@ -278,6 +293,16 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
+
+            # Atualiza trust com base nas ações do jogador neste turno
+            mudancas_trust = detectar_mudancas_trust(
+                texto_jogador, sessao.working_mem.npcs_presentes
+            )
+            for npc_id, delta in mudancas_trust:
+                sessao.working_mem.atualizar_trust(npc_id, delta)
+                log.info("trust_atualizado", npc_id=npc_id, delta=delta,
+                         novo_valor=sessao.working_mem.trust_levels.get(npc_id))
+
             sessao.iteracoes += 1
             latencia_ms = int((time.perf_counter() - t0) * 1000)
 

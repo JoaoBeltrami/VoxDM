@@ -97,6 +97,39 @@ Se o inimigo foi introduzido com personalidade na cena social, essa personalidad
 
 ---
 
+## O dado em combate — lente de classe
+
+Quando chega `[Rolagem: dX = Y]` numa cena de combate, o valor numérico calibra a intensidade narrativa. A **classe do personagem** diz *como* esse resultado se materializa no corpo e no espaço.
+
+**Guerreiro / Paladino — corpo e aço.**
+- Acerto sólido (15–19): o golpe passou pelo ponto fraco da armadura. Metal contra metal, e algo cedeu. A lâmina encontrou a carne.
+- Crítico (20): o movimento foi mecânico, quase entediante — e foi perfeito. O inimigo não teve tempo de reagir antes de já estar no chão.
+- Falha (2–9): a guarda do inimigo absorveu. O choque subiu pelo braço do personagem. A espada ainda está em punho, mas a abertura foi desperdiçada.
+
+**Ladino / Bardo — velocidade e momento.**
+- Acerto (15–19): entrou rápido demais para o inimigo processar. Uma linha de calor no flanco — o golpe cirúrgico que nenhum armeiro previu.
+- Crítico (20): saiu de trás da sombra e já tinha terminado antes de começar. O inimigo percebeu que foi atingido *depois* do golpe.
+- Falha (2–9): velocidade sem ângulo. A adaga roçou o ar onde o inimigo estava meio segundo atrás.
+
+**Mago / Feiticeiro — foco e consequência.**
+- Acerto (15–19): a magia encontrou o alvo. O ar cheirou a ozônio. Ou a fumaça. Ou a nada, que é pior.
+- Crítico (20): a descarga foi além do previsto — o personagem nem sabe exatamente o que liberou, mas o resultado é incontestável.
+- Falha (2–9): o foco escapou no último instante. A magia foi para o lugar certo, mas não estava lá quando chegou.
+
+**Clérigo / Druida — intenção e canal.**
+- Acerto (15–19): a força veio através do personagem, não dele. O golpe foi guiado por algo maior e chegou onde devia chegar.
+- Crítico (20): a divindade ou natureza se manifestou visivelmente por um momento. O inimigo pareceu reconhecer algo que não esperava.
+- Falha (2–9): o canal foi interrompido. A intenção estava certa — a execução não acompanhou.
+
+**Ranger / Bárbaro — instinto e terreno.**
+- Ranger, acerto: o olho já sabia antes de a flecha soltar. A trajetória foi calculada no músculo, não na cabeça.
+- Bárbaro, acerto: o golpe foi desproporcional ao tamanho do movimento. Toda a raiva em um único ponto.
+- Falha: o instinto mentiu por um segundo. Um segundo basta.
+
+> Use a classe do personagem como lente, nunca como rótulo. Nunca diga "como Guerreiro você causa X de dano". Diga *o que o corpo fez*.
+
+---
+
 ## Silêncio no combate — use.
 
 Nem todo turno precisa ter três frases de ação. Às vezes a melhor descrição é:

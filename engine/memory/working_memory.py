@@ -82,6 +82,8 @@ class WorkingMemory:
     session_id: str
     # Voz Edge TTS selecionada nas Opções (padrão: Francisca Neural)
     tts_voice: str = "pt-BR-FranciscaNeural"
+    # Sinaliza cena de combate ativo — ativa injeção de combat.md no prompt
+    em_combate: bool = False
 
     @classmethod
     def nova_sessao(
@@ -136,6 +138,14 @@ class WorkingMemory:
         """Ajusta trust de um NPC, limitando ao intervalo [0, 3] conforme Schema v1.2."""
         atual = self.trust_levels.get(npc_id, 0)
         self.trust_levels[npc_id] = max(0, min(3, atual + delta))
+
+    def entrar_combate(self) -> None:
+        """Ativa modo combate — prompt_builder injeta combat.md no próximo turno."""
+        self.em_combate = True
+
+    def sair_combate(self) -> None:
+        """Desativa modo combate quando a cena é resolvida."""
+        self.em_combate = False
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado

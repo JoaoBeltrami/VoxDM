@@ -23,7 +23,7 @@ from typing import Any
 import structlog
 
 from config import settings
-from engine.llm.prompt_builder import ContextoMontado, SecretVisivel
+from engine.llm.prompt_builder import ContextoMontado, SecretVisivel, _RE_ROLAGEM, _RE_COMBATE
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.qdrant_client import QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory
@@ -299,6 +299,17 @@ class ContextBuilder:
         else:
             query_modulo = transcricao
 
+        # Query de regras enriquecida com classe/nível quando em combate ou rolagem detectada
+        _tem_rolagem = bool(_RE_ROLAGEM.search(transcricao))
+        _tem_combate = working_mem.em_combate or bool(_RE_COMBATE.search(transcricao))
+        if _tem_rolagem and _tem_combate and working_mem.player_class:
+            query_regras = (
+                f"{working_mem.player_class} nível {working_mem.player_level} "
+                f"ataque combate {transcricao}"
+            )
+        else:
+            query_regras = transcricao
+
         # ── Buscas em paralelo (Qdrant) ───────────────────────────────────────
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
             self._qdrant.buscar_modulo(query_modulo, top_k=TOP_K_SEMANTICO + 2),
@@ -307,7 +318,7 @@ class ContextBuilder:
                 colecao="voxdm_episodic",
                 top_k=TOP_K_EPISODICO,
             ),
-            self._qdrant.buscar_regras(transcricao, top_k=TOP_K_REGRAS),
+            self._qdrant.buscar_regras(query_regras, top_k=TOP_K_REGRAS),
             return_exceptions=True,
         )
 
