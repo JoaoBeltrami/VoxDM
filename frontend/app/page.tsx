@@ -32,7 +32,7 @@ function lerVozStorage(): string {
 export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
-    historico, erro, conectar, enviarComando, desconectar,
+    historico, erro, conectar, enviarComando, desconectar, pararAudio,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -125,12 +125,27 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
-          <VoxOrb estado={orbEstado} tamanho={64} />
+          <div className="relative">
+            <VoxOrb estado={orbEstado} tamanho={64} />
+            {/* Botão de parar fala — aparece sobre o orb quando o mestre está falando */}
+            {respostaAtual && (
+              <button
+                onClick={pararAudio}
+                title="Parar fala do mestre"
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 transition hover:bg-black/70"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-white">
+                  <rect x="4" y="4" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            )}
+          </div>
           <VoiceButton
             onEnviar={enviarComando}
             onOuvindoChange={setOuvindo}
             desabilitado={!!respostaAtual}
             sessionId={sessionId}
+            onIniciarFala={pararAudio}
           />
         </div>
       </main>

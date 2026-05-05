@@ -9,9 +9,11 @@ interface Props {
   desabilitado?:    boolean;
   /** ID da sessão ativa — habilita path Faster-Whisper GPU via POST /transcribe */
   sessionId?:       string | null;
+  /** Chamado no início de cada gravação — usado para parar o áudio do mestre */
+  onIniciarFala?:   () => void;
 }
 
-export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId }: Props) {
+export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala }: Props) {
   const [texto,        setTexto]        = useState("");
   const [ouvindo,      setOuvindo]      = useState(false);
   const [preview,      setPreview]      = useState("");
@@ -34,6 +36,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
 
   const iniciarMediaRec = useCallback(async () => {
     if (desabilitado || !sessionId) return;
+    onIniciarFala?.(); // para o áudio do mestre antes de gravar
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -79,6 +82,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
 
   const iniciarWebSpeech = useCallback(() => {
     if (desabilitado) return;
+    onIniciarFala?.(); // para o áudio do mestre antes de gravar
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
     if (!SR) return;

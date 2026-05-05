@@ -149,5 +149,5 @@ export function useGameSession() {
     return () => { wsRef.current?.close(); };
   }, []);
 
-  return { ...estado, conectar, enviarComando, desconectar };
+  return { ...estado, conectar, enviarComando, desconectar, pararAudio: pararTudo };
 }
