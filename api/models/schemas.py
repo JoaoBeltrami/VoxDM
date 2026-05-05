@@ -33,7 +33,7 @@ class SessaoConfig(BaseModel):
     player_race: str = ""
     player_class: str = ""
     player_background: str = ""
-    player_level: int = Field(default=1, ge=1, le=20)
+    player_level: int = Field(default=3, ge=1, le=20)  # personagens começam no nível 3
     # Continuação de sessão anterior — pré-popula trust_levels e quest_stages
     session_anterior_id: str | None = None
 

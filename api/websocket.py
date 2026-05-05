@@ -44,10 +44,6 @@ log = structlog.get_logger()
 _tts_engine: Any = None
 _tts_tentou_inicializar = False
 
-_CHUNK_MIN_PALAVRAS: int = 3    # mínimo de palavras antes de sintetizar sentença
-_CHUNK_MAX_PALAVRAS: int = 20   # força flush mesmo sem pontuação
-_FINAIS_SENTENCA = frozenset(".!?:…")
-
 
 def _obter_tts() -> Any:
     """Retorna TTSEngine singleton ou None se TTS indisponível."""
@@ -64,30 +60,28 @@ def _obter_tts() -> Any:
     return _tts_engine
 
 
-async def _sintetizar_e_enviar_chunk(
-    ws: WebSocket, tts: Any, sentenca: str, seq: int
-) -> int:
-    """Sintetiza sentença via Edge TTS e envia como audio_chunk base64. Retorna próximo seq.
+async def _sintetizar_e_enviar(ws: WebSocket, tts: Any, texto: str) -> None:
+    """Sintetiza o texto completo via Edge TTS e envia UM audio_chunk base64.
 
-    Usa sintetizar() em vez de sintetizar_stream() para garantir MP3 completo e
-    decodificável por AudioContext.decodeAudioData() no browser.
+    Uma única chamada TTS por resposta — mais simples, menos fragmentação,
+    sem múltiplos chunks na fila do browser.
     """
+    if not texto.strip():
+        return
     try:
-        log.info("tts_sintetizando", chars=len(sentenca), preview=sentenca[:80])
-        audio_bytes: bytes = await tts.sintetizar(sentenca)
+        log.info("tts_sintetizando", chars=len(texto), preview=texto[:80])
+        audio_bytes: bytes = await tts.sintetizar(texto)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             await ws.send_text(
                 MensagemWS(
                     tipo="audio_chunk",
                     conteudo_b64=audio_b64,
-                    sequencia=seq,
+                    sequencia=0,
                 ).model_dump_json()
             )
-            return seq + 1
     except Exception as e:
-        log.warning("tts_chunk_falhou", sentenca_resumida=sentenca[:40], erro=str(e))
-    return seq
+        log.warning("tts_falhou", preview=texto[:40], erro=str(e))
 
 # Prompt de abertura — carregado de arquivo para poder editar sem tocar em código
 _INTRO_SYSTEM: str = (
@@ -150,9 +144,6 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     resposta_intro = ""
     tts = _obter_tts()
-    buffer_tts = ""
-    buffer_palavras = 0
-    audio_seq = 0
 
     try:
         async for token in sessao.groq.completar_stream(
@@ -162,20 +153,6 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             await websocket.send_text(
                 MensagemWS(tipo="token", conteudo=token).model_dump_json()
             )
-            # TTS por sentença — mesmo pipeline do turno normal
-            if tts:
-                buffer_tts += token
-                buffer_palavras += max(1, len(token.split()))
-                deve_flush = (
-                    buffer_palavras >= _CHUNK_MIN_PALAVRAS
-                    and token.rstrip()[-1:] in _FINAIS_SENTENCA
-                ) or buffer_palavras >= _CHUNK_MAX_PALAVRAS
-                if deve_flush and buffer_tts.strip():
-                    audio_seq = await _sintetizar_e_enviar_chunk(
-                        websocket, tts, buffer_tts.strip(), audio_seq
-                    )
-                    buffer_tts = ""
-                    buffer_palavras = 0
     except Exception as e:
         log.error("ws_abertura_falhou", session_id=sessao.session_id, erro=str(e))
         msg_fallback = "Bem-vindo. O mundo aguarda. Quem é você?"
@@ -184,9 +161,9 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()
         )
 
-    # Flush do restante (última sentença sem pontuação final)
-    if tts and buffer_tts.strip():
-        await _sintetizar_e_enviar_chunk(websocket, tts, buffer_tts.strip(), audio_seq)
+    # Uma única síntese TTS do texto completo — sem fragmentação em sentenças
+    if tts:
+        await _sintetizar_e_enviar(websocket, tts, resposta_intro)
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
@@ -269,13 +246,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
                 mensagens = [{"role": "user", "content": texto_jogador}]
 
-            # Groq streaming — tokens ao cliente + TTS por sentença (pipeline)
+            # Groq streaming — tokens ao cliente em tempo real
             resposta_completa = ""
             latencia_primeiro_token = -1
             tts = _obter_tts()
-            buffer_tts = ""
-            buffer_palavras = 0
-            audio_seq = 0
 
             try:
                 async for token in sessao.groq.completar_stream(
@@ -288,22 +262,6 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         MensagemWS(tipo="token", conteudo=token).model_dump_json()
                     )
 
-                    # Acumula sentença para TTS e sintetiza ao completar
-                    if tts:
-                        buffer_tts += token
-                        buffer_palavras += max(1, len(token.split()))
-                        deve_flush = (
-                            buffer_palavras >= _CHUNK_MIN_PALAVRAS
-                            and token.rstrip()[-1:] in _FINAIS_SENTENCA
-                        ) or buffer_palavras >= _CHUNK_MAX_PALAVRAS
-
-                        if deve_flush and buffer_tts.strip():
-                            audio_seq = await _sintetizar_e_enviar_chunk(
-                                websocket, tts, buffer_tts.strip(), audio_seq
-                            )
-                            buffer_tts = ""
-                            buffer_palavras = 0
-
             except Exception as e:
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
                 await websocket.send_text(
@@ -311,9 +269,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
                 continue
 
-            # Flush do buffer TTS restante (última sentença sem pontuação final)
-            if tts and buffer_tts.strip():
-                await _sintetizar_e_enviar_chunk(websocket, tts, buffer_tts.strip(), audio_seq)
+            # TTS: uma única síntese do texto completo após o stream terminar
+            if tts:
+                await _sintetizar_e_enviar(websocket, tts, resposta_completa)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
             sessao.iteracoes += 1
@@ -349,7 +307,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "resposta_mestre": resposta_completa,
                 "total_ms": latencia_ms,
                 "llm_ms": latencia_primeiro_token,   # proxy: tempo até 1º token ≈ tempo de LLM
-                "primeiro_audio_ms": -1,             # sem áudio no modo API
+                "primeiro_audio_ms": latencia_ms,    # TTS ocorre após stream; usa total_ms como proxy
                 "status": "OK" if latencia_ms < 2000 else "ACIMA DO LIMITE",
                 "chunks_lore": chunks_lore,
                 "chunks_regras": chunks_regras,

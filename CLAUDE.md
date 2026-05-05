@@ -153,9 +153,10 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT, EMBEDDING_MODEL, GROQ_MODEL | ✅ Atualizado |
-| `.env.example` | Template de variáveis de ambiente documentado — inclui CORS_ORIGINS | ✅ Atualizado |
+| `.env.example` | Template de variáveis de ambiente documentado — inclui CORS_ORIGINS=http://localhost:3000,http://localhost:3001 | ✅ Atualizado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
-| `Makefile` | Targets: run, run-api, test, ingest, debug, backup | ✅ Atualizado |
+| `Makefile` | Targets: run, run-api, test (dep: ingest), ingest, debug, backup — usa `uv run` | ✅ Atualizado |
+| `start.bat` | Mata portas 8000/3000, limpa .next, inicia API+frontend, abre browser após 20s | ✅ Corrigido |
 | `tests/conftest.py` | Fixtures base + os.environ.setdefault antes dos imports (fix pydantic ValidationError no pytest) | ✅ Atualizado |
 | `tests/test_config.py` | Smoke tests — config carrega e falha corretamente | ✅ Criado |
 | `QUICKSTART.md` | Guia de uso local com GPU — Windows/RTX, ordem dos terminais, problemas comuns | ✅ Criado |
@@ -257,7 +258,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Feature | O que foi feito |
 |---|---|
 | STT via GPU (POST /transcribe) | `transcrever_bytes()` + endpoint multipart, 10MB limit, singleton WhisperModel |
-| TTS de volta ao browser | sentence buffer no WS, `sintetizar_e_enviar_chunk()`, `audio_chunk` base64 messages |
+| TTS de volta ao browser | UMA chamada `sintetizar()` pós-stream completo, `audio_chunk` base64 — sem fragmentação por sentença |
 | Nome do personagem na UI | `playerName` no header e bolha do jogador |
 | Seletor de sessão passada | `SessionPicker` + `GET /session/list` + restauração de trust/quest via episodic memory |
 | Ficha do personagem | `CharacterSheet` colapsável com HP bar |
@@ -265,6 +266,23 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Prompt do mestre v3 | seção de rolagem de dados + `dice.md` com escala narrativa de veterano |
 | Testes de segurança de prompt | `tests/test_master_prompt.py` — 32 testes, cache, regex, fallback |
 | **Total testes** | **106 passed, 0 failed** |
+
+### Fixes Áudio + UX (Sessão 04/05 — continuação)
+
+| O que foi feito | Detalhe |
+|---|---|
+| TTS arquitetura simplificada | `api/websocket.py`: removido sentence buffer inteiro; UMA síntese `sintetizar()` pós-stream; elimina fragmentação e "áudio louco" |
+| `useAudio.ts` reescrito | `AudioContext.resume()` aguardado (fix silêncio por policy), `sourceAtualRef` para stop imediato, fila promise chain com flag `parandoRef` |
+| `pararTudo()` em desconectar | `useGameSession.ts`: `desconectar()` agora para o áudio antes de fechar WS — elimina áudio pós-encerramento |
+| Voz natural Edge TTS | `engine/voice/tts.py`: `EDGE_RATE="0%"`, `EDGE_PITCH="0Hz"` — elimina distorção robótica |
+| `_limpar_markdown()` ampliado | `engine/voice/tts.py`: remove `=== SEÇÃO ===`, JSON `{...}`, linhas de metadados `HP:|Local:|...` — TTS não lê "código" |
+| `start.bat` corrigido | Trailing `\` em `%~dp0` quebrava parser cmd; `set ROOT=%ROOT:~0,-1%` corrige; port kill + clear .next adicionados |
+| `CharacterForm` nível 3 | `useState(3)` — personagens sempre começam no nível 3 (roadmap) |
+| `page.tsx` UX | Session ID auto-gerado, SessionPicker primeiro, botão "Entrar no Mundo", ID de-emphasizado |
+| `player_level` default=3 | `api/models/schemas.py`: alinhado com CharacterForm (era 1) |
+| `Makefile` usa `uv run` | Consistente com resto do projeto (era `.venv/Scripts/python`) |
+| `primeiro_audio_ms` comentário | `api/websocket.py`: corrigido (era "sem áudio no modo API" — agora tem áudio) |
+| `CORS_ORIGINS` porta 3001 | `.env` e `.env.example`: adicionado `http://localhost:3001` — fallback Next.js |
 
 ### Abertura Classe-Aware + Limpeza (Sessão 04/05)
 
@@ -295,7 +313,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
 | `api/routes/session.py` | POST /session/start (+ restauração episódica), POST /{id}/transcribe (10MB limit), GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id} | ✅ Atualizado |
 | `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
-| `api/websocket.py` | WebSocket streaming — sentence buffer + TTS sintetizar_stream() + audio_chunk base64 + abertura classe-aware (quests/NPCs/continuação no intro_user) | ✅ Atualizado |
+| `api/websocket.py` | WebSocket streaming — stream tokens → TTS sintetizar() UMA chamada pós-stream + audio_chunk base64 + abertura classe-aware (quests/NPCs/continuação no intro_user) | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
 | `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk no WS | ✅ Atualizado |

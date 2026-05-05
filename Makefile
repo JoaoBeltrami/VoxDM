@@ -1,13 +1,8 @@
 .PHONY: run run-api test ingest ingest-rules debug backup docs-sync
 
-# Detecta Windows vs Unix para caminhos do venv
-ifeq ($(OS),Windows_NT)
-    PYTHON := .venv/Scripts/python
-    PYTEST := .venv/Scripts/pytest
-else
-    PYTHON := .venv/bin/python
-    PYTEST := .venv/bin/pytest
-endif
+# Usa uv run — sem ativar venv manualmente
+PYTHON := uv run python
+PYTEST := uv run pytest
 
 run: run-api
 

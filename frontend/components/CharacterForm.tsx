@@ -38,7 +38,7 @@ export function CharacterForm({ onChange }: Props) {
   const [raca, setRaca] = useState("");
   const [classe, setClasse] = useState("");
   const [background, setBackground] = useState("");
-  const [nivel, setNivel] = useState(1);
+  const [nivel, setNivel] = useState(3); // roadmap: personagem sempre começa no nível 3
 
   const hpBase = HP_INICIAL[classe] ?? 8;
   const hpTotal = hpBase + (nivel - 1) * Math.floor(hpBase / 2 + 1);

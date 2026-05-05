@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
@@ -16,14 +16,17 @@ export default function Home() {
     historico, erro, conectar, enviarComando, desconectar,
   } = useGameSession();
 
-  const [sessionInput, setSessionInput] = useState("sess-01");
+  // ID gerado automaticamente — kebab-case, único por timestamp
+  const [sessionInput, setSessionInput] = useState(() =>
+    `sess-${Date.now().toString(36).slice(-5)}`
+  );
   const [personagem, setPersonagem] = useState<PersonagemConfig>({});
   const [ouvindo, setOuvindo] = useState(false);
 
-  const handleContinuarSessao = (sessao: SessaoListaItem) => {
+  const handleContinuarSessao = useCallback((sessao: SessaoListaItem) => {
     setSessionInput(sessao.session_id);
     setPersonagem(p => ({ ...p, session_anterior_id: sessao.session_id }));
-  };
+  }, []);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,38 +47,38 @@ export default function Home() {
         <div className="w-full max-w-xs space-y-5 text-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-violet-400">VoxDM</h1>
-            <p className="mt-1 text-xs text-zinc-500">Engine de narração de RPG por voz</p>
+            <p className="mt-1 text-xs text-zinc-500">Narração de RPG por voz</p>
           </div>
 
-          <div className="space-y-2 text-left">
-            <label className="block text-xs text-zinc-400">ID da sessão</label>
-            <input
-              value={sessionInput}
-              onChange={e => setSessionInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter") conectar(sessionInput.trim() || "sess-01", personagem);
-              }}
-              placeholder="sess-01"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-violet-500"
-            />
-          </div>
-
-          {/* Seletor de sessão anterior */}
+          {/* Sessões anteriores — aparece se houver */}
           <SessionPicker onContinuar={handleContinuarSessao} />
 
-          {/* Formulário de personagem D&D */}
+          {/* Personagem D&D */}
           <CharacterForm onChange={setPersonagem} />
+
+          {/* ID da sessão — editável mas auto-gerado */}
+          <div className="space-y-1 text-left">
+            <label className="block text-xs text-zinc-600">ID da sessão</label>
+            <input
+              value={sessionInput}
+              onChange={e => setSessionInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              onKeyDown={e => {
+                if (e.key === "Enter") conectar(sessionInput || "sess-01", personagem);
+              }}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-500 outline-none focus:border-zinc-600"
+            />
+          </div>
 
           {erro && (
             <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-300">{erro}</p>
           )}
 
           <button
-            onClick={() => conectar(sessionInput.trim() || "sess-01", personagem)}
+            onClick={() => conectar(sessionInput || "sess-01", personagem)}
             disabled={carregando}
             className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-40"
           >
-            {carregando ? "Conectando…" : "Iniciar Sessão"}
+            {carregando ? "Conectando…" : "Entrar no Mundo"}
           </button>
         </div>
       </main>
