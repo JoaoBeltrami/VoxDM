@@ -23,14 +23,13 @@ Exemplo:
 
 import base64
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
 
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
-
-import re
 
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions

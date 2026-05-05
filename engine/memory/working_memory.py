@@ -126,6 +126,7 @@ class WorkingMemory:
             quest_stages={},
             session_id=session_id,
             tts_voice=tts_voice,
+            em_combate=False,
         )
 
     def registrar_fala(self, falante: str, texto: str) -> None:
