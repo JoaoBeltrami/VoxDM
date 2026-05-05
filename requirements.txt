@@ -18,6 +18,7 @@ aiosqlite
 # ─── Fase 2 — Voz ───────────────────────────���────────────────────────────────
 RealtimeSTT
 faster-whisper==1.2.1
+av                     # PyAV — decoder WebM/Opus para faster-whisper (necessario no Windows)
 edge-tts
 kokoro
 pygame

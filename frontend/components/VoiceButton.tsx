@@ -38,7 +38,10 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
     if (desabilitado || !sessionId) return;
     onIniciarFala?.(); // para o áudio do mestre antes de gravar
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // echoCancellation evita que o microfone capture o TTS do mestre
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : "audio/webm";
@@ -63,7 +66,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           setTranscrevendo(false);
         }
       };
-      mr.start(200); // coleta chunks a cada 200ms
+      mr.start(); // sem timeslice → um blob completo ao parar (mais compatível com FFmpeg Windows)
       mediaRecRef.current = mr;
       _setOuvindo(true);
     } catch {

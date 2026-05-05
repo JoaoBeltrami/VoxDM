@@ -119,12 +119,20 @@ def _aplicar_pronuncias(texto: str) -> str:
 def _limpar_markdown(texto: str) -> str:
     """Remove formatação que o Edge TTS leria literalmente.
 
-    Cobre: markdown, separadores de contexto (=== ... ===), chaves JSON,
+    Cobre: markdown, separadores de contexto (=== ... ===), cabeçalhos de
+    system prompt que o LLM às vezes ecoa na resposta, chaves JSON e
     metadados técnicos — qualquer coisa que soe como 'código' se lida em voz alta.
     """
-    # Remove separadores de seção do contexto: === CENA ATUAL ===
-    texto = re.sub(r'===.*?===', '', texto)
-    # Remove chaves/colchetes JSON: { ... } e [ ... ]
+    # Remove cabeçalhos de system prompt que o LLM pode ecoar na resposta
+    # Ex: "=== CENA ATUAL ===" ou "=== SESSÕES ANTERIORES ==="
+    texto = re.sub(r'===.*?===', '', texto, flags=re.DOTALL)
+    # Remove blocos de instrução interna (prompt leak)
+    texto = re.sub(r'\[LEMBRETE DE SAÍDA.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
+    texto = re.sub(r'\[INSTRUÇÕES INTERNAS.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
+    # Remove linhas de cabeçalho de contexto: "REGRAS DE JOGO:", "CONTEÚDO DO MÓDULO:"
+    texto = re.sub(r'^(?:REGRAS DE JOGO|CONTEÚDO DO MÓDULO|SESSÕES ANTERIORES)\s*:.*$', '',
+                   texto, flags=re.MULTILINE | re.IGNORECASE)
+    # Remove chaves/colchetes JSON: { ... } e [ ... ] (inclui [Rolagem: dX = Y])
     texto = re.sub(r'\{[^}]{0,200}\}', '', texto)
     texto = re.sub(r'\[[^\]]{0,200}\]', '', texto)
     # Remove bold e italic: **texto** → texto, *texto* → texto
@@ -134,7 +142,8 @@ def _limpar_markdown(texto: str) -> str:
     # Remove listas com hífen ou asterisco no início de linha
     texto = re.sub(r'^\s*[-*]\s+', '', texto, flags=re.MULTILINE)
     # Remove padrões de estado técnico: HP: 10/10, Local: xxx, Hora: xxx
-    texto = re.sub(r'^(?:HP|Local|Hora|Clima|Personagem|Condições):.+$', '', texto, flags=re.MULTILINE)
+    texto = re.sub(r'^(?:HP|Local|Hora|Clima|Personagem|Condições|NPCs|Quests):.+$',
+                   '', texto, flags=re.MULTILINE)
     # Remove notação de dados: 1d6, 3d8, etc.
     texto = re.sub(r'\b\d+d\d+\b', '', texto)
     # Colapsa múltiplos espaços e linhas em branco
