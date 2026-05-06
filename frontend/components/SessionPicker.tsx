@@ -21,14 +21,25 @@ export function SessionPicker({ onContinuar }: Props) {
   const [sessoes, setSessoes] = useState<SessaoListaItem[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [aberto, setAberto] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     listarSessoes()
       .then(lista => { setSessoes(lista); setCarregando(false); })
-      .catch(() => setCarregando(false));
+      .catch(() => { setErro("Não foi possível carregar sessões salvas."); setCarregando(false); });
   }, []);
 
-  if (carregando || sessoes.length === 0) return null;
+  if (carregando) return (
+    <p className="py-2 text-center text-xs text-zinc-600">Carregando sessões...</p>
+  );
+
+  if (erro) return (
+    <p className="rounded-lg bg-red-900/20 px-3 py-2 text-center text-xs text-red-400">{erro}</p>
+  );
+
+  if (sessoes.length === 0) return (
+    <p className="py-2 text-center text-xs text-zinc-600">Nenhuma sessão anterior encontrada.</p>
+  );
 
   return (
     <div className="w-full space-y-2 text-left">

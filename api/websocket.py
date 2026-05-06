@@ -219,6 +219,22 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 await _enviar_abertura(websocket, sessao)
                 continue
 
+            # Sync de HP do jogador — CharacterSheet envia quando usuário ajusta
+            if tipo_msg == "sync_hp":
+                novo_hp = dados.get("hp")
+                if isinstance(novo_hp, int):
+                    sessao.working_mem.player_hp = max(0, min(sessao.working_mem.player_hp_max, novo_hp))
+                    log.info("hp_sincronizado", session_id=session_id, hp=sessao.working_mem.player_hp)
+                continue
+
+            # Sync de condições ativas — CharacterSheet envia lista completa atual
+            if tipo_msg == "sync_conditions":
+                conditions = dados.get("conditions")
+                if isinstance(conditions, list):
+                    sessao.working_mem.player_conditions = [str(c) for c in conditions]
+                    log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
+                continue
+
             if not texto_jogador:
                 continue
 

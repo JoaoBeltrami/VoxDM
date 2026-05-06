@@ -33,12 +33,22 @@ log = structlog.get_logger()
 _VERSAO = "0.1.0"
 
 
+async def _tarefa_limpeza() -> None:
+    """Remove sessões inativas a cada 30 minutos."""
+    while True:
+        await asyncio.sleep(30 * 60)
+        from api.state import limpar_sessoes_inativas
+        limpar_sessoes_inativas()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup e shutdown controlados pela engine."""
     log.info("voxdm_api_iniciando", versao=_VERSAO, debug=settings.DEBUG)
     await _warmup_embedder()
+    _task_limpeza = asyncio.create_task(_tarefa_limpeza())
     yield
+    _task_limpeza.cancel()
     log.info("voxdm_api_encerrando", sessoes_abertas=len(_sessoes_ativas()))
 
 

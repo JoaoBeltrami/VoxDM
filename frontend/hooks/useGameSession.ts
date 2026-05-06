@@ -21,7 +21,11 @@ interface EstadoSessao {
   respostaAtual: string;
   historico: TurnoHistorico[];
   erro: string | null;
+  reconectando: boolean;
 }
+
+const MAX_RECONNECTS = 3;
+const RECONNECT_BASE_MS = 1500;
 
 export function useGameSession() {
   const { tocarChunk, pararTudo } = useAudio();
@@ -33,103 +37,141 @@ export function useGameSession() {
     respostaAtual: "",
     historico: [],
     erro: null,
+    reconectando: false,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const textoAtualRef = useRef("");
   const turnoAtualRef = useRef<{ jogador: string; id: number } | null>(null);
 
+  // Refs para auto-reconnect
+  const sessionIdRef = useRef<string | null>(null);
+  const personagemRef = useRef<PersonagemConfig | undefined>(undefined);
+  const reconnectCountRef = useRef(0);
+  const intentionalCloseRef = useRef(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const _conectarWS = useCallback((sessionId: string, nome: string | null) => {
+    const ws = new WebSocket(wsUrl(sessionId));
+
+    ws.onopen = () => {
+      reconnectCountRef.current = 0;
+      setEstado(s => ({
+        ...s,
+        sessionId,
+        playerName: nome,
+        conectado: true,
+        carregando: false,
+        reconectando: false,
+        erro: null,
+      }));
+      ws.send(JSON.stringify({ tipo: "init" }));
+    };
+
+    ws.onmessage = (ev) => {
+      const msg: MensagemWS = JSON.parse(ev.data);
+
+      if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
+        tocarChunk(msg.conteudo_b64);
+      }
+
+      if (msg.tipo === "token" && msg.conteudo) {
+        textoAtualRef.current += msg.conteudo;
+        setEstado(s => ({ ...s, respostaAtual: textoAtualRef.current }));
+      }
+
+      if (msg.tipo === "fim") {
+        // IMPORTANTE: capturar ANTES de limpar os refs.
+        // React 18 batcheia setEstado — o updater executa após o handler retornar.
+        const turno = turnoAtualRef.current;
+        const textoFinal = textoAtualRef.current;
+        textoAtualRef.current = "";
+        turnoAtualRef.current = null;
+
+        if (turno) {
+          setEstado(s => ({
+            ...s,
+            respostaAtual: "",
+            historico: [
+              ...s.historico,
+              {
+                id: turno.id,
+                jogador: turno.jogador,
+                mestre: textoFinal,
+                latencia_ms: msg.latencia_ms ?? 0,
+                chunks_lore: msg.chunks_lore ?? [],
+                chunks_regras: msg.chunks_regras ?? [],
+              },
+            ],
+          }));
+        } else if (textoFinal) {
+          setEstado(s => ({
+            ...s,
+            respostaAtual: "",
+            historico: [
+              ...s.historico,
+              {
+                id: Date.now(),
+                jogador: "",
+                mestre: textoFinal,
+                latencia_ms: msg.latencia_ms ?? 0,
+                chunks_lore: [],
+                chunks_regras: [],
+              },
+            ],
+          }));
+        }
+      }
+
+      if (msg.tipo === "erro") {
+        setEstado(s => ({ ...s, erro: msg.conteudo ?? "Erro desconhecido", carregando: false }));
+        textoAtualRef.current = "";
+        turnoAtualRef.current = null;
+      }
+    };
+
+    ws.onerror = () => {
+      setEstado(s => ({ ...s, erro: "Conexão WebSocket falhou", conectado: false }));
+    };
+
+    ws.onclose = () => {
+      setEstado(s => ({ ...s, conectado: false }));
+
+      // Auto-reconnect apenas se o fechamento foi inesperado
+      if (
+        !intentionalCloseRef.current &&
+        sessionIdRef.current &&
+        reconnectCountRef.current < MAX_RECONNECTS
+      ) {
+        reconnectCountRef.current++;
+        const delay = RECONNECT_BASE_MS * Math.pow(2, reconnectCountRef.current - 1);
+        setEstado(s => ({ ...s, reconectando: true }));
+        reconnectTimerRef.current = setTimeout(() => {
+          if (sessionIdRef.current) {
+            _conectarWS(sessionIdRef.current, personagemRef.current?.player_name?.trim() || null);
+          }
+        }, delay);
+      }
+    };
+
+    wsRef.current = ws;
+  }, [tocarChunk]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const conectar = useCallback(async (sessionId: string, personagem?: PersonagemConfig) => {
+    intentionalCloseRef.current = false;
+    reconnectCountRef.current = 0;
+    sessionIdRef.current = sessionId;
+    personagemRef.current = personagem;
+
     setEstado(s => ({ ...s, carregando: true, erro: null }));
     try {
       await criarSessao(sessionId, personagem);
-      const ws = new WebSocket(wsUrl(sessionId));
-
-      ws.onopen = () => {
-        const nome = personagem?.player_name?.trim() || null;
-        setEstado(s => ({ ...s, sessionId, playerName: nome, conectado: true, carregando: false }));
-        // Dispara mensagem de abertura automática: o mestre saúda o jogador
-        ws.send(JSON.stringify({ tipo: "init" }));
-      };
-
-      ws.onmessage = (ev) => {
-        const msg: MensagemWS = JSON.parse(ev.data);
-
-        if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
-          tocarChunk(msg.conteudo_b64);
-        }
-
-        if (msg.tipo === "token" && msg.conteudo) {
-          textoAtualRef.current += msg.conteudo;
-          setEstado(s => ({ ...s, respostaAtual: textoAtualRef.current }));
-        }
-
-        if (msg.tipo === "fim") {
-          // IMPORTANTE: capturar ANTES de limpar os refs.
-          // React 18 batcheia setEstado — o updater executa após o handler retornar.
-          // Se limpássemos textoAtualRef antes, 'mestre' seria sempre "".
-          const turno = turnoAtualRef.current;
-          const textoFinal = textoAtualRef.current;
-          textoAtualRef.current = "";
-          turnoAtualRef.current = null;
-
-          if (turno) {
-            // Turno normal: jogador enviou um comando
-            setEstado(s => ({
-              ...s,
-              respostaAtual: "",
-              historico: [
-                ...s.historico,
-                {
-                  id: turno.id,
-                  jogador: turno.jogador,
-                  mestre: textoFinal,
-                  latencia_ms: msg.latencia_ms ?? 0,
-                  chunks_lore: msg.chunks_lore ?? [],
-                  chunks_regras: msg.chunks_regras ?? [],
-                },
-              ],
-            }));
-          } else if (textoFinal) {
-            // Mensagem de abertura do mestre (sem comando do jogador)
-            setEstado(s => ({
-              ...s,
-              respostaAtual: "",
-              historico: [
-                ...s.historico,
-                {
-                  id: Date.now(),
-                  jogador: "",
-                  mestre: textoFinal,
-                  latencia_ms: msg.latencia_ms ?? 0,
-                  chunks_lore: [],
-                  chunks_regras: [],
-                },
-              ],
-            }));
-          }
-        }
-
-        if (msg.tipo === "erro") {
-          setEstado(s => ({ ...s, erro: msg.conteudo ?? "Erro desconhecido", carregando: false }));
-          textoAtualRef.current = "";
-          turnoAtualRef.current = null;
-        }
-      };
-
-      ws.onerror = () => {
-        setEstado(s => ({ ...s, erro: "Conexão WebSocket falhou", conectado: false }));
-      };
-
-      ws.onclose = () => {
-        setEstado(s => ({ ...s, conectado: false }));
-      };
-
-      wsRef.current = ws;
+      const nome = personagem?.player_name?.trim() || null;
+      _conectarWS(sessionId, nome);
     } catch (e) {
       setEstado(s => ({ ...s, carregando: false, erro: String(e) }));
     }
-  }, []);
+  }, [_conectarWS]);
 
   const enviarComando = useCallback((texto: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -138,16 +180,38 @@ export function useGameSession() {
     wsRef.current.send(JSON.stringify({ texto }));
   }, []);
 
-  const desconectar = useCallback(async () => {
-    pararTudo(); // para o áudio imediatamente antes de fechar
-    wsRef.current?.close();
-    if (estado.sessionId) await encerrarSessao(estado.sessionId);
-    setEstado(s => ({ ...s, sessionId: null, conectado: false, historico: [], respostaAtual: "" }));
-  }, [estado.sessionId, pararTudo]);
-
-  useEffect(() => {
-    return () => { wsRef.current?.close(); };
+  // Envia sync de HP ou condições sem passar pelo histórico de diálogo
+  const sincronizarEstado = useCallback((tipo: "sync_hp" | "sync_conditions", payload: Record<string, unknown>) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
 
-  return { ...estado, conectar, enviarComando, desconectar, pararAudio: pararTudo };
+  const desconectar = useCallback(async () => {
+    intentionalCloseRef.current = true;
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    pararTudo();
+    wsRef.current?.close();
+    const sid = sessionIdRef.current;
+    sessionIdRef.current = null;
+    personagemRef.current = undefined;
+    if (sid) await encerrarSessao(sid);
+    setEstado(s => ({
+      ...s,
+      sessionId: null,
+      conectado: false,
+      reconectando: false,
+      historico: [],
+      respostaAtual: "",
+    }));
+  }, [pararTudo]);
+
+  useEffect(() => {
+    return () => {
+      intentionalCloseRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+    };
+  }, []);
+
+  return { ...estado, conectar, enviarComando, desconectar, sincronizarEstado, pararAudio: pararTudo };
 }

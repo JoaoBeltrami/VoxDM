@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     # Fase 2 — Voz
-    STT_MODEL: str = "tiny"
+    STT_MODEL: str = "small"   # "small" melhor WER pt-BR; RTX 2060 Super suporta
     STT_DEVICE: str = "cuda"
     STT_LANGUAGE: str = "pt"
     TTS_VOICE_PTBR: str = "pt-BR-FranciscaNeural"

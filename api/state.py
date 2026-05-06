@@ -16,6 +16,9 @@ Exemplo:
 
 import time
 from dataclasses import dataclass, field
+import structlog
+
+_log = structlog.get_logger()
 
 from engine.llm.groq_client import GroqClient
 from engine.memory.context_builder import ContextBuilder
@@ -23,6 +26,9 @@ from engine.memory.working_memory import WorkingMemory
 
 # Limite de sessões simultâneas — evita vazamento de memória em demos
 MAX_SESSOES: int = 50
+
+# TTL de inatividade: sessões idle por mais deste tempo são removidas automaticamente
+SESSION_TTL_SECONDS: int = 4 * 3600  # 4 horas
 
 
 @dataclass
@@ -40,3 +46,17 @@ class SessaoAtiva:
 
 # Store global — keyed by session_id (kebab-case)
 sessions: dict[str, SessaoAtiva] = {}
+
+
+def limpar_sessoes_inativas() -> list[str]:
+    """Remove sessões onde ultima_atividade excedeu SESSION_TTL_SECONDS. Thread-safe p/ asyncio."""
+    agora = time.time()
+    encerradas = [
+        sid for sid, s in list(sessions.items())
+        if agora - s.ultima_atividade > SESSION_TTL_SECONDS
+    ]
+    for sid in encerradas:
+        del sessions[sid]
+    if encerradas:
+        _log.info("sessoes_inativas_removidas", ids=encerradas, total=len(encerradas))
+    return encerradas

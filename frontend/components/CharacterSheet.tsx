@@ -1,15 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PersonagemConfig } from "@/lib/api";
 
 interface Props {
   personagem: PersonagemConfig;
-  /** Envia resultado do dado para o chat — LLM usa como contexto de regra */
   onRolar?: (resultado: string) => void;
+  onSyncHP?: (hp: number) => void;
+  onSyncConditions?: (conditions: string[]) => void;
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
+type Dado = typeof DADOS_DND[number];
+
+const MAX_ITENS = 20;
+
+// Condições D&D 5e mais comuns
+const CONDICOES_DND = [
+  "Amedrontado", "Agarrado", "Atordoado", "Cego",
+  "Envenenado", "Exausto", "Incapacitado", "Invisível",
+  "Paralisado", "Petrificado", "Prone", "Surdo",
+];
 
 const SCORES_DISPLAY = [
   { key: "str_score" as const, abrev: "FOR" },
@@ -25,7 +36,7 @@ const SCORE_KEY_TO_SAVE: Record<string, string> = {
   int_score: "INT", wis_score: "SAB", cha_score: "CAR",
 };
 
-const PERICIA_SCORE: Record<string, keyof typeof SCORE_KEY_TO_SAVE> = {
+const PERICIA_SCORE: Record<string, keyof PersonagemConfig> = {
   "Acrobacia": "dex_score", "Adestrar Animais": "wis_score", "Arcanismo": "int_score",
   "Atletismo": "str_score", "Enganação": "cha_score", "História": "int_score",
   "Intuição": "wis_score", "Intimidação": "cha_score", "Investigação": "int_score",
@@ -38,31 +49,35 @@ function fmod(score: number): string {
   const m = Math.floor((score - 10) / 2);
   return m >= 0 ? `+${m}` : `${m}`;
 }
-
 function fmodNum(score: number): number {
   return Math.floor((score - 10) / 2);
 }
-type Dado = typeof DADOS_DND[number];
-
-const MAX_ITENS = 20;
-
 function rolar(faces: number): number {
   return Math.floor(Math.random() * faces) + 1;
 }
 
-export function CharacterSheet({ personagem, onRolar }: Props) {
+export function CharacterSheet({ personagem, onRolar, onSyncHP, onSyncConditions }: Props) {
   const [aberto, setAberto] = useState(false);
-  const [inventarioAberto, setInventarioAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
-  const [resultado, setResultado] = useState<{ dado: number; valor: number } | null>(null);
+  const [inventarioAberto, setInventarioAberto] = useState(false);
+  const [condicoesAberto, setCondicoesAberto] = useState(false);
 
-  // HP local — separado do personagem para permitir mudança em tempo de jogo
+  // HP local
   const [hpAtual, setHpAtual] = useState<number>(personagem.player_hp ?? 0);
   const [hpInput, setHpInput] = useState<string>("");
 
-  // Inventário local — estado simples sem persistência backend nesta fase
+  // Condições locais
+  const [condicoes, setCondicoes] = useState<string[]>([]);
+
+  // Inventário local
   const [itens, setItens] = useState<string[]>([]);
   const [novoItem, setNovoItem] = useState("");
+
+  // Dice slot-machine
+  const [animando, setAnimando] = useState(false);
+  const [displayValue, setDisplayValue] = useState<number | null>(null);
+  const [resultado, setResultado] = useState<{ dado: number; valor: number } | null>(null);
+  const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { player_name, player_race, player_class, player_level,
           player_background, player_hp_max,
@@ -76,26 +91,72 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
   const hpMax = player_hp_max ?? hpAtual;
   const hpPercent = hpMax > 0 ? Math.max(0, Math.min(100, (hpAtual / hpMax) * 100)) : 0;
   const inconsciente = hpAtual <= 0;
+  const profBon = Math.floor(((player_level ?? 3) - 1) / 4) + 2;
+
+  const scoreMap: Record<string, number> = {
+    str_score, dex_score, con_score, int_score, wis_score, cha_score,
+  };
 
   const ajustarHP = (delta: number) => {
-    setHpAtual(v => Math.max(0, Math.min(hpMax, v + delta)));
+    const novo = Math.max(0, Math.min(hpMax, hpAtual + delta));
+    setHpAtual(novo);
+    onSyncHP?.(novo);
   };
 
   const confirmarHpInput = () => {
     const n = parseInt(hpInput);
-    if (!isNaN(n)) setHpAtual(Math.max(0, Math.min(hpMax, n)));
+    if (!isNaN(n)) {
+      const novo = Math.max(0, Math.min(hpMax, n));
+      setHpAtual(novo);
+      onSyncHP?.(novo);
+    }
     setHpInput("");
   };
 
-  const rolarDado = (faces: Dado) => {
-    const valor = rolar(faces);
-    setResultado({ dado: faces, valor });
-    if (onRolar) {
-      const critico = faces === 20 && valor === 20 ? " — CRÍTICO!" : "";
-      const falha   = faces === 20 && valor === 1  ? " — FALHA CRÍTICA!" : "";
-      onRolar(`[Rolagem: d${faces} = ${valor}${critico || falha}]`);
-    }
+  const toggleCondicao = (cond: string) => {
+    const novas = condicoes.includes(cond)
+      ? condicoes.filter(c => c !== cond)
+      : [...condicoes, cond];
+    setCondicoes(novas);
+    onSyncConditions?.(novas);
   };
+
+  const rolarDado = (faces: Dado) => {
+    if (animando) return;
+    if (animTimerRef.current) clearInterval(animTimerRef.current);
+
+    const valor = rolar(faces);
+    setAnimando(true);
+    setDisplayValue(null);
+    setResultado(null);
+
+    let elapsed = 0;
+    const TOTAL_MS = 700;
+    const INTERVAL_MS = 55;
+
+    animTimerRef.current = setInterval(() => {
+      elapsed += INTERVAL_MS;
+      setDisplayValue(Math.floor(Math.random() * faces) + 1);
+
+      if (elapsed >= TOTAL_MS) {
+        clearInterval(animTimerRef.current!);
+        animTimerRef.current = null;
+        setAnimando(false);
+        setDisplayValue(valor);
+        setResultado({ dado: faces, valor });
+
+        if (onRolar) {
+          const critico = faces === 20 && valor === 20 ? " — CRÍTICO!" : "";
+          const falha   = faces === 20 && valor === 1  ? " — FALHA CRÍTICA!" : "";
+          onRolar(`[Rolagem: d${faces} = ${valor}${critico || falha}]`);
+        }
+      }
+    }, INTERVAL_MS);
+  };
+
+  useEffect(() => {
+    return () => { if (animTimerRef.current) clearInterval(animTimerRef.current); };
+  }, []);
 
   const adicionarItem = () => {
     const item = novoItem.trim();
@@ -119,7 +180,7 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-10 w-72 rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
+        <div className="absolute right-0 top-10 w-72 max-h-[80vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
 
           {/* Identidade */}
           <div className="mb-3 border-b border-zinc-800 pb-3">
@@ -137,7 +198,7 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-zinc-400">HP</span>
               {inconsciente ? (
-                <span className="font-bold text-red-400">💀 Inconsciente</span>
+                <span className="font-bold text-red-400">Inconsciente</span>
               ) : (
                 <span className="font-semibold text-zinc-200">{hpAtual} / {hpMax}</span>
               )}
@@ -145,20 +206,17 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
 
             <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">
               <div
-                className={`h-full rounded-full transition-all ${inconsciente ? "bg-red-700" : "bg-violet-500"}`}
+                className={`h-full rounded-full transition-all duration-300 ${inconsciente ? "bg-red-700" : hpPercent < 30 ? "bg-orange-500" : "bg-violet-500"}`}
                 style={{ width: `${hpPercent}%` }}
               />
             </div>
 
-            {/* Botões − / campo / + */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => ajustarHP(-1)}
                 disabled={hpAtual <= 0}
                 className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
-              >
-                −
-              </button>
+              >−</button>
               <input
                 type="number"
                 value={hpInput}
@@ -172,13 +230,11 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
                 onClick={() => ajustarHP(+1)}
                 disabled={hpAtual >= hpMax}
                 className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-30"
-              >
-                +
-              </button>
+              >+</button>
             </div>
           </div>
 
-          {/* Sistema de dados */}
+          {/* Dados — slot-machine */}
           <div className="mb-3 border-b border-zinc-800 pb-3">
             <p className="mb-2 text-xs text-zinc-500">Rolar dado:</p>
             <div className="flex flex-wrap gap-1.5">
@@ -186,27 +242,42 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
                 <button
                   key={d}
                   onClick={() => rolarDado(d)}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300"
+                  disabled={animando}
+                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-40"
                 >
                   d{d}
                 </button>
               ))}
             </div>
-            {resultado && (
-              <div className="mt-3 rounded-lg border border-violet-800/50 bg-violet-900/20 px-3 py-2 text-center">
-                <p className="text-xs text-zinc-400">d{resultado.dado}</p>
-                <p className="text-2xl font-bold text-violet-300">{resultado.valor}</p>
-                {resultado.dado === 20 && resultado.valor === 20 && (
-                  <p className="text-xs text-yellow-400">Crítico!</p>
-                )}
-                {resultado.dado === 20 && resultado.valor === 1 && (
-                  <p className="text-xs text-red-400">Falha crítica!</p>
-                )}
+
+            {(animando || resultado) && (
+              <div className={`mt-3 rounded-lg border px-3 py-2 text-center transition-all ${
+                animando ? "border-zinc-700 bg-zinc-800" : "border-violet-800/50 bg-violet-900/20"
+              }`}>
+                {animando ? (
+                  <>
+                    <p className="text-xs text-zinc-600">d{resultado?.dado ?? "?"}</p>
+                    <p className="animate-pulse text-2xl font-bold tabular-nums text-zinc-400">
+                      {displayValue ?? "·"}
+                    </p>
+                  </>
+                ) : resultado ? (
+                  <>
+                    <p className="text-xs text-zinc-400">d{resultado.dado}</p>
+                    <p className="text-2xl font-bold text-violet-300">{resultado.valor}</p>
+                    {resultado.dado === 20 && resultado.valor === 20 && (
+                      <p className="text-xs font-bold text-yellow-400">CRÍTICO!</p>
+                    )}
+                    {resultado.dado === 20 && resultado.valor === 1 && (
+                      <p className="text-xs font-bold text-red-400">FALHA CRÍTICA!</p>
+                    )}
+                  </>
+                ) : null}
               </div>
             )}
           </div>
 
-          {/* Atributos D&D 5e — colapsável */}
+          {/* Atributos D&D 5e */}
           <div className="mb-3 border-b border-zinc-800 pb-3">
             <button
               onClick={() => setAtributosAberto(a => !a)}
@@ -218,38 +289,37 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
 
             {atributosAberto && (
               <div className="mt-2 space-y-2">
-                {/* 6 scores em 2 colunas */}
                 <div className="grid grid-cols-3 gap-1">
                   {SCORES_DISPLAY.map(({ key, abrev }) => {
-                    const scoreVal = personagem[key] ?? 10;
-                    const isSaveProficient = save_profs.includes(SCORE_KEY_TO_SAVE[key]);
+                    const sv = scoreMap[key] ?? 10;
+                    const isSave = save_profs.includes(SCORE_KEY_TO_SAVE[key]);
                     return (
-                      <div
-                        key={key}
-                        className={`rounded border px-2 py-1 text-center ${
-                          isSaveProficient ? "border-violet-700/50 bg-violet-900/10" : "border-zinc-800 bg-zinc-800/50"
-                        }`}
-                      >
-                        <p className="text-[10px] text-zinc-500">{abrev}</p>
-                        <p className="text-sm font-bold text-zinc-200">{scoreVal}</p>
-                        <p className={`text-[10px] font-semibold ${isSaveProficient ? "text-violet-400" : "text-zinc-500"}`}>
-                          {fmod(scoreVal)}
+                      <div key={key} className={`rounded border px-2 py-1 text-center ${
+                        isSave ? "border-violet-700/50 bg-violet-900/10" : "border-zinc-800 bg-zinc-800/50"
+                      }`}>
+                        <p className="text-[10px] text-zinc-500">{abrev}{isSave ? " ★" : ""}</p>
+                        <p className="text-sm font-bold text-zinc-200">{sv}</p>
+                        <p className={`text-[10px] font-semibold ${isSave ? "text-violet-400" : "text-zinc-500"}`}>
+                          {fmod(sv)}
                         </p>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Perícias proficientes com modificador total */}
+                <div className="flex items-center gap-3 text-xs text-zinc-500">
+                  <span>CA {10 + fmodNum(dex_score)}</span>
+                  <span>Proef +{profBon}</span>
+                </div>
+
                 {skill_profs.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[10px] text-zinc-600 uppercase tracking-wider">Perícias</p>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">Perícias</p>
                     <div className="space-y-0.5">
                       {skill_profs.map(sk => {
-                        const scoreKey = PERICIA_SCORE[sk] ?? "int_score";
-                        const scoreVal = personagem[scoreKey] ?? 10;
-                        const prof = Math.floor((player_level ?? 3 - 1) / 4) + 2;
-                        const total = fmodNum(scoreVal) + prof;
+                        const scoreKey = PERICIA_SCORE[sk] as string ?? "int_score";
+                        const sv = scoreMap[scoreKey] ?? 10;
+                        const total = fmodNum(sv) + profBon;
                         return (
                           <div key={sk} className="flex justify-between text-xs">
                             <span className="text-zinc-400">{sk}</span>
@@ -263,16 +333,14 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
                   </div>
                 )}
 
-                {/* Saves proficientes */}
                 {save_profs.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[10px] text-zinc-600 uppercase tracking-wider">Saves</p>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">Saves</p>
                     <div className="flex flex-wrap gap-1.5">
                       {save_profs.map(sv => {
                         const scoreKey = Object.entries(SCORE_KEY_TO_SAVE).find(([, a]) => a === sv)?.[0];
-                        const scoreVal = scoreKey ? (personagem[scoreKey as keyof typeof personagem] as number ?? 10) : 10;
-                        const prof = Math.floor((player_level ?? 3 - 1) / 4) + 2;
-                        const total = fmodNum(scoreVal) + prof;
+                        const scoreVal = scoreKey ? (scoreMap[scoreKey] ?? 10) : 10;
+                        const total = fmodNum(scoreVal) + profBon;
                         return (
                           <span key={sv} className="rounded bg-violet-900/30 px-1.5 py-0.5 text-[10px] text-violet-300">
                             {sv} {total >= 0 ? `+${total}` : `${total}`}
@@ -286,7 +354,43 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
             )}
           </div>
 
-          {/* Inventário — colapsável separado */}
+          {/* Condições */}
+          <div className="mb-3 border-b border-zinc-800 pb-3">
+            <button
+              onClick={() => setCondicoesAberto(a => !a)}
+              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+            >
+              <span>
+                Condições
+                {condicoes.length > 0 && (
+                  <span className="ml-1.5 rounded bg-orange-900/40 px-1.5 py-0.5 text-[10px] text-orange-400">
+                    {condicoes.length}
+                  </span>
+                )}
+              </span>
+              <span>{condicoesAberto ? "▲" : "▼"}</span>
+            </button>
+
+            {condicoesAberto && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {CONDICOES_DND.map(cond => (
+                  <button
+                    key={cond}
+                    onClick={() => toggleCondicao(cond)}
+                    className={`rounded-lg border px-2 py-1 text-[11px] transition ${
+                      condicoes.includes(cond)
+                        ? "border-orange-600/60 bg-orange-900/30 text-orange-300"
+                        : "border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {cond}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Inventário */}
           <div>
             <button
               onClick={() => setInventarioAberto(a => !a)}
@@ -298,7 +402,6 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
 
             {inventarioAberto && (
               <div className="mt-2 space-y-2">
-                {/* Campo para adicionar */}
                 <div className="flex gap-1.5">
                   <input
                     value={novoItem}
@@ -313,26 +416,20 @@ export function CharacterSheet({ personagem, onRolar }: Props) {
                     onClick={adicionarItem}
                     disabled={!novoItem.trim() || itens.length >= MAX_ITENS}
                     className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-30"
-                  >
-                    +
-                  </button>
+                  >+</button>
                 </div>
 
-                {/* Lista de itens */}
                 {itens.length === 0 ? (
                   <p className="text-xs text-zinc-700">Nenhum item.</p>
                 ) : (
-                  <ul className="space-y-1 max-h-32 overflow-y-auto">
+                  <ul className="max-h-32 space-y-1 overflow-y-auto">
                     {itens.map((item, idx) => (
                       <li key={idx} className="flex items-center justify-between gap-1">
                         <span className="truncate text-xs text-zinc-400">{item}</span>
                         <button
                           onClick={() => removerItem(idx)}
                           className="shrink-0 text-xs text-zinc-700 transition hover:text-red-400"
-                          title="Remover"
-                        >
-                          ×
-                        </button>
+                        >×</button>
                       </li>
                     ))}
                   </ul>

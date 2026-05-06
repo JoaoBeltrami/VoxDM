@@ -39,6 +39,24 @@ log = structlog.get_logger()
 # Tipos de erro que justificam retry no Groq
 _ERROS_RETRY = (APIConnectionError, APITimeoutError, InternalServerError, RateLimitError)
 
+# Prefixos de recusa de conteúdo — o Groq retorna 200 OK com texto de recusa
+# em vez de erro de API. Precisamos detectar e fazer fallback para Ollama.
+_PREFIXOS_RECUSA = (
+    "não posso", "não é possível", "lamento", "desculpe-me",
+    "não consigo", "não devo", "não é apropriado", "não é adequado",
+    "i cannot", "i'm unable", "i'm sorry", "i can't", "i must decline",
+    "i won't", "i'm not able", "as an ai", "como ia ", "como modelo",
+    "como assistente", "preciso esclarecer", "devo informar",
+)
+
+_BUFFER_RECUSA = 120  # chars a coletar antes de checar recusa no stream
+
+
+def _e_recusa(texto: str) -> bool:
+    """Retorna True se o texto parece recusa de conteúdo do safety layer."""
+    txt = texto.lower().strip()
+    return any(txt.startswith(p) for p in _PREFIXOS_RECUSA)
+
 
 def _logar_tentativa(retry_state: RetryCallState) -> None:
     log.warning(
@@ -155,6 +173,9 @@ class GroqClient:
 
         try:
             texto = await self._chamar_groq(mensagens, temperatura, max_tokens)
+            if _e_recusa(texto):
+                log.warning("groq_recusa_conteudo_detectada", preview=texto[:80])
+                raise RuntimeError("groq_recusa")
             log.info("groq_resposta_ok", tokens_estimados=len(texto.split()))
             return texto
         except Exception as erro_groq:
@@ -197,7 +218,40 @@ class GroqClient:
             max_tokens=max_tokens,
             stream=True,
         )
+
+        # Bufferiza os primeiros _BUFFER_RECUSA chars antes de emitir,
+        # para detectar recusa do safety layer e fazer fallback para Ollama.
+        buffer = ""
+        buffer_liberado = False
+        chunks_pendentes: list[str] = []
+
         async for chunk in stream:
             delta = chunk.choices[0].delta.content
-            if delta:
+            if not delta:
+                continue
+
+            if not buffer_liberado:
+                buffer += delta
+                chunks_pendentes.append(delta)
+                if len(buffer) >= _BUFFER_RECUSA:
+                    buffer_liberado = True
+                    if _e_recusa(buffer):
+                        log.warning("groq_recusa_stream_detectada", preview=buffer[:80])
+                        async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                            yield token
+                        return
+                    for c in chunks_pendentes:
+                        yield c
+                    chunks_pendentes.clear()
+            else:
                 yield delta
+
+        # Stream terminou antes de acumular _BUFFER_RECUSA chars
+        if not buffer_liberado:
+            if _e_recusa(buffer):
+                log.warning("groq_recusa_stream_curto", preview=buffer[:80])
+                async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                    yield token
+            else:
+                for c in chunks_pendentes:
+                    yield c

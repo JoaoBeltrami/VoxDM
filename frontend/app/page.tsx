@@ -32,7 +32,8 @@ function lerVozStorage(): string {
 export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
-    historico, erro, conectar, enviarComando, desconectar, pararAudio,
+    historico, erro, reconectando, conectar, enviarComando, desconectar,
+    sincronizarEstado, pararAudio,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -99,6 +100,7 @@ export default function Home() {
             }`} />
             <span className="text-xs text-zinc-500">
               {sessionId}{playerName ? ` · ${playerName}` : ""}
+              {reconectando && <span className="ml-2 text-yellow-500">reconectando...</span>}
             </span>
           </div>
 
@@ -112,7 +114,12 @@ export default function Home() {
           </button>
         </header>
 
-        <CharacterSheet personagem={personagem} onRolar={enviarComando} />
+        <CharacterSheet
+          personagem={personagem}
+          onRolar={enviarComando}
+          onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
+          onSyncConditions={(conditions) => sincronizarEstado("sync_conditions", { conditions })}
+        />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {historico.length === 0 && !respostaAtual && (

@@ -35,9 +35,11 @@ log = structlog.get_logger(__name__)
 # Constantes
 # ---------------------------------------------------------------------------
 
-WHISPER_MODEL: str = "small"      # Melhor qualidade PT-BR; RTX 2060 Super suporta confortavelmente
-COMPUTE_DEVICE: str = "cuda"      # RTX 2060 Super
-COMPUTE_TYPE: str = "float16"     # Otimizado para GPU Nvidia — reduz VRAM e latência
+from config import settings as _settings  # noqa: E402 — import aqui evita circular
+
+WHISPER_MODEL: str = _settings.STT_MODEL    # lido de config (default "small")
+COMPUTE_DEVICE: str = _settings.STT_DEVICE  # lido de config (default "cuda")
+COMPUTE_TYPE: str = "float16"               # sempre float16 em GPU Nvidia
 
 # Duração de silêncio que encerra um utterance (em segundos)
 POST_SPEECH_SILENCE: float = 0.7  # 700ms — balanceia naturalidade e responsividade

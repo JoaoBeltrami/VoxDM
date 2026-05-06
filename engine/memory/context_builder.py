@@ -66,6 +66,10 @@ class ContextBuilder:
         """Carrega e cacheia o schema do módulo em memória."""
         if self._schema_cache is None:
             caminho = Path(settings.DEFAULT_MODULE_PATH)
+            # Resolve paths relativos à raiz do projeto (onde config.py está)
+            if not caminho.is_absolute():
+                _raiz = Path(__file__).parent.parent.parent
+                caminho = _raiz / settings.DEFAULT_MODULE_PATH.lstrip("./")
             if not caminho.exists():
                 log.error("schema_nao_encontrado", path=str(caminho))
                 self._schema_cache = {}
@@ -347,8 +351,13 @@ class ContextBuilder:
         relacoes: list[dict[str, Any]] = []
         for entidade_id in ids_para_grafo[:4]:  # cap em 4 para não sobrecarregar
             try:
-                rels = await self._neo4j.buscar_relacionamentos(entidade_id)
+                rels = await asyncio.wait_for(
+                    self._neo4j.buscar_relacionamentos(entidade_id),
+                    timeout=2.0,
+                )
                 relacoes.extend(rels)
+            except asyncio.TimeoutError:
+                log.warning("neo4j_timeout", entidade=entidade_id)
             except Exception as e:
                 log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
 

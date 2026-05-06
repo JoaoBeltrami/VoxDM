@@ -15,26 +15,44 @@ Exemplo:
 
 import re
 
-# Verbos de ação positiva em relação a NPCs (ajuda, cura, defesa, presente)
+# Verbos de ação positiva em relação a NPCs (ajuda, cura, defesa, presente, aliança)
 _RE_POSITIVO = re.compile(
     r"\b(ajudo|ajudei|ajudar|salvo|salvei|salvar|protejo|protegi|proteger|"
     r"curo|curei|curar|defendo|defendi|defender|presenteio|presenteei|"
-    r"acordo|acord[oa]mos|faço as pazes|parceiro|aliado)\b",
+    r"acordo|acord[oa]mos|faço as pazes|parceiro|aliado|"
+    r"concordo|concordei|compartilho|compartilhei|"
+    r"dou|dei|ofereço|ofereci|ofertar|"
+    r"apoio|apoiei|apoiar|confio|confiei|confiar|"
+    r"consolo|consolei|consolar|"
+    r"prometo|prometi|prometer|juro|jurei|jurar|"
+    r"coopero|cooperei|cooperar|"
+    r"nego[cs]io|negociei|negociar|"
+    r"alian[cç]a|amizade|companheiro|parceria)\b",
     re.IGNORECASE,
 )
 
-# Verbos de traição, violência ou roubo contra NPCs
+# Verbos de traição, violência, roubo ou manipulação contra NPCs
 _RE_NEGATIVO = re.compile(
     r"\b(traio|trai|trair|ataco|ataquei|atacar|mato|matei|matar|roubo|"
-    r"roubei|roubar|minto|menti|mentir|ameaço|ameacei|ameaçar|golpeio|"
-    r"golpeei|firo|feri|apunhalo|apunhalei|assassino|assassinei)\b",
+    r"roubei|roubar|minto|menti|mentir|ameaço|ameac[eo]i|amea[cç]ar|golpeio|"
+    r"golpeei|firo|feri|apunhalo|apunhalei|assassino|assassinei|"
+    r"envenen[oa]|envenenei|envenenar|intoxic[ao]|intoxiquei|intoxicar|"
+    r"humilho|humilhei|humilhar|insulto|insultei|insultar|"
+    r"ignoro|ignorei|ignorar|desprezo|desprezei|desprezar|"
+    r"abandono|abandonei|abandonar|"
+    r"tro[ck]o|troquei|trocar|"
+    r"espio|espiei|espiar|espi[oa]no|"
+    r"manipulo|manipulei|manipular|"
+    r"extorqu[oe]|extorqui|extorquir|"
+    r"chantage[io]|chantagei|chantagear)\b",
     re.IGNORECASE,
 )
 
 # Revelação de segredo sem permissão — penaliza todos os NPCs presentes
 _RE_REVELAR_SEGREDO = re.compile(
     r"\b(revelo o segredo|conto o segredo|revelo tudo|entrego|"
-    r"denuncio|delato|traio a confiança)\b",
+    r"denuncio|delato|traio a confiança|conto tudo|entrego tudo|"
+    r"delato ele|delato ela|denuncio ele|denuncio ela)\b",
     re.IGNORECASE,
 )
 
