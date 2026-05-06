@@ -40,6 +40,9 @@ export interface MensagemWS {
   quest_stages?: Record<string, string>;
   active_quest_hooks?: string[];
   inventory?: string[];
+  location_nome?: string;
+  time_of_day?: string;
+  npcs_trust?: Record<string, number>;
 }
 
 export interface PersonagemConfig {

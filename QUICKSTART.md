@@ -36,7 +36,25 @@ make run-api
 - Acessa: `http://localhost:8000/docs` → Swagger com todos os endpoints
 - Confirmar: `curl localhost:8000/health` → `{"status":"ok"}`
 
-### Terminal B — Dashboard (deixar rodando)
+### Terminal B — Frontend Web (a interface principal)
+
+```bat
+cd frontend
+npm run dev
+```
+- Acessa: `http://localhost:3000`
+- Fluxo: **Menu → Nova Sessão → preencher ficha D&D → Entrar no Mundo**
+- Na tela de jogo: segurar o botão de microfone para falar com o mestre
+- A ficha D&D (atributos, HP, condições, inventário, quests) fica colapsável na barra lateral
+
+> **Primeira vez no frontend:**
+> ```bat
+> cd frontend
+> npm install
+> npm run dev
+> ```
+
+### Terminal C — Dashboard (opcional, debug)
 
 ```bat
 make debug
@@ -45,30 +63,28 @@ make debug
 - Mostra: diálogo, latência, chunks RAG em tempo real
 - Atualiza sozinho a cada 500ms
 
-### Terminal C — Voice Loop (a feature principal)
+---
+
+## Alternativa CLI (sem browser)
+
+Para testar sem a interface web, o voice loop usa microfone + speaker diretamente:
 
 ```bat
 uv run demo/voice_loop.py
 ```
 
-O loop faz: **microfone → STT → RAG → Groq → TTS → speaker**
-
 Variações úteis:
 ```bat
-REM Limitar a 5 ciclos (bom para testar)
+REM Limitar a 5 ciclos
 uv run demo/voice_loop.py --iteracoes 5
 
-REM Só TTS — sem microfone, sem GPU de STT (bom para testar pronúncia)
+REM Só TTS — sem microfone (bom para testar pronúncia)
 uv run demo/voice_loop.py --tts-apenas "Você lança Fáierbol!"
-
-REM Encerrar: Ctrl+C — mostra relatório de latência
 ```
 
 **O que esperar:**
 - Warmup ~10s na primeira vez (carrega embedder + conecta Qdrant/Neo4j/Groq)
 - Latência total alvo: **< 2000ms** por ciclo
-- Primeiro áudio alvo: **< 1200ms**
-- Ao falar "fireball" ou "bola de fogo" → pronúncia correta "Fáierbol"
 
 ---
 
@@ -87,12 +103,12 @@ python -m benchmark.run_retrieval
 ## Testar a API manualmente
 
 ```bat
-REM Criar sessão
+REM Criar sessão com personagem completo
 curl -s -X POST localhost:8000/session/start ^
   -H "Content-Type: application/json" ^
-  -d "{\"session_id\": \"sess-local-01\"}"
+  -d "{\"session_id\": \"sess-local-01\", \"player_name\": \"Bjorn\", \"player_race\": \"Humano\", \"player_class\": \"Guerreiro\", \"player_background\": \"Soldado\", \"location_id\": \"tharnvik\"}"
 
-REM Processar turno
+REM Processar turno (resposta síncrona — sem streaming)
 curl -s -X POST localhost:8000/session/sess-local-01/turn ^
   -H "Content-Type: application/json" ^
   -d "{\"texto\": \"Eu entro na taverna e procuro Fael Drevasson\"}"
@@ -100,9 +116,13 @@ curl -s -X POST localhost:8000/session/sess-local-01/turn ^
 REM Ver estado interno (requer DEBUG=True no .env)
 curl -s localhost:8000/debug/estado/sess-local-01
 
-REM Encerrar sessão
+REM Encerrar sessão (salva memória episódica)
 curl -s -X DELETE localhost:8000/session/sess-local-01
 ```
+
+> **Nota:** `player_name`, `player_race`, `player_class`, `player_background` e `location_id` são opcionais
+> na API mas obrigatórios no formulário do frontend. Sessões criadas via curl sem esses campos
+> terão mestre sem contexto de personagem.
 
 ---
 
@@ -112,10 +132,12 @@ curl -s -X DELETE localhost:8000/session/sess-local-01
 REM Instalar wscat (uma vez)
 npm install -g wscat
 
-REM Sessão precisa existir antes
+REM Sessão precisa existir antes (criar via curl acima)
 wscat -c ws://localhost:8000/ws/game/sess-local-01
+REM → digitar: {"tipo": "init"}
+REM ← mestre abre a sessão com narração de abertura
 REM → digitar: {"texto": "O que vejo ao entrar na sala do conselho?"}
-REM ← tokens chegam um a um, finaliza com {"tipo":"fim","latencia_ms":...}
+REM ← tokens chegam um a um; finaliza com {"tipo":"fim","latencia_ms":...}
 ```
 
 ---
@@ -126,9 +148,10 @@ REM ← tokens chegam um a um, finaliza com {"tipo":"fim","latencia_ms":...}
 REM Testa Groq + Qdrant + Neo4j de uma vez
 python connection_test.py
 
-REM Rodar todos os testes unitários
+REM Rodar testes unitários
 make test
-REM → 32/32 OK
+REM → 14 testes (trust_detector + context_builder + prompt_builder)
+REM    Para rodar a suite completa: uv pip install structlog fastapi httpx antes
 ```
 
 ---
@@ -144,15 +167,21 @@ REM → 32/32 OK
 | Neo4j `ServiceUnavailable` | AuraDB free pausado | Acessar console.neo4j.io e resumir |
 | `settings validation error` | `.env` incompleto | Checar campos obrigatórios em `.env.example` |
 | Latência > 2s | Cold start | Warmup automático — normal só no primeiro ciclo |
+| Frontend não conecta no WS | API não está rodando | Confirmar Terminal A com `make run-api` |
 
 ---
 
 ## Estrutura resumida
 
 ```
-voice_loop.py          ← entry point principal (voz completa)
+frontend/              ← interface web mobile-first (npm run dev → :3000)
+  app/page.tsx         ← menu, criação de personagem, tela de jogo
+  components/
+    CharacterSheet.tsx ← ficha D&D 5e com sync backend (HP, condições, inventário, quests)
+    VoiceButton.tsx    ← captura de voz e envio ao STT
+demo/voice_loop.py     ← alternativa CLI (voz completa sem browser)
 demo/query_demo.py     ← RAG sem voz (bom para debug)
-api/main.py            ← API HTTP/WebSocket (make run-api)
-dashboard.py           ← Streamlit de métricas (make debug)
+api/main.py            ← API HTTP/WebSocket (make run-api → :8000)
+dashboard.py           ← Streamlit de métricas (make debug → :8501)
 benchmark/             ← validação de retrieval
 ```

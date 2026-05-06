@@ -33,6 +33,7 @@ export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
     historico, erro, reconectando, questStages, activeQuests,
+    locationNome, timeOfDay, npcsTrust,
     conectar, enviarComando, desconectar, sincronizarEstado, pararAudio,
   } = useGameSession();
 
@@ -122,6 +123,9 @@ export default function Home() {
           onSyncInventory={(inventory) => sincronizarEstado("sync_inventory", { inventory })}
           questStages={questStages}
           activeQuests={activeQuests}
+          locationNome={locationNome}
+          timeOfDay={timeOfDay}
+          npcsTrust={npcsTrust}
         />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">

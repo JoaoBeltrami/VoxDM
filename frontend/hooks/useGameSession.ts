@@ -25,6 +25,9 @@ interface EstadoSessao {
   questStages: Record<string, string>;
   activeQuests: string[];
   inventory: string[];
+  locationNome: string;
+  timeOfDay: string;
+  npcsTrust: Record<string, number>;
 }
 
 const MAX_RECONNECTS = 3;
@@ -44,6 +47,9 @@ export function useGameSession() {
     questStages: {},
     activeQuests: [],
     inventory: [],
+    locationNome: "",
+    timeOfDay: "",
+    npcsTrust: {},
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -98,6 +104,9 @@ export function useGameSession() {
         const questStagesAtual = msg.quest_stages ?? {};
         const activeQuestsAtual = msg.active_quest_hooks ?? [];
         const inventoryAtual = msg.inventory ?? [];
+        const locationNomeAtual = msg.location_nome ?? "";
+        const timeOfDayAtual = msg.time_of_day ?? "";
+        const npcsTrustAtual = msg.npcs_trust ?? {};
 
         if (turno) {
           setEstado(s => ({
@@ -106,6 +115,9 @@ export function useGameSession() {
             questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
             activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
             inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
+            locationNome: locationNomeAtual || s.locationNome,
+            timeOfDay: timeOfDayAtual || s.timeOfDay,
+            npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : s.npcsTrust,
             historico: [
               ...s.historico,
               {
@@ -125,6 +137,9 @@ export function useGameSession() {
             questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
             activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
             inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
+            locationNome: locationNomeAtual || s.locationNome,
+            timeOfDay: timeOfDayAtual || s.timeOfDay,
+            npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : s.npcsTrust,
             historico: [
               ...s.historico,
               {
@@ -222,6 +237,9 @@ export function useGameSession() {
       questStages: {},
       activeQuests: [],
       inventory: [],
+      locationNome: "",
+      timeOfDay: "",
+      npcsTrust: {},
     }));
   }, [pararTudo]);
 

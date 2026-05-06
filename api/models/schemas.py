@@ -120,3 +120,6 @@ class MensagemWS(BaseModel):
     quest_stages: dict[str, str] = Field(default_factory=dict)
     active_quest_hooks: list[str] = Field(default_factory=list)
     inventory: list[str] = Field(default_factory=list)
+    location_nome: str = ""
+    time_of_day: str = ""
+    npcs_trust: dict[str, int] = Field(default_factory=dict)  # npc_id → trust (0-3)

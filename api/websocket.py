@@ -171,6 +171,9 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             quest_stages=wm.quest_stages,
             active_quest_hooks=wm.active_quest_hooks,
             inventory=wm.player_inventory,
+            location_nome=wm.location_nome,
+            time_of_day=wm.time_of_day,
+            npcs_trust={npc: wm.trust_levels.get(npc, 0) for npc in wm.npcs_presentes},
         ).model_dump_json()
     )
 
@@ -344,6 +347,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     quest_stages=sessao.working_mem.quest_stages,
                     active_quest_hooks=sessao.working_mem.active_quest_hooks,
                     inventory=sessao.working_mem.player_inventory,
+                    location_nome=sessao.working_mem.location_nome,
+                    time_of_day=sessao.working_mem.time_of_day,
+                    npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 0) for npc in sessao.working_mem.npcs_presentes},
                 ).model_dump_json()
             )
 

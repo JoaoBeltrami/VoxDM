@@ -9,7 +9,7 @@ run: run-api
 run-api:
 	$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-test: ingest
+test:
 	$(PYTEST) tests/ -v
 
 ingest:

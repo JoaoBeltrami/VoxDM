@@ -11,6 +11,9 @@ interface Props {
   onSyncInventory?: (items: string[]) => void;
   questStages?: Record<string, string>;
   activeQuests?: string[];
+  locationNome?: string;
+  timeOfDay?: string;
+  npcsTrust?: Record<string, number>;
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -59,15 +62,22 @@ function rolar(faces: number): number {
   return Math.floor(Math.random() * faces) + 1;
 }
 
+const TRUST_LABEL: Record<number, string> = { 0: "Neutro", 1: "Amigável", 2: "Confiante", 3: "Aliado" };
+const TRUST_COLOR: Record<number, string> = {
+  0: "text-zinc-500", 1: "text-emerald-500", 2: "text-violet-400", 3: "text-yellow-400",
+};
+
 export function CharacterSheet({
   personagem, onRolar, onSyncHP, onSyncConditions, onSyncInventory,
   questStages = {}, activeQuests = [],
+  locationNome, timeOfDay, npcsTrust = {},
 }: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const [condicoesAberto, setCondicoesAberto] = useState(false);
   const [questsAberto, setQuestsAberto] = useState(false);
+  const [npcsAberto, setNpcsAberto] = useState(false);
 
   // HP local
   const [hpAtual, setHpAtual] = useState<number>(personagem.player_hp ?? 0);
@@ -201,6 +211,11 @@ export function CharacterSheet({
             </p>
             {player_background && (
               <p className="mt-0.5 text-xs text-zinc-600">Background: {player_background}</p>
+            )}
+            {locationNome && (
+              <p className="mt-1.5 text-xs text-zinc-500">
+                📍 {locationNome}{timeOfDay ? ` · ${timeOfDay}` : ""}
+              </p>
             )}
           </div>
 
@@ -400,6 +415,40 @@ export function CharacterSheet({
               </div>
             )}
           </div>
+
+          {/* NPCs presentes */}
+          {Object.keys(npcsTrust).length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <button
+                onClick={() => setNpcsAberto(a => !a)}
+                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <span>
+                  NPCs na cena
+                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                    {Object.keys(npcsTrust).length}
+                  </span>
+                </span>
+                <span>{npcsAberto ? "▲" : "▼"}</span>
+              </button>
+
+              {npcsAberto && (
+                <div className="mt-2 space-y-1">
+                  {Object.entries(npcsTrust).map(([npcId, trust]) => {
+                    const nome = npcId.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                    return (
+                      <div key={npcId} className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-400">{nome}</span>
+                        <span className={`text-[10px] font-medium ${TRUST_COLOR[trust] ?? "text-zinc-500"}`}>
+                          {TRUST_LABEL[trust] ?? trust}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Quests */}
           {activeQuests.length > 0 && (
