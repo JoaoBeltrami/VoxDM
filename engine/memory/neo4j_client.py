@@ -161,7 +161,7 @@ class Neo4jMemoryClient:
         na transcrição e precisa enriquecer o contexto de todas de uma vez.
 
         Args:
-            ids: Lista de IDs kebab-case (ex: ["bjorn-tharnsson", "aldeia-valdrek"]).
+            ids: Lista de IDs kebab-case (ex: ["bjorn-tharnsson", "tharnvik"]).
 
         Returns:
             Lista de dicts com propriedades de cada nó encontrado.

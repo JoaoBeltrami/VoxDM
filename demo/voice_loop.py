@@ -359,8 +359,8 @@ async def main() -> None:
     parser.add_argument(
         "--location-id",
         type=str,
-        default="aldeia-valdrek",
-        help="ID kebab-case do local inicial (padrão: aldeia-valdrek)",
+        default="tharnvik",
+        help="ID kebab-case do local inicial (padrão: tharnvik)",
     )
     parser.add_argument(
         "--location-nome",

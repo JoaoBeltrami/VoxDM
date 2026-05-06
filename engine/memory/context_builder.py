@@ -23,7 +23,7 @@ from typing import Any
 import structlog
 
 from config import settings
-from engine.llm.prompt_builder import ContextoMontado, SecretVisivel, _RE_ROLAGEM, _RE_COMBATE
+from engine.llm.types import ContextoMontado, SecretVisivel, RE_ROLAGEM as _RE_ROLAGEM, RE_COMBATE as _RE_COMBATE
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.qdrant_client import QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory

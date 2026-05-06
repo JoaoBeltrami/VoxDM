@@ -26,8 +26,8 @@ from engine.memory.working_memory import WorkingMemory
 @pytest.fixture
 def working_mem() -> WorkingMemory:
     return WorkingMemory.nova_sessao(
-        location_id="aldeia-valdrek",
-        location_nome="Aldeia de Valdrek",
+        location_id="tharnvik",
+        location_nome="Tharnvik",
         session_id="test-01",
     )
 
@@ -40,7 +40,7 @@ def schema_simples() -> dict:
             {"id": "bjorn-tharnsson",  "name": "Bjorn Tharnsson",  "role": "guerreiro"},
         ],
         "locations": [
-            {"id": "aldeia-valdrek", "name": "Aldeia de Valdrek"},
+            {"id": "tharnvik", "name": "Tharnvik"},
         ],
         "companions": [],
         "entities": [],
@@ -130,8 +130,8 @@ def test_nao_extrai_nome_curto_demais(builder_com_schema):
 
 
 def test_extrai_localizacao_mencionada(builder_com_schema):
-    ids = builder_com_schema._extrair_entidades_mencionadas("vou para a Aldeia de Valdrek")
-    assert "aldeia-valdrek" in ids
+    ids = builder_com_schema._extrair_entidades_mencionadas("vou para Tharnvik")
+    assert "tharnvik" in ids
 
 
 def test_transcricao_sem_entidades(builder_com_schema):

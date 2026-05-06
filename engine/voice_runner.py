@@ -11,7 +11,7 @@ Armadilha: STT deve ser silenciado antes do primeiro áudio e reativado após o
     ciclo duplicado.
 
 Exemplo:
-    runner = VoiceRunner(session_id="sess-01", location_id="aldeia-valdrek")
+    runner = VoiceRunner(session_id="sess-01", location_id="tharnvik")
     await runner.run()
     # → loop interativo no microfone até Ctrl+C
 """

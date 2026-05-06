@@ -84,7 +84,7 @@ async def _query_context_builder(texto: str) -> dict[str, Any]:
     from engine.memory.context_builder import ContextBuilder
     from engine.memory.working_memory import WorkingMemory
 
-    wm = WorkingMemory.nova_sessao("aldeia-valdrek", "Aldeia de Valdrek", "demo-query")
+    wm = WorkingMemory.nova_sessao("tharnvik", "Tharnvik", "demo-query")
     cb = ContextBuilder()
 
     t0 = time.perf_counter()

@@ -212,11 +212,11 @@ with tab_debug:
                 async def _ping_neo4j():
                     from engine.memory.neo4j_client import Neo4jMemoryClient
                     async with Neo4jMemoryClient() as c:
-                        return await c.buscar_npcs_no_local("aldeia-valdrek")
+                        return await c.buscar_npcs_no_local("tharnvik")
                 npcs = _rodar(_ping_neo4j())
                 ms = int((time.perf_counter() - inicio) * 1000)
                 st.success(f"OK — {ms}ms")
-                st.caption(f"NPCs em aldeia-valdrek: {len(npcs)}")
+                st.caption(f"NPCs em tharnvik: {len(npcs)}")
             except Exception as e:
                 st.error(str(e))
 

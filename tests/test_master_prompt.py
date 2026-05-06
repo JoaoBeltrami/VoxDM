@@ -41,8 +41,8 @@ from engine.llm.prompt_builder import ContextoMontado
 def _contexto_minimo(transcricao: str = "Eu olho ao redor") -> ContextoMontado:
     """Cria um ContextoMontado mínimo para testes."""
     wm = WorkingMemory.nova_sessao(
-        location_id="aldeia-valdrek",
-        location_nome="Aldeia de Valdrek",
+        location_id="tharnvik",
+        location_nome="Tharnvik",
         session_id="test-session",
     )
     return ContextoMontado(
@@ -310,8 +310,8 @@ def test_montar_mensagens_sem_combate_nao_injeta_combat_md():
 def test_montar_mensagens_em_combate_ativo_injeta_combat_md():
     invalidar_cache()
     wm = WorkingMemory.nova_sessao(
-        location_id="aldeia-valdrek",
-        location_nome="Aldeia de Valdrek",
+        location_id="tharnvik",
+        location_nome="Tharnvik",
         session_id="test-session",
     )
     wm.entrar_combate()

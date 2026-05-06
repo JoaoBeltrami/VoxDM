@@ -12,14 +12,21 @@ Exemplo:
     # → [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
 """
 
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import structlog
 
-from engine.memory.working_memory import WorkingMemory
+from engine.llm.types import (
+    ContextoMontado,
+    SecretVisivel,
+    RE_ROLAGEM as _RE_ROLAGEM,
+    RE_COMBATE as _RE_COMBATE,
+)
+
+# Re-exportados para compatibilidade com importações existentes
+__all__ = ["ContextoMontado", "SecretVisivel", "montar_mensagens", "invalidar_cache",
+           "validar_master_system", "_RE_ROLAGEM", "_RE_COMBATE", "_LEMBRETE_SAIDA"]
 
 log = structlog.get_logger()
 
@@ -32,16 +39,6 @@ _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 _master_system_cache: str | None = None
 _dice_cache: str | None = None
 _combat_cache: str | None = None
-
-# Detecta o formato [Rolagem: dX = Y] enviado pelo CharacterSheet
-_RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
-
-# Detecta ação de combate no texto do jogador (verbos e substantivos de conflito físico)
-_RE_COMBATE = re.compile(
-    r"\b(atac[oa]r?|golpe[io]+|firo|fere[i]?|mato|luto|combate|inimigo|espada|adaga|"
-    r"arco|flecha|magia|feitiço|briga|soco|chuto|defendo|paro o golpe|escudo)\b",
-    re.IGNORECASE,
-)
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
@@ -69,26 +66,6 @@ _LEMBRETE_SAIDA = (
     "Comece DIRETO com a narração — sem prefácio, sem explicação, sem recusa."
 )
 
-
-@dataclass
-class SecretVisivel:
-    """Secret que o context_builder decidiu que pode ser revelado (total ou parcialmente)."""
-    npc_id: str
-    content: str
-    lie_content: str | None   # None → NPC esquiva; str → NPC mente com este texto
-    revelar: bool             # True → content; False → lie_content ou evasão
-
-
-@dataclass
-class ContextoMontado:
-    """Saída do context_builder — tudo que o prompt_builder precisa."""
-    working_memory: WorkingMemory
-    chunks_semanticos: list[dict[str, Any]]      # do voxdm_modules
-    chunks_episodicos: list[dict[str, Any]]      # sessões anteriores
-    chunks_regras: list[dict[str, Any]]          # do voxdm_rules (SRD)
-    relacoes_grafo: list[dict[str, Any]]         # do Neo4j
-    secrets_visiveis: list[SecretVisivel]
-    transcricao_atual: str
 
 
 def _carregar_master_system() -> str:

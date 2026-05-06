@@ -8,7 +8,7 @@ Armadilha: session_id deve estar em kebab-case — pattern ^[a-z0-9-]+$ validado
     Não aceitar IDs com underscores ou maiúsculas para manter consistência com o schema.
 
 Exemplo:
-    config = SessaoConfig(session_id="sess-01", location_id="aldeia-valdrek")
+    config = SessaoConfig(session_id="sess-01", location_id="tharnvik")
     cmd = ComandoJogador(texto="Eu quero falar com Fael")
     resp = RespostaMestre(texto="Fael franze o cenho...", latencia_ms=820, iteracao=1)
 """

@@ -74,7 +74,7 @@ async def _medir_ciclo(
     from engine.llm.prompt_builder import montar_mensagens
     from engine.memory.working_memory import WorkingMemory
 
-    working_mem = WorkingMemory.nova_sessao("aldeia-valdrek", "Aldeia de Valdrek", "bench-e2e")
+    working_mem = WorkingMemory.nova_sessao("tharnvik", "Tharnvik", "bench-e2e")
     working_mem.registrar_fala("player", texto)
 
     t0 = time.perf_counter()
