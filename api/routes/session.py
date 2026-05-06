@@ -90,6 +90,14 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         player_background=config.player_background,
         player_level=config.player_level,
         tts_voice=config.tts_voice,
+        str_score=config.str_score,
+        dex_score=config.dex_score,
+        con_score=config.con_score,
+        int_score=config.int_score,
+        wis_score=config.wis_score,
+        cha_score=config.cha_score,
+        skill_profs=list(config.skill_profs),
+        save_profs=list(config.save_profs),
     )
 
     context_builder = ContextBuilder()

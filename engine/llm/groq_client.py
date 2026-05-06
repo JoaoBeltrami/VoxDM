@@ -1,13 +1,13 @@
 """
-Cliente Groq com fallback automático para Ollama local.
+Cliente LLM: Groq (primário) ou Ollama local (sem filtros).
 
 Por que existe: centraliza todas as chamadas ao LLM de jogo com retry,
     timeout e fallback — o context_builder e o prompt_builder nunca
-    chamam o Groq diretamente.
+    chamam o LLM diretamente.
 Dependências: groq, httpx, tenacity, structlog, config
-Armadilha: o fallback Ollama usa httpx puro (não SDK), retornando texto
-    bruto — normalizar o retorno para string em ambos os caminhos antes
-    de devolver ao chamador.
+Armadilha: o Groq retorna recusas como respostas bem-sucedidas — o fallback
+    automático não dispara em recusas de conteúdo. Use LLM_BACKEND=ollama
+    no .env para usar Ollama como primário (sem filtros de conteúdo).
 
 Exemplo:
     cliente = GroqClient()
@@ -18,6 +18,7 @@ Exemplo:
     # → "A taverna está tomada por fumaça de cachimbo..."
 """
 
+import json
 from typing import AsyncIterator
 
 import httpx
@@ -48,7 +49,7 @@ def _logar_tentativa(retry_state: RetryCallState) -> None:
 
 
 class GroqClient:
-    """Cliente LLM com Groq primário e Ollama como fallback."""
+    """Cliente LLM com Groq primário e Ollama como fallback (ou primário via LLM_BACKEND)."""
 
     def __init__(self) -> None:
         self._groq: AsyncGroq | None = None
@@ -86,14 +87,14 @@ class GroqClient:
         temperatura: float,
         max_tokens: int,
     ) -> str:
-        """Fallback Ollama via httpx quando Groq está indisponível."""
+        """Ollama via httpx — sem filtros de conteúdo."""
         payload = {
             "model": settings.OLLAMA_MODEL,
             "messages": mensagens,
             "options": {"temperature": temperatura, "num_predict": max_tokens},
             "stream": False,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resposta = await client.post(
                 f"{settings.OLLAMA_BASE_URL}/api/chat",
                 json=payload,
@@ -102,6 +103,39 @@ class GroqClient:
             dados = resposta.json()
             return str(dados.get("message", {}).get("content", ""))
 
+    async def _chamar_ollama_stream(
+        self,
+        mensagens: list[dict[str, str]],
+        temperatura: float,
+        max_tokens: int,
+    ) -> AsyncIterator[str]:
+        """Ollama streaming via httpx — yield de tokens conforme chegam."""
+        payload = {
+            "model": settings.OLLAMA_MODEL,
+            "messages": mensagens,
+            "options": {"temperature": temperatura, "num_predict": max_tokens},
+            "stream": True,
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+            ) as resposta:
+                resposta.raise_for_status()
+                async for linha in resposta.aiter_lines():
+                    if not linha.strip():
+                        continue
+                    try:
+                        dados = json.loads(linha)
+                        token = dados.get("message", {}).get("content", "")
+                        if token:
+                            yield token
+                        if dados.get("done"):
+                            break
+                    except json.JSONDecodeError:
+                        continue
+
     async def completar(
         self,
         mensagens: list[dict[str, str]],
@@ -109,11 +143,16 @@ class GroqClient:
         max_tokens: int = 1024,
     ) -> str:
         """
-        Gera uma resposta do LLM com fallback automático.
+        Gera uma resposta do LLM.
 
-        Tenta Groq primeiro. Se falhar após retries, cai para Ollama local.
-        Retorna string com a resposta do modelo.
+        Se LLM_BACKEND=ollama, usa Ollama direto (sem filtros).
+        Se LLM_BACKEND=groq (default), tenta Groq e cai para Ollama se falhar.
         """
+        if settings.LLM_BACKEND == "ollama":
+            texto = await self._chamar_ollama(mensagens, temperatura, max_tokens)
+            log.info("ollama_resposta_ok", tokens_estimados=len(texto.split()))
+            return texto
+
         try:
             texto = await self._chamar_groq(mensagens, temperatura, max_tokens)
             log.info("groq_resposta_ok", tokens_estimados=len(texto.split()))
@@ -141,9 +180,16 @@ class GroqClient:
         max_tokens: int = 1024,
     ) -> AsyncIterator[str]:
         """
-        Versão streaming — yield de tokens conforme chegam do Groq.
-        Sem fallback Ollama: streaming requer Groq disponível.
+        Versão streaming — yield de tokens conforme chegam.
+
+        Se LLM_BACKEND=ollama, usa Ollama streaming (sem filtros).
+        Se LLM_BACKEND=groq (default), usa Groq streaming.
         """
+        if settings.LLM_BACKEND == "ollama":
+            async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                yield token
+            return
+
         stream = await self._get_groq().chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=mensagens,  # type: ignore[arg-type]

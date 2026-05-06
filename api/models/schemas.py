@@ -22,8 +22,8 @@ class SessaoConfig(BaseModel):
     """Parâmetros para iniciar uma nova sessão de jogo."""
 
     session_id: str = Field(..., pattern=r"^[a-z0-9-]+$", description="ID em kebab-case")
-    location_id: str = "aldeia-valdrek"
-    location_nome: str = "Aldeia de Valdrek"
+    location_id: str = "drevamor"
+    location_nome: str = "Drevamor"
     time_of_day: str = "noite"
     weather: str = "frio"
     player_hp: int = Field(default=30, ge=1, le=999)
@@ -38,6 +38,16 @@ class SessaoConfig(BaseModel):
     session_anterior_id: str | None = None
     # Voz Edge TTS escolhida pelo jogador nas Opções
     tts_voice: str = "pt-BR-FranciscaNeural"
+    # Atributos D&D 5e (Standard Array padrão)
+    str_score: int = Field(default=10, ge=3, le=20)
+    dex_score: int = Field(default=10, ge=3, le=20)
+    con_score: int = Field(default=10, ge=3, le=20)
+    int_score: int = Field(default=10, ge=3, le=20)
+    wis_score: int = Field(default=10, ge=3, le=20)
+    cha_score: int = Field(default=10, ge=3, le=20)
+    # Proficiências derivadas de classe + background
+    skill_profs: list[str] = Field(default_factory=list)
+    save_profs: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":

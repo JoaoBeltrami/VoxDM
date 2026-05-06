@@ -219,13 +219,25 @@ export default function Home() {
             <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-300">{erro}</p>
           )}
 
-          <button
-            onClick={handleConectar}
-            disabled={carregando}
-            className="w-full rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-40"
-          >
-            {carregando ? "Conectando…" : "Entrar no Mundo"}
-          </button>
+          {(() => {
+            const pronto = !!(
+              personagem.player_name?.trim() &&
+              personagem.player_class &&
+              personagem.player_race &&
+              personagem.player_background &&
+              personagem.location_id
+            );
+            return (
+              <button
+                onClick={handleConectar}
+                disabled={carregando || !pronto}
+                title={!pronto ? "Preencha nome, raça, classe, background e local de início" : undefined}
+                className="w-full rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {carregando ? "Conectando…" : "Entrar no Mundo"}
+              </button>
+            );
+          })()}
         </div>
       </main>
     );

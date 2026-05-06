@@ -21,6 +21,16 @@ from dataclasses import dataclass, field
 
 MAX_DIALOGOS = 8  # últimas N trocas mantidas em RAM
 
+# Mapeamento de perícia D&D 5e → atributo abreviado (usado em para_texto)
+_PERICIA_ATRIBUTO: dict[str, str] = {
+    "Acrobacia": "des", "Adestrar Animais": "sab", "Arcanismo": "int",
+    "Atletismo": "for", "Enganação": "car", "História": "int",
+    "Intuição": "sab", "Intimidação": "car", "Investigação": "int",
+    "Medicina": "sab", "Natureza": "int", "Percepção": "sab",
+    "Atuação": "car", "Persuasão": "car", "Religião": "int",
+    "Prestidigitação": "des", "Furtividade": "des", "Sobrevivência": "sab",
+}
+
 
 def _id_para_nome(id_kebab: str) -> str:
     """Converte 'fael-valdreksson' → 'Fael Valdreksson'."""
@@ -85,6 +95,17 @@ class WorkingMemory:
     # Sinaliza cena de combate ativo — ativa injeção de combat.md no prompt
     em_combate: bool = False
 
+    # Atributos D&D 5e — Standard Array [15,14,13,12,10,8] atribuído na criação
+    str_score: int = 10
+    dex_score: int = 10
+    con_score: int = 10
+    int_score: int = 10
+    wis_score: int = 10
+    cha_score: int = 10
+    # Proficiências derivadas de classe + background
+    skill_profs: list[str] = field(default_factory=list)
+    save_profs: list[str] = field(default_factory=list)
+
     @classmethod
     def nova_sessao(
         cls,
@@ -101,6 +122,14 @@ class WorkingMemory:
         player_background: str = "",
         player_level: int = 1,
         tts_voice: str = "pt-BR-FranciscaNeural",
+        str_score: int = 10,
+        dex_score: int = 10,
+        con_score: int = 10,
+        int_score: int = 10,
+        wis_score: int = 10,
+        cha_score: int = 10,
+        skill_profs: list[str] | None = None,
+        save_profs: list[str] | None = None,
     ) -> "WorkingMemory":
         """Cria uma WorkingMemory com estado inicial zerado."""
         return cls(
@@ -127,6 +156,14 @@ class WorkingMemory:
             session_id=session_id,
             tts_voice=tts_voice,
             em_combate=False,
+            str_score=str_score,
+            dex_score=dex_score,
+            con_score=con_score,
+            int_score=int_score,
+            wis_score=wis_score,
+            cha_score=cha_score,
+            skill_profs=skill_profs or [],
+            save_profs=save_profs or [],
         )
 
     def registrar_fala(self, falante: str, texto: str) -> None:
@@ -147,6 +184,34 @@ class WorkingMemory:
     def sair_combate(self) -> None:
         """Desativa modo combate quando a cena é resolvida."""
         self.em_combate = False
+
+    # ── Propriedades computadas D&D 5e (SRD) ─────────────────────────────────
+
+    @property
+    def prof_bonus(self) -> int:
+        return (self.player_level - 1) // 4 + 2
+
+    @property
+    def mod_for(self) -> int: return (self.str_score - 10) // 2
+    @property
+    def mod_des(self) -> int: return (self.dex_score - 10) // 2
+    @property
+    def mod_con(self) -> int: return (self.con_score - 10) // 2
+    @property
+    def mod_int(self) -> int: return (self.int_score - 10) // 2
+    @property
+    def mod_sab(self) -> int: return (self.wis_score - 10) // 2
+    @property
+    def mod_car(self) -> int: return (self.cha_score - 10) // 2
+
+    @property
+    def ca(self) -> int:
+        """CA base sem armadura. Bárbaro: +CON. Monge: +SAB."""
+        if self.player_class == "Bárbaro":
+            return 10 + self.mod_des + self.mod_con
+        if self.player_class == "Monge":
+            return 10 + self.mod_des + self.mod_sab
+        return 10 + self.mod_des
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado
@@ -196,6 +261,31 @@ class WorkingMemory:
             f"Hora: {self.time_of_day} | Clima: {self.weather}",
             f"HP: {self.player_hp}/{self.player_hp_max}",
         ]
+
+        _m = lambda v: f"+{v}" if v >= 0 else str(v)
+        linhas.append(
+            f"FOR {self.str_score}({_m(self.mod_for)}) "
+            f"DES {self.dex_score}({_m(self.mod_des)}) "
+            f"CON {self.con_score}({_m(self.mod_con)}) "
+            f"INT {self.int_score}({_m(self.mod_int)}) "
+            f"SAB {self.wis_score}({_m(self.mod_sab)}) "
+            f"CAR {self.cha_score}({_m(self.mod_car)})"
+        )
+        linhas.append(f"Proef +{self.prof_bonus} | CA {self.ca}")
+        if self.save_profs:
+            _save_mods = {
+                "FOR": self.mod_for, "DES": self.mod_des, "CON": self.mod_con,
+                "INT": self.mod_int, "SAB": self.mod_sab, "CAR": self.mod_car,
+            }
+            saves = [f"{s}({_m(_save_mods.get(s, 0) + self.prof_bonus)})" for s in self.save_profs]
+            linhas.append(f"Saves: {', '.join(saves)}")
+        if self.skill_profs:
+            skills = []
+            for sk in self.skill_profs:
+                attr = _PERICIA_ATRIBUTO.get(sk, "int")
+                total = getattr(self, f"mod_{attr}") + self.prof_bonus
+                skills.append(f"{sk}({_m(total)})")
+            linhas.append(f"Perícias: {', '.join(skills)}")
 
         if self.player_conditions:
             linhas.append(f"Condições: {', '.join(self.player_conditions)}")

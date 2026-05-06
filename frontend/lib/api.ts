@@ -47,8 +47,19 @@ export interface PersonagemConfig {
   player_level?: number;
   player_hp?: number;
   player_hp_max?: number;
+  location_id?: string;
+  location_nome?: string;
   session_anterior_id?: string;
   tts_voice?: string;
+  // D&D 5e ability scores
+  str_score?: number;
+  dex_score?: number;
+  con_score?: number;
+  int_score?: number;
+  wis_score?: number;
+  cha_score?: number;
+  skill_profs?: string[];
+  save_profs?: string[];
 }
 
 export async function criarSessao(

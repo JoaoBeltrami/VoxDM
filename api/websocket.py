@@ -33,7 +33,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
-from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE
+from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE, _LEMBRETE_SAIDA
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
 
@@ -79,7 +79,7 @@ async def _sintetizar_e_enviar(
     if not texto.strip():
         return
     try:
-        log.info("tts_sintetizando", chars=len(texto), preview=texto[:80])
+        log.info("tts_sintetizando", chars=len(texto), preview=texto[:300])
         audio_bytes: bytes = await tts.sintetizar(texto, voice=voice)
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -115,40 +115,28 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     # Sinais de continuação: session restaurada pré-popula quest_stages do episódico
     eh_continuacao = bool(wm.quest_stages)
 
+    # Turno do usuário: apenas dados factuais — instruções ficam no system.
+    # Colocar instruções aqui faz o LLM ecoá-las no início da resposta.
     partes: list[str] = []
 
     if wm.player_name:
         classe_info = " ".join(filter(None, [wm.player_race, wm.player_class]))
         partes.append(
-            f"O personagem é {wm.player_name}"
-            + (f", {classe_info}" if classe_info else "")
+            wm.player_name
+            + (f" — {classe_info}" if classe_info else "")
             + (f", background {wm.player_background}" if wm.player_background else "")
-            + "."
+            + f". Nível {wm.player_level}."
         )
         if wm.active_quest_hooks:
-            partes.append(f"Quests ativas que o personagem conhece: {', '.join(wm.active_quest_hooks)}.")
+            partes.append(f"Quests: {', '.join(wm.active_quest_hooks)}.")
         if wm.npcs_presentes:
-            partes.append(f"NPCs presentes no local: {', '.join(wm.npcs_presentes)}.")
-        if eh_continuacao:
-            partes.append(
-                "É uma continuação de sessão anterior. "
-                "Reabra a atmosfera sem resumir — volte direto para dentro da cena."
-            )
-        else:
-            partes.append(
-                "É a primeira cena. Abra com impacto sensorial calibrado pela classe do personagem "
-                "e termine com um gancho que o convide a agir."
-            )
-    else:
-        partes.append(
-            "O personagem ainda é desconhecido. "
-            "Abra com descrição sensorial do local e termine com algo que convide o jogador a se apresentar."
-        )
+            partes.append(f"NPCs no local: {', '.join(wm.npcs_presentes)}.")
+        partes.append("continuação." if eh_continuacao else "nova sessão.")
 
-    intro_user = " ".join(partes)
+    intro_user = " ".join(partes) if partes else "—"
 
     mensagens_intro = [
-        {"role": "system", "content": f"{_INTRO_SYSTEM}\n\n{contexto_abertura}"},
+        {"role": "system", "content": f"{_INTRO_SYSTEM}\n\n{contexto_abertura}{_LEMBRETE_SAIDA}"},
         {"role": "user", "content": intro_user},
     ]
 

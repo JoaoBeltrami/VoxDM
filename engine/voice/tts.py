@@ -139,6 +139,12 @@ def _limpar_markdown(texto: str) -> str:
         # Meta-comentário sobre narração
         r'|(?:Como narrador|Enquanto narrador|Como mestre|Enquanto mestre)'
         r'[^.!?\n]*[.!?]'
+        # Eco de instruções do prompt — o LLM às vezes repete a abertura do system message
+        r'|Você é VoxDM[^.!?\n]*[.!?]'
+        r'|Você está abrindo uma sessão[^.!?\n]*[.!?]'
+        r'|Máximo \d+ frases[^.!?\n]*[.!?]'
+        r'|Abertura de sessão[^.!?\n]*[.!?]'
+        r'|Um mestre veterano[^.!?\n]*[.!?]'
         r')',
         re.IGNORECASE | re.MULTILINE,
     )
@@ -153,8 +159,23 @@ def _limpar_markdown(texto: str) -> str:
     texto = re.sub(r'^---+\s*$', '', texto, flags=re.MULTILINE)
 
     # ── Blocos de instrução interna (prompt leak) ────────────────────────────
-    texto = re.sub(r'\[LEMBRETE DE SAÍDA.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
+    # Remove o _LEMBRETE_SAIDA inteiro: o marcador + tudo que vem depois até o fim.
+    # O LLM às vezes ecoa o lembrete no final da resposta — removendo o bloco
+    # completo preserva a narração que veio antes.
+    texto = re.sub(r'---\s*\n?\s*\[LEMBRETE DE SAÍDA[\s\S]*', '', texto, flags=re.IGNORECASE)
+    texto = re.sub(r'\[LEMBRETE DE SAÍDA[\s\S]*', '', texto, flags=re.IGNORECASE)
     texto = re.sub(r'\[INSTRUÇÕES INTERNAS.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
+
+    # ── Eco de linhas do _LEMBRETE_SAIDA sem o marcador de colchete ──────────
+    # Caso o LLM ecoe apenas parte do lembrete sem os colchetes
+    texto = re.sub(r'^Responda em prosa falada.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Use apenas vírgulas.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^PROIBIDO:.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Comece DIRETO com.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Escreva como narrador humano.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^O jogador ouve, não lê.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Nunca use markdown.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Regras absolutas.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
 
     # ── Linhas de cabeçalho de contexto injetado ────────────────────────────
     # Ex: "REGRAS DE JOGO:", "CONTEÚDO DO MÓDULO:", "SESSÕES ANTERIORES:"

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     LANGCHAIN_PROJECT: str = "voxdm"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
+    # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
+    LLM_BACKEND: str = "groq"
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False
