@@ -165,7 +165,13 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
-        MensagemWS(tipo="fim", latencia_ms=latencia_ms).model_dump_json()
+        MensagemWS(
+            tipo="fim",
+            latencia_ms=latencia_ms,
+            quest_stages=wm.quest_stages,
+            active_quest_hooks=wm.active_quest_hooks,
+            inventory=wm.player_inventory,
+        ).model_dump_json()
     )
 
     if resposta_intro:
@@ -233,6 +239,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 if isinstance(conditions, list):
                     sessao.working_mem.player_conditions = [str(c) for c in conditions]
                     log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
+                continue
+
+            # Sync de inventário — CharacterSheet envia lista completa de itens
+            if tipo_msg == "sync_inventory":
+                inventory = dados.get("inventory")
+                if isinstance(inventory, list):
+                    sessao.working_mem.player_inventory = [str(i) for i in inventory]
+                    log.info("inventory_sincronizado", session_id=session_id, total=len(sessao.working_mem.player_inventory))
                 continue
 
             if not texto_jogador:
@@ -327,6 +341,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     chunks_regras=chunks_regras,
                     relacoes_grafo=relacoes,
                     iteracao=sessao.iteracoes,
+                    quest_stages=sessao.working_mem.quest_stages,
+                    active_quest_hooks=sessao.working_mem.active_quest_hooks,
+                    inventory=sessao.working_mem.player_inventory,
                 ).model_dump_json()
             )
 

@@ -30,13 +30,16 @@ export interface RespostaMestre {
 export interface MensagemWS {
   tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk";
   conteudo?: string;
-  conteudo_b64?: string;   // bytes MP3 base64 — preenchido em audio_chunk
-  sequencia?: number;      // índice do chunk de áudio
+  conteudo_b64?: string;
+  sequencia?: number;
   latencia_ms?: number;
   chunks_lore?: string[];
   chunks_regras?: string[];
   relacoes_grafo?: Record<string, unknown>[];
   iteracao?: number;
+  quest_stages?: Record<string, string>;
+  active_quest_hooks?: string[];
+  inventory?: string[];
 }
 
 export interface PersonagemConfig {

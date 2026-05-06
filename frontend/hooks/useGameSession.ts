@@ -22,6 +22,9 @@ interface EstadoSessao {
   historico: TurnoHistorico[];
   erro: string | null;
   reconectando: boolean;
+  questStages: Record<string, string>;
+  activeQuests: string[];
+  inventory: string[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -38,6 +41,9 @@ export function useGameSession() {
     historico: [],
     erro: null,
     reconectando: false,
+    questStages: {},
+    activeQuests: [],
+    inventory: [],
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -88,10 +94,18 @@ export function useGameSession() {
         textoAtualRef.current = "";
         turnoAtualRef.current = null;
 
+        // Atualizações de estado da sessão vindas do backend
+        const questStagesAtual = msg.quest_stages ?? {};
+        const activeQuestsAtual = msg.active_quest_hooks ?? [];
+        const inventoryAtual = msg.inventory ?? [];
+
         if (turno) {
           setEstado(s => ({
             ...s,
             respostaAtual: "",
+            questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
+            activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
+            inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
             historico: [
               ...s.historico,
               {
@@ -108,6 +122,9 @@ export function useGameSession() {
           setEstado(s => ({
             ...s,
             respostaAtual: "",
+            questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
+            activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
+            inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
             historico: [
               ...s.historico,
               {
@@ -181,7 +198,7 @@ export function useGameSession() {
   }, []);
 
   // Envia sync de HP ou condições sem passar pelo histórico de diálogo
-  const sincronizarEstado = useCallback((tipo: "sync_hp" | "sync_conditions", payload: Record<string, unknown>) => {
+  const sincronizarEstado = useCallback((tipo: "sync_hp" | "sync_conditions" | "sync_inventory", payload: Record<string, unknown>) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
@@ -202,6 +219,9 @@ export function useGameSession() {
       reconectando: false,
       historico: [],
       respostaAtual: "",
+      questStages: {},
+      activeQuests: [],
+      inventory: [],
     }));
   }, [pararTudo]);
 

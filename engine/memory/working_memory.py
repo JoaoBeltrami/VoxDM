@@ -289,6 +289,8 @@ class WorkingMemory:
 
         if self.player_conditions:
             linhas.append(f"Condições: {', '.join(self.player_conditions)}")
+        if self.player_inventory:
+            linhas.append(f"Inventário: {', '.join(self.player_inventory)}")
 
         if self.npcs_presentes:
             linhas.append(f"\nNPCs presentes: {', '.join(self.npcs_presentes)}")

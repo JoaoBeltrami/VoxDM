@@ -116,3 +116,7 @@ class MensagemWS(BaseModel):
     chunks_regras: list[str] = Field(default_factory=list)
     relacoes_grafo: list[dict[str, Any]] = Field(default_factory=list)
     iteracao: int = 0
+    # Estado da sessão enviado no "fim" para sincronizar o frontend
+    quest_stages: dict[str, str] = Field(default_factory=dict)
+    active_quest_hooks: list[str] = Field(default_factory=list)
+    inventory: list[str] = Field(default_factory=list)

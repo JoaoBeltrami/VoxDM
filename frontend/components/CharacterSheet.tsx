@@ -8,6 +8,9 @@ interface Props {
   onRolar?: (resultado: string) => void;
   onSyncHP?: (hp: number) => void;
   onSyncConditions?: (conditions: string[]) => void;
+  onSyncInventory?: (items: string[]) => void;
+  questStages?: Record<string, string>;
+  activeQuests?: string[];
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -56,11 +59,15 @@ function rolar(faces: number): number {
   return Math.floor(Math.random() * faces) + 1;
 }
 
-export function CharacterSheet({ personagem, onRolar, onSyncHP, onSyncConditions }: Props) {
+export function CharacterSheet({
+  personagem, onRolar, onSyncHP, onSyncConditions, onSyncInventory,
+  questStages = {}, activeQuests = [],
+}: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const [condicoesAberto, setCondicoesAberto] = useState(false);
+  const [questsAberto, setQuestsAberto] = useState(false);
 
   // HP local
   const [hpAtual, setHpAtual] = useState<number>(personagem.player_hp ?? 0);
@@ -161,12 +168,16 @@ export function CharacterSheet({ personagem, onRolar, onSyncHP, onSyncConditions
   const adicionarItem = () => {
     const item = novoItem.trim();
     if (!item || itens.length >= MAX_ITENS) return;
-    setItens(prev => [...prev, item]);
+    const novos = [...itens, item];
+    setItens(novos);
     setNovoItem("");
+    onSyncInventory?.(novos);
   };
 
   const removerItem = (idx: number) => {
-    setItens(prev => prev.filter((_, i) => i !== idx));
+    const novos = itens.filter((_, i) => i !== idx);
+    setItens(novos);
+    onSyncInventory?.(novos);
   };
 
   return (
@@ -389,6 +400,42 @@ export function CharacterSheet({ personagem, onRolar, onSyncHP, onSyncConditions
               </div>
             )}
           </div>
+
+          {/* Quests */}
+          {activeQuests.length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <button
+                onClick={() => setQuestsAberto(a => !a)}
+                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <span>
+                  Quests
+                  <span className="ml-1.5 rounded bg-violet-900/40 px-1.5 py-0.5 text-[10px] text-violet-400">
+                    {activeQuests.length}
+                  </span>
+                </span>
+                <span>{questsAberto ? "▲" : "▼"}</span>
+              </button>
+
+              {questsAberto && (
+                <div className="mt-2 space-y-1.5">
+                  {activeQuests.map(qid => {
+                    const stage = questStages[qid];
+                    const nomeQuest = qid.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                    const nomeStage = stage ? stage.replace(/-/g, " ") : null;
+                    return (
+                      <div key={qid} className="rounded border border-violet-800/30 bg-violet-900/10 px-2 py-1.5">
+                        <p className="text-xs font-medium text-violet-300">{nomeQuest}</p>
+                        {nomeStage && (
+                          <p className="mt-0.5 text-[10px] text-zinc-500">{nomeStage}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Inventário */}
           <div>

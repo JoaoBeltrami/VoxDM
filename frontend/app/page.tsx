@@ -32,8 +32,8 @@ function lerVozStorage(): string {
 export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
-    historico, erro, reconectando, conectar, enviarComando, desconectar,
-    sincronizarEstado, pararAudio,
+    historico, erro, reconectando, questStages, activeQuests,
+    conectar, enviarComando, desconectar, sincronizarEstado, pararAudio,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -119,6 +119,9 @@ export default function Home() {
           onRolar={enviarComando}
           onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
           onSyncConditions={(conditions) => sincronizarEstado("sync_conditions", { conditions })}
+          onSyncInventory={(inventory) => sincronizarEstado("sync_inventory", { inventory })}
+          questStages={questStages}
+          activeQuests={activeQuests}
         />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
