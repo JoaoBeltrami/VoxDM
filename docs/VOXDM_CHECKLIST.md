@@ -280,8 +280,31 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `tests/test_character_store.py` — 26 testes SQLite persistence ✅ *(09/05/2026)*
 - [x] Total: **233/233** ✅ *(09/05/2026)*
 
+### Benchmark e2e — 09/05/2026 ❌ FALHOU (3 bugs críticos identificados)
+> `python -m benchmark.run_voice_e2e` — mediana global 33s (meta: <2s)
+
+| Query | Total | 1º token | Culpado |
+|---|---|---|---|
+| quem e Fael Drevasson? | 15s | **1.4s ✅** | TTS cumulativo (3 chamadas) |
+| onde esta Bjorn? | 38s | **12.5s ❌** | Groq response muito longa |
+| Crônica de Valdrek? | 33s | **3.9s ⚠️** | TTS cumulativo (6 chamadas) |
+| Fireball? | 49s | **29.8s ❌** | combat.md injetado = 32k chars |
+| envenenado faz? | 25s | **0.9s ✅** | TTS cumulativo (5 chamadas) |
+
+**Bug 1 (crítico):** combat.md injeta em "Fireball?" (query de regra, não ação de combate) → prompt 32k chars → Groq 30s. Regex de detecção muito agressiva.
+
+**Bug 2 (crítico):** WebSocket chama `sintetizar()` UMA vez após stream completo. Usuário espera LLM completo + TTS inteiro = 5-15s antes de ouvir qualquer coisa. Benchmark media isso com múltiplas chamadas (cada sentença), mas o problema real é o mesmo.
+
+**Bug 3 (moderado):** Sem `max_tokens` efetivo — Bjorn gerou resposta enorme com 8 relações Neo4j no contexto. Adicionar limite narrativo.
+
+**O que funcionou bem:** RAG (300-500ms), embeddings GPU (65ms), Groq primeiro token em queries sem combat.md (0.9-3.9s)
+
 ### Pendente
 - [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
+- [ ] **[BUG 1]** Corrigir false positive combat.md — "Fireball" (nome de magia) não é ação de combate `[código]` `[claude code]` `[leve]`
+- [ ] **[BUG 2]** Restaurar TTS por sentença no WebSocket — `sintetizar_stream()` ou buffer por frase enquanto LLM ainda streama `[código]` `[claude code]` `[moderado]`
+- [ ] **[BUG 3]** Cap narrativo em `max_tokens=300` no WebSocket para respostas longas `[código]` `[claude code]` `[leve]`
+- [ ] Re-rodar benchmark após os 3 fixes — meta: mediana 1º audio <1200ms `[revisão]`
 - [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
 - [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
@@ -299,7 +322,14 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `SpanLatencia` dataclass em `telemetry.py` `[código]` `[claude code]` `[leve]`
 - [ ] Tabela `metricas_turno` no SQLite + aba "Histórico" no Streamlit `[código]` `[claude code]` `[moderado]`
 
-**Prio 3 — Saúde contínua (antes do deploy)**
+**Prio 3 — Dashboard Next.js `/dashboard` (antes do vídeo)**
+> Rota `/dashboard` no frontend existente consumindo `/debug/*`. Visual dark purple do VoxDM. Bom para YouTube.
+- [ ] Página `frontend/app/dashboard/page.tsx` — layout base, semáforo de saúde, polling `/debug/sessoes` `[código]` `[claude code]` `[moderado]`
+- [ ] Painel "Último Turno" — prompt injetado (por seção), RAG scores com cor (verde/amarelo/vermelho) `[código]` `[claude code]` `[moderado]`
+- [ ] Painel "Latência" — breakdown por etapa (STT/Qdrant/Neo4j/LLM/TTS), meta <2s `[código]` `[claude code]` `[leve]`
+- [ ] Painel "Histórico" — últimas 10 trocas jogador↔mestre com latência de cada uma `[código]` `[claude code]` `[leve]`
+
+**Prio 4 — Saúde contínua (antes do deploy)**
 - [ ] `GET /health/deps` com ping real a cada dependência `[código]` `[claude code]` `[leve]`
 - [ ] FileRenderer no structlog → `.internal/voxdm.log` `[código]` `[claude code]` `[leve]`
 - [ ] Auto-ping das dependências no lifespan (10min) `[código]` `[claude code]` `[leve]`
