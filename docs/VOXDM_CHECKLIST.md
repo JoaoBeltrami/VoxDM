@@ -1,5 +1,5 @@
 # VOXDM_CHECKLIST.md
-> Versão 2.6 — 8 de maio de 2026
+> Versão 2.7 — 9 de maio de 2026
 > Checklists executáveis por fase — separado do documento técnico
 > Usar junto com VOXDM_PROJETO.md para contexto técnico completo
 
@@ -277,14 +277,14 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `tests/test_master_prompt.py` — 43 testes (incl. saves.md) ✅
 - [x] `tests/test_working_memory.py` — 60 testes ✅
 - [x] `tests/test_trust_detector.py` — 14 testes ✅
-- [x] Total: **207/207** ✅ *(07/05/2026)*
+- [x] `tests/test_character_store.py` — 26 testes SQLite persistence ✅ *(09/05/2026)*
+- [x] Total: **233/233** ✅ *(09/05/2026)*
 
 ### Pendente
 - [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
 - [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
 - [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
-- [ ] `tests/test_character_store.py` — testes SQLite persistence `[código]`
 
 ---
 
@@ -306,12 +306,10 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] Inventário: add/remove itens, envia sync_inventory
 
 ### Persistência (Backend) ✅
-- [x] `engine/persistence/character_store.py` — SQLite + aiosqlite: salvar/carregar/deletar
+- [x] `engine/persistence/character_store.py` — SQLite + aiosqlite: salvar/carregar/deletar. Fix: `_conn` como @asynccontextmanager (bug double-await)
 - [x] `api/routes/session.py` — GET/PUT /{id}/character
 - [x] Restauração em "Carregar Sessão": aplica char_state no working_mem
-
-### Pendente
-- [ ] `tests/test_character_store.py` — testes SQLite persistence `[código]` `[claude code]` `[leve]`
+- [x] `tests/test_character_store.py` — 26 testes SQLite (roundtrip, upsert, bool↔int, spell_slots int keys)
 
 ---
 
@@ -324,6 +322,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `engine/voice_runner.py` — `print()` substituído por `log.info()` (violação de convenção)
 - [x] `tests/conftest.py` e `test_config.py` — referências ao `LANGCHAIN_API_KEY` removidas
 - [x] `.env.example` — encoding corrompido (latin1 inválido) corrigido para UTF-8; LANGCHAIN movido para seção legado
+- [x] `engine/persistence/character_store.py` — `_conn()` usava `async with await self._conn()`: padrão double-await iniciava thread aiosqlite duas vezes (RuntimeError oculto, só exposto pelos novos testes). Corrigido com @asynccontextmanager.
 
 ### Confirmado OK (sem alteração necessária)
 - CORS restrito via `settings.CORS_ORIGINS` (não `allow_origins=["*"]`)
@@ -334,7 +333,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - `tenacity` retry em todos os clientes externos
 - `structlog` em todo código de produção (zero `print()` na API/engine)
 - `from config import settings` em todo lugar (zero `os.getenv()`)
-- **207/207 testes passando após correções**
+- **233/233 testes passando após correções** *(09/05/2026)*
 
 ---
 

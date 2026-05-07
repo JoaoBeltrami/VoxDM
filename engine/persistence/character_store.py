@@ -15,8 +15,10 @@ Exemplo:
 """
 
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import AsyncIterator
 
 import aiosqlite
 import structlog
@@ -71,18 +73,20 @@ class CharacterState:
 class CharacterStore:
     """CRUD assíncrono para o estado do personagem em SQLite."""
 
-    async def _conn(self) -> aiosqlite.Connection:
-        conn = await aiosqlite.connect(DB_PATH)
-        conn.row_factory = aiosqlite.Row
-        await conn.execute(_CREATE_TABLE)
-        await conn.commit()
-        return conn
+    @asynccontextmanager
+    async def _conn(self) -> AsyncIterator[aiosqlite.Connection]:
+        # aiosqlite.connect() é um context manager — não fazer await separado
+        async with aiosqlite.connect(DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            await conn.execute(_CREATE_TABLE)
+            await conn.commit()
+            yield conn
 
     async def salvar(self, state: CharacterState) -> None:
         """Upsert do estado completo do personagem."""
         # JSON não aceita int como chave — serializa como string
         slots_json = json.dumps({str(k): v for k, v in state.spell_slots.items()})
-        async with await self._conn() as conn:
+        async with self._conn() as conn:
             await conn.execute(
                 """
                 INSERT INTO character_state
@@ -131,7 +135,7 @@ class CharacterStore:
 
     async def carregar(self, session_id: str) -> CharacterState | None:
         """Carrega estado do personagem. Retorna None se não houver registro."""
-        async with await self._conn() as conn:
+        async with self._conn() as conn:
             async with conn.execute(
                 "SELECT * FROM character_state WHERE session_id = ?", (session_id,)
             ) as cur:
@@ -164,7 +168,7 @@ class CharacterStore:
 
     async def deletar(self, session_id: str) -> None:
         """Remove estado do personagem do banco."""
-        async with await self._conn() as conn:
+        async with self._conn() as conn:
             await conn.execute(
                 "DELETE FROM character_state WHERE session_id = ?", (session_id,)
             )

@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 8 de maio de 2026
+> Atualizado: 9 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -19,7 +19,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
 - Fase 3 (memória + LLM): ✅ CONCLUÍDA. RAG 3 camadas, episodic memory, prompt mestre v4 com dice/combat/saves.md condicionais.
 - Fase 4 (API + Frontend): ✅ CONCLUÍDA. Main menu 3 telas, ficha completa, dados, seletor de sessão, abertura classe-aware, ambient audio, journal, trust detector. 207 testes OK.
-- Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz. Pendente: tests/test_character_store.py.
+- Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz. 233 testes OK.
 Próximo: `make ingest` → teste e2e voz → gravar vídeo. Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
@@ -136,6 +136,7 @@ NÃO usar material licenciado → apenas SRD aberto (5e-bits/5e-database)
 # Configuração
 NÃO tornar LANGCHAIN_API_KEY obrigatório → LangChain não é usado na engine; campo é opcional
 NÃO adicionar imports de langchain → não está na stack (tracing via LangSmith não ativado)
+NÃO usar `async with await self._conn()` com aiosqlite → double-await inicia o thread duas vezes (RuntimeError). Padrão correto: _conn como @asynccontextmanager + `async with self._conn() as conn:`
 
 # Segurança
 NÃO expor /debug/* em prod  → proteger com settings.debug
@@ -334,14 +335,15 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `frontend/components/PlayerJournal.tsx` | Diário do jogador — persiste notas de sessão no localStorage por session_id | ✅ Criado |
 | `frontend/app/page.tsx` | 3 telas (menu → nova/carregar/opções), seletor de voz pt-BR-*Neural, combat toolbar (d20/Vantagem/Desvantagem), chips de condição detectada | ✅ Atualizado |
 | `frontend/app/layout.tsx` | Layout root Next.js 14 com fontes Geist | ✅ Criado |
-| `engine/persistence/character_store.py` | SQLite/aiosqlite — CharacterStore.salvar()/carregar()/deletar(), persiste spell slots, gold, XP, death saves, hit dice entre sessões | ✅ Criado |
+| `engine/persistence/character_store.py` | SQLite/aiosqlite — CharacterStore.salvar()/carregar()/deletar(), persiste spell slots, gold, XP, death saves, hit dice entre sessões. `_conn` como @asynccontextmanager (fix: double-await bug) | ✅ Corrigido |
 | `requirements.txt` | + python-multipart (FastAPI UploadFile) | ✅ Atualizado |
 | `tests/test_api_session.py` | 17 testes REST — start/turn/status/delete com TestClient + AsyncMock | ✅ Atualizado |
 | `tests/test_context_builder.py` | 13 testes — dedup por source_id, extração de entidades, query curta/longa | ✅ Criado |
 | `tests/test_master_prompt.py` | 43 testes — existência/conteúdo dos .md (incl. saves.md), regex rolagem/combate, cache, montar_mensagens | ✅ Atualizado |
 | `tests/test_working_memory.py` | 60 testes — modificadores D&D, CA, passive perception, combate, inimigos, log consequências, para_texto() | ✅ Criado |
 | `tests/test_trust_detector.py` | 14 testes — detecção de ações positivas/negativas de trust por regex | ✅ Criado |
-| **Total testes** | **207 passed, 0 failed** | ✅ |
+| `tests/test_character_store.py` | 26 testes SQLite — roundtrip completo, upsert, deleção, spell_slots int keys, bool↔int, sessões independentes | ✅ Criado |
+| **Total testes** | **233 passed, 0 failed** | ✅ |
 
 ### Melhorias Qualidade DM + Mecânicas Combate (Sessão 07/05)
 
