@@ -34,11 +34,13 @@ log = structlog.get_logger()
 _MASTER_SYSTEM_PATH = Path(__file__).parent / "prompts" / "master_system.md"
 _DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
 _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
+_SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
 
 # Caches — None = ainda não lido; str vazia = lido mas ausente/falho
 _master_system_cache: str | None = None
 _dice_cache: str | None = None
 _combat_cache: str | None = None
+_saves_cache: str | None = None
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
@@ -128,12 +130,30 @@ def _carregar_combat() -> str | None:
     return _combat_cache if _combat_cache else None
 
 
+def _carregar_saves() -> str | None:
+    """Carrega e cacheia o guia de salvaguardas. Retorna None se ausente."""
+    global _saves_cache
+    if _saves_cache is None:
+        try:
+            if _SAVES_PATH.exists():
+                conteudo = _SAVES_PATH.read_text(encoding="utf-8")
+                if len(conteudo) >= _PROMPT_MIN_CHARS:
+                    _saves_cache = conteudo
+                    return _saves_cache
+            log.info("saves_md_ausente", path=str(_SAVES_PATH))
+        except Exception as e:
+            log.warning("saves_md_falhou_leitura", erro=str(e))
+        _saves_cache = ""
+    return _saves_cache if _saves_cache else None
+
+
 def invalidar_cache() -> None:
     """Invalida caches de prompts — útil em testes e em hot-reload."""
-    global _master_system_cache, _dice_cache, _combat_cache
+    global _master_system_cache, _dice_cache, _combat_cache, _saves_cache
     _master_system_cache = None
     _dice_cache = None
     _combat_cache = None
+    _saves_cache = None
 
 
 def validar_master_system() -> tuple[bool, str]:
@@ -248,7 +268,7 @@ def montar_mensagens(
             secoes.append(f"\n{dice_texto}")
             log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
 
-    # Camada de combate — injetada quando em_combate ativo OU texto contém ação de combate
+    # Camada de combate + salvaguardas — injetadas quando em_combate ativo OU ação detectada
     _em_combate_ativo = contexto.working_memory.em_combate
     _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
     if _em_combate_ativo or _acao_combate:
@@ -261,6 +281,9 @@ def montar_mensagens(
                 acao_detectada=_acao_combate,
                 transcricao=contexto.transcricao_atual[:60],
             )
+        saves_texto = _carregar_saves()
+        if saves_texto:
+            secoes.append(f"\n{saves_texto}")
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

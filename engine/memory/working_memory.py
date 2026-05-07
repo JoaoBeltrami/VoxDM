@@ -94,6 +94,10 @@ class WorkingMemory:
     tts_voice: str = "pt-BR-FranciscaNeural"
     # Sinaliza cena de combate ativo — ativa injeção de combat.md no prompt
     em_combate: bool = False
+    # Iniciativa do jogador no combate atual (d20+DES; None = combate não iniciado)
+    iniciativa_jogador: int | None = None
+    # Rodada atual dentro do combate (1-based; 0 fora de combate)
+    rodada_combate: int = 0
 
     # Atributos D&D 5e — Standard Array [15,14,13,12,10,8] atribuído na criação
     str_score: int = 10
@@ -243,10 +247,19 @@ class WorkingMemory:
     def entrar_combate(self) -> None:
         """Ativa modo combate — prompt_builder injeta combat.md no próximo turno."""
         self.em_combate = True
+        self.rodada_combate = 1
+        self.iniciativa_jogador = None
 
     def sair_combate(self) -> None:
         """Desativa modo combate quando a cena é resolvida."""
         self.em_combate = False
+        self.iniciativa_jogador = None
+        self.rodada_combate = 0
+
+    def avancar_rodada(self) -> None:
+        """Incrementa contador de rodada dentro do combate ativo."""
+        if self.em_combate:
+            self.rodada_combate += 1
 
     # ── Propriedades computadas D&D 5e (SRD) ─────────────────────────────────
 
@@ -275,6 +288,12 @@ class WorkingMemory:
         if self.player_class == "Monge":
             return 10 + self.mod_des + self.mod_sab
         return 10 + self.mod_des
+
+    @property
+    def passive_perception(self) -> int:
+        """Percepção passiva: 10 + mod_SAB + prof_bonus se Percepção em skill_profs."""
+        bonus = self.prof_bonus if "Percepção" in self.skill_profs else 0
+        return 10 + self.mod_sab + bonus
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado
@@ -334,7 +353,16 @@ class WorkingMemory:
             f"SAB {self.wis_score}({_m(self.mod_sab)}) "
             f"CAR {self.cha_score}({_m(self.mod_car)})"
         )
-        linhas.append(f"Proef +{self.prof_bonus} | CA {self.ca}")
+        linhas.append(
+            f"Proef +{self.prof_bonus} | CA {self.ca} | Percepção Passiva {self.passive_perception}"
+        )
+        if self.em_combate:
+            rodada_str = f"Rodada {self.rodada_combate}" if self.rodada_combate else "combate iniciando"
+            ini_str = (
+                f"iniciativa {self.iniciativa_jogador}" if self.iniciativa_jogador is not None
+                else "aguardando iniciativa"
+            )
+            linhas.append(f"COMBATE ATIVO — {rodada_str} — {ini_str}")
         if self.save_profs:
             _save_mods = {
                 "FOR": self.mod_for, "DES": self.mod_des, "CON": self.mod_con,

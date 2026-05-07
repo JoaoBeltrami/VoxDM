@@ -38,7 +38,9 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    conectar, enviarComando, desconectar, sincronizarEstado, pararAudio,
+    condicoesDetectadas,
+    conectar, enviarComando, desconectar, sincronizarEstado,
+    dispensarCondicaoDetectada, pararAudio,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -56,6 +58,21 @@ export default function Home() {
 
   // Sessão selecionada no picker (tela "carregar-sessao")
   const [sessaoSelecionada, setSessaoSelecionada] = useState<SessaoListaItem | null>(null);
+
+  // Rastreia condições atuais do personagem para merge ao confirmar auto-detecção
+  const conditionsRef = useRef<string[]>([]);
+
+  const handleSyncConditions = useCallback((conditions: string[]) => {
+    conditionsRef.current = conditions;
+    sincronizarEstado("sync_conditions", { conditions });
+  }, [sincronizarEstado]);
+
+  const confirmarCondicao = useCallback((cond: string) => {
+    const novas = Array.from(new Set([...conditionsRef.current, cond]));
+    conditionsRef.current = novas;
+    sincronizarEstado("sync_conditions", { conditions: novas });
+    dispensarCondicaoDetectada(cond);
+  }, [sincronizarEstado, dispensarCondicaoDetectada]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -164,7 +181,7 @@ export default function Home() {
           sessionId={sessionId}
           onRolar={enviarComando}
           onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
-          onSyncConditions={(conditions) => sincronizarEstado("sync_conditions", { conditions })}
+          onSyncConditions={handleSyncConditions}
           onSyncInventory={(inventory) => sincronizarEstado("sync_inventory", { inventory })}
           onSyncSpellSlots={(spell_slots) => sincronizarEstado("sync_spell_slots", { spell_slots })}
           onSyncHitDice={(current) => sincronizarEstado("sync_hit_dice", { current })}
@@ -198,7 +215,7 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
-          {/* Botão d20 rápido — aparece quando é a vez do jogador */}
+          {/* Toolbar de dados — aparece na vez do jogador */}
           {(() => {
             const ultimaFala = historico.length > 0
               ? historico[historico.length - 1].mestre
@@ -208,23 +225,68 @@ export default function Home() {
               ultimaFala.trimEnd().endsWith("?");
             const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
             if (!turnoJogador) return null;
+
+            const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
+              const r1 = Math.floor(Math.random() * 20) + 1;
+              const r2 = Math.floor(Math.random() * 20) + 1;
+              let val: number;
+              let sufixo = "";
+              if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; }
+              else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; }
+              else { val = r1; }
+              const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
+              enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
+            };
+
+            const rolarDano = (faces: number) => {
+              const val = Math.floor(Math.random() * faces) + 1;
+              enviarComando(`[Rolagem: d${faces} = ${val}]`);
+            };
+
             return (
-              <button
-                onClick={() => {
-                  const val = Math.floor(Math.random() * 20) + 1;
-                  const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
-                  enviarComando(`[Rolagem: d20 = ${val}${critico}]`);
-                }}
-                title="Rolar d20"
-                className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                  esperandoRolagem
-                    ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                <span>🎲</span>
-                <span>d20</span>
-              </button>
+              <div className="flex flex-col items-center gap-1.5">
+                {/* Linha d20 */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => rolarD20()}
+                    title="Rolar d20"
+                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                      esperandoRolagem
+                        ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                    }`}
+                  >
+                    🎲 d20
+                  </button>
+                  <button
+                    onClick={() => rolarD20("vantagem")}
+                    title="Vantagem: 2d20, usa o maior"
+                    className="rounded-full border border-emerald-900 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 transition hover:border-emerald-600 hover:text-emerald-400"
+                  >
+                    ▲d20
+                  </button>
+                  <button
+                    onClick={() => rolarD20("desvantagem")}
+                    title="Desvantagem: 2d20, usa o menor"
+                    className="rounded-full border border-rose-950 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-rose-800 transition hover:border-rose-700 hover:text-rose-500"
+                  >
+                    ▼d20
+                  </button>
+                </div>
+                {/* Linha dano */}
+                <div className="flex items-center gap-1.5">
+                  {([4, 6, 8, 10, 12] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => rolarDano(f)}
+                      title={`Rolar d${f}`}
+                      className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
+                    >
+                      d{f}
+                    </button>
+                  ))}
+                </div>
+              </div>
             );
           })()}
 
@@ -243,6 +305,30 @@ export default function Home() {
               </button>
             )}
           </div>
+          {/* Chips de condição auto-detectada */}
+          {condicoesDetectadas.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-1.5 px-4">
+              {condicoesDetectadas.map(cond => (
+                <div key={cond}
+                  className="flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/30 px-2.5 py-0.5 text-[10px]"
+                >
+                  <span className="text-amber-500">⚠</span>
+                  <span className="text-amber-300/80">{cond}</span>
+                  <button
+                    onClick={() => confirmarCondicao(cond)}
+                    title={`Adicionar ${cond} à ficha`}
+                    className="ml-0.5 font-bold text-amber-400 hover:text-amber-200"
+                  >+</button>
+                  <button
+                    onClick={() => dispensarCondicaoDetectada(cond)}
+                    title="Ignorar"
+                    className="text-zinc-600 hover:text-zinc-400"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <VoiceButton
             onEnviar={enviarComando}
             onOuvindoChange={setOuvindo}

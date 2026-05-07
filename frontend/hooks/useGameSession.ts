@@ -45,6 +45,8 @@ interface EstadoSessao {
   deathSavesSuccesses: number;
   deathSavesFailures: number;
   deathSavesStable: boolean;
+  // Condições detectadas automaticamente no texto do mestre (aguardando confirmação)
+  condicoesDetectadas: string[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -73,7 +75,32 @@ const ESTADO_INICIAL: EstadoSessao = {
   deathSavesSuccesses: 0,
   deathSavesFailures: 0,
   deathSavesStable: false,
+  condicoesDetectadas: [],
 };
+
+// Condições D&D 5e detectáveis no texto do mestre
+const CONDICOES_DETECTAR: [string, RegExp][] = [
+  ["Envenenado",    /\benvenenad[oa]\b/i],
+  ["Atordoado",    /\batordoad[oa]\b/i],
+  ["Paralisado",   /\bparalisa(?:do|da)\b/i],
+  ["Inconsciente", /\binconsciente\b/i],
+  ["Exausto",      /\bexaust[oa]\b/i],
+  ["Amedrontado",  /\bamedrontad[oa]\b/i],
+  ["Agarrado",     /\bagarrad[oa]\b/i],
+  ["Caído",        /\bcaíd[oa]\b|\bprostrad[oa]\b/i],
+  ["Cego",         /\bceg[oa]\b/i],
+  ["Surdo",        /\bsurd[oa]\b/i],
+  ["Enfeitiçado",  /\benfeitiçad[oa]\b/i],
+  ["Petrificado",  /\bpetrificad[oa]\b/i],
+  ["Invisível",    /\binvisível\b/i],
+  ["Incapacitado", /\bincapacitad[oa]\b/i],
+];
+
+function detectarCondicoes(texto: string): string[] {
+  return CONDICOES_DETECTAR
+    .filter(([, re]) => re.test(texto))
+    .map(([nome]) => nome);
+}
 
 // Converte chaves string do JSON para number (JSON serializa int keys como string)
 function parseSpellSlots(raw: Record<string, SpellSlot> | undefined): Record<number, SpellSlot> {
@@ -180,6 +207,9 @@ export function useGameSession() {
           npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : undefined,
         };
 
+        // Detectar condições mencionadas no texto do mestre
+        const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
+
         if (turno) {
           setEstado(s => ({
             ...s,
@@ -198,6 +228,9 @@ export function useGameSession() {
             deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
+            condicoesDetectadas: novasCondicoes.length
+              ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
+              : s.condicoesDetectadas,
             historico: [
               ...s.historico,
               {
@@ -228,6 +261,9 @@ export function useGameSession() {
             deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
+            condicoesDetectadas: novasCondicoes.length
+              ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
+              : s.condicoesDetectadas,
             historico: [
               ...s.historico,
               {
@@ -309,6 +345,13 @@ export function useGameSession() {
     wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
 
+  const dispensarCondicaoDetectada = useCallback((cond: string) => {
+    setEstado(s => ({
+      ...s,
+      condicoesDetectadas: s.condicoesDetectadas.filter(c => c !== cond),
+    }));
+  }, []);
+
   const desconectar = useCallback(async () => {
     intentionalCloseRef.current = true;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -335,6 +378,7 @@ export function useGameSession() {
     enviarComando,
     desconectar,
     sincronizarEstado,
+    dispensarCondicaoDetectada,
     pararAudio: pararTudo,
   };
 }

@@ -34,6 +34,18 @@ Mapeamento narrativo:
 
 ---
 
+---
+
+## Vantagem e desvantagem — dois dados, uma narrativa.
+
+Quando a rolagem chegar com indicação de vantagem, o jogador rolou dois d20 e usou o maior. Narre com leveza: a posição estava boa, o aliado segurou a atenção do inimigo, o terreno favoreceu, ele pegou o ângulo certo. O mundo cooperou.
+
+Quando chegar com desvantagem, o jogador usou o menor. Narre com peso: visão prejudicada, terreno hostil, ferimento que cobrou, distração no momento errado. O mundo resistiu.
+
+O número já chegou corrigido — não há segundo dado para narrar. Apenas o efeito no corpo com a textura adequada: vantagem dá confiança e fluidez, desvantagem dá esforço visível e tropeço.
+
+---
+
 **Dados de dano — d4, d6, d8, d10, d12.**
 Chegam depois de um acerto confirmado. Determinam a intensidade, não se aconteceu.
 

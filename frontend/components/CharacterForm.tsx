@@ -152,10 +152,10 @@ export function CharacterForm({ onChange }: Props) {
   const ca  = allAssigned && classe ? calcCA(classe, scores.dex, scores.con, scores.wis) : 10;
   const prof = profBonus(nivel);
 
-  const allSkills = [...new Set([
+  const allSkills = Array.from(new Set([
     ...(CLASS_SKILLS[classe] ?? []),
     ...(BACKGROUND_SKILLS[background] ?? []),
-  ])];
+  ]));
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
