@@ -286,6 +286,24 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
 
+### Fase 5 — Monitoramento e Observabilidade (planejada)
+> Detalhes completos em `.internal/MONITORAMENTO.md`
+
+**Prio 1 — Debug real (antes do e2e)**
+- [ ] `ultimo_turno` em `SessaoAtiva` + latências reais no `websocket.py` `[código]` `[claude code]` `[moderado]`
+- [ ] `GET /debug/ultimo-turno/{id}` — prompt, RAG scores, breakdown latência `[código]` `[claude code]` `[leve]`
+- [ ] Emitir `{"tipo": "erro"}` nos `except` do `websocket.py` `[código]` `[claude code]` `[leve]`
+- [ ] Nova aba "Último Turno" no `dashboard.py` `[código]` `[claude code]` `[leve]`
+
+**Prio 2 — Histórico e agregação (antes do vídeo)**
+- [ ] `SpanLatencia` dataclass em `telemetry.py` `[código]` `[claude code]` `[leve]`
+- [ ] Tabela `metricas_turno` no SQLite + aba "Histórico" no Streamlit `[código]` `[claude code]` `[moderado]`
+
+**Prio 3 — Saúde contínua (antes do deploy)**
+- [ ] `GET /health/deps` com ping real a cada dependência `[código]` `[claude code]` `[leve]`
+- [ ] FileRenderer no structlog → `.internal/voxdm.log` `[código]` `[claude code]` `[leve]`
+- [ ] Auto-ping das dependências no lifespan (10min) `[código]` `[claude code]` `[leve]`
+
 ---
 
 ## Fase 4.5 — Main Menu + Ficha Completa + Persistência ✅ CONCLUÍDA
