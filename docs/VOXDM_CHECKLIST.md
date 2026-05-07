@@ -1,5 +1,5 @@
 # VOXDM_CHECKLIST.md
-> Versão 2.4 — 27 de abril de 2026
+> Versão 2.5 — 7 de maio de 2026
 > Checklists executáveis por fase — separado do documento técnico
 > Usar junto com VOXDM_PROJETO.md para contexto técnico completo
 
@@ -229,9 +229,9 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ---
 
-## Fase 4 — Interface Web ✅ MVP CONCLUÍDO + LOOP DE VOZ FECHADO
+## Fase 4 — Interface Web ✅ CONCLUÍDA
 > 🟡 Carga moderada
-> **Última atualização:** 05/05/2026 — 106/106 testes OK
+> **Última atualização:** 07/05/2026 — 207/207 testes OK
 
 **Marco:** sessão completa jogável pelo browser sem abrir terminal ✅
 
@@ -256,48 +256,62 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `Makefile` — uv run, ingest como prerequisito de test
 - [x] `api/models/schemas.py` — player_level default=3, MensagemWS com audio_chunk/conteudo_b64
 
+### Adicionado pós-MVP (sessões 05-07/05)
+- [x] `engine/llm/types.py` — tipos compartilhados, evita imports circulares
+- [x] `engine/memory/trust_detector.py` — 14 testes, wired em websocket.py
+- [x] `engine/persistence/character_store.py` — SQLite, salvar/carregar/deletar
+- [x] `engine/llm/prompts/saves.md` — salvaguardas narrativas, injetado com combat.md
+- [x] `frontend/hooks/useAmbientAudio.ts` — música ambiente por cena
+- [x] `frontend/components/PlayerJournal.tsx` — diário por session_id no localStorage
+- [x] `frontend/app/page.tsx` — 3 telas (menu/nova/carregar/opções), seletor de voz, combat toolbar, chips de condição
+- [x] `api/routes/session.py` — GET/PUT /{id}/character
+- [x] Combat toolbar: d20 / ▲Vantagem / ▼Desvantagem / d4-d12
+- [x] Auto-detecção de 14 condições D&D com confirmação via chips
+- [x] `tests/test_working_memory.py` — 60 testes WorkingMemory completa
+- [x] `tests/test_trust_detector.py` — 14 testes
+
 ### Testes
-- [x] `tests/test_api_session.py` — 16 testes REST ✅
+- [x] `tests/test_api_session.py` — 17 testes REST ✅
 - [x] `tests/test_context_builder.py` — 13 testes ✅
 - [x] `tests/test_websocket.py` — 5 testes WS ✅
-- [x] `tests/test_master_prompt.py` — 32 testes ✅
-- [x] Total: **106/106** ✅ *(05/05/2026)*
+- [x] `tests/test_master_prompt.py` — 43 testes (incl. saves.md) ✅
+- [x] `tests/test_working_memory.py` — 60 testes ✅
+- [x] `tests/test_trust_detector.py` — 14 testes ✅
+- [x] Total: **207/207** ✅ *(07/05/2026)*
 
 ### Pendente
 - [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
 - [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
 - [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
 - [ ] Deploy frontend no Vercel `[revisão]` `[claude.ai]` `[leve]` `[roteiro]`
+- [ ] `tests/test_character_store.py` — testes SQLite persistence `[código]`
 
 ---
 
-## Fase 4.5 — Main Menu + Ficha Completa + Persistência 🔲 PRÓXIMA
-> Pré-requisito: loop de voz validado (áudio OK no browser)
+## Fase 4.5 — Main Menu + Ficha Completa + Persistência ✅ CONCLUÍDA
+> **Última atualização:** 07/05/2026
 
-**Marco:** personagem criado em "Nova Sessão" persiste ao "Carregar Sessão" — sem redigitar nada
+**Marco:** personagem criado em "Nova Sessão" persiste ao "Carregar Sessão" — sem redigitar nada ✅
 
-### Tela de Início (Nova/Carregar/Opções)
-- [ ] `frontend/app/page.tsx` — refatorar em 3 telas: menu → nova/carregar/opções `[código]` `[claude code]`
-- [ ] Menu inicial: 3 botões grandes (Nova Sessão / Carregar Sessão / Opções) `[código]`
-- [ ] "Nova Sessão" → CharacterForm completo → "Entrar no Mundo" `[código]`
-- [ ] "Carregar Sessão" → SessionPicker → restaura personagem vinculado `[código]`
-- [ ] "Opções" → seletor de voz Edge TTS (lista `pt-BR-*Neural`) `[código]`
+### Tela de Início (Nova/Carregar/Opções) ✅
+- [x] `frontend/app/page.tsx` — 3 telas: menu → nova/carregar/opções
+- [x] Menu inicial: 3 botões grandes (Nova Sessão / Carregar Sessão / Opções)
+- [x] "Nova Sessão" → CharacterForm completo → "Entrar no Mundo"
+- [x] "Carregar Sessão" → SessionPicker → restaura personagem vinculado
+- [x] "Opções" → seletor de voz Edge TTS (5 vozes pt-BR-*Neural)
 
-### HP Tracking Dinâmico
-- [ ] `frontend/components/CharacterSheet.tsx` — botões +/- HP durante o jogo `[código]`
-- [ ] HP atual se separa do HP max — pode mudar em tempo de jogo `[código]`
-- [ ] Envia atualização de HP para o backend via WebSocket ou REST `[código]`
+### HP Tracking + Inventário ✅
+- [x] `frontend/components/CharacterSheet.tsx` — botões +/- HP durante o jogo
+- [x] HP atual separado do HP max — muda em tempo de jogo, envia sync_hp
+- [x] Inventário: add/remove itens, envia sync_inventory
 
-### Inventário Básico
-- [ ] `frontend/components/CharacterSheet.tsx` — seção inventário: add/remove itens `[código]`
-- [ ] Lista simples: nome do item + quantidade + botão remover `[código]`
-- [ ] Estado local por enquanto (sem persistência ainda) `[código]`
+### Persistência (Backend) ✅
+- [x] `engine/persistence/character_store.py` — SQLite + aiosqlite: salvar/carregar/deletar
+- [x] `api/routes/session.py` — GET/PUT /{id}/character
+- [x] Restauração em "Carregar Sessão": aplica char_state no working_mem
 
-### Persistência (Backend)
-- [ ] `engine/persistence/character_store.py` — SQLite + aiosqlite: salva ficha vinculada a session_id `[código]` `[claude code]`
-- [ ] `api/routes/session.py` — GET/PUT /{id}/character (carrega/salva ficha) `[código]`
-- [ ] Restauração em "Carregar Sessão": puxa ficha salva + pré-popula CharacterSheet `[código]`
-- [ ] Testes: `tests/test_character_store.py` + `tests/test_api_character.py` `[código]`
+### Pendente
+- [ ] `tests/test_character_store.py` — testes SQLite persistence `[código]` `[claude code]` `[leve]`
 
 ---
 

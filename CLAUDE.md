@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 4 de maio de 2026
+> Atualizado: 7 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,13 +13,14 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Todas as fases concluídas. Pendente: teste e2e local com GPU + push para remote.**
+**Fase 4.5 concluída. Pendente: teste e2e local com GPU + Cloudflare Tunnel.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
-- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. 32 testes OK.
+- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Pendente: `make ingest` para re-indexar Qdrant com melhorias de abril.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
-- Fase 3 (memória + LLM): ✅ CONCLUÍDA. RAG 3 camadas, episodic memory, prompt mestre v3 com dice.md condicional.
-- Fase 4 (API + Frontend): ✅ CONCLUÍDA. 106 testes OK. Ficha, dados, seletor de sessão, abertura classe-aware. Pendente: teste e2e local + push para remote.
-Consultar VOXDM_CHECKLIST.md para tarefas abertas.
+- Fase 3 (memória + LLM): ✅ CONCLUÍDA. RAG 3 camadas, episodic memory, prompt mestre v4 com dice/combat/saves.md condicionais.
+- Fase 4 (API + Frontend): ✅ CONCLUÍDA. Main menu 3 telas, ficha completa, dados, seletor de sessão, abertura classe-aware, ambient audio, journal, trust detector. 207 testes OK.
+- Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz. Pendente: tests/test_character_store.py.
+Próximo: `make ingest` → teste e2e voz → gravar vídeo. Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
 
@@ -210,21 +211,24 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 ### Memória e LLM (Fase 3)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `engine/memory/working_memory.py` | Dataclass da cena atual — janela deslizante de diálogo, trust levels, quest stages, para_texto() | ✅ Criado |
+| `engine/memory/working_memory.py` | Dataclass da cena atual — janela deslizante de diálogo, trust levels, quest stages, inimigos_combate, log_consequencias (max 5), passive_perception, para_texto() | ✅ Atualizado |
 | `engine/memory/qdrant_client.py` | Cliente Qdrant com retry tenacity — buscar_modulo(), buscar_regras(), buscar() genérico + score_threshold=0.45 | ✅ Atualizado |
 | `engine/memory/neo4j_client.py` | Cliente Neo4j async com retry — buscar_relacionamentos(), buscar_entidade(), buscar_npcs_no_local(), buscar_por_ids() | ✅ Atualizado |
 | `engine/memory/context_builder.py` | Monta contexto 3 camadas — query inteligente (curta/longa), dedup por source_id, extração de entidades da transcrição | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | Recuperação de memórias de sessões anteriores — busca voxdm_episodic, filtro por NPC, listar_sessoes() | ✅ Criado |
 | `engine/memory/semantic_memory.py` | Query híbrida Qdrant + Neo4j — enriquece chunks com relações do grafo, buscar_npc() | ✅ Criado |
 | `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
+| `engine/memory/trust_detector.py` | Detecta mudanças de trust via regex no texto do jogador — retorna lista de (npc_id, delta); wired em websocket.py | ✅ Criado |
 | `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
-| `engine/llm/prompt_builder.py` | Monta prompt final — lie_content como instrução, budget por camada, cache de prompts com `invalidar_cache()`, injeção condicional de dice.md via regex | ✅ Atualizado |
-| `engine/llm/prompts/master_system.md` | Prompt do mestre — identidade humana, voz falada PT-BR, 5 hábitos de narração, secrets, pacing, limite 80 palavras, seção de rolagem de dados | ✅ v3 |
-| `engine/llm/prompts/dice.md` | Guia de rolagem de dados — escala narrativa d20 (1=fumble, 2-9=falha, 10-14=custo, 15-19=limpo, 20=crítico), danos, d100, nunca expor número | ✅ Criado |
-| `engine/llm/prompts/combat.md` | Camada de combate — teatro da mente, sem mecânica visível, ritmo música/batimento, variedade de verbos, HP como sensação | ✅ Criado |
+| `engine/llm/types.py` | Tipos compartilhados entre módulos LLM — ContextoMontado, etc. — evita imports circulares | ✅ Criado |
+| `engine/llm/prompt_builder.py` | Monta prompt final — budget por camada, cache de prompts, injeção condicional de dice.md (regex rolagem) + combat.md + saves.md (em_combate ou ação de combate) | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Prompt do mestre v4 — identidade humana, voz falada PT-BR, passive perception proativa, CONSEQUÊNCIAS section, marcos de progressão, sequência obrigatória de dados em combate | ✅ v4 |
+| `engine/llm/prompts/dice.md` | Guia de rolagem — escala narrativa d20, danos, d100, Vantagem/Desvantagem (dois dados, uma narrativa), nunca expor número | ✅ Atualizado |
+| `engine/llm/prompts/combat.md` | Camada de combate — sequência obrigatória 4 camadas (Iniciativa/Ataque/Dano/Saves), teatro da mente, NPC attacks internos via CA do jogador | ✅ Atualizado |
+| `engine/llm/prompts/saves.md` | Salvaguardas narrativas — os 6 atributos (FOR/DES/CON/INT/SAB/CAR), falha/sucesso com graus, sequência obrigatória de 4 passos | ✅ Criado |
 | `engine/llm/prompts/social.md` | Camada social — assinatura de voz por NPC, trust→transparência, corpo que contradiz fala, barganha/interrogatório | ✅ Criado |
 | `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
-| `engine/llm/prompts/intro_system.md` | Prompt de abertura de sessão — calibrado por classe D&D (lente perceptual), sabedoria de mestre veterano, sessão nova vs. continuação | ✅ v2 |
+| `engine/llm/prompts/intro_system.md` | Prompt de abertura — calibrado por classe D&D (lente perceptual), 8 princípios de mestre veterano, sessão nova vs. continuação | ✅ v2 |
 | `engine/telemetry.py` | Pub/sub leve via JSONL — emit(), read_latest(), purge_old() para voice_loop → dashboard | ✅ Criado |
 | `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo (3 cols, histórico, auto-refresh 500ms) | ✅ Atualizado |
 | `.streamlit/config.toml` | Tema escuro roxo (#7c3aed) para dashboard no vídeo | ✅ Criado |
@@ -311,23 +315,49 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `api/main.py` | FastAPI app — CORS seguro (CORS_ORIGINS via env), lifespan, /health, /ws/game/{id}, /debug/* só em DEBUG=True | ✅ Criado |
 | `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket | ✅ Criado |
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
-| `api/routes/session.py` | POST /session/start (+ restauração episódica), POST /{id}/transcribe (10MB limit), GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id} | ✅ Atualizado |
+| `api/routes/session.py` | POST /session/start (+ restauração episódica + char_state), POST /{id}/transcribe, GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id}, GET/PUT /{id}/character | ✅ Atualizado |
 | `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
 | `api/websocket.py` | WebSocket streaming — stream tokens → TTS sintetizar() UMA chamada pós-stream + audio_chunk base64 + abertura classe-aware (quests/NPCs/continuação no intro_user) | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
-| `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk no WS | ✅ Atualizado |
-| `frontend/hooks/useAudio.ts` | NOVO — fila sequencial MP3 via Web Audio API, tocarChunk(), pararTudo() | ✅ Criado |
-| `frontend/components/VoiceButton.tsx` | Reescrito — MediaRecorder primary (GPU), Web Speech API fallback, sessionId prop, "Transcrevendo via GPU…" | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk, auto-detecção de condições D&D (14 regex), condicoesDetectadas state | ✅ Atualizado |
+| `frontend/hooks/useAudio.ts` | Fila sequencial MP3 via Web Audio API, tocarChunk(), pararTudo(), AudioContext.resume() aguardado | ✅ Criado |
+| `frontend/hooks/useAmbientAudio.ts` | Música ambiente por cena (taverna/combate/dungeon/campo/cidade) — troca suave baseada em locationNome | ✅ Criado |
+| `frontend/components/VoiceButton.tsx` | MediaRecorder primary (GPU), Web Speech API fallback, sessionId prop | ✅ Atualizado |
 | `frontend/components/MasterResponse.tsx` | + playerName prop, exibe nome na bolha do jogador | ✅ Atualizado |
-| `frontend/components/SessionPicker.tsx` | NOVO — lista sessões passadas, "Continuar" preenche form com session_anterior_id | ✅ Criado |
-| `frontend/components/CharacterSheet.tsx` | NOVO — ficha colapsável, HP bar, botões de dados (d4-d100), envia [Rolagem: dX = Y] ao chat | ✅ Criado |
-| `frontend/app/page.tsx` | + SessionPicker, CharacterSheet, playerName no header, handleContinuarSessao | ✅ Atualizado |
+| `frontend/components/SessionPicker.tsx` | Lista sessões passadas, "Continuar" preenche form com session_anterior_id | ✅ Criado |
+| `frontend/components/CharacterSheet.tsx` | Ficha colapsável, HP bar + botões +/-, inventário add/remove, dados d4-d100, descanso curto, condições ativas | ✅ Atualizado |
+| `frontend/components/PlayerJournal.tsx` | Diário do jogador — persiste notas de sessão no localStorage por session_id | ✅ Criado |
+| `frontend/app/page.tsx` | 3 telas (menu → nova/carregar/opções), seletor de voz pt-BR-*Neural, combat toolbar (d20/Vantagem/Desvantagem), chips de condição detectada | ✅ Atualizado |
 | `frontend/app/layout.tsx` | Layout root Next.js 14 com fontes Geist | ✅ Criado |
-| `requirements.txt` | + python-multipart (necessário para FastAPI UploadFile) | ✅ Atualizado |
-| `tests/test_api_session.py` | 16 testes REST — start/turn/status/delete com TestClient + AsyncMock de ContextBuilder e Groq | ✅ Criado |
+| `engine/persistence/character_store.py` | SQLite/aiosqlite — CharacterStore.salvar()/carregar()/deletar(), persiste spell slots, gold, XP, death saves, hit dice entre sessões | ✅ Criado |
+| `requirements.txt` | + python-multipart (FastAPI UploadFile) | ✅ Atualizado |
+| `tests/test_api_session.py` | 17 testes REST — start/turn/status/delete com TestClient + AsyncMock | ✅ Atualizado |
 | `tests/test_context_builder.py` | 13 testes — dedup por source_id, extração de entidades, query curta/longa | ✅ Criado |
-| `tests/test_master_prompt.py` | 32 testes — existência/conteúdo dos .md, regex rolagem, cache, montar_mensagens c/ e s/ dado | ✅ Criado |
+| `tests/test_master_prompt.py` | 43 testes — existência/conteúdo dos .md (incl. saves.md), regex rolagem/combate, cache, montar_mensagens | ✅ Atualizado |
+| `tests/test_working_memory.py` | 60 testes — modificadores D&D, CA, passive perception, combate, inimigos, log consequências, para_texto() | ✅ Criado |
+| `tests/test_trust_detector.py` | 14 testes — detecção de ações positivas/negativas de trust por regex | ✅ Criado |
+| **Total testes** | **207 passed, 0 failed** | ✅ |
+
+### Melhorias Qualidade DM + Mecânicas Combate (Sessão 07/05)
+
+| O que foi feito | Detalhe |
+|---|---|
+| `saves.md` criado + injetado | Salvaguardas narrativas para os 6 atributos; injetado com combat.md quando `em_combate` ou ação de combate detectada |
+| `combat.md` sequência obrigatória | 4 camadas: Iniciativa → Ataque → Dano → Saves; NPC attacks internos via CA; `STOP` antes de narrar |
+| `dice.md` Vantagem/Desvantagem | Nova seção: dois d20, narrativa de uma rolagem, narrar a tensão antes |
+| `working_memory.py` campos de combate | `inimigos_combate` dict, `log_consequencias` (max 5), `rodada_combate`, `iniciativa_jogador`, `passive_perception` property |
+| `master_system.md` v4 | Passive perception proativa em novas localizações; seção CONSEQUÊNCIAS; marcos de progressão com peso narrativo |
+| Combat toolbar no frontend | d20 / ▲Vantagem / ▼Desvantagem + d4-d12; d20 pulsa quando `esperandoRolagem` |
+| Auto-detecção de condições | 14 regex (Envenenado, Paralisado, Inconsciente, etc.); chips ⚠ com confirmação antes de sync |
+| `test_working_memory.py` | 60 testes — cobertura completa WorkingMemory incluindo novos campos |
+| saves.md em `test_master_prompt.py` | +11 testes — existência, 6 atributos, injeção em combate |
+
+### Gap Conhecido — Combat Sync Não Implementado
+
+> `inimigos_combate`, `log_consequencias` e `avancar_rodada()` existem na WorkingMemory mas **nada na API os alimenta**.
+> O DM vê o bloco "Inimigos:" vazio em jogo real. Não há `sync_combat` / `sync_enemies` no frontend.
+> Para resolver: adicionar parsing da resposta do LLM para extrair inimigos mencionados, ou sync manual via UI.
 
 ---
 
