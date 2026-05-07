@@ -104,6 +104,21 @@ class TranscricaoResponse(BaseModel):
     idioma: str
 
 
+class CharacterStateSchema(BaseModel):
+    """Estado persistível do personagem — usado em GET/PUT /session/{id}/character."""
+
+    spell_slots: dict[int, dict[str, int]] = Field(default_factory=dict)
+    hit_dice_current: int = 3
+    hit_dice_max: int = 3
+    hit_dice_type: int = 8
+    death_saves_successes: int = Field(default=0, ge=0, le=3)
+    death_saves_failures: int = Field(default=0, ge=0, le=3)
+    death_saves_stable: bool = False
+    gold: int = Field(default=0, ge=0)
+    xp: int = Field(default=0, ge=0)
+    inspiration: bool = False
+
+
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
@@ -123,3 +138,12 @@ class MensagemWS(BaseModel):
     location_nome: str = ""
     time_of_day: str = ""
     npcs_trust: dict[str, int] = Field(default_factory=dict)  # npc_id → trust (0-3)
+    # Mecânicas RPG — enviadas no "fim" para manter frontend sincronizado
+    spell_slots: dict[int, dict[str, int]] = Field(default_factory=dict)
+    hit_dice_current: int = 0
+    gold: int = 0
+    xp: int = 0
+    inspiration: bool = False
+    death_saves_successes: int = 0
+    death_saves_failures: int = 0
+    death_saves_stable: bool = False

@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { criarSessao, encerrarSessao, wsUrl, type MensagemWS, type PersonagemConfig } from "@/lib/api";
+import {
+  criarSessao,
+  encerrarSessao,
+  wsUrl,
+  type MensagemWS,
+  type PersonagemConfig,
+  type SpellSlot,
+} from "@/lib/api";
 import { useAudio } from "@/hooks/useAudio";
 
 export interface TurnoHistorico {
@@ -28,35 +35,63 @@ interface EstadoSessao {
   locationNome: string;
   timeOfDay: string;
   npcsTrust: Record<string, number>;
+  // Mecânicas RPG
+  spellSlots: Record<number, SpellSlot>;
+  hitDiceCurrent: number;
+  gold: number;
+  xp: number;
+  inspiration: boolean;
+  deathSavesSuccesses: number;
+  deathSavesFailures: number;
+  deathSavesStable: boolean;
 }
 
 const MAX_RECONNECTS = 3;
 const RECONNECT_BASE_MS = 1500;
 
+const ESTADO_INICIAL: EstadoSessao = {
+  sessionId: null,
+  playerName: null,
+  conectado: false,
+  carregando: false,
+  respostaAtual: "",
+  historico: [],
+  erro: null,
+  reconectando: false,
+  questStages: {},
+  activeQuests: [],
+  inventory: [],
+  locationNome: "",
+  timeOfDay: "",
+  npcsTrust: {},
+  spellSlots: {},
+  hitDiceCurrent: 0,
+  gold: 0,
+  xp: 0,
+  inspiration: false,
+  deathSavesSuccesses: 0,
+  deathSavesFailures: 0,
+  deathSavesStable: false,
+};
+
+// Converte chaves string do JSON para number (JSON serializa int keys como string)
+function parseSpellSlots(raw: Record<string, SpellSlot> | undefined): Record<number, SpellSlot> {
+  if (!raw) return {};
+  const result: Record<number, SpellSlot> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    result[Number(k)] = v;
+  }
+  return result;
+}
+
 export function useGameSession() {
   const { tocarChunk, pararTudo } = useAudio();
-  const [estado, setEstado] = useState<EstadoSessao>({
-    sessionId: null,
-    playerName: null,
-    conectado: false,
-    carregando: false,
-    respostaAtual: "",
-    historico: [],
-    erro: null,
-    reconectando: false,
-    questStages: {},
-    activeQuests: [],
-    inventory: [],
-    locationNome: "",
-    timeOfDay: "",
-    npcsTrust: {},
-  });
+  const [estado, setEstado] = useState<EstadoSessao>(ESTADO_INICIAL);
 
   const wsRef = useRef<WebSocket | null>(null);
   const textoAtualRef = useRef("");
   const turnoAtualRef = useRef<{ jogador: string; id: number } | null>(null);
 
-  // Refs para auto-reconnect
   const sessionIdRef = useRef<string | null>(null);
   const personagemRef = useRef<PersonagemConfig | undefined>(undefined);
   const reconnectCountRef = useRef(0);
@@ -93,31 +128,57 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "fim") {
-        // IMPORTANTE: capturar ANTES de limpar os refs.
-        // React 18 batcheia setEstado — o updater executa após o handler retornar.
         const turno = turnoAtualRef.current;
         const textoFinal = textoAtualRef.current;
         textoAtualRef.current = "";
         turnoAtualRef.current = null;
 
-        // Atualizações de estado da sessão vindas do backend
         const questStagesAtual = msg.quest_stages ?? {};
         const activeQuestsAtual = msg.active_quest_hooks ?? [];
         const inventoryAtual = msg.inventory ?? [];
         const locationNomeAtual = msg.location_nome ?? "";
         const timeOfDayAtual = msg.time_of_day ?? "";
         const npcsTrustAtual = msg.npcs_trust ?? {};
+        const spellSlotsAtual = parseSpellSlots(msg.spell_slots);
+
+        const rpgUpdate = {
+          spellSlots: Object.keys(spellSlotsAtual).length > 0 ? spellSlotsAtual : undefined,
+          hitDiceCurrent: msg.hit_dice_current,
+          gold: msg.gold,
+          xp: msg.xp,
+          inspiration: msg.inspiration,
+          deathSavesSuccesses: msg.death_saves_successes,
+          deathSavesFailures: msg.death_saves_failures,
+          deathSavesStable: msg.death_saves_stable,
+        };
+
+        const novoTurnoBase = {
+          questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : undefined,
+          activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : undefined,
+          inventory: inventoryAtual.length > 0 ? inventoryAtual : undefined,
+          locationNome: locationNomeAtual || undefined,
+          timeOfDay: timeOfDayAtual || undefined,
+          npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : undefined,
+        };
 
         if (turno) {
           setEstado(s => ({
             ...s,
             respostaAtual: "",
-            questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
-            activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
-            inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
-            locationNome: locationNomeAtual || s.locationNome,
-            timeOfDay: timeOfDayAtual || s.timeOfDay,
-            npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : s.npcsTrust,
+            questStages: novoTurnoBase.questStages ?? s.questStages,
+            activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
+            inventory: novoTurnoBase.inventory ?? s.inventory,
+            locationNome: novoTurnoBase.locationNome ?? s.locationNome,
+            timeOfDay: novoTurnoBase.timeOfDay ?? s.timeOfDay,
+            npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
+            spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
+            hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
+            gold: rpgUpdate.gold ?? s.gold,
+            xp: rpgUpdate.xp ?? s.xp,
+            inspiration: rpgUpdate.inspiration ?? s.inspiration,
+            deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
+            deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
+            deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             historico: [
               ...s.historico,
               {
@@ -134,12 +195,20 @@ export function useGameSession() {
           setEstado(s => ({
             ...s,
             respostaAtual: "",
-            questStages: Object.keys(questStagesAtual).length > 0 ? questStagesAtual : s.questStages,
-            activeQuests: activeQuestsAtual.length > 0 ? activeQuestsAtual : s.activeQuests,
-            inventory: inventoryAtual.length > 0 ? inventoryAtual : s.inventory,
-            locationNome: locationNomeAtual || s.locationNome,
-            timeOfDay: timeOfDayAtual || s.timeOfDay,
-            npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : s.npcsTrust,
+            questStages: novoTurnoBase.questStages ?? s.questStages,
+            activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
+            inventory: novoTurnoBase.inventory ?? s.inventory,
+            locationNome: novoTurnoBase.locationNome ?? s.locationNome,
+            timeOfDay: novoTurnoBase.timeOfDay ?? s.timeOfDay,
+            npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
+            spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
+            hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
+            gold: rpgUpdate.gold ?? s.gold,
+            xp: rpgUpdate.xp ?? s.xp,
+            inspiration: rpgUpdate.inspiration ?? s.inspiration,
+            deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
+            deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
+            deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             historico: [
               ...s.historico,
               {
@@ -169,7 +238,6 @@ export function useGameSession() {
     ws.onclose = () => {
       setEstado(s => ({ ...s, conectado: false }));
 
-      // Auto-reconnect apenas se o fechamento foi inesperado
       if (
         !intentionalCloseRef.current &&
         sessionIdRef.current &&
@@ -212,8 +280,12 @@ export function useGameSession() {
     wsRef.current.send(JSON.stringify({ texto }));
   }, []);
 
-  // Envia sync de HP ou condições sem passar pelo histórico de diálogo
-  const sincronizarEstado = useCallback((tipo: "sync_hp" | "sync_conditions" | "sync_inventory", payload: Record<string, unknown>) => {
+  const sincronizarEstado = useCallback((
+    tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
+          "sync_spell_slots" | "sync_hit_dice" | "sync_death_saves" |
+          "sync_gold" | "sync_xp" | "sync_inspiration",
+    payload: Record<string, unknown>
+  ) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
@@ -227,20 +299,7 @@ export function useGameSession() {
     sessionIdRef.current = null;
     personagemRef.current = undefined;
     if (sid) await encerrarSessao(sid);
-    setEstado(s => ({
-      ...s,
-      sessionId: null,
-      conectado: false,
-      reconectando: false,
-      historico: [],
-      respostaAtual: "",
-      questStages: {},
-      activeQuests: [],
-      inventory: [],
-      locationNome: "",
-      timeOfDay: "",
-      npcsTrust: {},
-    }));
+    setEstado({ ...ESTADO_INICIAL });
   }, [pararTudo]);
 
   useEffect(() => {
@@ -251,5 +310,12 @@ export function useGameSession() {
     };
   }, []);
 
-  return { ...estado, conectar, enviarComando, desconectar, sincronizarEstado, pararAudio: pararTudo };
+  return {
+    ...estado,
+    conectar,
+    enviarComando,
+    desconectar,
+    sincronizarEstado,
+    pararAudio: pararTudo,
+  };
 }

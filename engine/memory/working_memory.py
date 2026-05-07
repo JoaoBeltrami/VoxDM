@@ -106,6 +106,22 @@ class WorkingMemory:
     skill_profs: list[str] = field(default_factory=list)
     save_profs: list[str] = field(default_factory=list)
 
+    # ── Mecânicas RPG persistíveis ────────────────────────────────────────────
+    # Spell slots: nível → {current, max} — vazio para classes não-conjuradoras
+    spell_slots: dict[int, dict[str, int]] = field(default_factory=dict)
+    # Hit Dice para descanso curto
+    hit_dice_current: int = 3
+    hit_dice_max: int = 3
+    hit_dice_type: int = 8   # d8 padrão — sobrescrito por classe em nova_sessao
+    # Death saves — só relevantes quando player_hp == 0
+    death_saves_successes: int = 0
+    death_saves_failures: int = 0
+    death_saves_stable: bool = False
+    # Economia e progressão
+    gold: int = 0
+    xp: int = 0
+    inspiration: bool = False
+
     @classmethod
     def nova_sessao(
         cls,
@@ -130,8 +146,23 @@ class WorkingMemory:
         cha_score: int = 10,
         skill_profs: list[str] | None = None,
         save_profs: list[str] | None = None,
+        spell_slots: dict[int, dict[str, int]] | None = None,
+        hit_dice_current: int | None = None,
+        hit_dice_type: int | None = None,
+        gold: int = 0,
+        xp: int = 0,
+        inspiration: bool = False,
     ) -> "WorkingMemory":
         """Cria uma WorkingMemory com estado inicial zerado."""
+        # Tipo do dado de vida por classe (SRD 5e)
+        _HIT_DICE_TIPO: dict[str, int] = {
+            "Bárbaro": 12, "Guerreiro": 10, "Paladino": 10, "Ranger": 10,
+            "Bardo": 8, "Clérigo": 8, "Druida": 8, "Monge": 8, "Ladino": 8,
+            "Feiticeiro": 6, "Bruxo": 6, "Mago": 6,
+        }
+        hd_tipo = hit_dice_type if hit_dice_type is not None else _HIT_DICE_TIPO.get(player_class, 8)
+        hd_atual = hit_dice_current if hit_dice_current is not None else player_level
+
         return cls(
             location_id=location_id,
             location_nome=location_nome,
@@ -164,7 +195,39 @@ class WorkingMemory:
             cha_score=cha_score,
             skill_profs=skill_profs or [],
             save_profs=save_profs or [],
+            spell_slots=spell_slots or {},
+            hit_dice_current=hd_atual,
+            hit_dice_max=player_level,
+            hit_dice_type=hd_tipo,
+            death_saves_successes=0,
+            death_saves_failures=0,
+            death_saves_stable=False,
+            gold=gold,
+            xp=xp,
+            inspiration=inspiration,
         )
+
+    def aplicar_character_state(self, state: "object") -> None:
+        """Aplica estado carregado do SQLite sobre esta WorkingMemory.
+
+        Chamado em nova_sessao quando session_anterior_id existe — restaura
+        spell slots, gold, XP, etc. sem sobrescrever trust/quests episódicos.
+        """
+        self.spell_slots = getattr(state, "spell_slots", {})
+        self.hit_dice_current = getattr(state, "hit_dice_current", self.hit_dice_current)
+        self.hit_dice_max = getattr(state, "hit_dice_max", self.hit_dice_max)
+        self.hit_dice_type = getattr(state, "hit_dice_type", self.hit_dice_type)
+        self.death_saves_successes = getattr(state, "death_saves_successes", 0)
+        self.death_saves_failures = getattr(state, "death_saves_failures", 0)
+        self.death_saves_stable = getattr(state, "death_saves_stable", False)
+        self.gold = getattr(state, "gold", 0)
+        self.xp = getattr(state, "xp", 0)
+        self.inspiration = getattr(state, "inspiration", False)
+        # HP, inventário e condições também são restaurados
+        self.player_hp = getattr(state, "hp_current", self.player_hp)
+        self.player_hp_max = getattr(state, "hp_max", self.player_hp_max)
+        self.player_inventory = list(getattr(state, "inventory", self.player_inventory))
+        self.player_conditions = list(getattr(state, "conditions", self.player_conditions))
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona uma fala ao diálogo recente, mantendo a janela deslizante."""

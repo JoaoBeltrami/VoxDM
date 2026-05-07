@@ -22,6 +22,7 @@ import structlog
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from api.models.schemas import (
+    CharacterStateSchema,
     ComandoJogador,
     RespostaMestre,
     SessaoConfig,
@@ -36,6 +37,7 @@ from engine.llm.prompt_builder import montar_mensagens
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.session_writer import SessionWriter
 from engine.memory.working_memory import WorkingMemory
+from engine.persistence.character_store import CharacterState, CharacterStore
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/session", tags=["session"])
@@ -118,7 +120,7 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         total=len(npcs_iniciais),
     )
 
-    # Restaurar trust_levels e quest_stages de sessão anterior, se fornecida
+    # Restaurar trust_levels, quest_stages e estado do personagem de sessão anterior
     if config.session_anterior_id:
         try:
             mem_episodica = EpisodicMemory()
@@ -140,6 +142,22 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
                 )
         except Exception as e:
             log.warning("restauracao_sessao_falhou", erro=str(e))
+
+        # Restaurar estado do personagem (spell slots, gold, XP, etc.) do SQLite
+        try:
+            store = CharacterStore()
+            char_state = await store.carregar(config.session_anterior_id)
+            if char_state:
+                working_mem.aplicar_character_state(char_state)
+                log.info(
+                    "character_state_restaurado",
+                    session_id=config.session_id,
+                    gold=char_state.gold,
+                    xp=char_state.xp,
+                    slots=len(char_state.spell_slots),
+                )
+        except Exception as e:
+            log.warning("character_state_restauracao_falhou", erro=str(e))
 
     sessions[config.session_id] = sessao
     log.info("sessao_criada", session_id=config.session_id, location=config.location_id)
@@ -231,14 +249,96 @@ async def status_sessao(session_id: str) -> SessaoInfo:
     return _serializar_info(_get_sessao(session_id))
 
 
+@router.get("/{session_id}/character", response_model=CharacterStateSchema)
+async def obter_character_state(session_id: str) -> CharacterStateSchema:
+    """Retorna o estado atual do personagem (spell slots, gold, XP, etc.)."""
+    sessao = _get_sessao(session_id)
+    wm = sessao.working_mem
+    return CharacterStateSchema(
+        spell_slots=wm.spell_slots,
+        hit_dice_current=wm.hit_dice_current,
+        hit_dice_max=wm.hit_dice_max,
+        hit_dice_type=wm.hit_dice_type,
+        death_saves_successes=wm.death_saves_successes,
+        death_saves_failures=wm.death_saves_failures,
+        death_saves_stable=wm.death_saves_stable,
+        gold=wm.gold,
+        xp=wm.xp,
+        inspiration=wm.inspiration,
+    )
+
+
+@router.put("/{session_id}/character", status_code=204)
+async def salvar_character_state(session_id: str, state: CharacterStateSchema) -> None:
+    """Persiste o estado do personagem no SQLite e atualiza a WorkingMemory."""
+    sessao = _get_sessao(session_id)
+    wm = sessao.working_mem
+
+    wm.spell_slots = dict(state.spell_slots)
+    wm.hit_dice_current = state.hit_dice_current
+    wm.hit_dice_max = state.hit_dice_max
+    wm.hit_dice_type = state.hit_dice_type
+    wm.death_saves_successes = state.death_saves_successes
+    wm.death_saves_failures = state.death_saves_failures
+    wm.death_saves_stable = state.death_saves_stable
+    wm.gold = state.gold
+    wm.xp = state.xp
+    wm.inspiration = state.inspiration
+
+    store = CharacterStore()
+    await store.salvar(CharacterState(
+        session_id=session_id,
+        spell_slots=wm.spell_slots,
+        hit_dice_current=wm.hit_dice_current,
+        hit_dice_max=wm.hit_dice_max,
+        hit_dice_type=wm.hit_dice_type,
+        death_saves_successes=wm.death_saves_successes,
+        death_saves_failures=wm.death_saves_failures,
+        death_saves_stable=wm.death_saves_stable,
+        gold=wm.gold,
+        xp=wm.xp,
+        inspiration=wm.inspiration,
+        hp_current=wm.player_hp,
+        hp_max=wm.player_hp_max,
+        inventory=list(wm.player_inventory),
+        conditions=list(wm.player_conditions),
+    ))
+    log.info("character_state_salvo_via_put", session_id=session_id)
+
+
 @router.delete("/{session_id}", status_code=204)
 async def encerrar_sessao(session_id: str) -> None:
-    """Encerra a sessão, comprime o diálogo via Groq e salva memória episódica no Qdrant."""
+    """Encerra a sessão, salva estado do personagem + memória episódica."""
     sessao = _get_sessao(session_id)
+    wm = sessao.working_mem
+
+    # Persiste estado do personagem antes de destruir a sessão
+    try:
+        store = CharacterStore()
+        await store.salvar(CharacterState(
+            session_id=session_id,
+            spell_slots=wm.spell_slots,
+            hit_dice_current=wm.hit_dice_current,
+            hit_dice_max=wm.hit_dice_max,
+            hit_dice_type=wm.hit_dice_type,
+            death_saves_successes=wm.death_saves_successes,
+            death_saves_failures=wm.death_saves_failures,
+            death_saves_stable=wm.death_saves_stable,
+            gold=wm.gold,
+            xp=wm.xp,
+            inspiration=wm.inspiration,
+            hp_current=wm.player_hp,
+            hp_max=wm.player_hp_max,
+            inventory=list(wm.player_inventory),
+            conditions=list(wm.player_conditions),
+        ))
+        log.info("character_state_salvo_no_encerramento", session_id=session_id)
+    except Exception as e:
+        log.warning("character_state_save_falhou", session_id=session_id, erro=str(e))
 
     try:
         writer = SessionWriter()
-        await writer.fechar_sessao(sessao.working_mem, session_id=session_id)
+        await writer.fechar_sessao(wm, session_id=session_id)
         log.info("sessao_episodica_salva", session_id=session_id)
     except Exception as e:
         log.warning(

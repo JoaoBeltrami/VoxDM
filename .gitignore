@@ -23,3 +23,6 @@ venv/
 # Claude Code — worktrees temporários e settings locais
 .claude/worktrees/
 .claude/settings.local.jsonbenchmark/results*.json
+
+# SQLite local
+voxdm.db

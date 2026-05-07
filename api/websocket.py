@@ -174,6 +174,14 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             location_nome=wm.location_nome,
             time_of_day=wm.time_of_day,
             npcs_trust={npc: wm.trust_levels.get(npc, 0) for npc in wm.npcs_presentes},
+            spell_slots=wm.spell_slots,
+            hit_dice_current=wm.hit_dice_current,
+            gold=wm.gold,
+            xp=wm.xp,
+            inspiration=wm.inspiration,
+            death_saves_successes=wm.death_saves_successes,
+            death_saves_failures=wm.death_saves_failures,
+            death_saves_stable=wm.death_saves_stable,
         ).model_dump_json()
     )
 
@@ -250,6 +258,50 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 if isinstance(inventory, list):
                     sessao.working_mem.player_inventory = [str(i) for i in inventory]
                     log.info("inventory_sincronizado", session_id=session_id, total=len(sessao.working_mem.player_inventory))
+                continue
+
+            # Sync de spell slots — {spell_slots: {"1": {current: N, max: N}, ...}}
+            if tipo_msg == "sync_spell_slots":
+                raw = dados.get("spell_slots", {})
+                if isinstance(raw, dict):
+                    sessao.working_mem.spell_slots = {int(k): v for k, v in raw.items()}
+                    log.info("spell_slots_sincronizados", session_id=session_id, niveis=len(raw))
+                continue
+
+            # Sync de hit dice restantes
+            if tipo_msg == "sync_hit_dice":
+                current = dados.get("current")
+                if isinstance(current, int):
+                    sessao.working_mem.hit_dice_current = max(0, current)
+                continue
+
+            # Sync de death saves
+            if tipo_msg == "sync_death_saves":
+                sessao.working_mem.death_saves_successes = max(0, min(3, int(dados.get("successes", 0))))
+                sessao.working_mem.death_saves_failures = max(0, min(3, int(dados.get("failures", 0))))
+                sessao.working_mem.death_saves_stable = bool(dados.get("stable", False))
+                log.info("death_saves_sincronizados", session_id=session_id,
+                         succ=sessao.working_mem.death_saves_successes,
+                         fail=sessao.working_mem.death_saves_failures)
+                continue
+
+            # Sync de ouro
+            if tipo_msg == "sync_gold":
+                gold = dados.get("gold")
+                if isinstance(gold, int) and gold >= 0:
+                    sessao.working_mem.gold = gold
+                continue
+
+            # Sync de XP
+            if tipo_msg == "sync_xp":
+                xp = dados.get("xp")
+                if isinstance(xp, int) and xp >= 0:
+                    sessao.working_mem.xp = xp
+                continue
+
+            # Sync de inspiração
+            if tipo_msg == "sync_inspiration":
+                sessao.working_mem.inspiration = bool(dados.get("inspiration", False))
                 continue
 
             if not texto_jogador:
@@ -350,6 +402,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     location_nome=sessao.working_mem.location_nome,
                     time_of_day=sessao.working_mem.time_of_day,
                     npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 0) for npc in sessao.working_mem.npcs_presentes},
+                    spell_slots=sessao.working_mem.spell_slots,
+                    hit_dice_current=sessao.working_mem.hit_dice_current,
+                    gold=sessao.working_mem.gold,
+                    xp=sessao.working_mem.xp,
+                    inspiration=sessao.working_mem.inspiration,
+                    death_saves_successes=sessao.working_mem.death_saves_successes,
+                    death_saves_failures=sessao.working_mem.death_saves_failures,
+                    death_saves_stable=sessao.working_mem.death_saves_stable,
                 ).model_dump_json()
             )
 

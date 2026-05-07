@@ -27,6 +27,24 @@ export interface RespostaMestre {
   iteracao: number;
 }
 
+export interface SpellSlot {
+  current: number;
+  max: number;
+}
+
+export interface CharacterStateClient {
+  spell_slots: Record<number, SpellSlot>;
+  hit_dice_current: number;
+  hit_dice_max: number;
+  hit_dice_type: number;
+  death_saves_successes: number;
+  death_saves_failures: number;
+  death_saves_stable: boolean;
+  gold: number;
+  xp: number;
+  inspiration: boolean;
+}
+
 export interface MensagemWS {
   tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk";
   conteudo?: string;
@@ -43,6 +61,15 @@ export interface MensagemWS {
   location_nome?: string;
   time_of_day?: string;
   npcs_trust?: Record<string, number>;
+  // Mecânicas RPG
+  spell_slots?: Record<string, SpellSlot>;
+  hit_dice_current?: number;
+  gold?: number;
+  xp?: number;
+  inspiration?: boolean;
+  death_saves_successes?: number;
+  death_saves_failures?: number;
+  death_saves_stable?: boolean;
 }
 
 export interface PersonagemConfig {
@@ -106,4 +133,22 @@ export async function transcrever(session_id: string, audioBlob: Blob): Promise<
 
 export function wsUrl(session_id: string): string {
   return `${API_BASE.replace("http", "ws")}/ws/game/${session_id}`;
+}
+
+export async function carregarEstadoPersonagem(session_id: string): Promise<CharacterStateClient | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/session/${session_id}/character`);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function salvarEstadoPersonagem(session_id: string, state: CharacterStateClient): Promise<void> {
+  await fetch(`${API_BASE}/session/${session_id}/character`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
 }

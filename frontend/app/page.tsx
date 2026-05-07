@@ -34,6 +34,8 @@ export default function Home() {
     sessionId, playerName, conectado, carregando, respostaAtual,
     historico, erro, reconectando, questStages, activeQuests,
     locationNome, timeOfDay, npcsTrust,
+    spellSlots, hitDiceCurrent, gold, xp, inspiration,
+    deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     conectar, enviarComando, desconectar, sincronizarEstado, pararAudio,
   } = useGameSession();
 
@@ -121,11 +123,25 @@ export default function Home() {
           onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
           onSyncConditions={(conditions) => sincronizarEstado("sync_conditions", { conditions })}
           onSyncInventory={(inventory) => sincronizarEstado("sync_inventory", { inventory })}
+          onSyncSpellSlots={(spell_slots) => sincronizarEstado("sync_spell_slots", { spell_slots })}
+          onSyncHitDice={(current) => sincronizarEstado("sync_hit_dice", { current })}
+          onSyncDeathSaves={(saves) => sincronizarEstado("sync_death_saves", saves)}
+          onSyncGold={(gold) => sincronizarEstado("sync_gold", { gold })}
+          onSyncXP={(xp) => sincronizarEstado("sync_xp", { xp })}
+          onSyncInspiration={(inspiration) => sincronizarEstado("sync_inspiration", { inspiration })}
           questStages={questStages}
           activeQuests={activeQuests}
           locationNome={locationNome}
           timeOfDay={timeOfDay}
           npcsTrust={npcsTrust}
+          initSpellSlots={spellSlots}
+          initHitDiceCurrent={hitDiceCurrent}
+          initGold={gold}
+          initXP={xp}
+          initInspiration={inspiration}
+          initDeathSavesSuccesses={deathSavesSuccesses}
+          initDeathSavesFailures={deathSavesFailures}
+          initDeathSavesStable={deathSavesStable}
         />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
