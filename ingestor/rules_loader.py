@@ -33,10 +33,10 @@ log = structlog.get_logger()
 
 # Fonte pública — licença OGL / CC-BY 4.0
 _SRD_URLS: dict[str, str] = {
-    "spells":     "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/5e-SRD-Spells.json",
-    "conditions": "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/5e-SRD-Conditions.json",
-    "equipment":  "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/5e-SRD-Equipment.json",
-    "classes":    "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/5e-SRD-Classes.json",
+    "spells":     "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Spells.json",
+    "conditions": "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Conditions.json",
+    "equipment":  "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Equipment.json",
+    "classes":    "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Classes.json",
 }
 
 _NOMES_ARQUIVOS: dict[str, str] = {
