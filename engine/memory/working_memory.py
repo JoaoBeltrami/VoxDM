@@ -110,6 +110,14 @@ class WorkingMemory:
     skill_profs: list[str] = field(default_factory=list)
     save_profs: list[str] = field(default_factory=list)
 
+    # Inimigos em combate: id → {nome, estado, hp_rel}
+    # estado: "intacto" | "ferido" | "gravemente ferido" | "incapacitado" | "morto"
+    # hp_rel: impressão narrativa ("cansado mas de pé", "sangrando bastante", etc.)
+    inimigos_combate: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    # Log de consequências da sessão (max 5, rolling) — o mundo lembra
+    log_consequencias: list[str] = field(default_factory=list)
+
     # ── Mecânicas RPG persistíveis ────────────────────────────────────────────
     # Spell slots: nível → {current, max} — vazio para classes não-conjuradoras
     spell_slots: dict[int, dict[str, int]] = field(default_factory=dict)
@@ -250,16 +258,56 @@ class WorkingMemory:
         self.rodada_combate = 1
         self.iniciativa_jogador = None
 
+    def avancar_rodada(self) -> None:
+        """Incrementa contador de rodada dentro do combate ativo."""
+        if self.em_combate:
+            self.rodada_combate += 1
+
+    # ── Inimigos em combate ───────────────────────────────────────────────────
+
+    _ESTADOS_INIMIGO = frozenset(
+        {"intacto", "ferido", "gravemente ferido", "incapacitado", "morto"}
+    )
+
+    def registrar_inimigo(
+        self, inimigo_id: str, nome: str, estado: str = "intacto", hp_rel: str = ""
+    ) -> None:
+        """Adiciona ou atualiza um inimigo no combate atual."""
+        self.inimigos_combate[inimigo_id] = {
+            "nome": nome,
+            "estado": estado if estado in self._ESTADOS_INIMIGO else "intacto",
+            "hp_rel": hp_rel,
+        }
+
+    def atualizar_estado_inimigo(self, inimigo_id: str, estado: str, hp_rel: str = "") -> None:
+        """Atualiza o estado narrativo de um inimigo existente."""
+        if inimigo_id in self.inimigos_combate:
+            self.inimigos_combate[inimigo_id]["estado"] = (
+                estado if estado in self._ESTADOS_INIMIGO else "ferido"
+            )
+            if hp_rel:
+                self.inimigos_combate[inimigo_id]["hp_rel"] = hp_rel
+
+    def remover_inimigo(self, inimigo_id: str) -> None:
+        """Remove inimigo do combate (morto ou fugiu)."""
+        self.inimigos_combate.pop(inimigo_id, None)
+
     def sair_combate(self) -> None:
         """Desativa modo combate quando a cena é resolvida."""
         self.em_combate = False
         self.iniciativa_jogador = None
         self.rodada_combate = 0
+        self.inimigos_combate.clear()
 
-    def avancar_rodada(self) -> None:
-        """Incrementa contador de rodada dentro do combate ativo."""
-        if self.em_combate:
-            self.rodada_combate += 1
+    # ── Consequências da sessão ───────────────────────────────────────────────
+
+    _MAX_CONSEQUENCIAS = 5
+
+    def registrar_consequencia(self, texto: str) -> None:
+        """Adiciona consequência ao log rolling (máx 5)."""
+        self.log_consequencias.append(texto)
+        if len(self.log_consequencias) > self._MAX_CONSEQUENCIAS:
+            self.log_consequencias.pop(0)
 
     # ── Propriedades computadas D&D 5e (SRD) ─────────────────────────────────
 
@@ -363,6 +411,16 @@ class WorkingMemory:
                 else "aguardando iniciativa"
             )
             linhas.append(f"COMBATE ATIVO — {rodada_str} — {ini_str}")
+            if self.inimigos_combate:
+                partes_ini = []
+                for dados in self.inimigos_combate.values():
+                    desc = dados["nome"]
+                    if dados.get("estado") and dados["estado"] != "intacto":
+                        desc += f" ({dados['estado']})"
+                    if dados.get("hp_rel"):
+                        desc += f" [{dados['hp_rel']}]"
+                    partes_ini.append(desc)
+                linhas.append(f"Inimigos: {', '.join(partes_ini)}")
         if self.save_profs:
             _save_mods = {
                 "FOR": self.mod_for, "DES": self.mod_des, "CON": self.mod_con,
@@ -396,6 +454,9 @@ class WorkingMemory:
             linhas.append(f"\nQuests ativas: {', '.join(self.active_quest_hooks)}")
             for qid, stage in self.quest_stages.items():
                 linhas.append(f"  {qid} → estágio: {stage}")
+
+        if self.log_consequencias:
+            linhas.append(f"\nCONSEQUÊNCIAS: {'; '.join(self.log_consequencias)}")
 
         if incluir_dialogo and self.dialogo_recente:
             linhas.append("\n=== DIÁLOGO RECENTE ===")

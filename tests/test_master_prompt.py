@@ -22,12 +22,14 @@ from engine.llm.prompt_builder import (
     _COMBAT_PATH,
     _DICE_PATH,
     _MASTER_SYSTEM_PATH,
+    _SAVES_PATH,
     _PROMPT_MIN_CHARS,
     _RE_COMBATE,
     _RE_ROLAGEM,
     _carregar_combat,
     _carregar_dice,
     _carregar_master_system,
+    _carregar_saves,
     invalidar_cache,
     montar_mensagens,
     validar_master_system,
@@ -328,3 +330,79 @@ def test_montar_mensagens_em_combate_ativo_injeta_combat_md():
     mensagens = montar_mensagens(contexto)
     system = mensagens[0]["content"]
     assert "teatro da mente" in system.lower() or "lente" in system.lower()
+
+
+# ── Testes: saves.md ─────────────────────────────────────────────────────────
+
+def test_saves_md_existe():
+    assert _SAVES_PATH.exists(), "saves.md não encontrado"
+
+
+def test_saves_md_tem_conteudo_minimo():
+    conteudo = _SAVES_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) >= _PROMPT_MIN_CHARS
+
+
+def test_saves_md_cobre_seis_atributos():
+    conteudo = _SAVES_PATH.read_text(encoding="utf-8").lower()
+    for atrib in ["força", "destreza", "constituição", "inteligência", "sabedoria", "carisma"]:
+        assert atrib in conteudo, f"saves.md não menciona '{atrib}'"
+
+
+def test_saves_md_menciona_sequencia_rolagem():
+    conteudo = _SAVES_PATH.read_text(encoding="utf-8")
+    assert "Rolagem" in conteudo, "saves.md deve referenciar o formato [Rolagem:]"
+
+
+def test_carregar_saves_retorna_string():
+    invalidar_cache()
+    conteudo = _carregar_saves()
+    assert conteudo is not None
+    assert len(conteudo) > 0
+
+
+def test_invalidar_cache_reseta_saves():
+    _carregar_saves()
+    invalidar_cache()
+    import engine.llm.prompt_builder as pb
+    assert pb._saves_cache is None
+
+
+def test_montar_mensagens_em_combate_ativo_injeta_saves():
+    invalidar_cache()
+    wm = WorkingMemory.nova_sessao(
+        location_id="tharnvik",
+        location_nome="Tharnvik",
+        session_id="test-session",
+    )
+    wm.entrar_combate()
+    contexto = ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[],
+        chunks_episodicos=[],
+        chunks_regras=[],
+        relacoes_grafo=[],
+        secrets_visiveis=[],
+        transcricao_atual="o que faço agora?",
+    )
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # saves.md contém "salvaguarda" ou pelo menos um dos atributos com contexto de saves
+    assert "salvaguarda" in system.lower() or "constituição" in system.lower()
+
+
+def test_montar_mensagens_acao_combate_injeta_saves():
+    invalidar_cache()
+    contexto = _contexto_minimo("ataco o goblin com minha espada")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    assert "salvaguarda" in system.lower() or "constituição" in system.lower()
+
+
+def test_montar_mensagens_fora_combate_nao_injeta_saves():
+    invalidar_cache()
+    contexto = _contexto_minimo("eu falo com o ferreiro sobre o martelo")
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # saves.md não deve aparecer em contexto puramente social
+    assert "salvaguarda" not in system.lower()
