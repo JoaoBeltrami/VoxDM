@@ -44,7 +44,7 @@ def _rodar(coro) -> Any:
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
-tab_debug, tab_video = st.tabs(["Debug", "Modo Video"])
+tab_debug, tab_video, tab_ultimo = st.tabs(["Debug", "Modo Video", "Ultimo Turno"])
 
 
 # ── Tab: Modo Vídeo ───────────────────────────────────────────────────────────
@@ -163,6 +163,79 @@ with tab_video:
         st.caption(f"Ciclo #{evento.get('iteracao', '?')} — {evento.get('ts', '')}")
     else:
         st.info("Aguardando voice_loop emitir eventos... (rodar demo/voice_loop.py)")
+
+
+# ── Tab: Último Turno ────────────────────────────────────────────────────────
+
+with tab_ultimo:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=2000, key="ultimo_refresh")
+    except ImportError:
+        pass
+
+    st.header("Ultimo Turno")
+
+    from api.state import sessions as _sessions
+
+    session_ids = list(_sessions.keys())
+    if not session_ids:
+        st.info("Nenhuma sessao ativa. Inicie uma sessao via POST /session/start.")
+    else:
+        sid_sel = st.selectbox("Sessao", session_ids)
+        turno = _sessions[sid_sel].ultimo_turno if sid_sel in _sessions else {}
+
+        if not turno:
+            st.info("Nenhum turno registrado ainda — envie uma mensagem primeiro.")
+        else:
+            # Latência breakdown
+            lats = turno.get("latencias", {})
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Context (RAG)", f"{lats.get('context_ms', 0)}ms")
+            c2.metric("LLM 1o token", f"{lats.get('llm_first_token_ms', -1)}ms")
+            c3.metric("TTS", f"{lats.get('tts_ms', 0)}ms")
+            c4.metric("Total", f"{lats.get('total_ms', 0)}ms")
+
+            # Erros do turno
+            erros = turno.get("erros", [])
+            if erros:
+                st.error("Erros neste turno: " + " | ".join(erros))
+
+            st.divider()
+
+            # Jogador e RAG
+            st.markdown(f"**Jogador:** {turno.get('texto_jogador', '—')}")
+
+            col_lore, col_regras = st.columns(2)
+            with col_lore:
+                st.subheader("RAG — Lore")
+                for c in turno.get("rag", {}).get("chunks_lore", []):
+                    score = c.get("score", 0)
+                    cor = "🟢" if score >= 0.7 else ("🟡" if score >= 0.5 else "🔴")
+                    with st.expander(f"{cor} score={score:.3f}"):
+                        st.write(c.get("text", ""))
+                if not turno.get("rag", {}).get("chunks_lore"):
+                    st.caption("nenhum chunk de lore")
+
+            with col_regras:
+                st.subheader("RAG — Regras")
+                for c in turno.get("rag", {}).get("chunks_regras", []):
+                    score = c.get("score", 0)
+                    cor = "🟢" if score >= 0.7 else ("🟡" if score >= 0.5 else "🔴")
+                    with st.expander(f"{cor} score={score:.3f}"):
+                        st.write(c.get("text", ""))
+                if not turno.get("rag", {}).get("chunks_regras"):
+                    st.caption("nenhuma regra recuperada")
+
+            st.divider()
+
+            # Prompt enviado ao Groq
+            with st.expander("Prompt enviado ao Groq (mensagens_groq)"):
+                for msg in turno.get("mensagens_groq", []):
+                    role = msg.get("role", "?")
+                    content = msg.get("content", "")
+                    st.markdown(f"**[{role}]**")
+                    st.text(content[:2000] + ("..." if len(content) > 2000 else ""))
 
 
 # ── Tab: Debug ────────────────────────────────────────────────────────────────

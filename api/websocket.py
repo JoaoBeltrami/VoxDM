@@ -340,11 +340,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
             contexto = None
+            context_ms = 0
+            erros_turno: list[str] = []
             try:
+                t_ctx = time.perf_counter()
                 contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
+                context_ms = int((time.perf_counter() - t_ctx) * 1000)
                 mensagens = montar_mensagens(contexto)
             except Exception as e:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
+                erros_turno.append(f"context_builder: {e}")
+                _emit({"tipo": "erro", "session_id": session_id, "etapa": "context_builder", "mensagem": str(e)})
                 mensagens = [{"role": "user", "content": texto_jogador}]
 
             # Groq streaming — tokens ao cliente em tempo real
@@ -357,7 +363,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             try:
                 async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=200
+                    mensagens, temperatura=0.8, max_tokens=300
                 ):
                     resposta_completa += token
                     if latencia_primeiro_token < 0:
@@ -375,6 +381,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             except Exception as e:
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
+                erros_turno.append(f"groq: {e}")
+                _emit({"tipo": "erro", "session_id": session_id, "etapa": "groq", "mensagem": str(e)})
                 await websocket.send_text(
                     MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                 )
@@ -386,6 +394,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 tts_tasks.append(asyncio.create_task(
                     tts.sintetizar(buffer_sentenca.strip(), idioma=idioma, voice=sessao.working_mem.tts_voice)
                 ))
+            t_tts = time.perf_counter()
             for seq, task in enumerate(tts_tasks):
                 try:
                     audio_bytes = await task
@@ -398,7 +407,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             ).model_dump_json()
                         )
                 except Exception as e:
+                    erros_turno.append(f"tts_seq{seq}: {e}")
                     log.warning("tts_sentenca_falhou", seq=seq, erro=str(e))
+            tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
 
@@ -413,6 +424,29 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             sessao.iteracoes += 1
             latencia_ms = int((time.perf_counter() - t0) * 1000)
+
+            sessao.ultimo_turno = {
+                "texto_jogador": texto_jogador,
+                "mensagens_groq": mensagens,
+                "rag": {
+                    "chunks_lore": [
+                        {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
+                        for c in (contexto.chunks_semanticos if contexto else [])
+                    ],
+                    "chunks_regras": [
+                        {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
+                        for c in (contexto.chunks_regras if contexto else [])
+                    ],
+                    "relacoes_neo4j": (contexto.relacoes_grafo if contexto else []),
+                },
+                "latencias": {
+                    "context_ms": context_ms,
+                    "llm_first_token_ms": latencia_primeiro_token,
+                    "tts_ms": tts_ms,
+                    "total_ms": latencia_ms,
+                },
+                "erros": erros_turno,
+            }
 
             chunks_lore = [
                 c.get("text", "")[:120]

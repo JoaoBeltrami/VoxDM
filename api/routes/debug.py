@@ -84,3 +84,14 @@ async def telemetria(n: int = 20) -> dict[str, Any]:
     """Retorna os últimos N eventos do pub/sub de telemetria (JSONL)."""
     eventos = read_latest(n)
     return {"total": len(eventos), "eventos": eventos}
+
+
+@router.get("/ultimo-turno/{session_id}")
+async def ultimo_turno(session_id: str) -> dict[str, Any]:
+    """Retorna snapshot completo do último turno: prompt enviado ao Groq, RAG scores e breakdown de latência."""
+    sessao = sessions.get(session_id)
+    if not sessao:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    if not sessao.ultimo_turno:
+        raise HTTPException(status_code=404, detail="Nenhum turno registrado ainda nesta sessão")
+    return sessao.ultimo_turno

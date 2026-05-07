@@ -43,6 +43,7 @@ class SessaoAtiva:
     criada_em: float = field(default_factory=time.time)
     ultima_atividade: float = field(default_factory=time.time)
     resumo_anterior: str = ""  # Resumo da sessão anterior para recap narrativo na abertura
+    ultimo_turno: dict = field(default_factory=dict)  # Snapshot do último turno para /debug/ultimo-turno
 
 
 # Store global — keyed by session_id (kebab-case)

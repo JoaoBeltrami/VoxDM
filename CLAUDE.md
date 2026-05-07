@@ -235,7 +235,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `engine/llm/prompts/session_eval.md` | Compressão e avaliação de sessão — 5 momentos que um mestre humano guarda, estrutura do resumo, sinais de engajamento | ✅ Criado |
 | `engine/llm/prompts/intro_system.md` | Prompt de abertura — calibrado por classe D&D (lente perceptual), 8 princípios de mestre veterano, sessão nova vs. continuação | ✅ v2 |
 | `engine/telemetry.py` | Pub/sub leve via JSONL — emit(), read_latest(), purge_old() para voice_loop → dashboard | ✅ Criado |
-| `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo (3 cols, histórico, auto-refresh 500ms) | ✅ Atualizado |
+| `dashboard.py` | Dashboard Streamlit — aba Debug + aba Modo Vídeo + aba Último Turno (RAG scores 🟢🟡🔴, prompt Groq, latências, erros) | ✅ Atualizado |
 | `.streamlit/config.toml` | Tema escuro roxo (#7c3aed) para dashboard no vídeo | ✅ Criado |
 
 ### Melhorias RAG (Sessão 26/04)
@@ -318,11 +318,11 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | Arquivo | O que faz | Status |
 |---|---|---|
 | `api/main.py` | FastAPI app — CORS seguro (CORS_ORIGINS via env), lifespan, /health, /ws/game/{id}, /debug/* só em DEBUG=True | ✅ Criado |
-| `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket | ✅ Criado |
+| `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket. Campo `ultimo_turno: dict` guarda snapshot do turno para /debug/ultimo-turno | ✅ Atualizado |
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
 | `api/routes/session.py` | POST /session/start (+ restauração episódica + char_state), POST /{id}/transcribe, GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id}, GET/PUT /{id}/character | ✅ Atualizado |
-| `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
-| `api/websocket.py` | WebSocket streaming — TTS por sentença com asyncio.create_task() durante stream (1º áudio mais rápido); detectar_idioma() passado corretamente; audio_chunks enviados em ordem com sequencia; abertura classe-aware | ✅ Atualizado |
+| `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria, /debug/ultimo-turno/{id} — registrado APENAS quando DEBUG=True | ✅ Atualizado |
+| `api/websocket.py` | WebSocket streaming — TTS por sentença com asyncio.create_task(); detectar_idioma() passado; max_tokens=300; instrumentado com context_ms/tts_ms/erros_turno; popula sessao.ultimo_turno a cada turno; _emit(erro) nos excepts | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
 | `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk, auto-detecção de condições D&D (14 regex), condicoesDetectadas state | ✅ Atualizado |

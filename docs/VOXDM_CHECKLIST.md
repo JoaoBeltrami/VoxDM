@@ -303,7 +303,7 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
 - [x] **[BUG 1]** Corrigir false positive combat.md — removido `magia|feitiço` do RE_COMBATE; adicionado `lanç\w*|conjur\w*` (verbos de ação). "como funciona a magia Fireball?" → não injeta combat.md. *(09/05)*
 - [x] **[BUG 2]** TTS por sentença no WebSocket — `asyncio.create_task()` dispara síntese durante stream; chunks enviados em ordem após stream; `detectar_idioma()` passado corretamente. *(09/05)*
-- [ ] **[BUG 3]** Cap narrativo em `max_tokens=300` no WebSocket para respostas longas `[código]` `[claude code]` `[leve]`
+- [x] **[BUG 3]** Cap narrativo — `max_tokens=300` no WebSocket. *(09/05)*
 - [ ] Re-rodar benchmark após os 3 fixes — meta: mediana 1º audio <1200ms `[revisão]`
 - [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
 - [ ] `cloudflared tunnel login` → URL permanente ⏳ precisa browser `[roteiro]`
@@ -312,11 +312,11 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 ### Fase 5 — Monitoramento e Observabilidade (planejada)
 > Detalhes completos em `.internal/MONITORAMENTO.md`
 
-**Prio 1 — Debug real (antes do e2e)**
-- [ ] `ultimo_turno` em `SessaoAtiva` + latências reais no `websocket.py` `[código]` `[claude code]` `[moderado]`
-- [ ] `GET /debug/ultimo-turno/{id}` — prompt, RAG scores, breakdown latência `[código]` `[claude code]` `[leve]`
-- [ ] Emitir `{"tipo": "erro"}` nos `except` do `websocket.py` `[código]` `[claude code]` `[leve]`
-- [ ] Nova aba "Último Turno" no `dashboard.py` `[código]` `[claude code]` `[leve]`
+**Prio 1 — Debug real (antes do e2e)** ✅ CONCLUÍDA
+- [x] `ultimo_turno` em `SessaoAtiva` + latências reais no `websocket.py` — context_ms, llm_first_token_ms, tts_ms, total_ms *(09/05)*
+- [x] `GET /debug/ultimo-turno/{id}` — retorna prompt completo, RAG scores (com _score), breakdown latência *(09/05)*
+- [x] Emitir `{"tipo": "erro"}` nos `except` do `websocket.py` — context_builder e groq *(09/05)*
+- [x] Nova aba "Último Turno" no `dashboard.py` — 4 métricas, RAG scores 🟢🟡🔴, prompt expandível *(09/05)*
 
 **Prio 2 — Histórico e agregação (antes do vídeo)**
 - [ ] `SpanLatencia` dataclass em `telemetry.py` `[código]` `[claude code]` `[leve]`
