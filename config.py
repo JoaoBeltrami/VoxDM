@@ -8,14 +8,12 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str
     NEO4J_URI: str
     NEO4J_PASSWORD: str
-    LANGCHAIN_API_KEY: str
 
     # OPCIONAIS — têm default, não travam o boot
     GEMINI_API_KEY: str = ""  # deprecated — free tier extinto
+    LANGCHAIN_API_KEY: str = ""  # mantido para compatibilidade com .env existentes; não usado
     NEO4J_USER: str = "neo4j"
     GROQ_MODEL: str = "llama-3.3-70b-versatile"  # centralizado aqui conforme DIRETRIZES
-    LANGCHAIN_TRACING_V2: bool = True
-    LANGCHAIN_PROJECT: str = "voxdm"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
     # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
@@ -52,7 +50,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "GROQ_API_KEY", "QDRANT_URL", "QDRANT_API_KEY",
-        "NEO4J_URI", "NEO4J_PASSWORD", "LANGCHAIN_API_KEY",
+        "NEO4J_URI", "NEO4J_PASSWORD",
     )
     @classmethod
     def nao_pode_ser_vazio(cls, v: str, info) -> str:

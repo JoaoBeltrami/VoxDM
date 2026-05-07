@@ -14,7 +14,6 @@ Exemplo:
     DELETE /session/sess-01       → 204 (salva memória episódica)
 """
 
-import tempfile
 import time
 from typing import Any
 

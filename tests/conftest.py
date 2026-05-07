@@ -23,7 +23,6 @@ os.environ.setdefault("QDRANT_URL",          "https://test.qdrant.io")
 os.environ.setdefault("QDRANT_API_KEY",      "test-qdrant-key")
 os.environ.setdefault("NEO4J_URI",           "neo4j+s://test.databases.neo4j.io")
 os.environ.setdefault("NEO4J_PASSWORD",      "test-neo4j-password")
-os.environ.setdefault("LANGCHAIN_API_KEY",   "test-langchain-key")
 
 
 @pytest.fixture
@@ -34,7 +33,6 @@ def settings_mock(monkeypatch):
     monkeypatch.setenv("QDRANT_API_KEY", "test-qdrant-key")
     monkeypatch.setenv("NEO4J_URI", "neo4j+s://test.databases.neo4j.io")
     monkeypatch.setenv("NEO4J_PASSWORD", "test-neo4j-password")
-    monkeypatch.setenv("LANGCHAIN_API_KEY", "test-langchain-key")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
     from config import Settings

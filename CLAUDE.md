@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 7 de maio de 2026
+> Atualizado: 8 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -133,6 +133,10 @@ NÃO pular fases             → Fase 3 antes de 5, sempre
 NÃO usar Curse of Strahd    → copyright. Só "Os Filhos de Valdrek" até engine pronta
 NÃO usar material licenciado → apenas SRD aberto (5e-bits/5e-database)
 
+# Configuração
+NÃO tornar LANGCHAIN_API_KEY obrigatório → LangChain não é usado na engine; campo é opcional
+NÃO adicionar imports de langchain → não está na stack (tracing via LangSmith não ativado)
+
 # Segurança
 NÃO expor /debug/* em prod  → proteger com settings.debug
 NÃO commitar chaves API     → git grep "gsk_" antes de push
@@ -153,8 +157,8 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 ### Configuração (Fase 0)
 | Arquivo | O que faz | Status |
 |---|---|---|
-| `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT, EMBEDDING_MODEL, GROQ_MODEL | ✅ Atualizado |
-| `.env.example` | Template de variáveis de ambiente documentado — inclui CORS_ORIGINS=http://localhost:3000,http://localhost:3001 | ✅ Atualizado |
+| `config.py` | Configuração centralizada via pydantic-settings — inclui CORS_ORIGINS, API_HOST, API_PORT, EMBEDDING_MODEL, GROQ_MODEL. LANGCHAIN_API_KEY agora opcional (não usado na engine) | ✅ Atualizado |
+| `.env.example` | Template de variáveis de ambiente documentado — encoding UTF-8 corrigido; LANGCHAIN_API_KEY movida para seção legado | ✅ Atualizado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
 | `Makefile` | Targets: run, run-api, test (dep: ingest), ingest, debug, backup — usa `uv run` | ✅ Atualizado |
 | `start.bat` | Mata portas 8000/3000, limpa .next, inicia API+frontend, abre browser após 20s | ✅ Corrigido |

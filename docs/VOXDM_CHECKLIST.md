@@ -1,5 +1,5 @@
 # VOXDM_CHECKLIST.md
-> Versão 2.5 — 7 de maio de 2026
+> Versão 2.6 — 8 de maio de 2026
 > Checklists executáveis por fase — separado do documento técnico
 > Usar junto com VOXDM_PROJETO.md para contexto técnico completo
 
@@ -312,6 +312,29 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ### Pendente
 - [ ] `tests/test_character_store.py` — testes SQLite persistence `[código]` `[claude code]` `[leve]`
+
+---
+
+## Auditoria de Código — 08/05/2026 ✅ CONCLUÍDA
+
+### Bugs corrigidos
+- [x] `config.py` — `LANGCHAIN_API_KEY` era campo obrigatório mas LangChain não é usado na engine; servidor não subia sem a key no `.env`. Corrigido: agora opcional com default `""`
+- [x] `config.py` — campos mortos `LANGCHAIN_TRACING_V2` e `LANGCHAIN_PROJECT` removidos
+- [x] `api/routes/session.py` — `import tempfile` removido (unused; temp file é criado internamente no stt.py)
+- [x] `engine/voice_runner.py` — `print()` substituído por `log.info()` (violação de convenção)
+- [x] `tests/conftest.py` e `test_config.py` — referências ao `LANGCHAIN_API_KEY` removidas
+- [x] `.env.example` — encoding corrompido (latin1 inválido) corrigido para UTF-8; LANGCHAIN movido para seção legado
+
+### Confirmado OK (sem alteração necessária)
+- CORS restrito via `settings.CORS_ORIGINS` (não `allow_origins=["*"]`)
+- `/debug/*` só registrado quando `DEBUG=True`
+- Todas as queries SQLite parametrizadas (sem SQL injection)
+- Temp file em `stt.py` com `finally: unlink()` — correto para Windows
+- `session_id` validado com `^[a-z0-9-]+$` no schema
+- `tenacity` retry em todos os clientes externos
+- `structlog` em todo código de produção (zero `print()` na API/engine)
+- `from config import settings` em todo lugar (zero `os.getenv()`)
+- **207/207 testes passando após correções**
 
 ---
 

@@ -21,5 +21,4 @@ def test_settings_falha_com_key_vazia():
             QDRANT_API_KEY="x",
             NEO4J_URI="x",
             NEO4J_PASSWORD="x",
-            LANGCHAIN_API_KEY="x",
         )

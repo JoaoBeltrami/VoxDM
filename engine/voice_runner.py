@@ -270,7 +270,7 @@ class VoiceRunner:
         )
 
         await self._warmup()
-        print("\nFale ao microfone. Ctrl+C para encerrar.\n")
+        log.info("microfone_pronto", instrucao="Fale ao microfone. Ctrl+C para encerrar.")
 
         latencias: list[int] = []
         primeiros_audios: list[int] = []
