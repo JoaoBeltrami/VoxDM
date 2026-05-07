@@ -133,6 +133,7 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
                     k: str(v) for k, v in entrada.get("quest_stages", {}).items()
                 }
                 working_mem.active_quest_hooks = list(working_mem.quest_stages.keys())
+                sessao.resumo_anterior = str(entrada.get("resumo_curto", ""))
                 log.info(
                     "sessao_anterior_restaurada",
                     session_id=config.session_id,

@@ -5,6 +5,7 @@ import type { PersonagemConfig, SpellSlot } from "@/lib/api";
 
 interface Props {
   personagem: PersonagemConfig;
+  sessionId?: string | null;
   onRolar?: (resultado: string) => void;
   onSyncHP?: (hp: number) => void;
   onSyncConditions?: (conditions: string[]) => void;
@@ -129,6 +130,7 @@ function rolar(faces: number): number {
 
 export function CharacterSheet({
   personagem,
+  sessionId,
   onRolar, onSyncHP, onSyncConditions, onSyncInventory,
   onSyncSpellSlots, onSyncHitDice, onSyncDeathSaves,
   onSyncGold, onSyncXP, onSyncInspiration,
@@ -384,6 +386,44 @@ export function CharacterSheet({
     setInspiration(novo); onSyncInspiration?.(novo);
   };
 
+  // ── Concentração ──────────────────────────────────────────────────────────
+  const [concentrando, setConcentrando] = useState(false);
+  const [feiticoConcentracao, setFeiticoConcentracao] = useState("");
+
+  // ── Ações de turno ────────────────────────────────────────────────────────
+  const [acaoUsada, setAcaoUsada] = useState(false);
+  const [acaoBonusUsada, setAcaoBonusUsada] = useState(false);
+  const [reacaoUsada, setReacaoUsada] = useState(false);
+  const [acoesAberto, setAcoesAberto] = useState(false);
+
+  const resetarTurno = () => {
+    setAcaoUsada(false); setAcaoBonusUsada(false); setReacaoUsada(false);
+  };
+
+  // ── Locais visitados ──────────────────────────────────────────────────────
+  const [locaisVisitados, setLocaisVisitados] = useState<string[]>([]);
+  const [mapaAberto, setMapaAberto] = useState(false);
+
+  useEffect(() => {
+    if (!locationNome) return;
+    setLocaisVisitados(prev =>
+      prev.includes(locationNome) ? prev : [...prev, locationNome]
+    );
+  }, [locationNome]);
+
+  // ── Calendário in-game ────────────────────────────────────────────────────
+  const _diaKey = `voxdm_gameday_${sessionId ?? "global"}`;
+  const [diaDaJornada, setDiaDaJornada] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    return parseInt(localStorage.getItem(_diaKey) ?? "1") || 1;
+  });
+
+  const mudarDia = (delta: number) => {
+    const novo = Math.max(1, diaDaJornada + delta);
+    setDiaDaJornada(novo);
+    if (typeof window !== "undefined") localStorage.setItem(_diaKey, String(novo));
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="absolute right-4 top-14 z-10">
@@ -414,6 +454,11 @@ export function CharacterSheet({
                 📍 {locationNome}{timeOfDay ? ` · ${timeOfDay}` : ""}
               </p>
             )}
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
+              <span>📅 Dia {diaDaJornada}</span>
+              <button onClick={() => mudarDia(-1)} className="text-zinc-700 hover:text-zinc-400 transition">−</button>
+              <button onClick={() => mudarDia(+1)} className="text-zinc-700 hover:text-zinc-400 transition">+</button>
+            </div>
           </div>
 
           {/* Death Saves — só quando HP = 0 */}
@@ -511,6 +556,75 @@ export function CharacterSheet({
               <span>✨ Inspiração</span>
               <span>{inspiration ? "Ativa" : "—"}</span>
             </button>
+          </div>
+
+          {/* Concentração */}
+          <div className="mb-3 border-b border-zinc-800 pb-3">
+            <button onClick={() => {
+              const novo = !concentrando;
+              setConcentrando(novo);
+              if (!novo) setFeiticoConcentracao("");
+            }}
+              className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs transition ${
+                concentrando
+                  ? "border-blue-500/60 bg-blue-900/20 text-blue-300"
+                  : "border-zinc-700 bg-zinc-800/50 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+              }`}
+            >
+              <span>🔮 Concentração</span>
+              <span>{concentrando ? "Ativa" : "—"}</span>
+            </button>
+            {concentrando && (
+              <input
+                value={feiticoConcentracao}
+                onChange={e => setFeiticoConcentracao(e.target.value)}
+                placeholder="Nome do feitiço…"
+                maxLength={40}
+                className="mt-1.5 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-blue-500"
+              />
+            )}
+          </div>
+
+          {/* Ações de turno */}
+          <div className="mb-3 border-b border-zinc-800 pb-3">
+            <button onClick={() => setAcoesAberto(a => !a)}
+              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+            >
+              <span>
+                Ações de Turno
+                {(acaoUsada || acaoBonusUsada || reacaoUsada) && (
+                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                    {[acaoUsada && "Ação", acaoBonusUsada && "Bônus", reacaoUsada && "Reação"].filter(Boolean).join(", ")}
+                  </span>
+                )}
+              </span>
+              <span>{acoesAberto ? "▲" : "▼"}</span>
+            </button>
+            {acoesAberto && (
+              <div className="mt-2 space-y-1.5">
+                {([
+                  { label: "Ação", state: acaoUsada, set: setAcaoUsada },
+                  { label: "Ação Bônus", state: acaoBonusUsada, set: setAcaoBonusUsada },
+                  { label: "Reação", state: reacaoUsada, set: setReacaoUsada },
+                ] as const).map(({ label, state, set }) => (
+                  <button key={label} onClick={() => set(!state)}
+                    className={`flex w-full items-center justify-between rounded border px-3 py-1.5 text-xs transition ${
+                      state
+                        ? "border-zinc-600 bg-zinc-700/50 text-zinc-400 line-through"
+                        : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-violet-500"
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span>{state ? "Usada" : "Disponível"}</span>
+                  </button>
+                ))}
+                <button onClick={resetarTurno}
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 py-1 text-xs text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-400"
+                >
+                  Reset Turno
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Hit Dice + Descanso */}
@@ -816,6 +930,38 @@ export function CharacterSheet({
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mapa de texto */}
+          {locaisVisitados.length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <button onClick={() => setMapaAberto(a => !a)}
+                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <span>
+                  Locais Visitados
+                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{locaisVisitados.length}</span>
+                </span>
+                <span>{mapaAberto ? "▲" : "▼"}</span>
+              </button>
+              {mapaAberto && (
+                <div className="mt-2 space-y-1">
+                  {locaisVisitados.map((local, i) => (
+                    <div key={i}
+                      className={`flex items-center gap-2 rounded px-2 py-1 text-xs ${
+                        local === locationNome
+                          ? "bg-violet-900/30 text-violet-300"
+                          : "text-zinc-500"
+                      }`}
+                    >
+                      <span>{local === locationNome ? "📍" : "·"}</span>
+                      <span>{local}</span>
+                      {local === locationNome && <span className="text-[10px] text-violet-500">atual</span>}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

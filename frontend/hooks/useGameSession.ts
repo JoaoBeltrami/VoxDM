@@ -18,6 +18,7 @@ export interface TurnoHistorico {
   latencia_ms: number;
   chunks_lore: string[];
   chunks_regras: string[];
+  tipo?: "normal" | "recap";
 }
 
 interface EstadoSessao {
@@ -120,6 +121,24 @@ export function useGameSession() {
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
         tocarChunk(msg.conteudo_b64);
+      }
+
+      if (msg.tipo === "recap" && msg.conteudo) {
+        setEstado(s => ({
+          ...s,
+          historico: [
+            ...s.historico,
+            {
+              id: Date.now(),
+              jogador: "",
+              mestre: msg.conteudo ?? "",
+              latencia_ms: 0,
+              chunks_lore: [],
+              chunks_regras: [],
+              tipo: "recap",
+            },
+          ],
+        }));
       }
 
       if (msg.tipo === "token" && msg.conteudo) {

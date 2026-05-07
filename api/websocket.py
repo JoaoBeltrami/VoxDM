@@ -140,6 +140,16 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         {"role": "user", "content": intro_user},
     ]
 
+    # Recap da sessão anterior — enviado antes do streaming de abertura
+    if sessao.resumo_anterior:
+        await websocket.send_text(
+            MensagemWS(
+                tipo="recap",
+                conteudo=sessao.resumo_anterior,
+            ).model_dump_json()
+        )
+        log.info("recap_anterior_enviado", session_id=sessao.session_id, chars=len(sessao.resumo_anterior))
+
     resposta_intro = ""
     tts = _obter_tts()
 

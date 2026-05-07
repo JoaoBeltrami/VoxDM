@@ -13,6 +13,42 @@ interface Props {
   onIniciarFala?:   () => void;
 }
 
+// Comandos de voz reconhecidos e suas transformações para o WS
+const COMANDOS_VOZ: { pattern: RegExp; transformar: (m: RegExpMatchArray) => string }[] = [
+  {
+    pattern: /\b(descanso\s+curto|descansando\s+um\s+pouco|vou\s+descansar\s+um\s+pouco)\b/i,
+    transformar: () => "[Descanso Curto — recupero um dado de vida]",
+  },
+  {
+    pattern: /\b(descanso\s+longo|durmo|vou\s+acampar|acampar\s+aqui|passo\s+a\s+noite)\b/i,
+    transformar: () => "[Descanso Longo — descanso por 8 horas e recupero HP e slots]",
+  },
+  {
+    pattern: /\brolar?\s+(de\s+)?(percep[cç][aã]o)\b/i,
+    transformar: () => "[Verifico minha percepção — olho ao redor com atenção]",
+  },
+  {
+    pattern: /\brolar?\s+(de\s+)?(furtividade|furtivo)\b/i,
+    transformar: () => "[Tento me mover furtivamente]",
+  },
+  {
+    pattern: /\brolar?\s+(de\s+)?(intui[cç][aã]o|intuir)\b/i,
+    transformar: () => "[Leio a situação — tento perceber intenções ocultas]",
+  },
+  {
+    pattern: /\binvestigar?\b.{0,20}\b(sala|local|ambiente|área|quarto)\b/i,
+    transformar: (m) => `[${m[0].trim()} — examino cuidadosamente]`,
+  },
+];
+
+function processarComandoVoz(texto: string): string {
+  for (const { pattern, transformar } of COMANDOS_VOZ) {
+    const m = texto.match(pattern);
+    if (m) return transformar(m);
+  }
+  return texto;
+}
+
 export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala }: Props) {
   const [texto,        setTexto]        = useState("");
   const [ouvindo,      setOuvindo]      = useState(false);
@@ -58,7 +94,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
         try {
           const texto = await transcrever(sessionId, blob);
           setPreview("");
-          if (texto.trim()) onEnviar(texto.trim());
+          if (texto.trim()) onEnviar(processarComandoVoz(texto.trim()));
         } catch {
           // Falha na transcrição — fallback silencioso (texto ainda disponível)
           setPreview("");
@@ -106,7 +142,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
       if (ev.results[ev.results.length - 1].isFinal) {
         setPreview("");
         _setOuvindo(false);
-        if (transcript.trim()) onEnviar(transcript.trim());
+        if (transcript.trim()) onEnviar(processarComandoVoz(transcript.trim()));
       } else {
         setPreview(transcript);
       }

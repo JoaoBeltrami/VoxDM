@@ -2,12 +2,14 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
+import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { CharacterForm } from "@/components/CharacterForm";
 import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
+import { PlayerJournal } from "@/components/PlayerJournal";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
@@ -90,6 +92,9 @@ export default function Home() {
     });
   }, [conectar, sessaoSelecionada, personagem, vozSelecionada]);
 
+  const { ativo: ambienteAtivo, cena: ambienteCena, toggle: toggleAmbiente } =
+    useAmbientAudio(locationNome ?? "", false);
+
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
     return (
@@ -109,16 +114,54 @@ export default function Home() {
 
           <span className="text-xs font-semibold tracking-widest text-violet-400/70">VOXDM</span>
 
-          <button
-            onClick={desconectar}
-            className="text-xs text-zinc-600 transition hover:text-zinc-400"
-          >
-            Encerrar
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleAmbiente}
+              title={ambienteAtivo ? `Ambiente: ${ambienteCena} (clique para pausar)` : "Ligar música ambiente"}
+              className={`text-xs transition ${
+                ambienteAtivo ? "text-violet-400 hover:text-violet-300" : "text-zinc-600 hover:text-zinc-400"
+              }`}
+            >
+              {ambienteAtivo ? "♫" : "♩"}
+            </button>
+            <button
+              onClick={() => {
+                if (!historico.length) return;
+                const linhas = historico.flatMap(t => {
+                  const parts: string[] = [];
+                  if (t.tipo === "recap") parts.push(`[RECAP]\n${t.mestre}`);
+                  else {
+                    if (t.jogador) parts.push(`${playerName ?? "Jogador"}: ${t.jogador}`);
+                    if (t.mestre) parts.push(`Mestre: ${t.mestre}`);
+                  }
+                  return parts;
+                });
+                const txt = `VoxDM — Sessão ${sessionId}\n${"─".repeat(40)}\n\n${linhas.join("\n\n")}`;
+                const blob = new Blob([txt], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `voxdm-${sessionId}.txt`; a.click();
+                URL.revokeObjectURL(url);
+              }}
+              title="Exportar transcript"
+              className="text-xs text-zinc-600 transition hover:text-zinc-400"
+            >
+              ↓
+            </button>
+            <button
+              onClick={desconectar}
+              className="text-xs text-zinc-600 transition hover:text-zinc-400"
+            >
+              Encerrar
+            </button>
+          </div>
         </header>
+
+        <PlayerJournal sessionId={sessionId} />
 
         <CharacterSheet
           personagem={personagem}
+          sessionId={sessionId}
           onRolar={enviarComando}
           onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
           onSyncConditions={(conditions) => sincronizarEstado("sync_conditions", { conditions })}
@@ -155,6 +198,36 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
+          {/* Botão d20 rápido — aparece quando é a vez do jogador */}
+          {(() => {
+            const ultimaFala = historico.length > 0
+              ? historico[historico.length - 1].mestre
+              : "";
+            const esperandoRolagem = !respostaAtual &&
+              historico.length > 0 &&
+              ultimaFala.trimEnd().endsWith("?");
+            const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
+            if (!turnoJogador) return null;
+            return (
+              <button
+                onClick={() => {
+                  const val = Math.floor(Math.random() * 20) + 1;
+                  const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
+                  enviarComando(`[Rolagem: d20 = ${val}${critico}]`);
+                }}
+                title="Rolar d20"
+                className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                  esperandoRolagem
+                    ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
+                    : "border-zinc-700 bg-zinc-900 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <span>🎲</span>
+                <span>d20</span>
+              </button>
+            );
+          })()}
+
           <div className="relative">
             <VoxOrb estado={orbEstado} tamanho={64} />
             {/* Botão de parar fala — aparece sobre o orb quando o mestre está falando */}

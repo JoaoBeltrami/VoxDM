@@ -13,8 +13,21 @@ export function MasterResponse({ historico, respostaAtual, playerName }: Props) 
     <div className="flex flex-col gap-4 overflow-y-auto">
       {historico.map((turno) => (
         <div key={turno.id} className="flex flex-col gap-2">
+
+          {/* Recap da sessão anterior — exibido com estilo sepia antes da abertura */}
+          {turno.tipo === "recap" && turno.mestre && (
+            <div className="self-start w-full rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600/80">
+                Anteriormente…
+              </p>
+              <p className="text-sm leading-relaxed text-amber-200/70 italic">
+                {turno.mestre}
+              </p>
+            </div>
+          )}
+
           {/* Fala do jogador — omitida em mensagens de abertura (jogador == "") */}
-          {turno.jogador && (
+          {turno.tipo !== "recap" && turno.jogador && (
             <div className="self-end flex flex-col items-end gap-0.5">
               {playerName && (
                 <span className="mr-1 text-xs text-violet-400/70">{playerName}</span>
@@ -26,7 +39,7 @@ export function MasterResponse({ historico, respostaAtual, playerName }: Props) 
           )}
 
           {/* Resposta do Mestre */}
-          {turno.mestre && (
+          {turno.tipo !== "recap" && turno.mestre && (
             <div className="self-start max-w-[90%] rounded-xl bg-zinc-800 px-4 py-3 text-sm leading-relaxed text-zinc-100">
               {turno.mestre}
               <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">

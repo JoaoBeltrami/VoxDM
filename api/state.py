@@ -42,6 +42,7 @@ class SessaoAtiva:
     iteracoes: int = 0
     criada_em: float = field(default_factory=time.time)
     ultima_atividade: float = field(default_factory=time.time)
+    resumo_anterior: str = ""  # Resumo da sessão anterior para recap narrativo na abertura
 
 
 # Store global — keyed by session_id (kebab-case)
