@@ -225,7 +225,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `engine/memory/session_writer.py` | Comprime sessão via Groq, upsert no Qdrant voxdm_episodic, cria coleção se ausente | ✅ Criado |
 | `engine/memory/trust_detector.py` | Detecta mudanças de trust via regex no texto do jogador — retorna lista de (npc_id, delta); wired em websocket.py | ✅ Criado |
 | `engine/llm/groq_client.py` | Cliente Groq + fallback Ollama — completar() e completar_stream() | ✅ Criado |
-| `engine/llm/types.py` | Tipos compartilhados entre módulos LLM — ContextoMontado, etc. — evita imports circulares | ✅ Criado |
+| `engine/llm/types.py` | Tipos compartilhados entre módulos LLM — ContextoMontado, RE_COMBATE (usa lanç\w*/conjur\w* em vez de magia/feitiço para evitar falso positivo em queries de regras) | ✅ Atualizado |
 | `engine/llm/prompt_builder.py` | Monta prompt final — budget por camada, cache de prompts, injeção condicional de dice.md (regex rolagem) + combat.md + saves.md (em_combate ou ação de combate) | ✅ Atualizado |
 | `engine/llm/prompts/master_system.md` | Prompt do mestre v4 — identidade humana, voz falada PT-BR, passive perception proativa, CONSEQUÊNCIAS section, marcos de progressão, sequência obrigatória de dados em combate | ✅ v4 |
 | `engine/llm/prompts/dice.md` | Guia de rolagem — escala narrativa d20, danos, d100, Vantagem/Desvantagem (dois dados, uma narrativa), nunca expor número | ✅ Atualizado |
@@ -322,7 +322,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
 | `api/routes/session.py` | POST /session/start (+ restauração episódica + char_state), POST /{id}/transcribe, GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id}, GET/PUT /{id}/character | ✅ Atualizado |
 | `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria — registrado APENAS quando DEBUG=True | ✅ Criado |
-| `api/websocket.py` | WebSocket streaming — stream tokens → TTS sintetizar() UMA chamada pós-stream + audio_chunk base64 + abertura classe-aware (quests/NPCs/continuação no intro_user) | ✅ Atualizado |
+| `api/websocket.py` | WebSocket streaming — TTS por sentença com asyncio.create_task() durante stream (1º áudio mais rápido); detectar_idioma() passado corretamente; audio_chunks enviados em ordem com sequencia; abertura classe-aware | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
 | `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk, auto-detecção de condições D&D (14 regex), condicoesDetectadas state | ✅ Atualizado |

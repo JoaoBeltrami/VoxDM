@@ -16,10 +16,13 @@ if TYPE_CHECKING:
 # Detecta o formato [Rolagem: dX = Y] enviado pelo CharacterSheet
 RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
 
-# Detecta ação de combate no texto do jogador
+# Detecta ação de combate no texto do jogador.
+# Removido: magia|feitiço — substantivos que disparavam falso positivo em queries de regras
+# ("como funciona a magia Fireball?"), inflando o prompt com combat.md desnecessariamente.
+# Substituído por: lanç\w* e conjur\w* — verbos de ação que só aparecem em contexto de combate.
 RE_COMBATE = re.compile(
     r"\b(atac[oa]r?|golpe[io]+|firo|fere[i]?|mato|luto|combate|inimigo|espada|adaga|"
-    r"arco|flecha|magia|feitiço|briga|soco|chuto|defendo|paro o golpe|escudo)\b",
+    r"arco|flecha|lanç\w*|conjur\w*|briga|soco|chuto|defendo|paro o golpe|escudo)\b",
     re.IGNORECASE,
 )
 

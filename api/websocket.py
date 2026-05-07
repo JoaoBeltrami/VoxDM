@@ -21,6 +21,7 @@ Exemplo:
     # Enviar:   {"texto": "O que vejo ao entrar na taverna?"}
 """
 
+import asyncio
 import base64
 import json
 import re
@@ -36,6 +37,7 @@ from api.state import SessaoAtiva, sessions
 from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE, _LEMBRETE_SAIDA
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
+from engine.voice.language import detectar_idioma
 
 # Detecta sinais de fim de combate para desativar em_combate na WorkingMemory
 _RE_FIM_COMBATE = re.compile(
@@ -349,6 +351,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             resposta_completa = ""
             latencia_primeiro_token = -1
             tts = _obter_tts()
+            idioma = detectar_idioma(texto_jogador)
+            buffer_sentenca = ""
+            tts_tasks: list[asyncio.Task] = []
 
             try:
                 async for token in sessao.groq.completar_stream(
@@ -360,6 +365,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     await websocket.send_text(
                         MensagemWS(tipo="token", conteudo=token).model_dump_json()
                     )
+                    if tts:
+                        buffer_sentenca += token
+                        if buffer_sentenca.rstrip()[-1:] in ".!?" and len(buffer_sentenca.split()) >= 4:
+                            tts_tasks.append(asyncio.create_task(
+                                tts.sintetizar(buffer_sentenca.strip(), idioma=idioma, voice=sessao.working_mem.tts_voice)
+                            ))
+                            buffer_sentenca = ""
 
             except Exception as e:
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
@@ -368,11 +380,25 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
                 continue
 
-            # TTS: uma única síntese do texto completo após o stream terminar
-            if tts:
-                await _sintetizar_e_enviar(
-                    websocket, tts, resposta_completa, voice=sessao.working_mem.tts_voice
-                )
+            # Flush do restante (última sentença sem pontuação final) e envia chunks em ordem.
+            # As tasks já estavam rodando em paralelo durante o stream — primeiro áudio chega mais rápido.
+            if tts and buffer_sentenca.strip():
+                tts_tasks.append(asyncio.create_task(
+                    tts.sintetizar(buffer_sentenca.strip(), idioma=idioma, voice=sessao.working_mem.tts_voice)
+                ))
+            for seq, task in enumerate(tts_tasks):
+                try:
+                    audio_bytes = await task
+                    if audio_bytes:
+                        await websocket.send_text(
+                            MensagemWS(
+                                tipo="audio_chunk",
+                                conteudo_b64=base64.b64encode(audio_bytes).decode("ascii"),
+                                sequencia=seq,
+                            ).model_dump_json()
+                        )
+                except Exception as e:
+                    log.warning("tts_sentenca_falhou", seq=seq, erro=str(e))
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
 

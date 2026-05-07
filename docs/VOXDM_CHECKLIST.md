@@ -301,8 +301,8 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 
 ### Pendente
 - [ ] **`make ingest`** — re-indexar Qdrant antes do primeiro teste real `[revisão]`
-- [ ] **[BUG 1]** Corrigir false positive combat.md — "Fireball" (nome de magia) não é ação de combate `[código]` `[claude code]` `[leve]`
-- [ ] **[BUG 2]** Restaurar TTS por sentença no WebSocket — `sintetizar_stream()` ou buffer por frase enquanto LLM ainda streama `[código]` `[claude code]` `[moderado]`
+- [x] **[BUG 1]** Corrigir false positive combat.md — removido `magia|feitiço` do RE_COMBATE; adicionado `lanç\w*|conjur\w*` (verbos de ação). "como funciona a magia Fireball?" → não injeta combat.md. *(09/05)*
+- [x] **[BUG 2]** TTS por sentença no WebSocket — `asyncio.create_task()` dispara síntese durante stream; chunks enviados em ordem após stream; `detectar_idioma()` passado corretamente. *(09/05)*
 - [ ] **[BUG 3]** Cap narrativo em `max_tokens=300` no WebSocket para respostas longas `[código]` `[claude code]` `[leve]`
 - [ ] Re-rodar benchmark após os 3 fixes — meta: mediana 1º audio <1200ms `[revisão]`
 - [ ] Testar loop completo voz→resposta→áudio no browser *(marco Fase 2)* `[revisão]` `[roteiro]`
