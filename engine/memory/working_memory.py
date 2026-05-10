@@ -118,6 +118,11 @@ class WorkingMemory:
     # Log de consequências da sessão (max 5, rolling) — o mundo lembra
     log_consequencias: list[str] = field(default_factory=list)
 
+    # Aftermath: True no turno imediatamente após fim de combate — injeta cue de silêncio
+    saiu_combate_recentemente: bool = False
+    # Turnos consecutivos sem combate ou drama — escalada automática de tensão após 5
+    turnos_sem_tensao: int = 0
+
     # ── Mecânicas RPG persistíveis ────────────────────────────────────────────
     # Spell slots: nível → {current, max} — vazio para classes não-conjuradoras
     spell_slots: dict[int, dict[str, int]] = field(default_factory=dict)
@@ -294,10 +299,19 @@ class WorkingMemory:
 
     def sair_combate(self) -> None:
         """Desativa modo combate quando a cena é resolvida."""
+        # Registra consequência antes de limpar inimigos
+        mortos = sum(1 for d in self.inimigos_combate.values() if d.get("estado") == "morto")
+        if mortos > 0:
+            self.registrar_consequencia(f"Combate encerrado — {mortos} inimigo(s) abatido(s)")
+        elif self.em_combate:
+            self.registrar_consequencia("Combate encerrado")
+
         self.em_combate = False
         self.iniciativa_jogador = None
         self.rodada_combate = 0
         self.inimigos_combate.clear()
+        self.saiu_combate_recentemente = True
+        self.turnos_sem_tensao = 0
 
     # ── Consequências da sessão ───────────────────────────────────────────────
 
@@ -384,12 +398,20 @@ class WorkingMemory:
         else:
             bloco_personagem = "Personagem: desconhecido (aguardando apresentação)"
 
+        # Aviso de HP crítico — muda tonalidade da narração
+        hp_ratio = self.player_hp / self.player_hp_max if self.player_hp_max > 0 else 1.0
+        hp_linha = f"HP: {self.player_hp}/{self.player_hp_max}"
+        if hp_ratio <= 0.3:
+            hp_linha += " — ESTADO CRÍTICO: jogador severamente ferido; narrar exaustão, dor, desespero"
+        elif hp_ratio <= 0.5:
+            hp_linha += " — FERIDO: abaixo da metade; narrar esforço e cansaço acumulado"
+
         linhas: list[str] = [
             f"=== CENA ATUAL ===",
             bloco_personagem,
             f"Local: {self.location_nome} ({self.location_id})",
             f"Hora: {self.time_of_day} | Clima: {self.weather}",
-            f"HP: {self.player_hp}/{self.player_hp_max}",
+            hp_linha,
         ]
 
         _m = lambda v: f"+{v}" if v >= 0 else str(v)
@@ -404,6 +426,13 @@ class WorkingMemory:
         linhas.append(
             f"Proef +{self.prof_bonus} | CA {self.ca} | Percepção Passiva {self.passive_perception}"
         )
+        if self.saiu_combate_recentemente:
+            linhas.append(
+                "APÓS COMBATE — narre o silêncio que retorna, as feridas, "
+                "o estado dos inimigos caídos, o que mudou no cenário; "
+                "um momento de respiração antes de seguir"
+            )
+
         if self.em_combate:
             rodada_str = f"Rodada {self.rodada_combate}" if self.rodada_combate else "combate iniciando"
             ini_str = (
@@ -457,6 +486,13 @@ class WorkingMemory:
 
         if self.log_consequencias:
             linhas.append(f"\nCONSEQUÊNCIAS: {'; '.join(self.log_consequencias)}")
+
+        if not self.em_combate and self.turnos_sem_tensao >= 5:
+            linhas.append(
+                f"\nTENSÃO: {self.turnos_sem_tensao} turnos sem confronto — "
+                "o mundo não está parado; introduza pressão ambiental, rumor, "
+                "sinal de ameaça próxima ou evento inesperado neste turno"
+            )
 
         if incluir_dialogo and self.dialogo_recente:
             linhas.append("\n=== DIÁLOGO RECENTE ===")

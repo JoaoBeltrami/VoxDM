@@ -145,6 +145,7 @@ def test_sair_combate_reseta_tudo():
     assert wm.rodada_combate == 0
     assert wm.iniciativa_jogador is None
     assert wm.inimigos_combate == {}
+    assert wm.saiu_combate_recentemente is True
 
 def test_avancar_rodada_incrementa():
     wm = _wm()
@@ -351,3 +352,110 @@ def test_para_texto_personagem_com_nome():
     assert "Lyra" in texto
     assert "Maga" in texto
     assert "Elfa" in texto
+
+
+# ── Aftermath + tensão + HP crítico ────────────────────────────────────────
+
+def test_nova_sessao_aftermath_false_inicial():
+    wm = _wm()
+    assert wm.saiu_combate_recentemente is False
+
+
+def test_nova_sessao_tensao_zero_inicial():
+    wm = _wm()
+    assert wm.turnos_sem_tensao == 0
+
+
+def test_sair_combate_seta_aftermath():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.sair_combate()
+    assert wm.saiu_combate_recentemente is True
+
+
+def test_sair_combate_reseta_tensao():
+    wm = _wm()
+    wm.turnos_sem_tensao = 7
+    wm.entrar_combate()
+    wm.sair_combate()
+    assert wm.turnos_sem_tensao == 0
+
+
+def test_sair_combate_registra_consequencia_com_mortos():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin")
+    wm.atualizar_estado_inimigo("goblin-1", "morto")
+    wm.sair_combate()
+    assert any("abatido" in c for c in wm.log_consequencias)
+    assert any("1" in c for c in wm.log_consequencias)
+
+
+def test_sair_combate_registra_consequencia_sem_mortos():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.sair_combate()
+    assert any("Combate encerrado" in c for c in wm.log_consequencias)
+
+
+def test_para_texto_aftermath_cue():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.sair_combate()
+    texto = wm.para_texto()
+    assert "APÓS COMBATE" in texto
+
+
+def test_para_texto_sem_aftermath_quando_false():
+    wm = _wm()
+    texto = wm.para_texto()
+    assert "APÓS COMBATE" not in texto
+
+
+def test_para_texto_tensao_apos_5_turnos():
+    wm = _wm()
+    wm.turnos_sem_tensao = 5
+    texto = wm.para_texto()
+    assert "TENSÃO" in texto
+
+
+def test_para_texto_tensao_exatamente_5():
+    wm = _wm()
+    wm.turnos_sem_tensao = 5
+    texto = wm.para_texto()
+    assert "5 turnos" in texto
+
+
+def test_para_texto_sem_tensao_antes_de_5():
+    wm = _wm()
+    wm.turnos_sem_tensao = 4
+    texto = wm.para_texto()
+    assert "TENSÃO" not in texto
+
+
+def test_para_texto_sem_tensao_em_combate():
+    wm = _wm()
+    wm.turnos_sem_tensao = 10
+    wm.entrar_combate()
+    texto = wm.para_texto()
+    assert "TENSÃO" not in texto
+
+
+def test_para_texto_hp_critico():
+    wm = _wm(player_hp=8, player_hp_max=30)
+    texto = wm.para_texto()
+    assert "ESTADO CRÍTICO" in texto
+
+
+def test_para_texto_hp_ferido():
+    wm = _wm(player_hp=14, player_hp_max=30)
+    texto = wm.para_texto()
+    assert "FERIDO" in texto
+    assert "ESTADO CRÍTICO" not in texto
+
+
+def test_para_texto_hp_ok_sem_aviso():
+    wm = _wm(player_hp=20, player_hp_max=30)
+    texto = wm.para_texto()
+    assert "ESTADO CRÍTICO" not in texto
+    assert "FERIDO" not in texto

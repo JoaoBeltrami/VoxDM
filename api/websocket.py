@@ -550,6 +550,25 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.info("trust_atualizado", npc_id=npc_id, delta=delta,
                          novo_valor=sessao.working_mem.trust_levels.get(npc_id))
 
+            # Auto-registra consequências: inimigos mortos neste turno
+            for dados in sessao.working_mem.inimigos_combate.values():
+                if dados.get("estado") == "morto":
+                    c = f"{dados['nome']} foi abatido"
+                    if not any(c in ex for ex in sessao.working_mem.log_consequencias):
+                        sessao.working_mem.registrar_consequencia(c)
+
+            # Auto-registra consequências: mudanças de trust significativas
+            for npc_id, delta in mudancas_trust:
+                nome = npc_id.split("-")[0].capitalize()
+                direcao = "melhorou" if delta > 0 else "piorou"
+                sessao.working_mem.registrar_consequencia(f"Relação com {nome} {direcao}")
+
+            # Gerencia contador de tensão narrativa
+            if sessao.working_mem.em_combate:
+                sessao.working_mem.turnos_sem_tensao = 0
+            else:
+                sessao.working_mem.turnos_sem_tensao += 1
+
             sessao.iteracoes += 1
             latencia_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -614,6 +633,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
                 ).model_dump_json()
             )
+
+            # Aftermath dura exatamente um turno — reset após o "fim" ser enviado
+            if sessao.working_mem.saiu_combate_recentemente:
+                sessao.working_mem.saiu_combate_recentemente = False
 
             # Campos alinhados com voice_loop.py para compatibilidade com dashboard.py
             _emit({
