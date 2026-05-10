@@ -13,14 +13,15 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 4.5 concluída. Pendente: teste e2e local com GPU + Cloudflare Tunnel.**
+**Fase 4.5 concluída. Combat sync implementado. Pendente: teste e2e local com GPU + Cloudflare Tunnel.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
-- Fase 1 (ingestão): ✅ CONCLUÍDA. Pipeline completo: parser → chunker → embedder → qdrant_uploader → neo4j_uploader → main.py. Pendente: `make ingest` para re-indexar Qdrant com melhorias de abril.
+- Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
 - Fase 3 (memória + LLM): ✅ CONCLUÍDA. RAG 3 camadas, episodic memory, prompt mestre v4 com dice/combat/saves.md condicionais.
-- Fase 4 (API + Frontend): ✅ CONCLUÍDA. Main menu 3 telas, ficha completa, dados, seletor de sessão, abertura classe-aware, ambient audio, journal, trust detector. 207 testes OK.
-- Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz. 233 testes OK.
-Próximo: `make ingest` → teste e2e voz → gravar vídeo. Consultar VOXDM_CHECKLIST.md para tarefas abertas.
+- Fase 4 (API + Frontend): ✅ CONCLUÍDA. Main menu 3 telas, ficha completa, dados, seletor de sessão, abertura classe-aware, ambient audio, journal, trust detector.
+- Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz.
+- **Combat Sync (09/05)**: ✅ CONCLUÍDO. `inimigos_combate` agora populado por turno via parsing de texto. CombatTracker UI mostra barras de status dos inimigos. Fix `esperandoRolagem` (regex PT-BR). d100 na toolbar. 244 testes OK.
+Próximo: teste e2e voz no browser → gravar vídeo de combate. Consultar VOXDM_CHECKLIST.md para tarefas abertas.
 
 ---
 
@@ -333,6 +334,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `frontend/components/SessionPicker.tsx` | Lista sessões passadas, "Continuar" preenche form com session_anterior_id | ✅ Criado |
 | `frontend/components/CharacterSheet.tsx` | Ficha colapsável, HP bar + botões +/-, inventário add/remove, dados d4-d100, descanso curto, condições ativas | ✅ Atualizado |
 | `frontend/components/PlayerJournal.tsx` | Diário do jogador — persiste notas de sessão no localStorage por session_id | ✅ Criado |
+| `frontend/components/CombatTracker.tsx` | Barras de status dos inimigos durante combate — intacto/ferido/grave/morto com cores; desaparece fora de combate | ✅ Criado |
 | `frontend/app/page.tsx` | 3 telas (menu → nova/carregar/opções), seletor de voz pt-BR-*Neural, combat toolbar (d20/Vantagem/Desvantagem), chips de condição detectada | ✅ Atualizado |
 | `frontend/app/layout.tsx` | Layout root Next.js 14 com fontes Geist | ✅ Criado |
 | `engine/persistence/character_store.py` | SQLite/aiosqlite — CharacterStore.salvar()/carregar()/deletar(), persiste spell slots, gold, XP, death saves, hit dice entre sessões. `_conn` como @asynccontextmanager (fix: double-await bug) | ✅ Corrigido |
@@ -359,11 +361,20 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `test_working_memory.py` | 60 testes — cobertura completa WorkingMemory incluindo novos campos |
 | saves.md em `test_master_prompt.py` | +11 testes — existência, 6 atributos, injeção em combate |
 
-### Gap Conhecido — Combat Sync Não Implementado
+### Combat Sync — Implementado (09/05)
 
-> `inimigos_combate`, `log_consequencias` e `avancar_rodada()` existem na WorkingMemory mas **nada na API os alimenta**.
-> O DM vê o bloco "Inimigos:" vazio em jogo real. Não há `sync_combat` / `sync_enemies` no frontend.
-> Para resolver: adicionar parsing da resposta do LLM para extrair inimigos mencionados, ou sync manual via UI.
+| O que foi feito | Detalhe |
+|---|---|
+| `_RE_ALVO_ATAQUE` no websocket | Extrai nome do alvo quando jogador declara ataque ("ataco o goblin") — registra em `inimigos_combate` |
+| `_RE_INIMIGO_MORTO/GRAVE/FERIDO` | Detecta estado de saúde na resposta do LLM — atualiza `estado` do inimigo registrado |
+| `_sincronizar_inimigos_combate()` | Orquestra parsing por turno: novo alvo do jogador + update de estado pelo LLM |
+| `avancar_rodada()` chamado | Contador de rodada incrementado a cada turno de combate |
+| `em_combate` + `inimigos_combate` no `fim` | Schema atualizado — frontend sincroniza a cada turno |
+| `CombatTracker.tsx` | Componente UI — barras de vitalidade narrativa (intacto→ferido→grave→morto) com pulso vermelho |
+| `esperandoRolagem` regex PT-BR | Pulso do d20 agora detecta "role", "teste de", "salvaguarda", "iniciativa" etc. (não só `?`) |
+| d100 na toolbar | Adicionado ao array de dados de dano na combat toolbar |
+| `qdrant_uploader.py` race condition | Fix: retry com backoff exponencial após delete (409 Conflict Qdrant Cloud) |
+| 244/244 testes | +11 testes unitários de combat sync no `test_websocket.py` |
 
 ---
 

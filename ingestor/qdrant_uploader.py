@@ -14,6 +14,7 @@ Exemplo:
 """
 
 import asyncio
+import time
 import uuid
 from typing import Any
 
@@ -65,7 +66,11 @@ class QdrantUploader:
         return self._client
 
     def _recriar_colecao(self, nome: str, vector_size: int) -> None:
-        """Deleta (se existir) e cria a coleção com Cosine distance."""
+        """Deleta (se existir) e cria a coleção com Cosine distance.
+
+        Qdrant Cloud é eventually consistent — após delete aguarda propagação
+        com retry antes de criar para evitar 409 Conflict.
+        """
         client = self._get_client()
 
         colecoes = {c.name for c in client.get_collections().collections}
@@ -73,11 +78,22 @@ class QdrantUploader:
             client.delete_collection(nome)
             log.info("qdrant_colecao_deletada", nome=nome)
 
-        client.create_collection(
-            collection_name=nome,
-            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-        )
-        log.info("qdrant_colecao_criada", nome=nome, vector_size=vector_size)
+        # Retry com backoff: Qdrant Cloud pode levar alguns segundos para propagar o delete
+        for tentativa in range(5):
+            try:
+                client.create_collection(
+                    collection_name=nome,
+                    vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+                )
+                log.info("qdrant_colecao_criada", nome=nome, vector_size=vector_size)
+                return
+            except Exception as e:
+                if "already exists" in str(e) and tentativa < 4:
+                    espera = 2 ** tentativa  # 1s, 2s, 4s, 8s
+                    log.warning("qdrant_colecao_ainda_existe", tentativa=tentativa + 1, espera_s=espera)
+                    time.sleep(espera)
+                else:
+                    raise
 
     @retry(
         retry=retry_if_exception_type(Exception),

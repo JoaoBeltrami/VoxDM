@@ -47,6 +47,10 @@ interface EstadoSessao {
   deathSavesStable: boolean;
   // Condições detectadas automaticamente no texto do mestre (aguardando confirmação)
   condicoesDetectadas: string[];
+  // Estado de combate — sincronizado a cada fim de turno
+  emCombate: boolean;
+  inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
+  rodadaCombate: number;
 }
 
 const MAX_RECONNECTS = 3;
@@ -76,6 +80,9 @@ const ESTADO_INICIAL: EstadoSessao = {
   deathSavesFailures: 0,
   deathSavesStable: false,
   condicoesDetectadas: [],
+  emCombate: false,
+  inimigos: {},
+  rodadaCombate: 0,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -196,6 +203,8 @@ export function useGameSession() {
           deathSavesSuccesses: msg.death_saves_successes,
           deathSavesFailures: msg.death_saves_failures,
           deathSavesStable: msg.death_saves_stable,
+          emCombate: msg.em_combate ?? false,
+          inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
         };
 
         const novoTurnoBase = {
@@ -228,6 +237,9 @@ export function useGameSession() {
             deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
+            emCombate: rpgUpdate.emCombate,
+            inimigos: rpgUpdate.inimigos,
+            rodadaCombate: rpgUpdate.emCombate ? (msg.iteracao ?? s.rodadaCombate) : 0,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -261,6 +273,9 @@ export function useGameSession() {
             deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
+            emCombate: rpgUpdate.emCombate,
+            inimigos: rpgUpdate.inimigos,
+            rodadaCombate: rpgUpdate.emCombate ? (msg.iteracao ?? s.rodadaCombate) : 0,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -380,5 +395,6 @@ export function useGameSession() {
     sincronizarEstado,
     dispensarCondicaoDetectada,
     pararAudio: pararTudo,
+    // emCombate, inimigos, rodadaCombate já vêm via ...estado
   };
 }

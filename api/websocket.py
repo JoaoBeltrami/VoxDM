@@ -45,6 +45,95 @@ _RE_FIM_COMBATE = re.compile(
     re.IGNORECASE,
 )
 
+# Extrai nome do alvo quando o jogador declara um ataque
+# Ex: "ataco o goblin com minha espada" → "goblin"
+_RE_ALVO_ATAQUE = re.compile(
+    r"\b(?:ataco?|atacar|golpei?o|firo|lanço|apunhalo|atinge?|atinjo|acerto)\s+"
+    r"(?:o|a|ao?s?|na?s?)\s+"
+    r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,30}?)(?=\s+(?:com|de|usando|n[ao])\b|[.!,?]|$)",
+    re.IGNORECASE,
+)
+
+# Detecta estado de saúde dos inimigos no texto do LLM
+_RE_INIMIGO_MORTO = re.compile(
+    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
+    r"(?:caiu|morreu|está morto|está morta|foi abatido|foi abatida|jaz|tombou|desmorona)\b",
+    re.IGNORECASE,
+)
+_RE_INIMIGO_GRAVE = re.compile(
+    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
+    r"(?:gravemente ferido|muito ferido|mal consegue|vacila|claudica|cambaleando|aos trancos)\b",
+    re.IGNORECASE,
+)
+_RE_INIMIGO_FERIDO = re.compile(
+    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
+    r"(?:está ferido|foi atingido|foi atingida|sangra|grita de dor|recua|recuou|tropeçou)\b",
+    re.IGNORECASE,
+)
+
+
+def _slugify(nome: str) -> str:
+    """Converte nome livre para id kebab-case: 'Goblin Cruel' → 'goblin-cruel'."""
+    import unicodedata
+    normalizado = unicodedata.normalize("NFD", nome.strip().lower())
+    sem_acento = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]+", "-", sem_acento).strip("-")
+
+
+def _sincronizar_inimigos_combate(
+    working_mem: Any, texto_jogador: str, resposta_llm: str
+) -> None:
+    """Popula e atualiza inimigos_combate a partir do turno atual.
+
+    Estratégia:
+    1. Se jogador declara ataque com alvo nomeado → registrar inimigo (estado: intacto)
+    2. Varrer resposta do LLM por descritores de saúde e atualizar estado dos registrados
+    """
+    if not working_mem.em_combate:
+        return
+
+    # 1 — Detectar novos alvos no texto do jogador
+    for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
+        nome = m.group(1).strip().rstrip(".,!?")
+        if nome:
+            inimigo_id = _slugify(nome)
+            if inimigo_id not in working_mem.inimigos_combate:
+                working_mem.registrar_inimigo(inimigo_id, nome.title(), "intacto")
+                log.info("combate_inimigo_registrado", id=inimigo_id, nome=nome)
+
+    if not working_mem.inimigos_combate:
+        return
+
+    nomes_registrados = {
+        dados["nome"].lower(): iid
+        for iid, dados in working_mem.inimigos_combate.items()
+    }
+
+    def _encontrar_id(trecho: str) -> str | None:
+        trecho_lower = trecho.strip().lower()
+        for nome_reg, iid in nomes_registrados.items():
+            # Correspondência se o nome registrado contiver parte do trecho ou vice-versa
+            if nome_reg in trecho_lower or trecho_lower in nome_reg:
+                return iid
+        return None
+
+    # 2 — Atualizar estado pelos descritores na resposta do LLM
+    for m in _RE_INIMIGO_MORTO.finditer(resposta_llm):
+        iid = _encontrar_id(m.group(1))
+        if iid:
+            working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
+            log.info("combate_inimigo_morto", id=iid)
+
+    for m in _RE_INIMIGO_GRAVE.finditer(resposta_llm):
+        iid = _encontrar_id(m.group(1))
+        if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") not in ("morto",):
+            working_mem.atualizar_estado_inimigo(iid, "gravemente ferido", "quase sem forças")
+
+    for m in _RE_INIMIGO_FERIDO.finditer(resposta_llm):
+        iid = _encontrar_id(m.group(1))
+        if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") == "intacto":
+            working_mem.atualizar_estado_inimigo(iid, "ferido", "ainda de pé")
+
 log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
@@ -413,6 +502,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
 
+            # Sincroniza estado dos inimigos com base no turno atual
+            _sincronizar_inimigos_combate(
+                sessao.working_mem, texto_jogador, resposta_completa
+            )
+
+            # Avança rodada de combate após cada turno completo
+            if sessao.working_mem.em_combate:
+                sessao.working_mem.avancar_rodada()
+
             # Atualiza trust com base nas ações do jogador neste turno
             mudancas_trust = detectar_mudancas_trust(
                 texto_jogador, sessao.working_mem.npcs_presentes
@@ -480,6 +578,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     death_saves_successes=sessao.working_mem.death_saves_successes,
                     death_saves_failures=sessao.working_mem.death_saves_failures,
                     death_saves_stable=sessao.working_mem.death_saves_stable,
+                    em_combate=sessao.working_mem.em_combate,
+                    inimigos_combate=dict(sessao.working_mem.inimigos_combate),
                 ).model_dump_json()
             )
 

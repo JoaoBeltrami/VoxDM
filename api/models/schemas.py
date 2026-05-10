@@ -147,3 +147,7 @@ class MensagemWS(BaseModel):
     death_saves_successes: int = 0
     death_saves_failures: int = 0
     death_saves_stable: bool = False
+    # Estado de combate — enviado no "fim" para sincronizar CombatTracker
+    em_combate: bool = False
+    # inimigo_id → {nome, estado, hp_rel} — espelha working_mem.inimigos_combate
+    inimigos_combate: dict[str, dict[str, str]] = Field(default_factory=dict)

@@ -10,6 +10,7 @@ import { CharacterForm } from "@/components/CharacterForm";
 import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { PlayerJournal } from "@/components/PlayerJournal";
+import { CombatTracker } from "@/components/CombatTracker";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
@@ -23,6 +24,9 @@ const VOZES_PTBR = [
 
 const VOZ_PADRAO = "pt-BR-FranciscaNeural";
 const LS_VOZ_KEY = "voxdm_tts_voice";
+
+// Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
+const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|iniciativa|d20|d\d+|perícia|habilidade)\b/i;
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
 
@@ -38,7 +42,7 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    condicoesDetectadas,
+    condicoesDetectadas, emCombate, inimigos, rodadaCombate,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio,
   } = useGameSession();
@@ -204,6 +208,8 @@ export default function Home() {
           initDeathSavesStable={deathSavesStable}
         />
 
+        <CombatTracker emCombate={emCombate} inimigos={inimigos} rodada={rodadaCombate} />
+
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {historico.length === 0 && !respostaAtual && (
             <p className="mt-6 text-center text-xs text-zinc-700">
@@ -222,7 +228,7 @@ export default function Home() {
               : "";
             const esperandoRolagem = !respostaAtual &&
               historico.length > 0 &&
-              ultimaFala.trimEnd().endsWith("?");
+              (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
             const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
             if (!turnoJogador) return null;
 
@@ -275,7 +281,7 @@ export default function Home() {
                 </div>
                 {/* Linha dano */}
                 <div className="flex items-center gap-1.5">
-                  {([4, 6, 8, 10, 12] as const).map(f => (
+                  {([4, 6, 8, 10, 12, 100] as const).map(f => (
                     <button
                       key={f}
                       onClick={() => rolarDano(f)}

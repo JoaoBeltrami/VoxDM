@@ -70,6 +70,9 @@ export interface MensagemWS {
   death_saves_successes?: number;
   death_saves_failures?: number;
   death_saves_stable?: boolean;
+  // Estado de combate
+  em_combate?: boolean;
+  inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
 }
 
 export interface PersonagemConfig {

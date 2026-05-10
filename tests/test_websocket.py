@@ -140,3 +140,117 @@ def test_ws_texto_longo_rejeitado(client):
 
     assert msg["tipo"] == "erro"
     assert "500" in msg["conteudo"]
+
+
+def test_ws_fim_inclui_campos_combate(client):
+    """Mensagem 'fim' sempre inclui em_combate e inimigos_combate."""
+    client.post("/session/start", json={"session_id": "ws-05"})
+
+    with client.websocket_connect("/ws/game/ws-05") as ws:
+        ws.send_json({"texto": "O que há na taverna?"})
+        msgs = []
+        while True:
+            m = ws.receive_json()
+            msgs.append(m)
+            if m["tipo"] == "fim":
+                break
+
+    fim = next(m for m in msgs if m["tipo"] == "fim")
+    assert "em_combate" in fim
+    assert "inimigos_combate" in fim
+    assert isinstance(fim["em_combate"], bool)
+    assert isinstance(fim["inimigos_combate"], dict)
+
+
+# ── Testes unitários das funções de combat sync ───────────────────────────────
+
+def test_slugify_converte_nome_para_kebab():
+    from api.websocket import _slugify
+    assert _slugify("Goblin Cruel") == "goblin-cruel"
+    assert _slugify("Troll das Pedras") == "troll-das-pedras"
+    assert _slugify("  Rato ") == "rato"
+
+
+def test_slugify_remove_acentos():
+    from api.websocket import _slugify
+    assert _slugify("Inimigo Árido") == "inimigo-arido"
+    assert _slugify("Capitão") == "capitao"
+
+
+def test_re_alvo_ataque_detecta_alvo_simples():
+    from api.websocket import _RE_ALVO_ATAQUE
+    m = _RE_ALVO_ATAQUE.search("Eu ataco o goblin com minha espada!")
+    assert m is not None
+    assert "goblin" in m.group(1).lower()
+
+
+def test_re_alvo_ataque_detecta_variantes():
+    from api.websocket import _RE_ALVO_ATAQUE
+    assert _RE_ALVO_ATAQUE.search("Golpeio o guarda sombrio.") is not None
+    assert _RE_ALVO_ATAQUE.search("Firo o esqueleto.") is not None
+    assert _RE_ALVO_ATAQUE.search("Atinjo o lobo com a lança") is not None
+
+
+def test_re_inimigo_morto_detecta_morte():
+    from api.websocket import _RE_INIMIGO_MORTO
+    assert _RE_INIMIGO_MORTO.search("O goblin caiu no chão.") is not None
+    assert _RE_INIMIGO_MORTO.search("O troll morreu!") is not None
+    assert _RE_INIMIGO_MORTO.search("O guarda está morto.") is not None
+
+
+def test_re_inimigo_ferido_detecta_dano():
+    from api.websocket import _RE_INIMIGO_FERIDO
+    assert _RE_INIMIGO_FERIDO.search("O goblin foi atingido no ombro.") is not None
+    assert _RE_INIMIGO_FERIDO.search("O lobo sangra da ferida.") is not None
+
+
+def test_sincronizar_inimigos_registra_alvo_do_ataque():
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("floresta", "Floresta Sombria", "sess-cbt")
+    mem.entrar_combate()
+
+    _sincronizar_inimigos_combate(mem, "Ataco o goblin com minha espada!", "O goblin recua.")
+
+    assert len(mem.inimigos_combate) == 1
+    ids = list(mem.inimigos_combate.keys())
+    assert "goblin" in ids[0]
+
+
+def test_sincronizar_inimigos_atualiza_estado_morto():
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("masmorra", "Masmorra", "sess-cbt2")
+    mem.entrar_combate()
+    mem.registrar_inimigo("goblin", "Goblin", "intacto")
+
+    _sincronizar_inimigos_combate(mem, "Ataco de novo!", "O goblin caiu morto no chão.")
+
+    assert mem.inimigos_combate["goblin"]["estado"] == "morto"
+
+
+def test_sincronizar_inimigos_atualiza_estado_ferido():
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("taverna", "Taverna", "sess-cbt3")
+    mem.entrar_combate()
+    mem.registrar_inimigo("guarda", "Guarda", "intacto")
+
+    _sincronizar_inimigos_combate(mem, "Ataco!", "O guarda foi atingido no braço e recua.")
+
+    assert mem.inimigos_combate["guarda"]["estado"] == "ferido"
+
+
+def test_sincronizar_inimigos_nao_roda_fora_de_combate():
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("vila", "Vila", "sess-cbt4")
+    # em_combate = False por padrão
+
+    _sincronizar_inimigos_combate(mem, "Ataco o goblin.", "O goblin caiu.")
+
+    assert len(mem.inimigos_combate) == 0
