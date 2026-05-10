@@ -254,6 +254,13 @@ export default function Home() {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => window.open(`/debug?s=${encodeURIComponent(sessionId ?? "")}`, "_blank")}
+              title="Abrir monitor de jogo (segunda tela)"
+              className="text-xs text-zinc-600 transition hover:text-violet-400"
+            >
+              ⬡
+            </button>
+            <button
               onClick={toggleAmbiente}
               title={ambienteAtivo ? `Ambiente: ${ambienteCena} (clique para pausar)` : "Ligar música ambiente"}
               className={`text-xs transition ${
