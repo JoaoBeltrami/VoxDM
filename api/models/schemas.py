@@ -153,3 +153,5 @@ class MensagemWS(BaseModel):
     inimigos_combate: dict[str, dict[str, str]] = Field(default_factory=dict)
     # Rodada real de combate (incrementada por avancar_rodada()) — NÃO é o turno da sessão
     rodada_combate: int = 0
+    # Últimas consequências narrativas — surfaced no frontend fora de combate
+    log_consequencias: list[str] = Field(default_factory=list)

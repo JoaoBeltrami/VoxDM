@@ -51,6 +51,8 @@ interface EstadoSessao {
   emCombate: boolean;
   inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodadaCombate: number;
+  // Últimas consequências narrativas — surfaced fora de combate
+  consequencias: string[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -83,6 +85,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   emCombate: false,
   inimigos: {},
   rodadaCombate: 0,
+  consequencias: [],
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -213,6 +216,7 @@ export function useGameSession() {
           deathSavesStable: msg.death_saves_stable,
           emCombate: msg.em_combate ?? false,
           inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
+          consequencias: msg.log_consequencias ?? [],
         };
 
         const novoTurnoBase = {
@@ -248,6 +252,7 @@ export function useGameSession() {
             emCombate: rpgUpdate.emCombate,
             inimigos: rpgUpdate.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
+            consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -284,6 +289,7 @@ export function useGameSession() {
             emCombate: rpgUpdate.emCombate,
             inimigos: rpgUpdate.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
+            consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,

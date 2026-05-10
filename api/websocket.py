@@ -611,6 +611,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     em_combate=sessao.working_mem.em_combate,
                     inimigos_combate=dict(sessao.working_mem.inimigos_combate),
                     rodada_combate=sessao.working_mem.rodada_combate,
+                    log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
                 ).model_dump_json()
             )
 

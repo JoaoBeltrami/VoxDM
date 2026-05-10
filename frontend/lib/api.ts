@@ -74,6 +74,8 @@ export interface MensagemWS {
   em_combate?: boolean;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
+  // Consequências narrativas recentes — para "você lembra que..."
+  log_consequencias?: string[];
 }
 
 export interface PersonagemConfig {

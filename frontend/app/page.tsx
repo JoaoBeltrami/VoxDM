@@ -28,6 +28,91 @@ const LS_VOZ_KEY = "voxdm_tts_voice";
 // Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
 const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|iniciativa|d20|d\d+|perícia|habilidade)\b/i;
 
+// ── Auto dice — mapeamento PT-BR skill/save → atributo ──────────────────────
+
+interface RolagemPendente {
+  id: string;
+  label: string;       // "Persuasão", "Salv. CON"
+  modificador: number;
+  dc: number | null;
+  cor: "violet" | "amber" | "cyan" | "rose";
+}
+const ROLL_COLORS: RolagemPendente["cor"][] = ["violet", "amber", "cyan", "rose"];
+
+// [normalizado sem acento, display, chave em PersonagemConfig]
+const SKILL_MAP: [string, string, keyof import("@/lib/api").PersonagemConfig][] = [
+  ["persuasao","Persuasão","cha_score"],["enganacao","Enganação","cha_score"],
+  ["engano","Enganação","cha_score"],["intimidacao","Intimidação","cha_score"],
+  ["atuacao","Atuação","cha_score"],["percepcao","Percepção","wis_score"],
+  ["intuicao","Intuição","wis_score"],["discernimento","Discernimento","wis_score"],
+  ["medicina","Medicina","wis_score"],["sobrevivencia","Sobrevivência","wis_score"],
+  ["atletismo","Atletismo","str_score"],["acrobacia","Acrobacia","dex_score"],
+  ["furtividade","Furtividade","dex_score"],["prestidigitacao","Prestidigitação","dex_score"],
+  ["arcanismo","Arcanismo","int_score"],["historia","História","int_score"],
+  ["investigacao","Investigação","int_score"],["natureza","Natureza","int_score"],
+  ["religiao","Religião","int_score"],["iniciativa","Iniciativa","dex_score"],
+];
+const SAVE_MAP: [string, string, keyof import("@/lib/api").PersonagemConfig][] = [
+  ["forca","FOR","str_score"],["destreza","DES","dex_score"],
+  ["constituicao","CON","con_score"],["inteligencia","INT","int_score"],
+  ["sabedoria","SAB","wis_score"],["carisma","CAR","cha_score"],
+];
+const ROLL_STYLE: Record<RolagemPendente["cor"], string> = {
+  violet: "border-violet-500 bg-violet-900/20 text-violet-300 shadow-[0_0_10px_1px_rgba(139,92,246,0.3)] animate-pulse",
+  amber:  "border-amber-500  bg-amber-900/20  text-amber-300  shadow-[0_0_10px_1px_rgba(245,158,11,0.3)]  animate-pulse",
+  cyan:   "border-cyan-500   bg-cyan-900/20   text-cyan-300   shadow-[0_0_10px_1px_rgba(34,211,238,0.3)]  animate-pulse",
+  rose:   "border-rose-500   bg-rose-900/20   text-rose-300   shadow-[0_0_10px_1px_rgba(244,63,94,0.3)]   animate-pulse",
+};
+
+function _n(s: string) { return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+function _mod(score: number) { return Math.floor((score - 10) / 2); }
+function _prof(level: number) { return Math.floor((level - 1) / 4) + 2; }
+
+function parseRolagens(
+  texto: string,
+  p: import("@/lib/api").PersonagemConfig,
+): RolagemPendente[] {
+  const n = _n(texto);
+  if (!/\b(role|jogue|teste|salvaguarda|iniciativa|rolagem)\b/.test(n)) return [];
+
+  const nivel  = p.player_level ?? 3;
+  const prof   = _prof(nivel);
+  const sprofs = new Set((p.skill_profs ?? []).map(_n));
+  const vprofs = new Set((p.save_profs  ?? []).map(_n));
+
+  const dcM = n.match(/\b(?:cd|dc|dificuldade)\s*(\d+)/);
+  const dc  = dcM ? parseInt(dcM[1]) : null;
+
+  // Modificador explícito no texto: "(CAR +2)" — usar se só 1 rolagem pedida
+  const explicitMod = (() => {
+    const m = n.match(/\([a-z]{3}\s*([+-]\d+)\)/);
+    return m ? parseInt(m[1]) : null;
+  })();
+
+  const found: { label: string; attrKey: keyof import("@/lib/api").PersonagemConfig; profKey: string; isSave: boolean }[] = [];
+
+  for (const [sn, sl, ak] of SAVE_MAP) {
+    if (n.includes("salvaguarda") && n.includes(sn))
+      found.push({ label: `Salv. ${sl}`, attrKey: ak, profKey: sn, isSave: true });
+  }
+  for (const [sn, sl, ak] of SKILL_MAP) {
+    if (n.includes(sn) && !found.some(f => f.label === sl))
+      found.push({ label: sl, attrKey: ak, profKey: sn, isSave: false });
+  }
+
+  if (found.length === 0)
+    return [{ id: `rg-${Date.now()}`, label: "d20", modificador: 0, dc, cor: "violet" }];
+
+  return found.slice(0, 4).map((f, i) => {
+    const score = (p[f.attrKey] as number) ?? 10;
+    const isProficient = f.isSave ? vprofs.has(f.profKey) : sprofs.has(f.profKey);
+    const mod = (found.length === 1 && explicitMod !== null)
+      ? explicitMod
+      : _mod(score) + (isProficient ? prof : 0);
+    return { id: `r${i}-${Date.now()}`, label: f.label, modificador: mod, dc, cor: ROLL_COLORS[i] };
+  });
+}
+
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
 
 function lerVozStorage(): string {
@@ -42,7 +127,7 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    condicoesDetectadas, emCombate, inimigos, rodadaCombate,
+    condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio,
   } = useGameSession();
@@ -79,6 +164,38 @@ export default function Home() {
   }, [sincronizarEstado, dispensarCondicaoDetectada]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const [rolamentosPendentes, setRolamentosPendentes] = useState<RolagemPendente[]>([]);
+  const [actionEconomy, setActionEconomy] = useState({ acao: false, acaoBônus: false, reacao: false });
+
+  // Parseia a última fala do mestre para extrair rolagens pedidas
+  useEffect(() => {
+    if (historico.length === 0 || respostaAtual) return;
+    const ultima = historico[historico.length - 1];
+    if (!ultima.mestre) return;
+    setRolamentosPendentes(parseRolagens(ultima.mestre, personagem));
+  }, [historico, respostaAtual, personagem]);
+
+  // Limpa rolagens pendentes quando o mestre começa a responder
+  useEffect(() => {
+    if (respostaAtual) setRolamentosPendentes([]);
+  }, [respostaAtual]);
+
+  // Reseta economia de ação a cada nova rodada de combate
+  useEffect(() => {
+    if (emCombate) setActionEconomy({ acao: false, acaoBônus: false, reacao: false });
+  }, [rodadaCombate, emCombate]);
+
+  const handleRolagemContextual = useCallback((roll: RolagemPendente) => {
+    const r = Math.floor(Math.random() * 20) + 1;
+    const total = r + roll.modificador;
+    const modStr = roll.modificador >= 0 ? `+${roll.modificador}` : `${roll.modificador}`;
+    const critico = r === 20 ? " — CRÍTICO!" : r === 1 ? " — FALHA CRÍTICA!" : "";
+    const vsCD = roll.dc !== null ? ` vs CD ${roll.dc} — ${total >= roll.dc ? "Sucesso!" : "Falha!"}` : "";
+    const label = roll.label !== "d20" ? `${roll.label} (${modStr}) ` : "";
+    enviarComando(`[Rolagem: ${label}d20${modStr} = ${total}${vsCD}${critico}]`);
+    setRolamentosPendentes(prev => prev.filter(p => p.id !== roll.id));
+  }, [enviarComando]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -280,19 +397,36 @@ export default function Home() {
 
             return (
               <div className="flex flex-col items-center gap-1.5">
-                {/* Linha d20 */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => rolarD20()}
-                    title="Rolar d20"
-                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
-                      esperandoRolagem
-                        ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
-                        : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                    }`}
-                  >
-                    🎲 d20
-                  </button>
+                {/* Linha d20 — contextual quando o mestre pediu rolagens específicas */}
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {rolamentosPendentes.length > 0 ? (
+                    rolamentosPendentes.map(roll => (
+                      <button
+                        key={roll.id}
+                        onClick={() => handleRolagemContextual(roll)}
+                        title={`Rolar ${roll.label}${roll.dc ? ` vs CD ${roll.dc}` : ""}`}
+                        className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${ROLL_STYLE[roll.cor]}`}
+                      >
+                        🎲 {roll.label}
+                        <span className="font-normal text-[10px] opacity-80">
+                          {roll.modificador >= 0 ? `+${roll.modificador}` : roll.modificador}
+                          {roll.dc ? ` / CD${roll.dc}` : ""}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <button
+                      onClick={() => rolarD20()}
+                      title="Rolar d20"
+                      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                        esperandoRolagem
+                          ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
+                          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                      }`}
+                    >
+                      🎲 d20
+                    </button>
+                  )}
                   <button
                     onClick={() => rolarD20("vantagem")}
                     title="Vantagem: 2d20, usa o maior"
@@ -324,6 +458,39 @@ export default function Home() {
               </div>
             );
           })()}
+
+          {/* Consequências narrativas recentes — fora de combate, como memória do mundo */}
+          {!emCombate && consequencias.length > 0 && (
+            <div className="max-w-xs space-y-0.5 text-center">
+              {consequencias.map((c, i) => (
+                <p key={i} className="text-[10px] italic leading-relaxed text-zinc-600">
+                  {c}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Economia de ação — só durante combate */}
+          {emCombate && (
+            <div className="flex items-center gap-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-5 py-1.5">
+              {(["acao", "acaoBônus", "reacao"] as const).map(k => {
+                const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
+                return (
+                  <label key={k} className="flex cursor-pointer select-none items-center gap-1.5 text-[10px]">
+                    <input
+                      type="checkbox"
+                      checked={actionEconomy[k]}
+                      onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
+                      className="h-3 w-3 accent-violet-500"
+                    />
+                    <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
+                      {labels[k]}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
 
           <div className="relative">
             <VoxOrb estado={orbEstado} tamanho={64} />
