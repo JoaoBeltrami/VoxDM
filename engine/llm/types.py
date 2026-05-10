@@ -17,12 +17,47 @@ if TYPE_CHECKING:
 RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
 
 # Detecta ação de combate no texto do jogador.
-# Removido: magia|feitiço — substantivos que disparavam falso positivo em queries de regras
-# ("como funciona a magia Fireball?"), inflando o prompt com combat.md desnecessariamente.
-# Substituído por: lanç\w* e conjur\w* — verbos de ação que só aparecem em contexto de combate.
+#
+# FILOSOFIA: verbo de ação explícita, não substantivo relacionado a combate.
+# "lanço a magia" → combate. "como funciona uma lança?" → não.
+# "luto" removido — significa mourning em PT-BR, causava falso positivo catastrófico.
+# Substantivos removidos: inimigo, espada, adaga, arco, flecha, escudo, briga, combate.
+# Adicionados: verbos de ranged (disparo/atiro), grapple (agarro), derrube, esquiva ativa.
 RE_COMBATE = re.compile(
-    r"\b(atac[oa]r?|golpe[io]+|firo|fere[i]?|mato|luto|combate|inimigo|espada|adaga|"
-    r"arco|flecha|lanç\w*|conjur\w*|briga|soco|chuto|defendo|paro o golpe|escudo)\b",
+    r"\b("
+    # ── Ataques corpo a corpo ──────────────────────────────────────────────────
+    r"atac[ao]|ataquei|atacar|"
+    r"golpei[oa]|golpeio|golpear|"
+    r"apunhal[ao]|apunhalei|apunhalar|"
+    r"cort[ao]|cortei|cortar|"
+    r"soc[ao]|socou|socar|"
+    r"chut[ao]|chutei|chutar|"
+    r"empurr[ao]|empurrei|empurrar|"
+    r"agarr[ao]|agarrei|agarrar|"
+    r"derrub[ao]|derrubei|derrubar|"
+    # ── Ataques à distância ────────────────────────────────────────────────────
+    r"dispar[ao]|disparei|disparar|"
+    r"atir[ao]|atirei|atirar|"
+    r"fir[ao]|firei|"                    # "firo o goblin"
+    # ── Magia ofensiva (verbos de ação, não substantivos) ─────────────────────
+    r"lanç[ao]|lancei|lançar|"           # "lanço Fireball" — ação
+    r"conjur[ao]|conjurei|conjurar|"
+    # ── Defesa ativa (reação explícita ao combate) ────────────────────────────
+    r"esquiv[ao]|esquivei|esquivar|"
+    r"par[ao] o (?:ataque|golpe)|"       # "paro o ataque" — específico
+    r"bloqueio o (?:ataque|golpe)|"
+    r"me (?:lanço|jogo) sobre|"          # charge
+    r"avanço sobre|"
+    # ── Combate corpo a corpo / movimento ─────────────────────────────────────
+    r"luto (?:contra|com [aou]|pela vida)|"   # "luto contra" — verbo lutar, não substantivo
+    r"avanço sobre|me (?:lanço|jogo) sobre|"
+    # ── Ativação de item em combate ────────────────────────────────────────────
+    r"ativ[ao] (?:minha|meu|o|a)|"       # "ativo minha espada flamejante"
+    # ── Iniciativa / abertura de combate ──────────────────────────────────────
+    r"iniciativa|"
+    r"saqu[ao] (?:minha|meu)|"           # "saco minha espada"
+    r"desembainho"                        # desembainhar a arma
+    r")\b",
     re.IGNORECASE,
 )
 
