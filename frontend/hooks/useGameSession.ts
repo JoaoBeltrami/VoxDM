@@ -104,9 +104,17 @@ const CONDICOES_DETECTAR: [string, RegExp][] = [
 ];
 
 function detectarCondicoes(texto: string): string[] {
-  return CONDICOES_DETECTAR
-    .filter(([, re]) => re.test(texto))
-    .map(([nome]) => nome);
+  // Só detecta condições em sentenças que mencionam "você" — evita marcar condições
+  // de NPCs ("o goblin envenenado ataca") como condições do jogador.
+  const sentencas = texto.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const encontradas = new Set<string>();
+  for (const sentenca of sentencas) {
+    if (!/\bvoc[eê]\b/i.test(sentenca)) continue;
+    for (const [nome, re] of CONDICOES_DETECTAR) {
+      if (re.test(sentenca)) encontradas.add(nome);
+    }
+  }
+  return Array.from(encontradas);
 }
 
 // Converte chaves string do JSON para number (JSON serializa int keys como string)
@@ -239,7 +247,7 @@ export function useGameSession() {
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
             inimigos: rpgUpdate.inimigos,
-            rodadaCombate: rpgUpdate.emCombate ? (msg.iteracao ?? s.rodadaCombate) : 0,
+            rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -275,7 +283,7 @@ export function useGameSession() {
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
             inimigos: rpgUpdate.inimigos,
-            rodadaCombate: rpgUpdate.emCombate ? (msg.iteracao ?? s.rodadaCombate) : 0,
+            rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,

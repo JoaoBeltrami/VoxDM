@@ -73,6 +73,7 @@ export interface MensagemWS {
   // Estado de combate
   em_combate?: boolean;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
+  rodada_combate?: number;
 }
 
 export interface PersonagemConfig {

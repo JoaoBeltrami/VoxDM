@@ -39,9 +39,30 @@ from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
 from engine.voice.language import detectar_idioma
 
-# Detecta sinais de fim de combate para desativar em_combate na WorkingMemory
-_RE_FIM_COMBATE = re.compile(
-    r"\b(morreu|caiu|fugiu|rendeu|acabou o combate|saio de combate|paramos de lutar|paz)\b",
+# Detecta declaração EXPLÍCITA do jogador de encerrar combate.
+# "paz" removido — falso positivo catastrófico ("deixo você em paz", "estamos em paz").
+# "morreu/caiu/fugiu" removidos — descrevem NPCs, não intenção do jogador de parar.
+_RE_FIM_COMBATE_JOGADOR = re.compile(
+    r"\b("
+    r"me rendo|nos rendemos|rendemos|capitulo|"
+    r"fujo daqui|fujo da batalha|fujo da luta|recuo da luta|"
+    r"paro de lutar|paramos de lutar|desisto de lutar|"
+    r"saio de combate|saímos de combate|"
+    r"o combate acabou|acabou a luta|fim do combate"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Detecta fim de combate na RESPOSTA DO LLM — o mestre narra que a luta terminou.
+# Sem isso, em_combate fica True mesmo após o mestre narrar a morte do último inimigo.
+_RE_FIM_COMBATE_LLM = re.compile(
+    r"\b("
+    r"o combate termina|a luta termina|combate encerrado|batalha encerrada|"
+    r"não há mais inimigos|sem mais ameaças|ambiente está seguro|"
+    r"silêncio retorna|silêncio toma conta|"
+    r"todos os inimigos ca[íi]ram|inimigos foram derrotados|"
+    r"último inimigo|únic[oa] sobrevivente"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -424,7 +445,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Detecta entrada/saída de combate pelo texto do jogador
             if _RE_COMBATE.search(texto_jogador):
                 sessao.working_mem.entrar_combate()
-            elif _RE_FIM_COMBATE.search(texto_jogador):
+            elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
                 sessao.working_mem.sair_combate()
 
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
@@ -469,6 +490,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             buffer_sentenca = ""
 
             except Exception as e:
+                # Fix 3: cancela tasks TTS já disparadas para não desperdiçar API Edge TTS
+                for task in tts_tasks:
+                    task.cancel()
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
                 erros_turno.append(f"groq: {e}")
                 _emit({"tipo": "erro", "session_id": session_id, "etapa": "groq", "mensagem": str(e)})
@@ -501,6 +525,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
+
+            # Fix 1b: fim de combate detectado na resposta do LLM
+            # Ex: "o último inimigo cai" → mestre narra vitória → sair_combate()
+            if sessao.working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
+                sessao.working_mem.sair_combate()
+                log.info("combate_encerrado_por_llm", session_id=session_id)
 
             # Sincroniza estado dos inimigos com base no turno atual
             _sincronizar_inimigos_combate(
@@ -580,6 +610,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     death_saves_stable=sessao.working_mem.death_saves_stable,
                     em_combate=sessao.working_mem.em_combate,
                     inimigos_combate=dict(sessao.working_mem.inimigos_combate),
+                    rodada_combate=sessao.working_mem.rodada_combate,
                 ).model_dump_json()
             )
 

@@ -278,11 +278,33 @@ def test_invalidar_cache_reseta_combat():
 # ── Testes: regex de detecção de combate ─────────────────────────────────────
 
 @pytest.mark.parametrize("texto,esperado", [
+    # ── Nível 1: sempre combate ────────────────────────────────────────────────
     ("ataco o inimigo com minha espada", True),
     ("golpeio o guarda na cabeça", True),
     ("lanço um feitiço de fogo", True),
     ("ativo minha espada mágica", True),
     ("luto contra os dois ao mesmo tempo", True),
+    ("disparo uma flecha", True),
+    ("conjuro Bola de Fogo", True),
+    ("esquivo do golpe", True),
+    # ── Nível 2: cortar — com alvo ou arma ────────────────────────────────────
+    ("corto o goblin com minha espada", True),
+    ("corto com minha espada", True),
+    ("cortei ele de um golpe", True),
+    # ── Nível 2: cortar — mundano (sem alvo singular ou arma) ─────────────────
+    ("corto as folhas no meu caminho", False),   # plural "as" → sem combate
+    ("corto galhos para montar acampamento", False),  # sem artigo → sem combate
+    # ── Nível 2: empurrar, agarrar, derrubar ──────────────────────────────────
+    ("empurro o guarda para longe", True),
+    ("agarrei o bandido pelo pescoço", True),
+    ("derrubei o orc no chão", True),
+    ("empurrei ela com força", True),
+    # ── Fix 5: desembainhar — todas as conjugações ────────────────────────────
+    ("desembainho minha espada lentamente", True),
+    ("ela desembainha a adaga", True),
+    ("desembainhou a espada antes de atacar", True),
+    ("vou desembainhar minha espada", True),
+    # ── Não combate ────────────────────────────────────────────────────────────
     ("eu falo com o ferreiro", False),
     ("olho ao redor da sala", False),
     ("examino a porta", False),

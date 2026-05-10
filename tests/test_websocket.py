@@ -254,3 +254,35 @@ def test_sincronizar_inimigos_nao_roda_fora_de_combate():
     _sincronizar_inimigos_combate(mem, "Ataco o goblin.", "O goblin caiu.")
 
     assert len(mem.inimigos_combate) == 0
+
+
+# ── Testes: _RE_FIM_COMBATE_JOGADOR — sem falsos positivos de "paz" ─────────
+
+def test_fim_combate_jogador_rende():
+    from api.websocket import _RE_FIM_COMBATE_JOGADOR
+    assert _RE_FIM_COMBATE_JOGADOR.search("Me rendo, não quero mais lutar!") is not None
+
+
+def test_fim_combate_jogador_fuga():
+    from api.websocket import _RE_FIM_COMBATE_JOGADOR
+    assert _RE_FIM_COMBATE_JOGADOR.search("Fujo daqui enquanto posso") is not None
+
+
+def test_fim_combate_jogador_paz_nao_dispara():
+    """'paz' não deve mais encerrar o combate — era o falso positivo crítico."""
+    from api.websocket import _RE_FIM_COMBATE_JOGADOR
+    assert _RE_FIM_COMBATE_JOGADOR.search("deixo você em paz") is None
+    assert _RE_FIM_COMBATE_JOGADOR.search("estamos em paz agora") is None
+    assert _RE_FIM_COMBATE_JOGADOR.search("que haja paz entre nós") is None
+
+
+def test_fim_combate_llm_detecta_vitoria():
+    from api.websocket import _RE_FIM_COMBATE_LLM
+    assert _RE_FIM_COMBATE_LLM.search("O combate termina. Silêncio retorna ao corredor.") is not None
+    assert _RE_FIM_COMBATE_LLM.search("Todos os inimigos caíram.") is not None
+
+
+def test_fim_combate_llm_nao_dispara_em_combate_normal():
+    from api.websocket import _RE_FIM_COMBATE_LLM
+    assert _RE_FIM_COMBATE_LLM.search("O goblin te ataca com fúria!") is None
+    assert _RE_FIM_COMBATE_LLM.search("Role iniciativa agora.") is None

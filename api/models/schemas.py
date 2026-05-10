@@ -151,3 +151,5 @@ class MensagemWS(BaseModel):
     em_combate: bool = False
     # inimigo_id → {nome, estado, hp_rel} — espelha working_mem.inimigos_combate
     inimigos_combate: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Rodada real de combate (incrementada por avancar_rodada()) — NÃO é o turno da sessão
+    rodada_combate: int = 0

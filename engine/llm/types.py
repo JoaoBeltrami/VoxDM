@@ -18,45 +18,55 @@ RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
 
 # Detecta ação de combate no texto do jogador.
 #
-# FILOSOFIA: verbo de ação explícita, não substantivo relacionado a combate.
-# "lanço a magia" → combate. "como funciona uma lança?" → não.
-# "luto" removido — significa mourning em PT-BR, causava falso positivo catastrófico.
+# FILOSOFIA: verbo de ação explícita, não substantivo. Dois níveis de confiança:
+#   Nível 1 — sempre combate: atacar, golpear, apunhalar, disparar, conjurar…
+#   Nível 2 — contexto obrigatório: cortar/empurrar/agarrar/derrubar exigem alvo
+#             direto singular (o/a + palavra) ou arma qualificadora.
+#             "corto as folhas" → artigo plural "as" não casa → sem combate.
+#             "corto o goblin" ou "corto com minha espada" → combate.
+# "luto" removido da raiz — significa mourning em PT-BR; adicionado só com sufixo "contra/com".
 # Substantivos removidos: inimigo, espada, adaga, arco, flecha, escudo, briga, combate.
-# Adicionados: verbos de ranged (disparo/atiro), grapple (agarro), derrube, esquiva ativa.
 RE_COMBATE = re.compile(
     r"\b("
-    # ── Ataques corpo a corpo ──────────────────────────────────────────────────
+    # ── Nível 1: ataques sem ambiguidade ──────────────────────────────────────
     r"atac[ao]|ataquei|atacar|"
     r"golpei[oa]|golpeio|golpear|"
     r"apunhal[ao]|apunhalei|apunhalar|"
-    r"cort[ao]|cortei|cortar|"
     r"soc[ao]|socou|socar|"
     r"chut[ao]|chutei|chutar|"
-    r"empurr[ao]|empurrei|empurrar|"
-    r"agarr[ao]|agarrei|agarrar|"
-    r"derrub[ao]|derrubei|derrubar|"
-    # ── Ataques à distância ────────────────────────────────────────────────────
+    # ── Nível 1: distância ────────────────────────────────────────────────────
     r"dispar[ao]|disparei|disparar|"
     r"atir[ao]|atirei|atirar|"
-    r"fir[ao]|firei|"                    # "firo o goblin"
-    # ── Magia ofensiva (verbos de ação, não substantivos) ─────────────────────
-    r"lanç[ao]|lancei|lançar|"           # "lanço Fireball" — ação
+    r"fir[ao]|firei|"
+    # ── Nível 1: magia ofensiva ────────────────────────────────────────────────
+    r"lanç[ao]|lancei|lançar|"
     r"conjur[ao]|conjurei|conjurar|"
-    # ── Defesa ativa (reação explícita ao combate) ────────────────────────────
+    # ── Nível 1: defesa ativa ─────────────────────────────────────────────────
     r"esquiv[ao]|esquivei|esquivar|"
-    r"par[ao] o (?:ataque|golpe)|"       # "paro o ataque" — específico
+    r"par[ao] o (?:ataque|golpe)|"
     r"bloqueio o (?:ataque|golpe)|"
-    r"me (?:lanço|jogo) sobre|"          # charge
+    r"me (?:lanço|jogo) sobre|"
     r"avanço sobre|"
-    # ── Combate corpo a corpo / movimento ─────────────────────────────────────
-    r"luto (?:contra|com [aou]|pela vida)|"   # "luto contra" — verbo lutar, não substantivo
-    r"avanço sobre|me (?:lanço|jogo) sobre|"
-    # ── Ativação de item em combate ────────────────────────────────────────────
-    r"ativ[ao] (?:minha|meu|o|a)|"       # "ativo minha espada flamejante"
-    # ── Iniciativa / abertura de combate ──────────────────────────────────────
+    # ── Nível 1: lutar verbo (não substantivo "luta") ─────────────────────────
+    r"luto (?:contra|com [aou]|pela vida)|"
+    # ── Nível 1: item / iniciativa ────────────────────────────────────────────
+    r"ativ[ao] (?:minha|meu|o|a)|"
     r"iniciativa|"
-    r"saqu[ao] (?:minha|meu)|"           # "saco minha espada"
-    r"desembainho"                        # desembainhar a arma
+    r"saqu[ao] (?:minha|meu)|"
+    r"desembainh\w+|"                     # desembainho/a/ei/ou/ar — qualquer conjugação
+    # ── Nível 2: cortar — exige arma ou alvo singular (não "as folhas") ───────
+    r"cort[ao] (?:com (?:minha|meu) \w+|(?:o|a) \w+|(?:ele|ela|você))|"
+    r"cortei (?:com|(?:o|a) \w+|(?:ele|ela|você))|"
+    r"cortar (?:com|(?:o|a) \w+|(?:ele|ela|você))|"
+    # ── Nível 2: empurrar — exige alvo singular ou pronome ───────────────────
+    r"empurr[ao] (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    r"empurrei (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    # ── Nível 2: agarrar (grapple) — exige alvo singular ou pronome ──────────
+    r"agarr[ao] (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    r"agarrei (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    # ── Nível 2: derrubar (shove) — exige alvo singular ou pronome ───────────
+    r"derrub[ao] (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    r"derrubei (?:(?:o|a) \w+|(?:ele|ela|você))"
     r")\b",
     re.IGNORECASE,
 )

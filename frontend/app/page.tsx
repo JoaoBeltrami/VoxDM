@@ -178,6 +178,35 @@ export default function Home() {
           </div>
         </header>
 
+        {/* Scene Status Bar — localização + hora + NPCs presentes com trust visual.
+            Sempre visível durante o jogo. Substitui o que ficava enterrado na CharacterSheet. */}
+        {(locationNome || Object.keys(npcsTrust).length > 0) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-800/40 bg-zinc-900/40 px-4 py-1.5 text-xs">
+            {locationNome && (
+              <span className="text-zinc-500">
+                <span className="text-zinc-600">📍</span>{" "}
+                <span className="text-zinc-400">{locationNome}</span>
+                {timeOfDay && <span className="ml-1 text-zinc-600">· {timeOfDay}</span>}
+              </span>
+            )}
+            {Object.entries(npcsTrust).map(([npcId, trust]) => {
+              const nome = npcId.split("-")[0].replace(/^\w/, c => c.toUpperCase());
+              const [cor, icone] =
+                trust >= 3 ? ["text-violet-400", "★"] :
+                trust >= 2 ? ["text-emerald-500", "+"] :
+                trust >= 1 ? ["text-yellow-500", "~"] :
+                             ["text-zinc-500",   "?"];
+              return (
+                <span key={npcId} title={`Trust: ${trust}/3`}
+                  className={`${cor} flex items-center gap-0.5`}>
+                  <span className="text-zinc-600 text-[10px]">{icone}</span>
+                  <span>{nome}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <PlayerJournal sessionId={sessionId} />
 
         <CharacterSheet

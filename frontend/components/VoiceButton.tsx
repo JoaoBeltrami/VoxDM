@@ -11,6 +11,8 @@ interface Props {
   sessionId?:       string | null;
   /** Chamado no início de cada gravação — usado para parar o áudio do mestre */
   onIniciarFala?:   () => void;
+  /** Chamado ao pausar/retomar — hook para otimização de latência em background */
+  onPausarFala?:    (pausado: boolean) => void;
 }
 
 // Comandos de voz reconhecidos e suas transformações para o WS
@@ -49,9 +51,10 @@ function processarComandoVoz(texto: string): string {
   return texto;
 }
 
-export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala }: Props) {
+export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala, onPausarFala }: Props) {
   const [texto,        setTexto]        = useState("");
   const [ouvindo,      setOuvindo]      = useState(false);
+  const [pausado,      setPausado]      = useState(false);
   const [preview,      setPreview]      = useState("");
   const [transcrevendo, setTranscrevendo] = useState(false);
 
@@ -115,7 +118,23 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   const pararMediaRec = useCallback(() => {
     mediaRecRef.current?.stop();
     mediaRecRef.current = null;
+    setPausado(false);
   }, []);
+
+  const pausarMediaRec = useCallback(() => {
+    const mr = mediaRecRef.current;
+    if (!mr) return;
+    if (mr.state === "recording") {
+      mr.pause();
+      setPausado(true);
+      onPausarFala?.(true);
+    } else if (mr.state === "paused") {
+      mr.resume();
+      setPausado(false);
+      onPausarFala?.(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onPausarFala]);
 
   // ── Caminho fallback: Web Speech API (browser transcreve localmente) ──
 
@@ -158,6 +177,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
     recRef.current = null;
     _setOuvindo(false);
     setPreview("");
+    setPausado(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -192,48 +212,87 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
 
   const semVoz = !temMediaRec && !temWebSpeech;
   const botaoDesabilitado = desabilitado || transcrevendo;
+  // Pausa só funciona com MediaRecorder (Web Speech API não suporta pause nativo)
+  const podePausar = temMediaRec && ouvindo;
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
 
-      {/* Botão de falar */}
+      {/* Botão de falar + botão de pausa */}
       {!semVoz && (
-        <button
-          onClick={toggleVoz}
-          disabled={botaoDesabilitado}
-          title={
-            transcrevendo ? "Transcrevendo…" :
-            ouvindo ? "Parar de ouvir" : "Falar"
-          }
-          className={`relative flex items-center justify-center rounded-full transition-all duration-300
-            w-14 h-14
-            ${ouvindo
-              ? "bg-violet-500 shadow-[0_0_24px_6px_rgba(139,92,246,0.5)] scale-110"
-              : transcrevendo
-              ? "bg-violet-800 animate-pulse"
-              : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
-            }
-            disabled:opacity-30 disabled:cursor-not-allowed`}
-        >
-          {ouvindo ? (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-white">
-              <rect x="3" y="3" width="12" height="12" rx="2" />
-            </svg>
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                 className="text-zinc-300">
-              <rect x="9" y="2" width="6" height="12" rx="3" />
-              <path d="M5 10a7 7 0 0 0 14 0" />
-              <line x1="12" y1="20" x2="12" y2="23" />
-              <line x1="9"  y1="23" x2="15" y2="23" />
-            </svg>
+        <div className="flex items-center gap-3">
+
+          {/* Botão de pausa/retomar — aparece só enquanto gravando via MediaRecorder */}
+          {podePausar && (
+            <button
+              onClick={pausarMediaRec}
+              title={pausado ? "Retomar gravação" : "Pausar gravação"}
+              className={`flex items-center justify-center rounded-full w-10 h-10 transition-all duration-200 border
+                ${pausado
+                  ? "bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_2px_rgba(245,158,11,0.3)]"
+                  : "bg-zinc-800/80 border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200"
+                }`}
+            >
+              {pausado ? (
+                /* ▶ retomar */
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <polygon points="4,2 14,8 4,14" />
+                </svg>
+              ) : (
+                /* ⏸ pausar */
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="3" y="2" width="4" height="12" rx="1" />
+                  <rect x="9" y="2" width="4" height="12" rx="1" />
+                </svg>
+              )}
+            </button>
           )}
-        </button>
+
+          {/* Botão principal: microfone / parar */}
+          <button
+            onClick={toggleVoz}
+            disabled={botaoDesabilitado}
+            title={
+              transcrevendo ? "Transcrevendo…" :
+              ouvindo ? "Parar de ouvir" : "Falar"
+            }
+            className={`relative flex items-center justify-center rounded-full transition-all duration-300
+              w-14 h-14
+              ${pausado
+                ? "bg-amber-600 shadow-[0_0_16px_4px_rgba(245,158,11,0.3)] scale-105"
+                : ouvindo
+                ? "bg-violet-500 shadow-[0_0_24px_6px_rgba(139,92,246,0.5)] scale-110"
+                : transcrevendo
+                ? "bg-violet-800 animate-pulse"
+                : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
+              }
+              disabled:opacity-30 disabled:cursor-not-allowed`}
+          >
+            {ouvindo ? (
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-white">
+                <rect x="3" y="3" width="12" height="12" rx="2" />
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                   className="text-zinc-300">
+                <rect x="9" y="2" width="6" height="12" rx="3" />
+                <path d="M5 10a7 7 0 0 0 14 0" />
+                <line x1="12" y1="20" x2="12" y2="23" />
+                <line x1="9"  y1="23" x2="15" y2="23" />
+              </svg>
+            )}
+          </button>
+        </div>
       )}
 
-      {/* Preview / status de transcrição */}
-      {(preview || transcrevendo) && (
+      {/* Indicador de estado */}
+      {pausado && (
+        <p className="text-xs text-amber-400 font-medium tracking-wide animate-pulse">
+          ⏸ PAUSADO — clique ▶ para continuar
+        </p>
+      )}
+      {(preview || transcrevendo) && !pausado && (
         <p className="max-w-xs text-center text-xs text-violet-300 animate-pulse">
           {transcrevendo ? "Transcrevendo via GPU…" : preview}
         </p>
