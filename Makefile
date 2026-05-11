@@ -7,7 +7,7 @@ PYTEST := uv run pytest
 run: run-api
 
 run-api:
-	$(PYTHON) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+	$(PYTHON) -m uvicorn api.main:app --reload --reload-dir api --reload-dir engine --host 0.0.0.0 --port 8000
 
 test:
 	$(PYTEST) tests/ -v

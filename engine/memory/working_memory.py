@@ -122,6 +122,10 @@ class WorkingMemory:
     # Índice no array de iniciativa ordenado (pulando mortos) — quem age agora
     turno_atual_idx: int = 0
 
+    # NPCs que foram formalmente apresentados ao jogador (mencionados pelo DM).
+    # Apenas estes aparecem no HUD — os demais estão no local mas não foram introduzidos.
+    npcs_apresentados: set[str] = field(default_factory=set)
+
     # Log de consequências da sessão (max 5, rolling) — o mundo lembra
     log_consequencias: list[str] = field(default_factory=list)
 
@@ -261,9 +265,11 @@ class WorkingMemory:
             self.dialogo_recente.pop(0)
 
     def atualizar_trust(self, npc_id: str, delta: int) -> None:
-        """Ajusta trust de um NPC, limitando ao intervalo [0, 3] conforme Schema v1.2."""
+        """Ajusta trust de um NPC, limitando ao intervalo [0, 3] conforme Schema v1.2.
+        Qualquer interação de trust implica que o NPC foi apresentado ao jogador."""
         atual = self.trust_levels.get(npc_id, 0)
         self.trust_levels[npc_id] = max(0, min(3, atual + delta))
+        self.npcs_apresentados.add(npc_id)
 
     def entrar_combate(self) -> None:
         """Ativa modo combate — prompt_builder injeta combat.md no próximo turno."""
@@ -370,6 +376,21 @@ class WorkingMemory:
         """Percepção passiva: 10 + mod_SAB + prof_bonus se Percepção em skill_profs."""
         bonus = self.prof_bonus if "Percepção" in self.skill_profs else 0
         return 10 + self.mod_sab + bonus
+
+    def apresentar_npc(self, npc_id: str) -> None:
+        """Marca NPC como apresentado — passa a aparecer no HUD."""
+        self.npcs_apresentados.add(npc_id)
+
+    def apresentar_npcs_mencionados(self, texto: str) -> None:
+        """Varre o texto do DM e apresenta qualquer NPC cujo primeiro nome apareça."""
+        texto_lower = texto.lower()
+        for npc_id in self.npcs_presentes:
+            if npc_id in self.npcs_apresentados:
+                continue
+            # Checa tanto o id completo ('bjorn-tharnsson') quanto o primeiro segmento ('bjorn')
+            primeiro_nome = npc_id.split("-")[0]
+            if primeiro_nome in texto_lower or npc_id.replace("-", " ") in texto_lower:
+                self.npcs_apresentados.add(npc_id)
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         self.npc_estados_emocionais[npc_id] = estado

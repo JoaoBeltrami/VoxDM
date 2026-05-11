@@ -565,3 +565,50 @@ def test_jogador_morto_marcado():
     ordem = wm.calcular_ordem_iniciativa()
     jogador = next(t for t in ordem if t.tipo == "jogador")
     assert jogador.morto is True
+
+
+# ── npcs_apresentados ──────────────────────────────────────────────────────
+
+def test_npc_nao_aparece_antes_de_ser_apresentado():
+    wm = _wm()
+    wm.npcs_presentes = ["bjorn-tharnsson", "runa-tharnsdottir"]
+    wm.trust_levels = {"bjorn-tharnsson": 1, "runa-tharnsdottir": 1}
+    assert wm.npcs_apresentados == set()
+
+
+def test_apresentar_npc_direto():
+    wm = _wm()
+    wm.npcs_presentes = ["bjorn-tharnsson"]
+    wm.apresentar_npc("bjorn-tharnsson")
+    assert "bjorn-tharnsson" in wm.npcs_apresentados
+
+
+def test_apresentar_npcs_mencionados_por_primeiro_nome():
+    wm = _wm()
+    wm.npcs_presentes = ["bjorn-tharnsson", "runa-tharnsdottir"]
+    wm.apresentar_npcs_mencionados("Bjorn olha para você com desconfiança.")
+    assert "bjorn-tharnsson" in wm.npcs_apresentados
+    assert "runa-tharnsdottir" not in wm.npcs_apresentados
+
+
+def test_apresentar_npcs_mencionados_por_id_completo():
+    wm = _wm()
+    wm.npcs_presentes = ["halvard-o-cinza"]
+    wm.apresentar_npcs_mencionados("halvard o cinza se aproxima lentamente.")
+    assert "halvard-o-cinza" in wm.npcs_apresentados
+
+
+def test_trust_atualizado_apresenta_npc():
+    wm = _wm()
+    wm.npcs_presentes = ["fael-valdreksson"]
+    wm.trust_levels = {"fael-valdreksson": 1}
+    wm.atualizar_trust("fael-valdreksson", 1)
+    assert "fael-valdreksson" in wm.npcs_apresentados
+
+
+def test_apresentar_npcs_idempotente():
+    wm = _wm()
+    wm.npcs_presentes = ["bjorn-tharnsson"]
+    wm.apresentar_npcs_mencionados("Bjorn ri.")
+    wm.apresentar_npcs_mencionados("Bjorn ri novamente.")
+    assert len(wm.npcs_apresentados) == 1

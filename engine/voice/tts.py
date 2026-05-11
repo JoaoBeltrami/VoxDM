@@ -37,6 +37,17 @@ from tenacity import (
 
 from engine.voice.language import Idioma
 
+# Semáforo global: máximo 2 chamadas Edge TTS simultâneas.
+# Mais que isso causa NoAudioReceived por rate-limit do servidor Microsoft.
+_edge_sem: asyncio.Semaphore | None = None
+
+
+def _obter_edge_sem() -> asyncio.Semaphore:
+    global _edge_sem
+    if _edge_sem is None:
+        _edge_sem = asyncio.Semaphore(2)
+    return _edge_sem
+
 log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -305,34 +316,45 @@ class EdgeTTSEngine:
         """
         Sintetiza texto completo em áudio MP3.
 
-        Args:
-            texto:           Texto do Mestre a sintetizar.
-            idioma:          Idioma para seleção de voz padrão.
-            voice_override:  Voz a usar (ex: "pt-BR-AntonioNeural"). None = padrão.
-            rate_override:   Taxa de fala (ex: "-15%"). None = EDGE_RATE global.
-            pitch_override:  Tom (ex: "-3Hz"). None = EDGE_PITCH global.
-
-        Returns:
-            bytes de áudio MP3.
+        Usa semáforo (máx 2 concurrent) + retry tenacity (3 tentativas) para
+        lidar com instabilidade do serviço Microsoft Edge TTS.
         """
         voz = voice_override or self._selecionar_voz(idioma)
         rate = rate_override or EDGE_RATE
         pitch = pitch_override or EDGE_PITCH
         texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
 
+        if not texto_limpo.strip():
+            return b""
+
         logger = log.bind(voz=voz, chars=len(texto), idioma=idioma)
         logger.info("Sintetizando (Edge TTS)")
 
-        communicate = edge_tts.Communicate(texto_limpo, voz, rate=rate, pitch=pitch)
-        buffer = io.BytesIO()
+        tentativa = 0
+        ultimo_erro: Exception | None = None
+        while tentativa < 3:
+            tentativa += 1
+            try:
+                async with _obter_edge_sem():
+                    communicate = edge_tts.Communicate(texto_limpo, voz, rate=rate, pitch=pitch)
+                    buffer = io.BytesIO()
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            buffer.write(chunk["data"])
+                    audio = buffer.getvalue()
+                    if audio:
+                        return audio
+                    # Vazio sem exceção → NoAudioReceived em versões antigas
+                    raise RuntimeError("Edge TTS retornou áudio vazio")
+            except Exception as exc:
+                ultimo_erro = exc
+                if tentativa < 3:
+                    await asyncio.sleep(0.4 * tentativa)
+                    log.debug("edge_tts_retry", tentativa=tentativa, erro=str(exc)[:80])
 
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                buffer.write(chunk["data"])
-
-        audio = buffer.getvalue()
-        logger.info("Síntese concluída", bytes=len(audio))
-        return audio
+        if ultimo_erro:
+            raise ultimo_erro
+        raise RuntimeError("Edge TTS falhou sem exceção capturada")
 
     async def sintetizar_stream(
         self,
@@ -357,10 +379,11 @@ class EdgeTTSEngine:
 
         log.info("Sintetizando stream (Edge TTS)", voz=voz, chars=len(texto))
 
-        communicate = edge_tts.Communicate(texto_limpo, voz, rate=EDGE_RATE, pitch=EDGE_PITCH)
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                yield chunk["data"]
+        async with _obter_edge_sem():
+            communicate = edge_tts.Communicate(texto_limpo, voz, rate=EDGE_RATE, pitch=EDGE_PITCH)
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
 
 
 # ---------------------------------------------------------------------------
@@ -435,13 +458,26 @@ class KokoroTTSEngine:
 
         def _sintetizar_sync() -> bytes:
             pipeline = self._carregar_pipeline(lang_code)
+            voz_real = voz
 
-            log.info("Sintetizando (Kokoro fallback)", chars=len(texto), voz=voz)
+            log.info("Sintetizando (Kokoro fallback)", chars=len(texto), voz=voz_real)
 
-            amostras: list[np.ndarray] = []
-            for _, _, audio in pipeline(texto, voice=voz):
-                if audio is not None:
-                    amostras.append(audio)
+            try:
+                amostras: list[np.ndarray] = []
+                for _, _, audio in pipeline(texto, voice=voz_real):
+                    if audio is not None:
+                        amostras.append(audio)
+            except Exception as exc_voz:
+                msg = str(exc_voz).lower()
+                if voz_real != "bf_emma" and any(k in msg for k in ("hub", "cache", "locate", "local disk")):
+                    log.warning("kokoro_voz_nao_encontrada", voz=voz_real, fallback="bf_emma")
+                    voz_real = "bf_emma"
+                    amostras = []
+                    for _, _, audio in pipeline(texto, voice=voz_real):
+                        if audio is not None:
+                            amostras.append(audio)
+                else:
+                    raise
 
             if not amostras:
                 log.warning("Kokoro não gerou áudio", texto_preview=texto[:40])

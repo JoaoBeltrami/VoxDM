@@ -321,7 +321,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             inventory=wm.player_inventory,
             location_nome=wm.location_nome,
             time_of_day=wm.time_of_day,
-            npcs_trust={npc: wm.trust_levels.get(npc, 0) for npc in wm.npcs_presentes},
+            npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
             spell_slots=wm.spell_slots,
             hit_dice_current=wm.hit_dice_current,
             gold=wm.gold,
@@ -335,6 +335,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     if resposta_intro:
         wm.registrar_fala("mestre", resposta_intro)
+        wm.apresentar_npcs_mencionados(resposta_intro)
 
     log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
@@ -605,6 +606,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)
+            sessao.working_mem.apresentar_npcs_mencionados(resposta_completa)
 
             # Fix 1b: fim de combate detectado na resposta do LLM
             # Ex: "o último inimigo cai" → mestre narra vitória → sair_combate()
@@ -718,7 +720,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     inventory=sessao.working_mem.player_inventory,
                     location_nome=sessao.working_mem.location_nome,
                     time_of_day=sessao.working_mem.time_of_day,
-                    npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 0) for npc in sessao.working_mem.npcs_presentes},
+                    npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 1) for npc in sessao.working_mem.npcs_apresentados},
                     spell_slots=sessao.working_mem.spell_slots,
                     hit_dice_current=sessao.working_mem.hit_dice_current,
                     gold=sessao.working_mem.gold,
