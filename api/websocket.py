@@ -617,6 +617,26 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 sessao.working_mem, texto_jogador, resposta_completa
             )
 
+            # Iniciativa — engine é authority. Populamos cache (idempotente) e
+            # avançamos o índice do turno atual. Logamos fallback quando o LLM
+            # não propõe valores e atribuímos decrescente 20, 19, 18…
+            if sessao.working_mem.em_combate and sessao.working_mem.inimigos_combate:
+                inimigos_sem_iniciativa = [
+                    iid for iid in sessao.working_mem.inimigos_combate
+                    if iid not in sessao.working_mem.iniciativa_cache
+                ]
+                if inimigos_sem_iniciativa:
+                    log.warning(
+                        "iniciativa_fallback",
+                        session_id=session_id,
+                        inimigos=inimigos_sem_iniciativa,
+                    )
+                sessao.working_mem.popular_iniciativa()
+                # Avança turno entre tokens vivos — só a partir da rodada 2,
+                # pra não pular o jogador no primeiro turno de combate.
+                if sessao.working_mem.rodada_combate >= 1:
+                    sessao.working_mem.avancar_turno_iniciativa()
+
             # Avança rodada de combate após cada turno completo
             if sessao.working_mem.em_combate:
                 sessao.working_mem.avancar_rodada()
@@ -711,6 +731,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     inimigos_combate=dict(sessao.working_mem.inimigos_combate),
                     rodada_combate=sessao.working_mem.rodada_combate,
                     log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
+                    iniciativa_ordem=(
+                        [
+                            {
+                                "id": t.id, "nome": t.nome, "tipo": t.tipo,
+                                "iniciativa": t.iniciativa,
+                                "turno_atual": t.turno_atual,
+                                "morto": t.morto,
+                                "hp_atual": t.hp_atual, "hp_max": t.hp_max,
+                            }
+                            for t in sessao.working_mem.calcular_ordem_iniciativa()
+                        ]
+                        if sessao.working_mem.em_combate else []
+                    ),
                 ).model_dump_json()
             )
 

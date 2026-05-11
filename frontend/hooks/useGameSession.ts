@@ -8,6 +8,7 @@ import {
   type MensagemWS,
   type PersonagemConfig,
   type SpellSlot,
+  type TokenIniciativa,
 } from "@/lib/api";
 import { useAudio } from "@/hooks/useAudio";
 
@@ -53,6 +54,8 @@ interface EstadoSessao {
   rodadaCombate: number;
   // Últimas consequências narrativas — surfaced fora de combate
   consequencias: string[];
+  // Barra de iniciativa horizontal — vazia fora de combate
+  iniciativaOrdem: TokenIniciativa[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -86,6 +89,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   inimigos: {},
   rodadaCombate: 0,
   consequencias: [],
+  iniciativaOrdem: [],
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -217,6 +221,7 @@ export function useGameSession() {
           emCombate: msg.em_combate ?? false,
           inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
           consequencias: msg.log_consequencias ?? [],
+          iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
         };
 
         const novoTurnoBase = {
@@ -253,6 +258,7 @@ export function useGameSession() {
             inimigos: rpgUpdate.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
+            iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -290,6 +296,7 @@ export function useGameSession() {
             inimigos: rpgUpdate.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
+            iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,

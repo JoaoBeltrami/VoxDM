@@ -459,3 +459,109 @@ def test_para_texto_hp_ok_sem_aviso():
     texto = wm.para_texto()
     assert "ESTADO CRÍTICO" not in texto
     assert "FERIDO" not in texto
+
+
+# ── Iniciativa de combate (Bloco 2) ────────────────────────────────────────
+
+def test_iniciativa_cache_vazio_fora_de_combate():
+    wm = _wm()
+    assert wm.iniciativa_cache == {}
+    assert wm.turno_atual_idx == 0
+
+
+def test_entrar_combate_zera_iniciativa():
+    wm = _wm()
+    wm.iniciativa_cache = {"velho": 99}  # estado sujo de "combate anterior"
+    wm.turno_atual_idx = 5
+    wm.entrar_combate()
+    assert wm.iniciativa_cache == {}
+    assert wm.turno_atual_idx == 0
+
+
+def test_popular_iniciativa_fallback_decrescente():
+    wm = _wm(dex_score=12)  # mod_des = +1 → jogador iniciativa = 11
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin 1")
+    wm.registrar_inimigo("ogro", "Ogro")
+    wm.popular_iniciativa()
+
+    assert wm.iniciativa_cache["jogador"] == 11
+    assert wm.iniciativa_cache["goblin-1"] == 20
+    assert wm.iniciativa_cache["ogro"] == 19
+
+
+def test_popular_iniciativa_respeita_proposta_llm():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin")
+    wm.popular_iniciativa({"goblin": 7})
+    assert wm.iniciativa_cache["goblin"] == 7
+
+
+def test_popular_iniciativa_idempotente():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin")
+    wm.popular_iniciativa({"goblin": 15})
+    wm.popular_iniciativa({"goblin": 99})  # tentar sobrescrever
+    assert wm.iniciativa_cache["goblin"] == 15  # primeiro valor permanece
+
+
+def test_calcular_ordem_ordena_desc():
+    wm = _wm(dex_score=14)  # +2 → jogador 12
+    wm.entrar_combate()
+    wm.registrar_inimigo("a", "A")
+    wm.registrar_inimigo("b", "B")
+    wm.popular_iniciativa({"a": 5, "b": 18})
+    ordem = wm.calcular_ordem_iniciativa()
+    assert [t.id for t in ordem] == ["b", "jogador", "a"]
+
+
+def test_calcular_ordem_marca_morto():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("a", "A", estado="morto")
+    wm.registrar_inimigo("b", "B")
+    wm.popular_iniciativa()
+    ordem = wm.calcular_ordem_iniciativa()
+    morto = next(t for t in ordem if t.id == "a")
+    assert morto.morto is True
+
+
+def test_avancar_turno_pula_mortos():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("vivo", "Vivo")
+    wm.registrar_inimigo("morto-1", "Morto", estado="morto")
+    wm.popular_iniciativa({"vivo": 5, "morto-1": 99})
+    # ordem por valor desc: morto-1(99), jogador(10), vivo(5)
+    # vivos: jogador, vivo
+    # turno_atual_idx = 0 → jogador
+    ordem = wm.calcular_ordem_iniciativa()
+    turno_atual = [t for t in ordem if t.turno_atual]
+    assert len(turno_atual) == 1
+    assert turno_atual[0].tipo == "jogador"
+
+    wm.avancar_turno_iniciativa()
+    ordem = wm.calcular_ordem_iniciativa()
+    turno_atual = [t for t in ordem if t.turno_atual]
+    assert turno_atual[0].id == "vivo"
+
+
+def test_sair_combate_limpa_iniciativa():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("g", "Goblin")
+    wm.popular_iniciativa()
+    wm.sair_combate()
+    assert wm.iniciativa_cache == {}
+    assert wm.turno_atual_idx == 0
+
+
+def test_jogador_morto_marcado():
+    wm = _wm(player_hp=0, player_hp_max=30)
+    wm.entrar_combate()
+    wm.popular_iniciativa()
+    ordem = wm.calcular_ordem_iniciativa()
+    jogador = next(t for t in ordem if t.tipo == "jogador")
+    assert jogador.morto is True

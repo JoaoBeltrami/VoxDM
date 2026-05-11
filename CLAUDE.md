@@ -24,6 +24,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 - **UX Cinematográfico de Combate (11/05)**: ✅ CONCLUÍDO. CharacterForm com 🎲 Aleatório + 🎲 Rolar 4d6↓ (priorizado por classe). CombatTracker interativo (botão ⚔ atacar por inimigo, pulse em mudança de estado, fade na morte). HP flash vermelho/verde em dano/cura. 5 chips de ações rápidas em combate (Esquivar/Disparada/Desengajar/Ajudar/Mirar). Overlay full-screen "20"/"1" em crit/falha. Splash "COMBATE" na transição calmaria→combate. Vinheta vermelha cinematic mode.
 - **Auditoria Geral + Hardening (11/05)**: ✅ CONCLUÍDO. Relatório completo em `.internal/AUDITORIA_11_05.md`. Corrigidos: `.env.example` com `DEBUG=true` (crítico — expunha `/debug/*`), `API_HOST=0.0.0.0` default trocado pra `127.0.0.1`, `api/main.py` com log de aviso quando `reload` ativo. Hardening do websocket: log no topo, try/except em sync handlers numéricos, limites em gold/xp/inventory/spell_slots. `tts.py` imports no topo, `schemas.py` sem `__import__`, `useGameSession.ts` cleanup chama pararTudo, `useAudio.ts` fecha AudioContext no unmount, `context_builder._deduplicar_por_source_id` preserva chunks sem source_id. Suspense boundary em `/debug/page.tsx` (fix Next 14 build). `dashboard.py` sem `asyncio.get_event_loop()` deprecated. Guia de monitoramento em `.internal/GUIA_MONITORAMENTO.md`.
 - **Features pós-auditoria (11/05)**: ✅ CONCLUÍDO. (1) **UX — Ducking de áudio ambiente**: `useAmbientAudio` recebe 3º arg `mestreFalando`, master gain transita pra 0.1 quando true e volta a 0.6 quando false (setTargetAtTime, curva exponencial sem cliques). (2) **Segurança — Rate limiting**: `slowapi` em `api/rate_limit.py`, decorators em `/start` (10/min), `/turn` (30/min), `/transcribe` (60/min). Limiter desabilitado em testes via conftest. (3) **Arquitetura — Hot reload de prompts**: `_ler_prompt(path)` em `prompt_builder.py` com cache invalidado por mtime. Vale para master_system, dice, combat, saves, intro_system. Editar `.md` agora pega no próximo turno sem restart. (4) **Som de crítico/falha**: `useCombatSounds` sintético via Web Audio API (zero arquivos). Clarinada heroica em natural 20 (3 osciladores triangle Sol5/Ré6/Sol6 com envelope ADSR), tambor seco em natural 1 (sine 120→40Hz + ruído branco decay). Toggle ON/OFF em Opções, persistido em localStorage.
+- **UX Pré-Vídeo de Combate (11/05 — tarde)**: ✅ CONCLUÍDO. Sessão dedicada de polimento visual em 4 blocos. (1) **Bloco 1 — Presença na cena**: novos componentes `SceneHeader` (local + hora com ícone contextual ☀️/🌤️/🌅/🌙) e `NpcsPresentes` (chips de NPC com ícones de trust 💀⚪🤝⭐). Tipografia Cinzel via Google Fonts. Substitui inline Scene Status Bar. (2) **Bloco 2 — Iniciativa Visual Horizontal** 🎯: `TokenIniciativa` dataclass em `engine/llm/types.py`. Cache de iniciativa `iniciativa_cache: dict[str,int]` + `turno_atual_idx` em `WorkingMemory`. Métodos `popular_iniciativa()` (fallback decrescente 20,19,18 se LLM não propõe), `avancar_turno_iniciativa()` (pula mortos), `calcular_ordem_iniciativa()` (ordena desc). Authority = engine (LLM apenas propõe). `TokenIniciativaPayload` em schemas; payload `fim` agora inclui `iniciativa_ordem`. `InitiativeBar.tsx` com tokens circulares 56px, ring violeta + scale(1.15) + seta ▼ no turno atual, 💀 grayscale em mortos, slide-down 400ms. Regra de iniciativa adicionada em `combat.md`. 10 testes novos. (3) **Bloco 3 — Atmosfera de cena**: hook `useSceneMood` mapeia local/hora/combate → overlayColor + vignetteIntensity + ambientTone. Aplicado em `<main>` com transição 800ms. VoxOrb ganhou ring expansivo no estado "falando". (4) **Bloco 4 — Polimento**: cinema mode (toggle 🎬/🛠️ canto inferior direito + atalho Ctrl+Shift+C + localStorage), esconde PlayerJournal, dice toolbar, combat chips e condições auto-detectadas. **293/293 testes passam, tsc verde.**
 Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado).
 
 ---
@@ -395,6 +396,32 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | d100 na toolbar | Adicionado ao array de dados de dano na combat toolbar |
 | `qdrant_uploader.py` race condition | Fix: retry com backoff exponencial após delete (409 Conflict Qdrant Cloud) |
 | 244/244 testes | +11 testes unitários de combat sync no `test_websocket.py` |
+
+### UX Pré-Vídeo de Combate (Sessão 11/05 — tarde)
+
+> Sessão dedicada de polimento visual pré-gravação. 4 blocos em ordem, validados isoladamente. Authority de turno de iniciativa migra pra engine.
+
+| Bloco | Arquivo | O que foi feito |
+|---|---|---|
+| 1 — Presença | `frontend/components/SceneHeader.tsx` (novo) | Cabeçalho de cena com ícone contextual por hora (☀️🌤️🌅🌙) + tipografia Cinzel + fade-in na troca de local |
+| 1 — Presença | `frontend/components/NpcsPresentes.tsx` (novo) | Chips compactos de NPC com ícone de trust (💀⚪🤝⭐) e slide-in-right ao aparecer |
+| 1 — Presença | `frontend/app/page.tsx` | Inline Scene Status Bar removida, substituída por `<SceneHeader>` + `<NpcsPresentes>` |
+| 1 — Presença | `frontend/app/globals.css` | Import de Cinzel + Cormorant Garamond via Google Fonts |
+| 2 — Iniciativa | `engine/llm/types.py` | Dataclass `TokenIniciativa` (id, nome, tipo, iniciativa, turno_atual, morto, hp_atual, hp_max) |
+| 2 — Iniciativa | `engine/memory/working_memory.py` | Cache `iniciativa_cache: dict[str,int]` + `turno_atual_idx`. Métodos `popular_iniciativa()` (idempotente, fallback decrescente), `avancar_turno_iniciativa()` (pula mortos), `calcular_ordem_iniciativa()`. Hooks em `entrar_combate` / `sair_combate` |
+| 2 — Iniciativa | `engine/llm/prompts/combat.md` | Seção nova "Iniciativa — autoridade da engine" — LLM não rerola, engine cicla |
+| 2 — Iniciativa | `api/models/schemas.py` | `TokenIniciativaPayload` + `iniciativa_ordem` em `MensagemWS` |
+| 2 — Iniciativa | `api/websocket.py` | `popular_iniciativa()` chamado em cada turno (com warning quando fallback). `avancar_turno_iniciativa()` após sync de inimigos. `iniciativa_ordem` emitido no payload `fim` |
+| 2 — Iniciativa | `frontend/lib/api.ts` | Interface `TokenIniciativa` + campo `iniciativa_ordem` em `MensagemWS` |
+| 2 — Iniciativa | `frontend/hooks/useGameSession.ts` | Estado `iniciativaOrdem: TokenIniciativa[]` parseado do payload `fim` |
+| 2 — Iniciativa | `frontend/components/InitiativeBar.tsx` (novo) | Tokens circulares 56px + ring violeta/scale(1.15)/seta ▼ no turno atual + 💀 grayscale em mortos. Fixed top, slide-down 400ms. React.memo por id+turno+morto+hp |
+| 2 — Iniciativa | `tests/test_working_memory.py` | +10 testes para iniciativa (fallback decrescente, idempotência, ordenação desc, marcação de mortos, ciclo do turno) |
+| 3 — Atmosfera | `frontend/hooks/useSceneMood.ts` (novo) | Tabela frontend-only de mood por local/hora/combate. `overlayColor` + `vignetteIntensity` + `ambientTone`. Combate sempre sobrescreve |
+| 3 — Atmosfera | `frontend/app/page.tsx` | `<main>` ganha `backgroundImage` linear-gradient + `boxShadow` inset com transição 800ms |
+| 3 — Atmosfera | `frontend/components/VoxOrb.tsx` | Ring expansivo violeta no estado "falando" (além do "ouvindo") |
+| 4 — Polimento | `frontend/app/page.tsx` | Cinema mode: estado + localStorage `voxdm_cinema_mode`. Atalho Ctrl+Shift+C. Botão flutuante 🎬/🛠️ canto inferior direito. Esconde header buttons, PlayerJournal, dice toolbar, combat chips e chips de condição auto-detectada |
+| Animações | `frontend/tailwind.config.ts` | +4 keyframes/animations: `fade-in` (SceneHeader), `slide-in-right` (NpcsPresentes chips), `slide-down` (InitiativeBar), `stream-pulse` (extra disponível para VoxOrb) |
+| **Total testes** | | **293/293 passed** (283 baseline + 10 iniciativa); `tsc --noEmit` clean |
 
 ---
 

@@ -82,6 +82,24 @@ class SecretVisivel:
 
 
 @dataclass
+class TokenIniciativa:
+    """Token na barra de iniciativa — jogador ou inimigo em combate.
+
+    Authority de turno = engine: o LLM propõe iniciativa via prompt (opcional),
+    a engine cacheia no primeiro turno de combate e gerencia o ciclo dali em diante.
+    Esta struct é o que vai pro frontend renderizar a InitiativeBar.
+    """
+    id: str
+    nome: str
+    tipo: str  # "jogador" | "inimigo"
+    iniciativa: int
+    turno_atual: bool = False
+    morto: bool = False
+    hp_atual: int = 0
+    hp_max: int = 0
+
+
+@dataclass
 class ContextoMontado:
     """Saída do context_builder — tudo que o prompt_builder precisa."""
     working_memory: "WorkingMemory"

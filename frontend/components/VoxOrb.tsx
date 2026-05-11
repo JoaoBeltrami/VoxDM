@@ -18,11 +18,17 @@ export function VoxOrb({ estado, tamanho = 96 }: Props) {
       className="relative flex items-center justify-center"
       style={{ width: tamanho * 2.2, height: tamanho * 2.2 }}
     >
-      {/* Anéis de ripple — só ao ouvir */}
+      {/* Anéis de ripple — ouvindo: violeta-claro mais rápido / falando: violeta forte expansivo */}
       {estado === "ouvindo" && (
         <>
           <span className="absolute inset-0 rounded-full border border-violet-400/40 animate-ripple" />
           <span className="absolute inset-0 rounded-full border border-violet-400/25 animate-ripple-delay" />
+        </>
+      )}
+      {estado === "falando" && (
+        <>
+          <span className="absolute inset-0 rounded-full border-2 border-violet-300/50 animate-ripple" />
+          <span className="absolute inset-0 rounded-full border border-violet-200/30 animate-ripple-delay" />
         </>
       )}
 

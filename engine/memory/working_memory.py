@@ -115,6 +115,13 @@ class WorkingMemory:
     # hp_rel: impressão narrativa ("cansado mas de pé", "sangrando bastante", etc.)
     inimigos_combate: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    # Cache de iniciativa: token_id ("jogador" ou inimigo_id) → valor cacheado.
+    # Populado no primeiro turno de combate. Mantido até sair_combate().
+    # Authority = engine: o LLM pode propor, mas a engine decide a ordem final.
+    iniciativa_cache: dict[str, int] = field(default_factory=dict)
+    # Índice no array de iniciativa ordenado (pulando mortos) — quem age agora
+    turno_atual_idx: int = 0
+
     # Log de consequências da sessão (max 5, rolling) — o mundo lembra
     log_consequencias: list[str] = field(default_factory=list)
 
@@ -263,6 +270,9 @@ class WorkingMemory:
         self.em_combate = True
         self.rodada_combate = 1
         self.iniciativa_jogador = None
+        # Reseta cache de iniciativa — será populado quando primeiros inimigos aparecerem
+        self.iniciativa_cache = {}
+        self.turno_atual_idx = 0
 
     def avancar_rodada(self) -> None:
         """Incrementa contador de rodada dentro do combate ativo."""
@@ -311,6 +321,9 @@ class WorkingMemory:
         self.iniciativa_jogador = None
         self.rodada_combate = 0
         self.inimigos_combate.clear()
+        # Limpa cache de iniciativa — próximo combate rola tudo de novo
+        self.iniciativa_cache.clear()
+        self.turno_atual_idx = 0
         self.saiu_combate_recentemente = True
         self.turnos_sem_tensao = 0
 
@@ -370,6 +383,115 @@ class WorkingMemory:
         """Remove item do inventário se presente."""
         if item_id in self.player_inventory:
             self.player_inventory.remove(item_id)
+
+    # ── Iniciativa de combate ─────────────────────────────────────────────────
+    #
+    # Authority = engine. O LLM pode propor iniciativa narrativamente, mas é a
+    # engine que cacheia, ordena e cicla os turnos. Implementação:
+    #   1. No primeiro turno em que há inimigos, popular_iniciativa() roda fallback
+    #      decrescente (20, 19, 18…) se LLM não emitiu valores.
+    #   2. avancar_turno_iniciativa() cicla turno_atual_idx pulando mortos.
+    #   3. calcular_ordem_iniciativa() devolve list[TokenIniciativa] pra UI.
+
+    def popular_iniciativa(self, proposta_llm: dict[str, int] | None = None) -> None:
+        """Popula o cache de iniciativa no primeiro turno de combate.
+
+        Args:
+            proposta_llm: opcional, mapeia inimigo_id → iniciativa proposta pelo
+                LLM. Se ausente ou parcial, usa fallback decrescente (20, 19, …).
+
+        Idempotente — só popula entradas que ainda não estão no cache.
+        Jogador entra com `mod_des + 10` (rolagem fake estável) ou
+        `iniciativa_jogador` se já tiver sido definida via [Rolagem: d20 = N].
+        """
+        # Jogador — se já temos um valor explícito de rolagem, usar; senão fake
+        if "jogador" not in self.iniciativa_cache:
+            if self.iniciativa_jogador is not None:
+                self.iniciativa_cache["jogador"] = self.iniciativa_jogador
+            else:
+                self.iniciativa_cache["jogador"] = 10 + self.mod_des
+
+        # Inimigos — preencher na ordem em que apareceram, valor decrescente do
+        # topo se LLM não propôs. Começa em 20 e desce, pulando o valor do jogador
+        # pra evitar empate sem critério de desempate.
+        proposta_llm = proposta_llm or {}
+        # valores já em uso para evitar duplicatas no fallback
+        em_uso = set(self.iniciativa_cache.values())
+        proximo_fallback = 20
+        for inimigo_id in self.inimigos_combate.keys():
+            if inimigo_id in self.iniciativa_cache:
+                continue
+            valor = proposta_llm.get(inimigo_id)
+            if valor is None:
+                while proximo_fallback in em_uso and proximo_fallback > 1:
+                    proximo_fallback -= 1
+                valor = max(1, proximo_fallback)
+                proximo_fallback -= 1
+            self.iniciativa_cache[inimigo_id] = valor
+            em_uso.add(valor)
+
+    def avancar_turno_iniciativa(self) -> None:
+        """Cicla turno_atual_idx para o próximo token vivo na ordem."""
+        if not self.em_combate or not self.iniciativa_cache:
+            return
+        ordem = self.calcular_ordem_iniciativa()
+        vivos = [t for t in ordem if not t.morto]
+        if not vivos:
+            return
+        self.turno_atual_idx = (self.turno_atual_idx + 1) % len(vivos)
+
+    def calcular_ordem_iniciativa(self) -> list["TokenIniciativa"]:
+        """Retorna a barra de iniciativa atual ordenada (desc por valor).
+
+        Combina jogador + inimigos do combate, usando o cache. Marca turno_atual
+        no token correspondente a turno_atual_idx (entre os vivos). Mortos têm
+        morto=True e são pulados no ciclo de turno.
+        """
+        from engine.llm.types import TokenIniciativa  # import tardio: types importa working_memory
+
+        tokens: list[TokenIniciativa] = []
+
+        # Jogador
+        ini_jogador = self.iniciativa_cache.get("jogador", 10 + self.mod_des)
+        tokens.append(TokenIniciativa(
+            id="jogador",
+            nome=self.player_name or "Jogador",
+            tipo="jogador",
+            iniciativa=ini_jogador,
+            hp_atual=self.player_hp,
+            hp_max=self.player_hp_max,
+            morto=self.player_hp <= 0,
+        ))
+
+        # Inimigos
+        for inimigo_id, dados in self.inimigos_combate.items():
+            ini = self.iniciativa_cache.get(inimigo_id, 0)
+            estado = dados.get("estado", "intacto")
+            tokens.append(TokenIniciativa(
+                id=inimigo_id,
+                nome=dados.get("nome", inimigo_id),
+                tipo="inimigo",
+                iniciativa=ini,
+                # Sem hp numérico — usar estado narrativo como proxy visual
+                hp_atual=0 if estado == "morto" else 1,
+                hp_max=1,
+                morto=estado == "morto",
+            ))
+
+        # Ordenar por iniciativa desc — desempate por tipo (jogador primeiro) só
+        # importa visualmente; numericamente já basta pra estabilidade.
+        tokens.sort(key=lambda t: (-t.iniciativa, 0 if t.tipo == "jogador" else 1))
+
+        # Marca turno atual entre os vivos
+        vivos = [t for t in tokens if not t.morto]
+        if vivos and 0 <= self.turno_atual_idx < len(vivos):
+            token_atual = vivos[self.turno_atual_idx]
+            for t in tokens:
+                if t.id == token_atual.id:
+                    t.turno_atual = True
+                    break
+
+        return tokens
 
     def atualizar_quest_stage(self, quest_id: str, stage_id: str) -> None:
         self.quest_stages[quest_id] = stage_id

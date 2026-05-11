@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
+import { useSceneMood } from "@/hooks/useSceneMood";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
@@ -11,6 +12,9 @@ import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
+import { SceneHeader } from "@/components/SceneHeader";
+import { NpcsPresentes } from "@/components/NpcsPresentes";
+import { InitiativeBar } from "@/components/InitiativeBar";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
@@ -25,6 +29,10 @@ const VOZES_PTBR = [
 
 const VOZ_PADRAO = "pt-BR-FranciscaNeural";
 const LS_VOZ_KEY = "voxdm_tts_voice";
+
+// Cinema mode — esconde controles utilitários, deixa só o essencial pra gravação.
+// Persistido em localStorage. Toggle via botão canto inferior direito ou Ctrl+Shift+C.
+const LS_CINEMA_KEY = "voxdm_cinema_mode";
 
 // Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
 const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|iniciativa|d20|d\d+|perícia|habilidade)\b/i;
@@ -129,6 +137,7 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
+    iniciativaOrdem,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio,
   } = useGameSession();
@@ -181,6 +190,30 @@ export default function Home() {
     else tocarFalha();
   }, [tocarCritico, tocarFalha]);
   useEffect(() => () => { if (critTimerRef.current) clearTimeout(critTimerRef.current); }, []);
+
+  // Cinema mode — esconde dashboard, debug, atalhos. Atalho Ctrl+Shift+C.
+  const [cinemaMode, setCinemaMode] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setCinemaMode(localStorage.getItem(LS_CINEMA_KEY) === "1");
+  }, []);
+  const toggleCinema = useCallback(() => {
+    setCinemaMode(prev => {
+      const next = !prev;
+      try { localStorage.setItem(LS_CINEMA_KEY, next ? "1" : "0"); } catch { /* SSR-safe */ }
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "C" || e.key === "c")) {
+        e.preventDefault();
+        toggleCinema();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [toggleCinema]);
 
   // Toggle de som de crítico — hydrate do localStorage
   const [somCritico, setSomCritico] = useState(true);
@@ -273,12 +306,26 @@ export default function Home() {
   const { ativo: ambienteAtivo, cena: ambienteCena, toggle: toggleAmbiente } =
     useAmbientAudio(locationNome ?? "", emCombate, !!respostaAtual);
 
+  // Mood visual da cena — overlay sutil + vinheta. Combate sempre sobrescreve.
+  const sceneMood = useSceneMood(locationNome, timeOfDay, emCombate);
+
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
     return (
-      <main className={`relative flex h-screen flex-col transition-colors duration-700 ${
-        emCombate ? "bg-zinc-950 shadow-[inset_0_0_120px_-30px_rgba(127,29,29,0.4)]" : "bg-zinc-950"
-      }`}>
+      <main
+        className="relative flex h-screen flex-col bg-zinc-950 transition-[background,box-shadow] duration-[800ms] ease-in-out"
+        style={{
+          // Mood ambiental (Bloco 3) — overlay sutil + vinheta interna, transita em 800ms
+          backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
+          boxShadow: `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px ${
+            emCombate ? "rgba(127,29,29,0.55)" : "rgba(0,0,0,0.55)"
+          }`,
+        }}
+        data-tone={sceneMood.ambientTone}
+      >
+        {/* Barra de iniciativa horizontal — só aparece em combate. Bloco 2. */}
+        <InitiativeBar ordem={iniciativaOrdem} emCombate={emCombate} />
+
         {/* Splash "Combate Iniciado!" — transição cinematográfica calmaria→combate */}
         {battleSplash && (
           <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-red-950/30 backdrop-blur-[2px]">
@@ -330,7 +377,7 @@ export default function Home() {
 
           <span className="text-xs font-semibold tracking-widest text-violet-400/70">VOXDM</span>
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 transition-opacity duration-300 ${cinemaMode ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             <button
               onClick={() => window.open(`/debug?s=${encodeURIComponent(sessionId ?? "")}`, "_blank")}
               title="Abrir monitor de jogo (segunda tela)"
@@ -380,36 +427,14 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Scene Status Bar — localização + hora + NPCs presentes com trust visual.
-            Sempre visível durante o jogo. Substitui o que ficava enterrado na CharacterSheet. */}
-        {(locationNome || Object.keys(npcsTrust).length > 0) && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-800/40 bg-zinc-900/40 px-4 py-1.5 text-xs">
-            {locationNome && (
-              <span className="text-zinc-500">
-                <span className="text-zinc-600">📍</span>{" "}
-                <span className="text-zinc-400">{locationNome}</span>
-                {timeOfDay && <span className="ml-1 text-zinc-600">· {timeOfDay}</span>}
-              </span>
-            )}
-            {Object.entries(npcsTrust).map(([npcId, trust]) => {
-              const nome = npcId.split("-")[0].replace(/^\w/, c => c.toUpperCase());
-              const [cor, icone] =
-                trust >= 3 ? ["text-violet-400", "★"] :
-                trust >= 2 ? ["text-emerald-500", "+"] :
-                trust >= 1 ? ["text-yellow-500", "~"] :
-                             ["text-zinc-500",   "?"];
-              return (
-                <span key={npcId} title={`Trust: ${trust}/3`}
-                  className={`${cor} flex items-center gap-0.5`}>
-                  <span className="text-zinc-600 text-[10px]">{icone}</span>
-                  <span>{nome}</span>
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {/* Scene Header + NpcsPresentes — presença na cena (Bloco 1).
+            Refatorado de inline Scene Status Bar para componentes dedicados,
+            com tipografia Cinzel, ícones contextuais por hora do dia e chips
+            de trust mais expressivos. */}
+        <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
+        <NpcsPresentes npcsTrust={npcsTrust} />
 
-        <PlayerJournal sessionId={sessionId} />
+        {!cinemaMode && <PlayerJournal sessionId={sessionId} />}
 
         <CharacterSheet
           personagem={personagem}
@@ -458,8 +483,8 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
-          {/* Toolbar de dados — aparece na vez do jogador */}
-          {(() => {
+          {/* Toolbar de dados — aparece na vez do jogador. Some em cinema mode. */}
+          {!cinemaMode && (() => {
             const ultimaFala = historico.length > 0
               ? historico[historico.length - 1].mestre
               : "";
@@ -563,8 +588,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* Combate — ações rápidas + economia de ação */}
-          {emCombate && (() => {
+          {/* Combate — ações rápidas + economia de ação. Some em cinema mode. */}
+          {emCombate && !cinemaMode && (() => {
             const turnoJogadorCombate = !respostaAtual && historico.length > 0 && !ouvindo;
             // Ações comuns de combate D&D 5e — 1 clique narra a intenção pro mestre.
             // "Cor" só é decorativa pra distinguir defensiva (azul) de agressiva (vermelha).
@@ -637,8 +662,8 @@ export default function Home() {
               </button>
             )}
           </div>
-          {/* Chips de condição auto-detectada */}
-          {condicoesDetectadas.length > 0 && (
+          {/* Chips de condição auto-detectada. Some em cinema mode. */}
+          {condicoesDetectadas.length > 0 && !cinemaMode && (
             <div className="flex flex-wrap justify-center gap-1.5 px-4">
               {condicoesDetectadas.map(cond => (
                 <div key={cond}
@@ -669,6 +694,19 @@ export default function Home() {
             onIniciarFala={pararAudio}
           />
         </div>
+
+        {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}
+        <button
+          onClick={toggleCinema}
+          title={cinemaMode ? "Sair do modo cinema (Ctrl+Shift+C)" : "Entrar no modo cinema — esconde UI utilitária (Ctrl+Shift+C)"}
+          className={`fixed bottom-3 right-3 z-30 flex h-9 w-9 items-center justify-center rounded-full border text-base transition ${
+            cinemaMode
+              ? "border-violet-600/60 bg-violet-950/80 text-violet-300 shadow-[0_0_12px_rgba(139,92,246,0.35)] hover:bg-violet-900/80"
+              : "border-zinc-800 bg-zinc-900/80 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+          }`}
+        >
+          {cinemaMode ? "🎬" : "🛠️"}
+        </button>
       </main>
     );
   }

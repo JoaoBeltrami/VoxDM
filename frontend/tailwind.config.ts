@@ -45,14 +45,38 @@ const config: Config = {
           "70%":  { transform: "scale(1)",   opacity: "1"   },
           "100%": { transform: "scale(0.95)",opacity: "0"   },
         },
+        // SceneHeader — fade ao trocar de local
+        "fade-in": {
+          "0%":   { opacity: "0", transform: "translateY(-4px)" },
+          "100%": { opacity: "1", transform: "translateY(0)"    },
+        },
+        // NpcsPresentes — chip entrando da direita
+        "slide-in-right": {
+          "0%":   { opacity: "0", transform: "translateX(8px)" },
+          "100%": { opacity: "1", transform: "translateX(0)"   },
+        },
+        // InitiativeBar — barra inteira descendo do topo
+        "slide-down": {
+          "0%":   { opacity: "0", transform: "translate(-50%, -16px)" },
+          "100%": { opacity: "1", transform: "translate(-50%, 0)"     },
+        },
+        // VoxOrb — pulso ritmado azul (recebendo tokens do LLM)
+        "stream-pulse": {
+          "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
+          "50%":      { transform: "scale(1.08)", opacity: "1"    },
+        },
       },
       animation: {
-        breathe:       "breathe 3.2s ease-in-out infinite",
-        listen:        "listen 0.9s ease-in-out infinite",
-        speak:         "speak 0.55s ease-in-out infinite",
-        ripple:        "ripple 1.4s ease-out infinite",
-        "ripple-delay":"ripple-delay 1.4s ease-out 0.7s infinite",
-        "crit-pop":    "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        breathe:         "breathe 3.2s ease-in-out infinite",
+        listen:          "listen 0.9s ease-in-out infinite",
+        speak:           "speak 0.55s ease-in-out infinite",
+        ripple:          "ripple 1.4s ease-out infinite",
+        "ripple-delay":  "ripple-delay 1.4s ease-out 0.7s infinite",
+        "crit-pop":      "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "fade-in":       "fade-in 400ms ease-out",
+        "slide-in-right":"slide-in-right 200ms ease-out",
+        "slide-down":    "slide-down 400ms ease-out",
+        "stream-pulse":  "stream-pulse 1s ease-in-out infinite",
       },
     },
   },

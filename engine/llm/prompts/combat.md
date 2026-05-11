@@ -194,6 +194,14 @@ Uma pausa no meio de um combate é mais tensa que dez golpes em sequência. Use 
 
 ---
 
+## Iniciativa — autoridade da engine.
+
+A engine cacheia a ordem de iniciativa no primeiro turno de combate e mantém o ciclo entre turnos. Você narra a tensão da abertura conforme a Camada 1, mas **não decide a ordem de turno**. Se quiser propor um valor para um inimigo específico (porque ele é claramente mais lento ou mais rápido), pode incluir uma frase narrativa do tipo "o ogro reage tarde, ainda pesado" — a engine pode usar isso como sinal, mas a ordem final é dela.
+
+Em turnos subsequentes durante o mesmo combate, **não rerole iniciativa**. Não diga "novo ciclo de iniciativa" nem "a ordem muda". O ciclo continua até o fim do combate.
+
+---
+
 ## Fechamento de rodada de combate.
 
 Cada resposta de combate termina com uma abertura — mas de combate, não de conversa. Um inimigo avançando. Uma arma levantada. Um som novo. Uma escolha concreta no ar. O jogador precisa sentir que tem uma próxima decisão agora.

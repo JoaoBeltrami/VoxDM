@@ -76,6 +76,20 @@ export interface MensagemWS {
   rodada_combate?: number;
   // Consequências narrativas recentes — para "você lembra que..."
   log_consequencias?: string[];
+  // Barra de iniciativa — vazia fora de combate
+  iniciativa_ordem?: TokenIniciativa[];
+}
+
+/** Token na barra de iniciativa — espelha api/models/schemas.TokenIniciativaPayload. */
+export interface TokenIniciativa {
+  id: string;
+  nome: string;
+  tipo: "jogador" | "inimigo";
+  iniciativa: number;
+  turno_atual: boolean;
+  morto: boolean;
+  hp_atual: number;
+  hp_max: number;
 }
 
 export interface PersonagemConfig {

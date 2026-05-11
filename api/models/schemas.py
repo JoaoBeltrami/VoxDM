@@ -121,6 +121,21 @@ class CharacterStateSchema(BaseModel):
     inspiration: bool = False
 
 
+class TokenIniciativaPayload(BaseModel):
+    """Token da barra de iniciativa enviado ao frontend.
+
+    Espelha engine.llm.types.TokenIniciativa — a engine é authority de turno.
+    """
+    id: str
+    nome: str
+    tipo: str  # "jogador" | "inimigo"
+    iniciativa: int
+    turno_atual: bool = False
+    morto: bool = False
+    hp_atual: int = 0
+    hp_max: int = 0
+
+
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
@@ -157,3 +172,5 @@ class MensagemWS(BaseModel):
     rodada_combate: int = 0
     # Últimas consequências narrativas — surfaced no frontend fora de combate
     log_consequencias: list[str] = Field(default_factory=list)
+    # Barra de iniciativa — vazia fora de combate. Authority de turno = engine.
+    iniciativa_ordem: list[TokenIniciativaPayload] = Field(default_factory=list)
