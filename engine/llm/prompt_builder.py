@@ -36,14 +36,46 @@ _DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
 _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 _SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
 
-# Caches — None = ainda não lido; str vazia = lido mas ausente/falho
-_master_system_cache: str | None = None
-_dice_cache: str | None = None
-_combat_cache: str | None = None
-_saves_cache: str | None = None
-
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
+
+# Cache com hot reload por mtime — quando o arquivo .md muda, próxima leitura
+# pega o novo conteúdo sem precisar reiniciar o servidor. Estrutura:
+#   path -> (mtime_visto, conteudo_ou_string_vazia)
+# string vazia em conteudo significa "arquivo ausente ou inválido" e tem TTL
+# de mtime=0.0 — sempre re-tenta na próxima chamada.
+_cache_prompts: dict[Path, tuple[float, str]] = {}
+
+
+def _ler_prompt(path: Path) -> str | None:
+    """Lê um prompt .md com cache invalidado por mtime.
+
+    Permite editar prompts ao vivo (mestre veterano ajustando comportamento)
+    sem reiniciar a API — próximo turno pega versão nova.
+
+    Returns:
+        str com conteúdo se OK, None se ausente ou muito curto.
+    """
+    try:
+        if not path.exists():
+            # Re-tenta a cada chamada (arquivo pode aparecer)
+            return None
+        mtime_atual = path.stat().st_mtime
+        cached = _cache_prompts.get(path)
+        if cached and cached[0] == mtime_atual:
+            return cached[1] or None
+        conteudo = path.read_text(encoding="utf-8")
+        if len(conteudo) < _PROMPT_MIN_CHARS:
+            log.warning("prompt_muito_curto", path=str(path), chars=len(conteudo))
+            _cache_prompts[path] = (mtime_atual, "")
+            return None
+        if cached and cached[1] and cached[0] != mtime_atual:
+            log.info("prompt_recarregado", path=path.name, mtime=mtime_atual)
+        _cache_prompts[path] = (mtime_atual, conteudo)
+        return conteudo
+    except Exception as e:
+        log.warning("prompt_leitura_falhou", path=str(path), erro=str(e))
+        return None
 
 # Budget de tokens por camada (aproximado — 1 token ≈ 4 chars)
 BUDGET_WORKING   = 1600   # 40% — nunca cortado
@@ -70,90 +102,39 @@ _LEMBRETE_SAIDA = (
 
 
 
-def _carregar_master_system() -> str:
-    """Carrega e cacheia o prompt do mestre em disco."""
-    global _master_system_cache
-    if _master_system_cache is None:
-        try:
-            if _MASTER_SYSTEM_PATH.exists():
-                conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
-                if len(conteudo) >= _PROMPT_MIN_CHARS:
-                    _master_system_cache = conteudo
-                else:
-                    log.warning("master_system_muito_curto", chars=len(conteudo))
-            else:
-                log.warning("master_system_ausente", path=str(_MASTER_SYSTEM_PATH))
-        except Exception as e:
-            log.error("master_system_falhou_leitura", erro=str(e))
+# Fallback inline para master_system — usado se o .md sumir/corromper.
+# Mantemos curto e auto-suficiente; nunca é o caminho normal.
+_MASTER_SYSTEM_FALLBACK = (
+    "Você é VoxDM, um mestre de RPG de mesa narrando em português brasileiro. "
+    "Seja imersivo, conciso e consistente com o contexto fornecido. "
+    "Nunca use markdown, asteriscos, listas ou parênteses técnicos. "
+    "Máximo 80 palavras por resposta."
+)
 
-        if _master_system_cache is None:
-            _master_system_cache = (
-                "Você é VoxDM, um mestre de RPG de mesa narrando em português brasileiro. "
-                "Seja imersivo, conciso e consistente com o contexto fornecido. "
-                "Nunca use markdown, asteriscos, listas ou parênteses técnicos. "
-                "Máximo 80 palavras por resposta."
-            )
-    return _master_system_cache
+
+def _carregar_master_system() -> str:
+    """Carrega prompt do mestre com hot reload — fallback inline se ausente."""
+    return _ler_prompt(_MASTER_SYSTEM_PATH) or _MASTER_SYSTEM_FALLBACK
 
 
 def _carregar_dice() -> str | None:
-    """Carrega e cacheia o guia de rolagem de dados. Retorna None se ausente."""
-    global _dice_cache
-    if _dice_cache is None:
-        try:
-            if _DICE_PATH.exists():
-                conteudo = _DICE_PATH.read_text(encoding="utf-8")
-                if len(conteudo) >= _PROMPT_MIN_CHARS:
-                    _dice_cache = conteudo
-                    return _dice_cache
-            log.info("dice_md_ausente", path=str(_DICE_PATH))
-        except Exception as e:
-            log.warning("dice_md_falhou_leitura", erro=str(e))
-        _dice_cache = ""   # marca como "tentado, não disponível"
-    return _dice_cache if _dice_cache else None
+    """Guia de rolagem de dados — com hot reload. None se ausente."""
+    return _ler_prompt(_DICE_PATH)
 
 
 def _carregar_combat() -> str | None:
-    """Carrega e cacheia o guia de combate. Retorna None se ausente."""
-    global _combat_cache
-    if _combat_cache is None:
-        try:
-            if _COMBAT_PATH.exists():
-                conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
-                if len(conteudo) >= _PROMPT_MIN_CHARS:
-                    _combat_cache = conteudo
-                    return _combat_cache
-            log.info("combat_md_ausente", path=str(_COMBAT_PATH))
-        except Exception as e:
-            log.warning("combat_md_falhou_leitura", erro=str(e))
-        _combat_cache = ""
-    return _combat_cache if _combat_cache else None
+    """Guia de combate — com hot reload. None se ausente."""
+    return _ler_prompt(_COMBAT_PATH)
 
 
 def _carregar_saves() -> str | None:
-    """Carrega e cacheia o guia de salvaguardas. Retorna None se ausente."""
-    global _saves_cache
-    if _saves_cache is None:
-        try:
-            if _SAVES_PATH.exists():
-                conteudo = _SAVES_PATH.read_text(encoding="utf-8")
-                if len(conteudo) >= _PROMPT_MIN_CHARS:
-                    _saves_cache = conteudo
-                    return _saves_cache
-            log.info("saves_md_ausente", path=str(_SAVES_PATH))
-        except Exception as e:
-            log.warning("saves_md_falhou_leitura", erro=str(e))
-        _saves_cache = ""
-    return _saves_cache if _saves_cache else None
+    """Guia de salvaguardas — com hot reload. None se ausente."""
+    return _ler_prompt(_SAVES_PATH)
 
 
 def invalidar_cache() -> None:
-    """Invalida caches de prompts — útil em testes e em hot-reload."""
-    global _master_system_cache, _dice_cache, _combat_cache, _saves_cache
-    _master_system_cache = None
-    _dice_cache = None
-    _combat_cache = None
-    _saves_cache = None
+    """Invalida caches de prompts — útil em testes (força releitura)."""
+    _cache_prompts.clear()
 
 
 def validar_master_system() -> tuple[bool, str]:

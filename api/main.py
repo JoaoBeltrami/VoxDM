@@ -22,7 +22,10 @@ import structlog
 import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from api.rate_limit import limiter
 from api.routes import debug as debug_router
 from api.routes import session as session_router
 from api.websocket import handle_game_ws
@@ -88,6 +91,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Wire do rate limiter — handler 429 + state pra session.py acessar via request.app.state.limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _origens = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 

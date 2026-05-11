@@ -11,6 +11,7 @@ import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
+import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
@@ -168,15 +169,26 @@ export default function Home() {
   const [rolamentosPendentes, setRolamentosPendentes] = useState<RolagemPendente[]>([]);
   const [actionEconomy, setActionEconomy] = useState({ acao: false, acaoBônus: false, reacao: false });
 
-  // Feedback visual de crítico/falha crítica — 1.2s de celebração full-screen
+  // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
   const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
     if (critTimerRef.current) clearTimeout(critTimerRef.current);
     setCritFlash(tipo);
     critTimerRef.current = setTimeout(() => setCritFlash(null), 1200);
-  }, []);
+    if (tipo === "crit") tocarCritico();
+    else tocarFalha();
+  }, [tocarCritico, tocarFalha]);
   useEffect(() => () => { if (critTimerRef.current) clearTimeout(critTimerRef.current); }, []);
+
+  // Toggle de som de crítico — hydrate do localStorage
+  const [somCritico, setSomCritico] = useState(true);
+  useEffect(() => { setSomCritico(lerSomCriticoAtivo()); }, []);
+  const toggleSomCritico = useCallback((ativo: boolean) => {
+    setSomCritico(ativo);
+    salvarSomCritico(ativo);
+  }, []);
 
   // Splash "Combate Iniciado!" — dispara na transição calmaria→combate.
   // Janela curta (2s) pra dar peso de transição sem atrapalhar a leitura da fala.
@@ -256,8 +268,10 @@ export default function Home() {
     });
   }, [conectar, sessaoSelecionada, personagem, vozSelecionada]);
 
+  // 3º arg "mestreFalando" ativa ducking: ambiente abaixa enquanto há resposta
+  // sendo lida, volta no silêncio. Replica como uma mesa real soa.
   const { ativo: ambienteAtivo, cena: ambienteCena, toggle: toggleAmbiente } =
-    useAmbientAudio(locationNome ?? "", false);
+    useAmbientAudio(locationNome ?? "", emCombate, !!respostaAtual);
 
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
@@ -831,6 +845,30 @@ export default function Home() {
             ))}
           </div>
           <p className="text-xs text-zinc-600">Escolha salva automaticamente.</p>
+        </div>
+
+        {/* Toggle de som em natural 20 / natural 1 */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Sons de Combate</p>
+          <button
+            onClick={() => toggleSomCritico(!somCritico)}
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+              somCritico
+                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+            }`}
+          >
+            <span>
+              🎺 Crítico / 🥁 Falha
+              <span className="ml-2 text-[10px] text-zinc-500">som curto em natural 20 / 1</span>
+            </span>
+            <span className={`text-xs font-semibold ${somCritico ? "text-violet-400" : "text-zinc-600"}`}>
+              {somCritico ? "ON" : "OFF"}
+            </span>
+          </button>
+          <p className="text-[10px] text-zinc-600">
+            Sintético, sem download. Default ligado — desligue se for atrapalhar o vídeo.
+          </p>
         </div>
       </div>
     </main>

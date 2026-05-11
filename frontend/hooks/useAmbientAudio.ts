@@ -51,7 +51,20 @@ const PRESETS: Record<CenaAmbiental, OscConfig[]> = {
   silencio: [],
 };
 
-export function useAmbientAudio(locationNome: string, emCombate?: boolean) {
+// Volume master "normal" vs durante fala do mestre. Em mesa real o DM fala
+// mais alto que a trilha — replicamos isso abaixando ambiente pra ~17% (0.1)
+// enquanto o respostaAtual está sendo lido. Volta gradualmente em 0.8s.
+const MASTER_NORMAL    = 0.6;
+const MASTER_DUCKED    = 0.1;
+const DUCK_DOWN_TC     = 0.15;   // tempo pra abaixar (atack rápido)
+const DUCK_UP_TC       = 0.45;   // tempo pra voltar (decay suave)
+
+export function useAmbientAudio(
+  locationNome: string,
+  emCombate?: boolean,
+  /** true enquanto o mestre fala — abaixa ambiente automaticamente (ducking) */
+  mestreFalando?: boolean,
+) {
   const [ativo, setAtivo] = useState(false);
   const [cena, setCena] = useState<CenaAmbiental>("campo");
 
@@ -64,6 +77,19 @@ export function useAmbientAudio(locationNome: string, emCombate?: boolean) {
     const novaCena = emCombate ? "combate" : detectarCena(locationNome);
     setCena(novaCena);
   }, [locationNome, emCombate]);
+
+  // Ducking: abaixa o master quando o mestre fala, volta quando termina.
+  // setTargetAtTime usa curva exponencial — soa orgânico (sem cliques abruptos).
+  useEffect(() => {
+    const master = masterRef.current;
+    const ctx = ctxRef.current;
+    if (!master || !ctx || !ativo) return;
+    if (mestreFalando) {
+      master.gain.setTargetAtTime(MASTER_DUCKED, ctx.currentTime, DUCK_DOWN_TC);
+    } else {
+      master.gain.setTargetAtTime(MASTER_NORMAL, ctx.currentTime, DUCK_UP_TC);
+    }
+  }, [mestreFalando, ativo]);
 
   const _destruirNodos = useCallback(() => {
     for (const { osc, gain } of nodesRef.current) {
@@ -111,13 +137,14 @@ export function useAmbientAudio(locationNome: string, emCombate?: boolean) {
     await ctxRef.current.resume();
 
     const master = ctxRef.current.createGain();
-    master.gain.value = 0.6;
+    // Inicia já no patamar adequado (ducked se o mestre estiver falando)
+    master.gain.value = mestreFalando ? MASTER_DUCKED : MASTER_NORMAL;
     master.connect(ctxRef.current.destination);
     masterRef.current = master;
 
     _criarNodos(cena);
     setAtivo(true);
-  }, [cena, _criarNodos]);
+  }, [cena, _criarNodos, mestreFalando]);
 
   const desligar = useCallback(() => {
     _destruirNodos();

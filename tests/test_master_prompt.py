@@ -177,13 +177,13 @@ def test_carregar_dice_retorna_string():
 
 
 def test_invalidar_cache_reseta_ambos():
-    # Aquece os caches
+    """invalidar_cache() limpa o dict de caches — próxima chamada relê do disco."""
     _carregar_master_system()
     _carregar_dice()
-    invalidar_cache()
     import engine.llm.prompt_builder as pb
-    assert pb._master_system_cache is None
-    assert pb._dice_cache is None
+    assert len(pb._cache_prompts) >= 1  # pelo menos um path foi cacheado
+    invalidar_cache()
+    assert pb._cache_prompts == {}
 
 
 # ── Testes: montar_mensagens com rolagem ─────────────────────────────────
@@ -269,10 +269,48 @@ def test_carregar_combat_retorna_string():
 
 
 def test_invalidar_cache_reseta_combat():
+    """invalidar_cache() limpa também o cache de combat.md."""
     _carregar_combat()
-    invalidar_cache()
     import engine.llm.prompt_builder as pb
-    assert pb._combat_cache is None
+    cache_antes = dict(pb._cache_prompts)
+    assert any("combat" in str(p) for p in cache_antes.keys())
+    invalidar_cache()
+    assert pb._cache_prompts == {}
+
+
+def test_hot_reload_relê_quando_mtime_muda(tmp_path):
+    """Hot reload: edita o .md em disco e a próxima chamada pega a versão nova."""
+    import engine.llm.prompt_builder as pb
+
+    fake = tmp_path / "fake_prompt.md"
+    fake.write_text("conteúdo inicial " * 20, encoding="utf-8")  # > 100 chars
+
+    # Primeira leitura — cacheia
+    v1 = pb._ler_prompt(fake)
+    assert v1 is not None and "inicial" in v1
+
+    # Reescreve com mtime diferente (Windows tem granularidade alta, então
+    # usar os.utime explicitamente garante mtime distinto sem depender de sleep)
+    import os
+    fake.write_text("conteúdo NOVO " * 20, encoding="utf-8")
+    futuro = fake.stat().st_mtime + 5
+    os.utime(fake, (futuro, futuro))
+
+    # Segunda leitura — deve pegar versão nova
+    v2 = pb._ler_prompt(fake)
+    assert v2 is not None and "NOVO" in v2 and "inicial" not in v2
+
+
+def test_hot_reload_retorna_none_quando_arquivo_some(tmp_path):
+    """Hot reload: se o arquivo é deletado, próxima leitura retorna None."""
+    import engine.llm.prompt_builder as pb
+
+    fake = tmp_path / "ephemeral.md"
+    fake.write_text("conteúdo " * 30, encoding="utf-8")
+    assert pb._ler_prompt(fake) is not None
+
+    fake.unlink()
+    assert pb._ler_prompt(fake) is None
 
 
 # ── Testes: regex de detecção de combate ─────────────────────────────────────
@@ -384,10 +422,13 @@ def test_carregar_saves_retorna_string():
 
 
 def test_invalidar_cache_reseta_saves():
+    """invalidar_cache() limpa o cache de saves.md."""
     _carregar_saves()
-    invalidar_cache()
     import engine.llm.prompt_builder as pb
-    assert pb._saves_cache is None
+    cache_antes = dict(pb._cache_prompts)
+    assert any("saves" in str(p) for p in cache_antes.keys())
+    invalidar_cache()
+    assert pb._cache_prompts == {}
 
 
 def test_montar_mensagens_em_combate_ativo_injeta_saves():

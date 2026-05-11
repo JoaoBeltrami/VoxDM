@@ -36,6 +36,7 @@ python-multipart
 
 # ─── Segurança ─────────────────────────────────���─────────────────────────────
 passlib[bcrypt]
+slowapi              # rate limiting in-memory pra /transcribe, /session/start, /turn
 
 # ─── Dev ────────────────────────────────���────────────────────────────────────
 pytest

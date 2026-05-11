@@ -25,6 +25,17 @@ os.environ.setdefault("NEO4J_URI",           "neo4j+s://test.databases.neo4j.io"
 os.environ.setdefault("NEO4J_PASSWORD",      "test-neo4j-password")
 
 
+# Desabilita rate limiter durante testes — TestClient dispara N requests em
+# sequência, estouraria o limite mesmo em uso legítimo. O limiter continua
+# ativo em produção e dev real (uvicorn).
+def pytest_configure(config):
+    try:
+        from api.rate_limit import limiter
+        limiter.enabled = False
+    except ImportError:
+        pass  # slowapi não instalado — testes de unit fora de api/ ainda rodam
+
+
 @pytest.fixture
 def settings_mock(monkeypatch):
     """Sobrescreve variáveis de ambiente para testes sem .env real."""

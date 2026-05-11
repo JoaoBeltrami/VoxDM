@@ -18,7 +18,9 @@ import time
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+
+from api.rate_limit import limiter
 
 from api.models.schemas import (
     CharacterStateSchema,
@@ -65,7 +67,8 @@ async def listar_sessoes_salvas() -> list[SessaoListaItem]:
 
 
 @router.post("/start", response_model=SessaoInfo, status_code=201)
-async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
+@limiter.limit("10/minute")
+async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
     """Cria uma nova sessão de jogo com os parâmetros fornecidos."""
     if config.session_id in sessions:
         raise HTTPException(
@@ -196,7 +199,8 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
 
 
 @router.post("/{session_id}/turn", response_model=RespostaMestre)
-async def processar_turno(session_id: str, comando: ComandoJogador) -> RespostaMestre:
+@limiter.limit("30/minute")
+async def processar_turno(request: Request, session_id: str, comando: ComandoJogador) -> RespostaMestre:
     """Processa um turno: texto do jogador → resposta completa do Mestre (síncrono)."""
     sessao = _get_sessao(session_id)
     t0 = time.perf_counter()
@@ -245,7 +249,9 @@ async def processar_turno(session_id: str, comando: ComandoJogador) -> RespostaM
 
 
 @router.post("/{session_id}/transcribe", response_model=TranscricaoResponse)
+@limiter.limit("60/minute")
 async def transcrever_audio(
+    request: Request,
     session_id: str,
     audio: UploadFile = File(..., description="Arquivo de áudio webm/opus do MediaRecorder"),
 ) -> TranscricaoResponse:
