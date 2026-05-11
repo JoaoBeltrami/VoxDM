@@ -40,7 +40,11 @@ class Settings(BaseSettings):
     TTS_VOLUME: str = "+0%"
 
     # Fase 4 — API
-    API_HOST: str = "0.0.0.0"
+    # Default seguro: localhost. Para expor na rede local (ex: gravação em
+    # browser de outro device), setar API_HOST=0.0.0.0 explicitamente no .env.
+    # A auditoria de 11/05 marcou o default 0.0.0.0 anterior como vetor de
+    # exposição involuntária — manter 127.0.0.1 como contrato do código.
+    API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
     # Origens permitidas para CORS — separadas por vírgula no .env
     # Ex: CORS_ORIGINS=http://localhost:3000,https://meudominio.com

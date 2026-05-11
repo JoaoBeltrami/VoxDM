@@ -56,6 +56,8 @@ interface EstadoSessao {
   consequencias: string[];
   // Barra de iniciativa horizontal — vazia fora de combate
   iniciativaOrdem: TokenIniciativa[];
+  // Quests que avançaram no último turno — limpa sozinho após 4s
+  questNotificacao: string | null;
 }
 
 const MAX_RECONNECTS = 3;
@@ -90,6 +92,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   rodadaCombate: 0,
   consequencias: [],
   iniciativaOrdem: [],
+  questNotificacao: null,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -135,7 +138,7 @@ function parseSpellSlots(raw: Record<string, SpellSlot> | undefined): Record<num
 }
 
 export function useGameSession() {
-  const { tocarChunk, pararTudo } = useAudio();
+  const { tocarChunk, pararTudo, setVolume } = useAudio();
   const [estado, setEstado] = useState<EstadoSessao>(ESTADO_INICIAL);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -192,7 +195,9 @@ export function useGameSession() {
 
       if (msg.tipo === "token" && msg.conteudo) {
         textoAtualRef.current += msg.conteudo;
-        setEstado(s => ({ ...s, respostaAtual: textoAtualRef.current }));
+        // Strip de marcadores [Q:...] do display em tempo real — nunca visível ao jogador
+        const exibicao = textoAtualRef.current.replace(/\[Q:[^\]]*\]/g, "").trimEnd();
+        setEstado(s => ({ ...s, respostaAtual: exibicao }));
       }
 
       if (msg.tipo === "fim") {
@@ -236,6 +241,17 @@ export function useGameSession() {
         // Detectar condições mencionadas no texto do mestre
         const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
 
+        // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx
+        const questNotificacao = (msg.quest_avancos ?? []).length > 0
+          ? (msg.quest_avancos ?? []).map(q => {
+              const linhas = [`⚑ Quest: ${q.quest_id} → ${q.stage_id}`];
+              if (q.recompensas && q.recompensas.length > 0) {
+                linhas.push(q.recompensas.join("  ·  "));
+              }
+              return linhas.join("\n");
+            }).join("\n")
+          : null;
+
         if (turno) {
           setEstado(s => ({
             ...s,
@@ -262,6 +278,7 @@ export function useGameSession() {
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
+            questNotificacao: questNotificacao ?? s.questNotificacao,
             historico: [
               ...s.historico,
               {
@@ -300,6 +317,7 @@ export function useGameSession() {
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
+            questNotificacao: questNotificacao ?? s.questNotificacao,
             historico: [
               ...s.historico,
               {
@@ -421,6 +439,8 @@ export function useGameSession() {
     sincronizarEstado,
     dispensarCondicaoDetectada,
     pararAudio: pararTudo,
+    setVolume,
+    dispensarQuestNotificacao: () => setEstado(s => ({ ...s, questNotificacao: null })),
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
   };
 }

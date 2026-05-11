@@ -27,9 +27,14 @@ from slowapi.errors import RateLimitExceeded
 
 from api.rate_limit import limiter
 from api.routes import debug as debug_router
+from api.routes import health as health_router
 from api.routes import session as session_router
 from api.websocket import handle_game_ws
 from config import settings
+from engine.logging_setup import configurar as configurar_logging
+
+# Configura structlog imediatamente — antes de qualquer log.info ser chamado
+configurar_logging()
 
 log = structlog.get_logger()
 
@@ -108,6 +113,9 @@ app.add_middleware(
 
 # Rotas de sessão — sempre ativas
 app.include_router(session_router.router)
+
+# Health check profundo — pinga dependências externas em paralelo
+app.include_router(health_router.router)
 
 # Rotas de debug — apenas em modo desenvolvimento
 if settings.DEBUG:

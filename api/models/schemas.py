@@ -42,6 +42,9 @@ class SessaoConfig(BaseModel):
     session_anterior_id: str | None = None
     # Voz Edge TTS escolhida pelo jogador nas Opções
     tts_voice: str = "pt-BR-FranciscaNeural"
+    # Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md
+    # Valores: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool"
+    dm_profile: str = Field(default="equilibrado", pattern=r"^(rigoroso|equilibrado|tranquilo|rule_of_cool)$")
     # Atributos D&D 5e (Standard Array padrão)
     str_score: int = Field(default=10, ge=3, le=20)
     dex_score: int = Field(default=10, ge=3, le=20)
@@ -174,3 +177,6 @@ class MensagemWS(BaseModel):
     log_consequencias: list[str] = Field(default_factory=list)
     # Barra de iniciativa — vazia fora de combate. Authority de turno = engine.
     iniciativa_ordem: list[TokenIniciativaPayload] = Field(default_factory=list)
+    # Quests que avançaram neste turno — notificação ao jogador
+    # Cada entrada: {quest_id, stage_id, recompensas: ["+300 XP", "Obteve: X", ...]}
+    quest_avancos: list[dict[str, Any]] = Field(default_factory=list)

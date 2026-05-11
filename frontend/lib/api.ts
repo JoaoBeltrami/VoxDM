@@ -78,6 +78,8 @@ export interface MensagemWS {
   log_consequencias?: string[];
   // Barra de iniciativa — vazia fora de combate
   iniciativa_ordem?: TokenIniciativa[];
+  // Quests que avançaram neste turno — notificação ao jogador
+  quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
 }
 
 /** Token na barra de iniciativa — espelha api/models/schemas.TokenIniciativaPayload. */
@@ -104,6 +106,8 @@ export interface PersonagemConfig {
   location_nome?: string;
   session_anterior_id?: string;
   tts_voice?: string;
+  // Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md
+  dm_profile?: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool";
   // D&D 5e ability scores
   str_score?: number;
   dex_score?: number;

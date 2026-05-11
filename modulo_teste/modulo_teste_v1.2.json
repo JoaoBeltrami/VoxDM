@@ -611,7 +611,10 @@
         {
           "id": "encontro-carnicais",
           "description": "Sobreviver ao encontro com 2-3 Carniçais da Cinza na planície rochosa. Terreno com formações que servem de cobertura — teste de posicionamento.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "xp_gain", "value": 300},
+            {"effect": "information", "value": "Os carniçais da cinza não são criatura natural — algo no subsolo da wasteland os reanimou."}
+          ]
         }
       ]
     },
@@ -623,17 +626,23 @@
         {
           "id": "receber-missao",
           "description": "O líder da vila do jogador pede reconhecimento. Companheiro designado.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "information", "value": "Cada vila da wasteland desconfia das outras — mas todas temem o que está no norte."}
+          ]
         },
         {
           "id": "visitar-vilas",
           "description": "Visitar uma ou ambas as vilas. Cada vila tenta recrutar ou manipular.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "xp_gain", "value": 150}
+          ]
         },
         {
           "id": "reportar",
           "description": "O jogador decide o que reportar e para quem. Informação é poder, omissão é escolha.",
           "on_complete": [
+            {"effect": "xp_gain", "value": 300},
+            {"effect": "gold_gain", "value": 25},
             {"effect": "faction_standing_change", "target": "os-tharn", "value": 0},
             {"effect": "faction_standing_change", "target": "os-kael", "value": 0},
             {"effect": "faction_standing_change", "target": "os-dreva", "value": 0}
@@ -649,17 +658,23 @@
         {
           "id": "crise-pagamento",
           "description": "Mundr exige pagamento maior. Senna convoca ajuda.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "information", "value": "Mundr não age por ganância — ele tem uma dívida antiga que precisa honrar, e Liiv é a moeda."}
+          ]
         },
         {
           "id": "negociar-mundr",
           "description": "Negociar diretamente com Mundr. Ameaçar a relação entre Liiv e Mundr tem consequências imprevisíveis.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "xp_gain", "value": 200}
+          ]
         },
         {
           "id": "pacto-resolvido",
           "description": "Pacto renegociado, nova fonte de pagamento encontrada, ou Senna busca o Cajado como alternativa.",
           "on_complete": [
+            {"effect": "xp_gain", "value": 500},
+            {"effect": "gold_gain", "value": 50},
             {"effect": "faction_standing_change", "target": "os-kael", "value": 10}
           ]
         },
@@ -667,6 +682,7 @@
           "id": "pacto-colapsou",
           "description": "Pacto colapsa. Grothmar retiram proteção. Kaëlmund vulnerável.",
           "on_complete": [
+            {"effect": "xp_gain", "value": 300},
             {"effect": "location_state_change", "target": "kaelmund", "value": "pacto-colapsou"},
             {"effect": "npc_disposition_change", "target": "senna-kaeldottir", "value": "fearful"},
             {"effect": "faction_standing_change", "target": "os-kael", "value": -10}
@@ -682,17 +698,24 @@
         {
           "id": "fael-revela",
           "description": "Fael confia ao jogador que a Crônica contém uma verdade que muda tudo sobre o cisma.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "information", "value": "Fael arriscou a própria vida ao confiar isso. Ele sabe que a verdade pode destruir as três vilas antes de salvá-las."}
+          ]
         },
         {
           "id": "ler-cronica",
           "description": "Jogador usa a Crônica para ver a verdade completa: Kaëla envenenou Valdrek, forçou a divisão, direcionou artefatos para Dreva.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "item_gain", "value": "Crônica de Valdrek"},
+            {"effect": "xp_gain", "value": 400},
+            {"effect": "information", "value": "Kaëla envenenou Valdrek não por poder — para salvar o povo de um tirano. Ela se matou com o mesmo veneno anos depois."}
+          ]
         },
         {
           "id": "verdade-revelada-publicamente",
           "description": "A verdade é revelada a todas as vilas. Tharnvik em fúria, Kaëlmund em crise, Drevamor humilhada, Sem-Vila vindicados.",
           "on_complete": [
+            {"effect": "xp_gain", "value": 1000},
             {"effect": "location_state_change", "target": "tharnvik", "value": "verdade-revelada-publicamente"},
             {"effect": "location_state_change", "target": "drevamor", "value": "verdade-revelada-publicamente"},
             {"effect": "npc_disposition_change", "target": "bjorn-tharnsson", "value": "hostile"},
@@ -703,12 +726,16 @@
         {
           "id": "verdade-revelada-parcial",
           "description": "A verdade é revelada apenas a um líder. Efeitos dependem de qual líder recebeu a informação.",
-          "on_complete": []
+          "on_complete": [
+            {"effect": "xp_gain", "value": 600}
+          ]
         },
         {
           "id": "verdade-entregue-brennan",
           "description": "Jogador entrega a informação a Brennan. Os Sem-Vila ganham poder de barganha imediato.",
           "on_complete": [
+            {"effect": "xp_gain", "value": 800},
+            {"effect": "gold_gain", "value": 100},
             {"effect": "faction_standing_change", "target": "os-sem-vila", "value": 15},
             {"effect": "npc_disposition_change", "target": "brennan-sem-vila", "value": "friendly"}
           ]

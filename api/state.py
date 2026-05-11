@@ -46,6 +46,12 @@ class SessaoAtiva:
     ultima_atividade: float = field(default_factory=time.time)
     resumo_anterior: str = ""  # Resumo da sessão anterior para recap narrativo na abertura
     ultimo_turno: dict = field(default_factory=dict)  # Snapshot do último turno para /debug/ultimo-turno
+    # Catálogo de quests carregado do módulo — quest_id → [stage_ids válidos]
+    # Usado pelo quest_detector para validar sinais [Q:...] do LLM
+    quest_catalog: dict[str, list[str]] = field(default_factory=dict)
+    # Efeitos on_complete por stage — quest_id → stage_id → [effect_dicts]
+    # Usado pelo quest_detector para aplicar recompensas após avanço de quest
+    quest_efeitos: dict[str, dict[str, list[dict]]] = field(default_factory=dict)
 
 
 # Store global — keyed by session_id (kebab-case)

@@ -92,6 +92,12 @@ class WorkingMemory:
     session_id: str
     # Voz Edge TTS selecionada nas Opções (padrão: Francisca Neural)
     tts_voice: str = "pt-BR-FranciscaNeural"
+    # Perfil de personalidade do Mestre — controla overlay injetado pelo prompt_builder
+    dm_profile: str = "equilibrado"
+    # Catálogo compacto das quests do módulo — texto injetado no prompt para o LLM
+    # saber os IDs exatos a usar no sinal [Q:id:stage]. Vazio = módulo sem quests.
+    # Exemplo: "Quests disponíveis: combate-inicial(encontro-carnicais) | ..."
+    quests_modulo: str = ""
     # Sinaliza cena de combate ativo — ativa injeção de combat.md no prompt
     em_combate: bool = False
     # Iniciativa do jogador no combate atual (d20+DES; None = combate não iniciado)
@@ -167,6 +173,7 @@ class WorkingMemory:
         player_background: str = "",
         player_level: int = 1,
         tts_voice: str = "pt-BR-FranciscaNeural",
+        dm_profile: str = "equilibrado",
         str_score: int = 10,
         dex_score: int = 10,
         con_score: int = 10,
@@ -215,6 +222,7 @@ class WorkingMemory:
             quest_stages={},
             session_id=session_id,
             tts_voice=tts_voice,
+            dm_profile=dm_profile if dm_profile in {"rigoroso", "equilibrado", "tranquilo", "rule_of_cool"} else "equilibrado",
             em_combate=False,
             str_score=str_score,
             dex_score=dex_score,
@@ -627,6 +635,9 @@ class WorkingMemory:
             linhas.append(f"\nQuests ativas: {', '.join(self.active_quest_hooks)}")
             for qid, stage in self.quest_stages.items():
                 linhas.append(f"  {qid} → estágio: {stage}")
+
+        if self.quests_modulo:
+            linhas.append(f"\n{self.quests_modulo}")
 
         if self.log_consequencias:
             linhas.append(f"\nCONSEQUÊNCIAS: {'; '.join(self.log_consequencias)}")

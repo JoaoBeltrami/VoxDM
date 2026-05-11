@@ -35,6 +35,13 @@ _MASTER_SYSTEM_PATH = Path(__file__).parent / "prompts" / "master_system.md"
 _DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
 _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 _SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
+_QUESTS_PATH        = Path(__file__).parent / "prompts" / "quests.md"
+_DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
+
+# Perfis válidos — alinhar com SessaoConfig.dm_profile e WorkingMemory.dm_profile
+_DM_PROFILES_VALIDOS: frozenset[str] = frozenset({
+    "rigoroso", "equilibrado", "tranquilo", "rule_of_cool",
+})
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
@@ -132,6 +139,23 @@ def _carregar_saves() -> str | None:
     return _ler_prompt(_SAVES_PATH)
 
 
+def _carregar_quests() -> str | None:
+    """Instrução de sinalização de quest — com hot reload. None se ausente."""
+    return _ler_prompt(_QUESTS_PATH)
+
+
+def _carregar_dm_profile(profile: str) -> str | None:
+    """Carrega overlay de personalidade do Mestre. None se inválido ou ausente.
+
+    Equilibrado é o tom default já contido no master_system — o overlay
+    apenas reforça; perfis distintos sobrescrevem o tom.
+    """
+    if profile not in _DM_PROFILES_VALIDOS:
+        log.warning("dm_profile_invalido", profile=profile)
+        return None
+    return _ler_prompt(_DM_PROFILES_DIR / f"{profile}.md")
+
+
 def invalidar_cache() -> None:
     """Invalida caches de prompts — útil em testes (força releitura)."""
     _cache_prompts.clear()
@@ -225,6 +249,14 @@ def montar_mensagens(
     # ── System message: identidade + estado da cena (sem diálogo) ────────────
     secoes: list[str] = [master_system, ""]
 
+    # Overlay de perfil do DM — sobrepõe o tom default quando perfil != equilibrado.
+    # Equilibrado também é injetado mas é uma confirmação do tom do master_system.
+    dm_profile_attr = getattr(contexto.working_memory, "dm_profile", "equilibrado")
+    overlay = _carregar_dm_profile(dm_profile_attr)
+    if overlay:
+        secoes.append(overlay)
+        log.info("dm_profile_aplicado", profile=dm_profile_attr)
+
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo
     secoes.append(contexto.working_memory.para_texto(incluir_dialogo=False))
 
@@ -265,6 +297,12 @@ def montar_mensagens(
         saves_texto = _carregar_saves()
         if saves_texto:
             secoes.append(f"\n{saves_texto}")
+
+    # Instrução de progressão de quests — injetada apenas quando o módulo define quests
+    if getattr(contexto.working_memory, "quests_modulo", ""):
+        quests_texto = _carregar_quests()
+        if quests_texto:
+            secoes.append(f"\n{quests_texto}")
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

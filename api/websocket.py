@@ -36,6 +36,11 @@ from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
 from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE, _LEMBRETE_SAIDA
 from engine.memory.trust_detector import detectar_mudancas_trust
+from engine.memory.quest_detector import (
+    aplicar_recompensas_avancos,
+    detectar_e_aplicar_quests,
+    strip_marcadores,
+)
 from engine.telemetry import emit as _emit
 from engine.voice.language import detectar_idioma
 
@@ -596,80 +601,41 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # Flush da última sentença (sem pontuação final) e aguarda todas as tasks.
             # A maioria já terminou durante o stream — gather retorna quase imediatamente.
+            # Strip de marcadores [Q:...] antes de síntese — evita falar o token em voz alta.
             if tts and buffer_sentenca.strip():
-                tts_tasks.append(asyncio.create_task(
-                    _tts_sentenca(tts_seq_prox, buffer_sentenca.strip())
-                ))
+                flush_texto = strip_marcadores(buffer_sentenca).strip()
+                if flush_texto:
+                    tts_tasks.append(asyncio.create_task(
+                        _tts_sentenca(tts_seq_prox, flush_texto)
+                    ))
             t_tts = time.perf_counter()
             if tts_tasks:
                 await asyncio.gather(*tts_tasks, return_exceptions=True)
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
-            sessao.working_mem.registrar_fala("mestre", resposta_completa)
-            sessao.working_mem.apresentar_npcs_mencionados(resposta_completa)
-
-            # Fix 1b: fim de combate detectado na resposta do LLM
-            # Ex: "o último inimigo cai" → mestre narra vitória → sair_combate()
-            if sessao.working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
-                sessao.working_mem.sair_combate()
-                log.info("combate_encerrado_por_llm", session_id=session_id)
-
-            # Sincroniza estado dos inimigos com base no turno atual
-            _sincronizar_inimigos_combate(
-                sessao.working_mem, texto_jogador, resposta_completa
+            # Detecção de quests — strip de [Q:...] antes do pipeline pós-turno.
+            # Ordem crítica: detectar_e_aplicar_quests ANTES de aplicar_pos_turno
+            # para que registrar_fala e o payload "fim" recebam o texto limpo.
+            resposta_limpa, avanco_quests = detectar_e_aplicar_quests(
+                resposta_completa, sessao.working_mem, sessao.quest_catalog
             )
-
-            # Iniciativa — engine é authority. Populamos cache (idempotente) e
-            # avançamos o índice do turno atual. Logamos fallback quando o LLM
-            # não propõe valores e atribuímos decrescente 20, 19, 18…
-            if sessao.working_mem.em_combate and sessao.working_mem.inimigos_combate:
-                inimigos_sem_iniciativa = [
-                    iid for iid in sessao.working_mem.inimigos_combate
-                    if iid not in sessao.working_mem.iniciativa_cache
-                ]
-                if inimigos_sem_iniciativa:
-                    log.warning(
-                        "iniciativa_fallback",
-                        session_id=session_id,
-                        inimigos=inimigos_sem_iniciativa,
-                    )
-                sessao.working_mem.popular_iniciativa()
-                # Avança turno entre tokens vivos — só a partir da rodada 2,
-                # pra não pular o jogador no primeiro turno de combate.
-                if sessao.working_mem.rodada_combate >= 1:
-                    sessao.working_mem.avancar_turno_iniciativa()
-
-            # Avança rodada de combate após cada turno completo
-            if sessao.working_mem.em_combate:
-                sessao.working_mem.avancar_rodada()
-
-            # Atualiza trust com base nas ações do jogador neste turno
-            mudancas_trust = detectar_mudancas_trust(
-                texto_jogador, sessao.working_mem.npcs_presentes
+            recompensas_por_quest = aplicar_recompensas_avancos(
+                avanco_quests, sessao.quest_efeitos, sessao.working_mem
             )
-            for npc_id, delta in mudancas_trust:
-                sessao.working_mem.atualizar_trust(npc_id, delta)
-                log.info("trust_atualizado", npc_id=npc_id, delta=delta,
-                         novo_valor=sessao.working_mem.trust_levels.get(npc_id))
+            if avanco_quests:
+                log.info("quests_avancaram_ws", session_id=session_id,
+                         avancos=[(q, s) for q, s in avanco_quests],
+                         recompensas=len(recompensas_por_quest))
 
-            # Auto-registra consequências: inimigos mortos neste turno
-            for dados in sessao.working_mem.inimigos_combate.values():
-                if dados.get("estado") == "morto":
-                    c = f"{dados['nome']} foi abatido"
-                    if not any(c in ex for ex in sessao.working_mem.log_consequencias):
-                        sessao.working_mem.registrar_consequencia(c)
-
-            # Auto-registra consequências: mudanças de trust significativas
-            for npc_id, delta in mudancas_trust:
-                nome = npc_id.split("-")[0].capitalize()
-                direcao = "melhorou" if delta > 0 else "piorou"
-                sessao.working_mem.registrar_consequencia(f"Relação com {nome} {direcao}")
-
-            # Gerencia contador de tensão narrativa
-            if sessao.working_mem.em_combate:
-                sessao.working_mem.turnos_sem_tensao = 0
-            else:
-                sessao.working_mem.turnos_sem_tensao += 1
+            # Pipeline pós-turno compartilhado entre WebSocket e REST `/turn`.
+            # Centraliza: registrar fala, apresentar NPCs, sync inimigos,
+            # iniciativa, trust, consequências, avanço de rodada, fim de combate
+            # e contador de tensão — todos na ORDEM crítica (sync antes do
+            # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
+            from api.turn_pipeline import aplicar_pos_turno
+            mudancas_trust = aplicar_pos_turno(
+                sessao.working_mem, texto_jogador, resposta_limpa
+            )
 
             sessao.iteracoes += 1
             latencia_ms = int((time.perf_counter() - t0) * 1000)
@@ -746,6 +712,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         ]
                         if sessao.working_mem.em_combate else []
                     ),
+                    quest_avancos=[
+                        {
+                            "quest_id": qid,
+                            "stage_id": sid,
+                            "recompensas": recompensas_por_quest.get((qid, sid), []),
+                        }
+                        for qid, sid in avanco_quests
+                    ],
                 ).model_dump_json()
             )
 

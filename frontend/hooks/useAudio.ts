@@ -12,7 +12,9 @@ import { useCallback, useEffect, useRef } from "react";
  * não múltiplas sobrepostas.
  */
 export function useAudio() {
-  const audioCtxRef   = useRef<AudioContext | null>(null);
+  const audioCtxRef    = useRef<AudioContext | null>(null);
+  const gainRef        = useRef<GainNode | null>(null);
+  const volumeRef      = useRef<number>(0.8);
   const sourceAtualRef = useRef<AudioBufferSourceNode | null>(null);
   // Cauda da Promise chain — garante execução sequencial
   const filaRef = useRef<Promise<void>>(Promise.resolve());
@@ -21,7 +23,13 @@ export function useAudio() {
 
   const obterCtx = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-      audioCtxRef.current = new AudioContext();
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      // GainNode master — controla volume de toda a fala do mestre
+      const gain = ctx.createGain();
+      gain.gain.value = volumeRef.current;
+      gain.connect(ctx.destination);
+      gainRef.current = gain;
     }
     // Browsers bloqueiam AudioContext até interação do usuário — resume() é async
     if (audioCtxRef.current.state === "suspended") {
@@ -44,7 +52,8 @@ export function useAudio() {
         await new Promise<void>((resolve) => {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
-          source.connect(ctx.destination);
+          // Roteia pelo GainNode master para controle de volume
+          source.connect(gainRef.current ?? ctx.destination);
           sourceAtualRef.current = source;
           source.onended = () => {
             sourceAtualRef.current = null;
@@ -65,6 +74,8 @@ export function useAudio() {
     return () => {
       try { sourceAtualRef.current?.stop(); } catch { /* já encerrado */ }
       sourceAtualRef.current = null;
+      gainRef.current?.disconnect();
+      gainRef.current = null;
       const ctx = audioCtxRef.current;
       if (ctx && ctx.state !== "closed") {
         ctx.close().catch(() => { /* irrelevante no unmount */ });
@@ -88,5 +99,10 @@ export function useAudio() {
     });
   }, []);
 
-  return { tocarChunk, pararTudo };
+  const setVolume = useCallback((v: number) => {
+    volumeRef.current = Math.max(0, Math.min(1, v));
+    if (gainRef.current) gainRef.current.gain.value = volumeRef.current;
+  }, []);
+
+  return { tocarChunk, pararTudo, setVolume };
 }

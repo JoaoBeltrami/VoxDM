@@ -21,6 +21,15 @@ import structlog
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from api.rate_limit import limiter
+from api.turn_pipeline import aplicar_pos_turno
+from engine.llm.types import RE_COMBATE as _RE_COMBATE
+from engine.memory.quest_detector import (
+    aplicar_recompensas_avancos,
+    carregar_catalog_modulo,
+    carregar_efeitos_modulo,
+    catalog_para_texto,
+    detectar_e_aplicar_quests,
+)
 
 from api.models.schemas import (
     CharacterStateSchema,
@@ -96,6 +105,7 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
         player_background=config.player_background,
         player_level=config.player_level,
         tts_voice=config.tts_voice,
+        dm_profile=config.dm_profile,
         str_score=config.str_score,
         dex_score=config.dex_score,
         con_score=config.con_score,
@@ -109,12 +119,21 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
     context_builder = ContextBuilder()
     voice_manager = VoiceManager(narrator_voz=config.tts_voice or "pt-BR-FranciscaNeural")
 
+    # Carrega catálogo e efeitos de quests do módulo
+    from config import settings
+    _quest_catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    _quest_efeitos = carregar_efeitos_modulo(settings.DEFAULT_MODULE_PATH)
+    _quests_modulo_txt = catalog_para_texto(_quest_catalog)
+    working_mem.quests_modulo = _quests_modulo_txt
+
     sessao = SessaoAtiva(
         session_id=config.session_id,
         working_mem=working_mem,
         context_builder=context_builder,
         groq=GroqClient(),
         voice_manager=voice_manager,
+        quest_catalog=_quest_catalog,
+        quest_efeitos=_quest_efeitos,
     )
 
     # Pré-popular NPCs do local inicial via Neo4j
@@ -207,6 +226,11 @@ async def processar_turno(request: Request, session_id: str, comando: ComandoJog
 
     sessao.working_mem.registrar_fala("player", comando.texto)
 
+    # Detecção de entrada de combate via texto do jogador — espelha o WebSocket
+    # para o REST não divergir. Saída de combate é detectada via pipeline pós-turno.
+    if _RE_COMBATE.search(comando.texto):
+        sessao.working_mem.entrar_combate()
+
     contexto = None
     try:
         contexto = await sessao.context_builder.montar(comando.texto, sessao.working_mem)
@@ -221,7 +245,21 @@ async def processar_turno(request: Request, session_id: str, comando: ComandoJog
         log.error("groq_falhou", session_id=session_id, erro=str(e))
         raise HTTPException(status_code=503, detail=f"LLM indisponível: {e}")
 
-    sessao.working_mem.registrar_fala("mestre", resposta_texto)
+    # Detecção de quests — extrai e strip de [Q:...] antes do pipeline pós-turno
+    resposta_limpa, avanco_quests = detectar_e_aplicar_quests(
+        resposta_texto, sessao.working_mem, sessao.quest_catalog
+    )
+    recompensas_por_quest = aplicar_recompensas_avancos(
+        avanco_quests, sessao.quest_efeitos, sessao.working_mem
+    )
+    if avanco_quests:
+        log.info("quests_avancaram_rest", session_id=session_id,
+                 avancos=[(q, s) for q, s in avanco_quests],
+                 recompensas=len(recompensas_por_quest))
+
+    # Pipeline pós-turno compartilhado — mesmo comportamento do WebSocket:
+    # sync inimigos, iniciativa, trust, consequências, rodada, fim de combate.
+    aplicar_pos_turno(sessao.working_mem, comando.texto, resposta_limpa)
     sessao.iteracoes += 1
     latencia_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -238,7 +276,7 @@ async def processar_turno(request: Request, session_id: str, comando: ComandoJog
     )
 
     return RespostaMestre(
-        texto=resposta_texto,
+        texto=resposta_limpa,
         chunks_lore=chunks_lore,
         chunks_regras=chunks_regras,
         relacoes_grafo=relacoes,

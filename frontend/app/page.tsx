@@ -16,6 +16,7 @@ import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
+import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
@@ -30,9 +31,36 @@ const VOZES_PTBR = [
 const VOZ_PADRAO = "pt-BR-FranciscaNeural";
 const LS_VOZ_KEY = "voxdm_tts_voice";
 
+// Perfis de personalidade do Mestre — overlay aplicado sobre master_system.md
+type DmProfile = "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool";
+const DM_PROFILES: { id: DmProfile; label: string; descricao: string }[] = [
+  { id: "rigoroso",     label: "Rigoroso",     descricao: "Mundo punitivo. Inimigos jogam pra vencer, consequências sem aviso." },
+  { id: "equilibrado",  label: "Equilibrado",  descricao: "Padrão VoxDM — desafio justo, peso narrativo na morte." },
+  { id: "tranquilo",    label: "Tranquilo",    descricao: "Didático. Lembra consequências, falhas viram aprendizado." },
+  { id: "rule_of_cool", label: "Rule of Cool", descricao: "Cinema. Descrição boa funciona mesmo fora das regras estritas." },
+];
+const DM_PROFILE_PADRAO: DmProfile = "equilibrado";
+const LS_DM_PROFILE_KEY = "voxdm_dm_profile";
+
+function lerDmProfileStorage(): DmProfile {
+  if (typeof window === "undefined") return DM_PROFILE_PADRAO;
+  const v = localStorage.getItem(LS_DM_PROFILE_KEY);
+  return (DM_PROFILES.find(p => p.id === v)?.id) ?? DM_PROFILE_PADRAO;
+}
+
 // Cinema mode — esconde controles utilitários, deixa só o essencial pra gravação.
 // Persistido em localStorage. Toggle via botão canto inferior direito ou Ctrl+Shift+C.
 const LS_CINEMA_KEY = "voxdm_cinema_mode";
+
+// Volume da voz do mestre — persistido em localStorage, controla GainNode em useAudio.
+const LS_VOLUME_KEY = "voxdm_volume";
+const VOLUME_PADRAO = 0.8;
+
+function lerVolumeStorage(): number {
+  if (typeof window === "undefined") return VOLUME_PADRAO;
+  const v = parseFloat(localStorage.getItem(LS_VOLUME_KEY) ?? "");
+  return isNaN(v) ? VOLUME_PADRAO : Math.max(0, Math.min(1, v));
+}
 
 // Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
 const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|iniciativa|d20|d\d+|perícia|habilidade)\b/i;
@@ -139,7 +167,8 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     iniciativaOrdem,
     conectar, enviarComando, desconectar, sincronizarEstado,
-    dispensarCondicaoDetectada, pararAudio,
+    dispensarCondicaoDetectada, pararAudio, setVolume,
+    questNotificacao, dispensarQuestNotificacao,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -154,6 +183,23 @@ export default function Home() {
   // Voz TTS — carregada do localStorage na hidratação
   const [vozSelecionada, setVozSelecionada] = useState<string>(VOZ_PADRAO);
   useEffect(() => { setVozSelecionada(lerVozStorage()); }, []);
+
+  // Perfil de personalidade do Mestre — persistido em localStorage
+  const [dmProfile, setDmProfile] = useState<DmProfile>(DM_PROFILE_PADRAO);
+  useEffect(() => { setDmProfile(lerDmProfileStorage()); }, []);
+  const handleSalvarDmProfile = useCallback((p: DmProfile) => {
+    setDmProfile(p);
+    localStorage.setItem(LS_DM_PROFILE_KEY, p);
+  }, []);
+
+  // Volume da voz do mestre — hydratado do localStorage, refletido no GainNode
+  const [volume, setVolumeState] = useState<number>(VOLUME_PADRAO);
+  useEffect(() => { setVolumeState(lerVolumeStorage()); }, []);
+  useEffect(() => { setVolume(volume); }, [volume, setVolume]);
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolumeState(v);
+    try { localStorage.setItem(LS_VOLUME_KEY, String(v)); } catch { /* SSR-safe */ }
+  }, []);
 
   // Sessão selecionada no picker (tela "carregar-sessao")
   const [sessaoSelecionada, setSessaoSelecionada] = useState<SessaoListaItem | null>(null);
@@ -237,6 +283,13 @@ export default function Home() {
     if (!emCombate) emCombateAnterior.current = false;
   }, [emCombate]);
 
+  // Auto-limpa a notificação de quest após 4s
+  useEffect(() => {
+    if (!questNotificacao) return;
+    const t = setTimeout(dispensarQuestNotificacao, 4000);
+    return () => clearTimeout(t);
+  }, [questNotificacao, dispensarQuestNotificacao]);
+
   // Parseia a última fala do mestre para extrair rolagens pedidas
   useEffect(() => {
     if (historico.length === 0 || respostaAtual) return;
@@ -289,8 +342,8 @@ export default function Home() {
   }, []);
 
   const handleConectar = useCallback(() => {
-    conectar(sessionInput || "sess-01", { ...personagem, tts_voice: vozSelecionada });
-  }, [conectar, sessionInput, personagem, vozSelecionada]);
+    conectar(sessionInput || "sess-01", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile });
+  }, [conectar, sessionInput, personagem, vozSelecionada, dmProfile]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
     if (!sessaoSelecionada) return;
@@ -298,8 +351,9 @@ export default function Home() {
       ...personagem,
       session_anterior_id: sessaoSelecionada.session_id,
       tts_voice: vozSelecionada,
+      dm_profile: dmProfile,
     });
-  }, [conectar, sessaoSelecionada, personagem, vozSelecionada]);
+  }, [conectar, sessaoSelecionada, personagem, vozSelecionada, dmProfile]);
 
   // 3º arg "mestreFalando" ativa ducking: ambiente abaixa enquanto há resposta
   // sendo lida, volta no silêncio. Replica como uma mesa real soa.
@@ -325,6 +379,17 @@ export default function Home() {
       >
         {/* Barra de iniciativa horizontal — só aparece em combate. Bloco 2. */}
         <InitiativeBar ordem={iniciativaOrdem} emCombate={emCombate} />
+
+        {/* Toast de progressão de quest — 4s, canto superior central */}
+        {questNotificacao && (
+          <div className="pointer-events-none fixed inset-x-0 top-16 z-40 flex justify-center px-4">
+            <div className="animate-slide-down rounded-xl border border-amber-700/60 bg-amber-950/80 px-4 py-2.5 text-center text-xs font-semibold text-amber-300 shadow-lg backdrop-blur-sm">
+              {questNotificacao.split("\n").map((linha, i) => (
+                <div key={i}>{linha}</div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Splash "Combate Iniciado!" — transição cinematográfica calmaria→combate */}
         {battleSplash && (
@@ -707,6 +772,9 @@ export default function Home() {
         >
           {cinemaMode ? "🎬" : "🛠️"}
         </button>
+
+        {/* Controle de volume da voz — canto inferior esquerdo, todas as telas */}
+        <VolumeControl volume={volume} onChange={handleVolumeChange} />
       </main>
     );
   }
@@ -743,6 +811,7 @@ export default function Home() {
             Opções
           </button>
         </div>
+        <VolumeControl volume={volume} onChange={handleVolumeChange} />
       </main>
     );
   }
@@ -798,6 +867,7 @@ export default function Home() {
             );
           })()}
         </div>
+        <VolumeControl volume={volume} onChange={handleVolumeChange} />
       </main>
     );
   }
@@ -844,6 +914,7 @@ export default function Home() {
             {carregando ? "Conectando…" : "Continuar"}
           </button>
         </div>
+        <VolumeControl volume={volume} onChange={handleVolumeChange} />
       </main>
     );
   }
@@ -885,6 +956,33 @@ export default function Home() {
           <p className="text-xs text-zinc-600">Escolha salva automaticamente.</p>
         </div>
 
+        {/* Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Perfil do Mestre</p>
+          <div className="space-y-2">
+            {DM_PROFILES.map(p => (
+              <button
+                key={p.id}
+                onClick={() => handleSalvarDmProfile(p.id)}
+                className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                  dmProfile === p.id
+                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                }`}
+              >
+                <span className="flex items-center justify-between">
+                  <span className="font-semibold">{p.label}</span>
+                  {dmProfile === p.id && <span className="text-violet-400">✓</span>}
+                </span>
+                <span className="text-[11px] text-zinc-500">{p.descricao}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600">
+            Aplicado na próxima sessão que você iniciar.
+          </p>
+        </div>
+
         {/* Toggle de som em natural 20 / natural 1 */}
         <div className="space-y-2 border-t border-zinc-800 pt-4">
           <p className="text-xs font-semibold text-zinc-400">Sons de Combate</p>
@@ -909,6 +1007,7 @@ export default function Home() {
           </p>
         </div>
       </div>
+      <VolumeControl volume={volume} onChange={handleVolumeChange} />
     </main>
   );
 }
