@@ -118,6 +118,7 @@ def test_start_limite_sessoes_503(client):
             working_mem=MagicMock(),
             context_builder=MagicMock(),
             groq=MagicMock(),
+            voice_manager=MagicMock(),
         )
 
     resp = client.post("/session/start", json={"session_id": "sess-extra"})

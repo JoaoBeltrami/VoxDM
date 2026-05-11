@@ -36,7 +36,9 @@ from engine.llm.prompt_builder import montar_mensagens
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.session_writer import SessionWriter
 from engine.memory.working_memory import WorkingMemory
+from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.persistence.character_store import CharacterState, CharacterStore
+from engine.voice.voice_manager import VoiceManager
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/session", tags=["session"])
@@ -102,11 +104,14 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
     )
 
     context_builder = ContextBuilder()
+    voice_manager = VoiceManager(narrator_voz=config.tts_voice or "pt-BR-FranciscaNeural")
+
     sessao = SessaoAtiva(
         session_id=config.session_id,
         working_mem=working_mem,
         context_builder=context_builder,
         groq=GroqClient(),
+        voice_manager=voice_manager,
     )
 
     # Pré-popular NPCs do local inicial via Neo4j
@@ -118,6 +123,31 @@ async def iniciar_sessao(config: SessaoConfig) -> SessaoInfo:
         location_id=working_mem.location_id,
         total=len(npcs_iniciais),
     )
+
+    # Pré-carregar vozes dos NPCs com gênero e raça reais do Neo4j
+    if npcs_iniciais:
+        try:
+            neo4j = Neo4jMemoryClient()
+            npc_dados = await neo4j.buscar_dados_npcs(npcs_iniciais)
+            await neo4j.fechar()
+            voice_manager.carregar_npcs(npc_dados)
+            # NPCs sem dados no Neo4j recebem voz por hash-fallback
+            ids_sem_dados = set(npcs_iniciais) - {d["id"] for d in npc_dados}
+            for npc_id in ids_sem_dados:
+                voice_manager.registrar_npc(npc_id, reconstruir_regex=False)
+            if ids_sem_dados:
+                voice_manager._reconstruir_regex()
+            log.info(
+                "voice_manager_pronto",
+                session_id=config.session_id,
+                npcs_com_dados=len(npc_dados),
+                npcs_fallback=len(ids_sem_dados),
+            )
+        except Exception as e:
+            log.warning("voice_manager_prefetch_falhou", erro=str(e))
+            for npc_id in npcs_iniciais:
+                voice_manager.registrar_npc(npc_id, reconstruir_regex=False)
+            voice_manager._reconstruir_regex()
 
     # Restaurar trust_levels, quest_stages e estado do personagem de sessão anterior
     if config.session_anterior_id:

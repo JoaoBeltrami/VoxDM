@@ -23,6 +23,7 @@ _log = structlog.get_logger()
 from engine.llm.groq_client import GroqClient
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.working_memory import WorkingMemory
+from engine.voice.voice_manager import VoiceManager
 
 # Limite de sessões simultâneas — evita vazamento de memória em demos
 MAX_SESSOES: int = 50
@@ -39,6 +40,7 @@ class SessaoAtiva:
     working_mem: WorkingMemory
     context_builder: ContextBuilder
     groq: GroqClient
+    voice_manager: VoiceManager
     iteracoes: int = 0
     criada_em: float = field(default_factory=time.time)
     ultima_atividade: float = field(default_factory=time.time)

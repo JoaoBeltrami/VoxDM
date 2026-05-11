@@ -48,9 +48,8 @@ EDGE_VOZ_PTBR: str = "pt-BR-FranciscaNeural"
 EDGE_VOZ_EN: str = "en-US-GuyNeural"
 
 # Ajustes de prosódia para soar mais como um narrador de RPG
-# Valores conservadores: alterações grandes distorcem a voz neural
-EDGE_RATE: str = "0%"     # velocidade natural — alterações > ±10% soam robóticas
-EDGE_PITCH: str = "0Hz"   # tom natural — FranciscaNeural já tem timbre narrativo
+EDGE_RATE: str = "-12%"   # ligeiramente mais lento → narração mais pausada e dramática
+EDGE_PITCH: str = "+0Hz"  # tom natural — FranciscaNeural já tem timbre narrativo
 
 # Caminho do dicionário de pronúncia D&D
 _DICT_PATH: Path = Path(__file__).parent.parent / "pronunciation" / "dictionary.json"
@@ -216,6 +215,20 @@ def _limpar_markdown(texto: str) -> str:
     return texto.strip()
 
 
+def _adicionar_pausas(texto: str) -> str:
+    """Insere <break> entre sentenças para respiração natural entre frases.
+
+    O edge-tts injeta o texto dentro de um elemento <prosody> no SSML que monta
+    internamente, então tags <break/> passadas aqui são preservadas e interpretadas
+    pelo serviço Microsoft TTS — não são lidas em voz alta.
+    """
+    # Pausa média após ponto/exclamação/interrogação seguidos de espaço
+    texto = re.sub(r'([.!?])\s+', r'\1<break time="450ms"/> ', texto)
+    # Pausa leve após reticências — comum em narração de RPG
+    texto = re.sub(r'(\.\.\.|…)\s*', r'…<break time="600ms"/> ', texto)
+    return texto
+
+
 def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
     """
     Monta documento SSML completo para Edge TTS.
@@ -284,16 +297,18 @@ class EdgeTTSEngine:
         texto: str,
         idioma: Idioma = Idioma.PTBR,
         voice_override: str | None = None,
+        rate_override: str | None = None,
+        pitch_override: str | None = None,
     ) -> bytes:
         """
         Sintetiza texto completo em áudio MP3.
 
-        Para respostas curtas do Mestre. Para streaming, usar sintetizar_stream().
-
         Args:
-            texto:          Texto do Mestre a sintetizar.
-            idioma:         Idioma para seleção de voz e xml:lang do SSML.
-            voice_override: Se fornecido, substitui a voz padrão (ex: "pt-BR-AntonioNeural").
+            texto:           Texto do Mestre a sintetizar.
+            idioma:          Idioma para seleção de voz padrão.
+            voice_override:  Voz a usar (ex: "pt-BR-AntonioNeural"). None = padrão.
+            rate_override:   Taxa de fala (ex: "-15%"). None = EDGE_RATE global.
+            pitch_override:  Tom (ex: "-3Hz"). None = EDGE_PITCH global.
 
         Returns:
             bytes de áudio MP3.
@@ -301,12 +316,14 @@ class EdgeTTSEngine:
         import edge_tts
 
         voz = voice_override or self._selecionar_voz(idioma)
-        ssml = _montar_ssml(texto, voz, idioma)
+        rate = rate_override or EDGE_RATE
+        pitch = pitch_override or EDGE_PITCH
+        texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
 
         logger = log.bind(voz=voz, chars=len(texto), idioma=idioma)
         logger.info("Sintetizando (Edge TTS)")
 
-        communicate = edge_tts.Communicate(ssml, voz)
+        communicate = edge_tts.Communicate(texto_limpo, voz, rate=rate, pitch=pitch)
         buffer = io.BytesIO()
 
         async for chunk in communicate.stream():
@@ -338,11 +355,11 @@ class EdgeTTSEngine:
         import edge_tts
 
         voz = self._selecionar_voz(idioma)
-        ssml = _montar_ssml(texto, voz, idioma)
+        texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
 
         log.info("Sintetizando stream (Edge TTS)", voz=voz, chars=len(texto))
 
-        communicate = edge_tts.Communicate(ssml, voz)
+        communicate = edge_tts.Communicate(texto_limpo, voz, rate=EDGE_RATE, pitch=EDGE_PITCH)
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 yield chunk["data"]
@@ -478,20 +495,29 @@ class TTSEngine:
         texto: str,
         idioma: Idioma = Idioma.PTBR,
         voice: str | None = None,
+        rate: str | None = None,
+        pitch: str | None = None,
     ) -> bytes:
         """
         Sintetiza texto com fallback automático Edge TTS → Kokoro.
 
         Args:
             texto:  Fala do Mestre a sintetizar.
-            idioma: Idioma do texto (afeta voz e pronúncias SSML).
-            voice:  Voz Edge TTS a usar (ex: "pt-BR-AntonioNeural"). None = padrão da sessão.
+            idioma: Idioma do texto.
+            voice:  Voz Edge TTS (ex: "pt-BR-AntonioNeural"). None = padrão da sessão.
+            rate:   Taxa de fala por chamada (ex: "-15%"). None = padrão global.
+            pitch:  Tom por chamada (ex: "-3Hz"). None = padrão global.
 
         Returns:
             bytes de áudio (MP3 via Edge TTS ou WAV via Kokoro).
         """
         try:
-            return await self._edge.sintetizar(texto, idioma, voice_override=voice)
+            return await self._edge.sintetizar(
+                texto, idioma,
+                voice_override=voice,
+                rate_override=rate,
+                pitch_override=pitch,
+            )
         except Exception as e:
             log.warning(
                 "Edge TTS falhou — ativando Kokoro fallback",

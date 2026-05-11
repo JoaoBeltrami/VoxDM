@@ -118,6 +118,7 @@ class WorkingMemory:
     # Log de consequências da sessão (max 5, rolling) — o mundo lembra
     log_consequencias: list[str] = field(default_factory=list)
 
+
     # Aftermath: True no turno imediatamente após fim de combate — injeta cue de silêncio
     saiu_combate_recentemente: bool = False
     # Turnos consecutivos sem combate ou drama — escalada automática de tensão após 5

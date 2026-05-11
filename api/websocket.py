@@ -471,6 +471,42 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             buffer_sentenca = ""
             tts_tasks: list[asyncio.Task] = []
 
+            # Estado por turno para TTS concorrente ordenado.
+            # Cada sentença gera uma task independente. A task que terminar primeiro
+            # drena o buffer em sequência — o browser recebe áudio durante o stream LLM.
+            tts_seq_prox: int = 0
+            tts_enviado_ate: int = -1
+            tts_buffer_audio: dict[int, bytes] = {}
+            tts_lock: asyncio.Lock = asyncio.Lock()
+
+            async def _tts_sentenca(seq: int, texto_s: str) -> None:
+                nonlocal tts_enviado_ate
+                try:
+                    voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
+                    audio = await tts.sintetizar(  # type: ignore[union-attr]
+                        texto_s, idioma=idioma,
+                        voice=voz_s, rate=rate_s, pitch=pitch_s,
+                    )
+                except Exception as exc:
+                    log.warning("tts_sentenca_falhou", seq=seq, erro=str(exc))
+                    erros_turno.append(f"tts_seq{seq}: {exc}")
+                    audio = b""
+                async with tts_lock:
+                    tts_buffer_audio[seq] = audio
+                    # Drena em ordem: envia todos os chunks prontos consecutivos
+                    while (tts_enviado_ate + 1) in tts_buffer_audio:
+                        prox = tts_enviado_ate + 1
+                        chunk = tts_buffer_audio.pop(prox)
+                        tts_enviado_ate = prox
+                        if chunk:
+                            await websocket.send_text(
+                                MensagemWS(
+                                    tipo="audio_chunk",
+                                    conteudo_b64=base64.b64encode(chunk).decode("ascii"),
+                                    sequencia=prox,
+                                ).model_dump_json()
+                            )
+
             try:
                 async for token in sessao.groq.completar_stream(
                     mensagens, temperatura=0.8, max_tokens=300
@@ -485,12 +521,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         buffer_sentenca += token
                         if buffer_sentenca.rstrip()[-1:] in ".!?" and len(buffer_sentenca.split()) >= 4:
                             tts_tasks.append(asyncio.create_task(
-                                tts.sintetizar(buffer_sentenca.strip(), idioma=idioma, voice=sessao.working_mem.tts_voice)
+                                _tts_sentenca(tts_seq_prox, buffer_sentenca.strip())
                             ))
+                            tts_seq_prox += 1
                             buffer_sentenca = ""
 
             except Exception as e:
-                # Fix 3: cancela tasks TTS já disparadas para não desperdiçar API Edge TTS
                 for task in tts_tasks:
                     task.cancel()
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
@@ -501,27 +537,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
                 continue
 
-            # Flush do restante (última sentença sem pontuação final) e envia chunks em ordem.
-            # As tasks já estavam rodando em paralelo durante o stream — primeiro áudio chega mais rápido.
+            # Flush da última sentença (sem pontuação final) e aguarda todas as tasks.
+            # A maioria já terminou durante o stream — gather retorna quase imediatamente.
             if tts and buffer_sentenca.strip():
                 tts_tasks.append(asyncio.create_task(
-                    tts.sintetizar(buffer_sentenca.strip(), idioma=idioma, voice=sessao.working_mem.tts_voice)
+                    _tts_sentenca(tts_seq_prox, buffer_sentenca.strip())
                 ))
             t_tts = time.perf_counter()
-            for seq, task in enumerate(tts_tasks):
-                try:
-                    audio_bytes = await task
-                    if audio_bytes:
-                        await websocket.send_text(
-                            MensagemWS(
-                                tipo="audio_chunk",
-                                conteudo_b64=base64.b64encode(audio_bytes).decode("ascii"),
-                                sequencia=seq,
-                            ).model_dump_json()
-                        )
-                except Exception as e:
-                    erros_turno.append(f"tts_seq{seq}: {e}")
-                    log.warning("tts_sentenca_falhou", seq=seq, erro=str(e))
+            if tts_tasks:
+                await asyncio.gather(*tts_tasks, return_exceptions=True)
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
             sessao.working_mem.registrar_fala("mestre", resposta_completa)

@@ -189,6 +189,54 @@ class Neo4jMemoryClient:
         before_sleep=_logar_tentativa,
         reraise=True,
     )
+    async def buscar_dados_npcs(self, ids: list[str]) -> list[dict[str, Any]]:
+        """Retorna id, name, gender e race de múltiplos NPCs em uma única query.
+
+        Usado pelo VoiceManager para pré-carregar perfis de voz com dados reais
+        de gênero e raça ao iniciar a sessão.
+
+        Args:
+            ids: Lista de IDs kebab-case (ex: ["fael-valdreksson", "valdrek"]).
+
+        Returns:
+            Lista de dicts com id, name, gender, race (strings vazias se ausentes).
+        """
+        if not ids:
+            return []
+        driver = await self._get_driver()
+        async with driver.session() as session:
+            result = await session.run(
+                """
+                UNWIND $ids AS eid
+                MATCH (n {id: eid})
+                RETURN n.id       AS id,
+                       n.name     AS name,
+                       coalesce(n.gender, '') AS gender,
+                       coalesce(n.race,   '') AS race
+                """,
+                {"ids": ids},
+            )
+            registros = await result.data()
+
+        dados: list[dict[str, Any]] = [
+            {
+                "id":     r["id"] or "",
+                "name":   r["name"] or "",
+                "gender": r["gender"] or "",
+                "race":   r["race"] or "",
+            }
+            for r in registros if r.get("id")
+        ]
+        log.info("neo4j_dados_npcs", total=len(dados))
+        return dados
+
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        before_sleep=_logar_tentativa,
+        reraise=True,
+    )
     async def buscar_npcs_no_local(self, location_id: str) -> list[dict[str, Any]]:
         """
         Retorna todos os NPCs/Companions relacionados a um local.
