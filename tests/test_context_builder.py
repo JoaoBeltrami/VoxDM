@@ -93,10 +93,31 @@ def test_deduplicar_lista_vazia():
     assert _deduplicar_por_source_id([]) == []
 
 
-def test_deduplicar_sem_source_id_ignora():
+def test_deduplicar_sem_source_id_preserva():
+    """
+    Chunks sem source_id são preservados (chunks de regras SRD legítimos podem
+    não ter source_id — antes desapareciam silenciosamente).
+    """
     chunks = [{"text": "sem id", "_score": 0.9}]
     resultado = _deduplicar_por_source_id(chunks)
-    assert resultado == []
+    assert len(resultado) == 1
+    assert resultado[0]["text"] == "sem id"
+
+
+def test_deduplicar_mistura_com_e_sem_source_id():
+    """Chunks com source_id são dedupedados; sem source_id vão ao fim por score."""
+    chunks = [
+        {"source_id": "a", "_score": 0.9, "text": "com id alto"},
+        {"text": "sem id", "_score": 0.95},  # score maior mas sem source_id
+        {"source_id": "a", "_score": 0.7, "text": "com id duplicado"},
+    ]
+    resultado = _deduplicar_por_source_id(chunks)
+    # 1 chunk dedupedado de source "a" (mantém o de maior score) + 1 sem source_id
+    assert len(resultado) == 2
+    assert resultado[0]["source_id"] == "a"
+    assert resultado[0]["text"] == "com id alto"
+    # Chunk sem source_id fica ao fim, independente do score
+    assert resultado[1].get("source_id", "") == ""
 
 
 def test_deduplicar_todos_diferentes():

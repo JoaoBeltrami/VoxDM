@@ -91,6 +91,30 @@ const ARRAY_PADRAO = [15, 14, 13, 12, 10, 8];
 
 type AtribKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 
+// 4d6, descarta o menor — método clássico de mesa, range 3–18, média ~12.2
+function rolar4d6DescartaMenor(): number {
+  const dados = [0, 1, 2, 3].map(() => Math.floor(Math.random() * 6) + 1);
+  dados.sort((a, b) => a - b);            // [menor, ..., maior]
+  return dados[1] + dados[2] + dados[3];  // soma os 3 maiores
+}
+
+// Distribui 6 rolagens nos atributos priorizando o que faz sentido pra classe.
+// Sem classe definida → distribui ordenado em FOR/DES/CON/INT/SAB/CAR.
+const PRIORIDADE_POR_CLASSE: Record<string, AtribKey[]> = {
+  "Bárbaro":   ["str", "con", "dex", "wis", "cha", "int"],
+  "Bardo":     ["cha", "dex", "con", "wis", "int", "str"],
+  "Clérigo":   ["wis", "con", "str", "cha", "dex", "int"],
+  "Druida":    ["wis", "con", "dex", "int", "cha", "str"],
+  "Guerreiro": ["str", "con", "dex", "wis", "cha", "int"],
+  "Monge":     ["dex", "wis", "con", "str", "int", "cha"],
+  "Paladino":  ["str", "cha", "con", "wis", "dex", "int"],
+  "Ranger":    ["dex", "wis", "con", "str", "int", "cha"],
+  "Ladino":    ["dex", "cha", "con", "int", "wis", "str"],
+  "Feiticeiro":["cha", "con", "dex", "wis", "int", "str"],
+  "Bruxo":     ["cha", "con", "dex", "wis", "int", "str"],
+  "Mago":      ["int", "con", "dex", "wis", "cha", "str"],
+};
+
 const ATRIBS: { key: AtribKey; label: string; abrev: string }[] = [
   { key: "str", label: "Força",        abrev: "FOR" },
   { key: "dex", label: "Destreza",     abrev: "DES" },
@@ -128,6 +152,12 @@ interface Props {
   onChange: (config: PersonagemConfig) => void;
 }
 
+const NOMES_FANTASIA = [
+  "Aldric", "Lyra", "Torvin", "Brenna", "Kael", "Mira",
+  "Doran", "Vex", "Sylas", "Riona", "Cassian", "Nyx",
+  "Garruk", "Elara", "Thane", "Selene", "Orin", "Vela",
+];
+
 export function CharacterForm({ onChange }: Props) {
   const [nome, setNome] = useState("");
   const [raca, setRaca] = useState("");
@@ -136,16 +166,59 @@ export function CharacterForm({ onChange }: Props) {
   const [nivel] = useState(3);
   const [localId, setLocalId] = useState("");
 
+  // "array" = Standard Array picker (15/14/13/12/10/8)
+  // "rolado" = 4d6 drop lowest, valores fixos por atributo
+  const [modoAtributos, setModoAtributos] = useState<"array" | "rolado">("array");
+
   const [scores, setScores] = useState<Record<AtribKey, number>>({
     str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
   });
 
   const assignedValues = Object.values(scores).filter(v => v > 0);
-  const remainingValues = ARRAY_PADRAO.filter(v => !assignedValues.includes(v));
+  const remainingValues = modoAtributos === "array"
+    ? ARRAY_PADRAO.filter(v => !assignedValues.includes(v))
+    : [];
   const allAssigned = assignedValues.length === 6;
 
   const assignScore = (key: AtribKey, value: number) => {
     setScores(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Rola 6× 4d6-drop-lowest e distribui prioritariamente pra classe atual.
+  // Em ausência de classe, ordem FOR/DES/CON/INT/SAB/CAR.
+  const rolarAtributos = () => {
+    const rolados = Array.from({ length: 6 }, () => rolar4d6DescartaMenor())
+      .sort((a, b) => b - a); // maior → menor
+    const ordem: AtribKey[] = PRIORIDADE_POR_CLASSE[classe] ?? ["str","dex","con","int","wis","cha"];
+    const novos: Record<AtribKey, number> = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+    ordem.forEach((k, i) => { novos[k] = rolados[i]; });
+    setScores(novos);
+    setModoAtributos("rolado");
+  };
+
+  // Personagem completo aleatório — raça, classe, background, atributos.
+  // Preserva nome se já preenchido; senão escolhe um nome fantasia.
+  const personagemAleatorio = () => {
+    const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    const novaClasse = pick(CLASSES_DND);
+    setRaca(pick(RACAS_DND));
+    setClasse(novaClasse);
+    setBackground(pick(BACKGROUNDS_DND));
+    if (!nome.trim()) setNome(pick(NOMES_FANTASIA));
+    if (!localId) setLocalId(pick(LOCAIS_INICIO).id);
+
+    const rolados = Array.from({ length: 6 }, () => rolar4d6DescartaMenor())
+      .sort((a, b) => b - a);
+    const ordem = PRIORIDADE_POR_CLASSE[novaClasse] ?? ["str","dex","con","int","wis","cha"];
+    const novos: Record<AtribKey, number> = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+    ordem.forEach((k, i) => { novos[k as AtribKey] = rolados[i]; });
+    setScores(novos);
+    setModoAtributos("rolado");
+  };
+
+  const resetarParaArray = () => {
+    setScores({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 });
+    setModoAtributos("array");
   };
 
   const hp  = allAssigned && classe ? calcHP(classe, nivel, scores.con) : 0;
@@ -188,9 +261,19 @@ export function CharacterForm({ onChange }: Props) {
 
   return (
     <div className="w-full space-y-4 text-left">
-      <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
-        Seu Personagem
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
+          Seu Personagem
+        </p>
+        <button
+          type="button"
+          onClick={personagemAleatorio}
+          title="Gera raça, classe, background, atributos e local aleatórios"
+          className="flex items-center gap-1 rounded-full border border-violet-700/60 bg-violet-900/30 px-2.5 py-1 text-[10px] font-semibold text-violet-300 transition hover:border-violet-500 hover:bg-violet-800/50 hover:text-violet-100 active:scale-95"
+        >
+          🎲 Aleatório
+        </button>
+      </div>
 
       {/* Nome */}
       <div>
@@ -253,12 +336,44 @@ export function CharacterForm({ onChange }: Props) {
         </select>
       </div>
 
-      {/* Atributos — Standard Array D&D 5e */}
+      {/* Atributos — Standard Array OU 4d6 drop lowest */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-zinc-400">Atributos</label>
-          <span className="text-xs text-zinc-600">Array padrão: 15, 14, 13, 12, 10, 8</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={rolarAtributos}
+              title="Rola 4d6 e descarta o menor, seis vezes. Distribui priorizando sua classe."
+              className="flex items-center gap-1 rounded-full border border-amber-700/60 bg-amber-900/20 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300 transition hover:border-amber-500 hover:bg-amber-800/40 hover:text-amber-100 active:scale-95"
+            >
+              🎲 Rolar 4d6↓
+            </button>
+            {modoAtributos === "rolado" && (
+              <button
+                type="button"
+                onClick={resetarParaArray}
+                title="Voltar para o Standard Array (15, 14, 13, 12, 10, 8)"
+                className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300"
+              >
+                array
+              </button>
+            )}
+          </div>
         </div>
+
+        {modoAtributos === "array" && (
+          <p className="mb-1.5 text-[10px] text-zinc-600">
+            Standard array: <span className="text-zinc-500">15, 14, 13, 12, 10, 8</span>
+          </p>
+        )}
+        {modoAtributos === "rolado" && allAssigned && (
+          <p className="mb-1.5 text-[10px] text-amber-500/80">
+            Rolado: <span className="text-amber-400 font-mono">{
+              ATRIBS.map(a => scores[a.key]).sort((a, b) => b - a).join(", ")
+            }</span> · total {ATRIBS.reduce((s, a) => s + scores[a.key], 0)}
+          </p>
+        )}
 
         <div className="grid grid-cols-3 gap-1.5">
           {ATRIBS.map(({ key, label, abrev }) => {
@@ -268,10 +383,12 @@ export function CharacterForm({ onChange }: Props) {
               ...remainingValues,
             ].sort((a, b) => b - a);
 
+            const destaque = valor >= 16 ? "ring-1 ring-violet-500/60" : "";
+
             return (
               <div
                 key={key}
-                className={`rounded-lg border p-2 transition ${
+                className={`rounded-lg border p-2 transition ${destaque} ${
                   valor
                     ? "border-violet-700/60 bg-violet-900/10"
                     : "border-zinc-700 bg-zinc-800/50"
@@ -283,23 +400,31 @@ export function CharacterForm({ onChange }: Props) {
                     {valor ? fmtMod(valor) : "—"}
                   </span>
                 </div>
-                <select
-                  value={valor || ""}
-                  onChange={e => assignScore(key, Number(e.target.value))}
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 py-0.5 text-center text-xs text-zinc-200 outline-none focus:border-violet-500"
-                >
-                  <option value="">—</option>
-                  {disponiveis.map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
+
+                {modoAtributos === "array" ? (
+                  <select
+                    value={valor || ""}
+                    onChange={e => assignScore(key, Number(e.target.value))}
+                    className="w-full rounded border border-zinc-700 bg-zinc-900 py-0.5 text-center text-xs text-zinc-200 outline-none focus:border-violet-500"
+                  >
+                    <option value="">—</option>
+                    {disponiveis.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full rounded border border-amber-800/40 bg-zinc-900 py-0.5 text-center text-xs font-bold text-amber-300">
+                    {valor || "—"}
+                  </div>
+                )}
+
                 <p className="mt-0.5 text-center text-[10px] text-zinc-600 truncate">{label}</p>
               </div>
             );
           })}
         </div>
 
-        {remainingValues.length > 0 && (
+        {modoAtributos === "array" && remainingValues.length > 0 && (
           <p className="mt-1.5 text-xs text-zinc-600">
             Disponíveis: {remainingValues.join(", ")}
           </p>

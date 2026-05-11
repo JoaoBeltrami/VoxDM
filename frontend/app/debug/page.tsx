@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -184,7 +184,21 @@ function ScoreDot({ score }: { score: number }) {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
-export default function MonitorPage() {
+// Next 14 exige Suspense boundary quando useSearchParams é usado em client component
+// que pode ser pré-renderizado. Sem isso, `next build` falha com erro de bailout.
+export default function MonitorPageWrapper() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-xs text-zinc-600">
+        Carregando monitor…
+      </main>
+    }>
+      <MonitorPage />
+    </Suspense>
+  );
+}
+
+function MonitorPage() {
   const params = useSearchParams();
   const [apiOk, setApiOk]     = useState<boolean | null>(null);
   const [auto, setAuto]       = useState(true);

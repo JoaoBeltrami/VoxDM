@@ -29,16 +29,20 @@ if not settings.DEBUG:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _rodar(coro) -> Any:
-    """Executa coroutine síncrona a partir do Streamlit."""
+    """Executa coroutine síncrona a partir do Streamlit.
+
+    asyncio.get_event_loop() é deprecated no Python 3.12 — usamos try/except sobre
+    get_running_loop() para detectar se já existe loop ativo (Streamlit às vezes cria).
+    """
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=10)
-        return loop.run_until_complete(coro)
-    except Exception:
+        # Se um loop já está rodando, não dá pra chamar asyncio.run direto — usa thread
+        asyncio.get_running_loop()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(asyncio.run, coro)
+            return future.result(timeout=15)
+    except RuntimeError:
+        # Sem loop ativo — caminho normal
         return asyncio.run(coro)
 
 

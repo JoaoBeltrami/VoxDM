@@ -132,10 +132,19 @@ async def websocket_game(websocket: WebSocket, session_id: str) -> None:
 
 
 if __name__ == "__main__":
+    # reload é desejável em dev local, mas catastrófico se DEBUG vazar pra prod
+    # (recarrega state global, perde sessões, descobre filesystem). Mantemos
+    # acoplado ao DEBUG por enquanto, mas com aviso explícito no log.
+    if settings.DEBUG:
+        log.warning(
+            "uvicorn_reload_ativo",
+            host=settings.API_HOST,
+            aviso="DEBUG=True liga --reload — NUNCA em produção",
+        )
     uvicorn.run(
         "api.main:app",
-        host=getattr(settings, "API_HOST", "0.0.0.0"),
-        port=getattr(settings, "API_PORT", 8000),
+        host=settings.API_HOST,
+        port=settings.API_PORT,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )

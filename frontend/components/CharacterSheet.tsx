@@ -165,6 +165,18 @@ export function CharacterSheet({
   const [hpAtual, setHpAtual] = useState<number>(personagem.player_hp ?? hpMax);
   const [hpInput, setHpInput] = useState("");
 
+  // Flash visceral em mudança de HP — "dano" (vermelho) ou "cura" (verde)
+  // Dura 700ms, suficiente pro olho registrar sem virar ruído.
+  const [hpFlash, setHpFlash] = useState<"dano" | "cura" | null>(null);
+  const hpAnterior = useRef(hpAtual);
+  useEffect(() => {
+    if (hpAtual === hpAnterior.current) return;
+    setHpFlash(hpAtual < hpAnterior.current ? "dano" : "cura");
+    hpAnterior.current = hpAtual;
+    const t = setTimeout(() => setHpFlash(null), 700);
+    return () => clearTimeout(t);
+  }, [hpAtual]);
+
   const hpPercent = hpMax > 0 ? Math.max(0, Math.min(100, (hpAtual / hpMax) * 100)) : 0;
   const inconsciente = hpAtual <= 0;
 
@@ -511,12 +523,20 @@ export function CharacterSheet({
           )}
 
           {/* HP */}
-          <div className="mb-3">
+          <div className={`mb-3 rounded-lg transition-all duration-300 ${
+            hpFlash === "dano" ? "bg-red-900/30 ring-1 ring-red-600/60 shadow-[0_0_20px_-4px_rgba(220,38,38,0.5)]" :
+            hpFlash === "cura" ? "bg-emerald-900/20 ring-1 ring-emerald-600/40" :
+            ""
+          } ${hpFlash ? "px-2 py-1.5" : ""}`}>
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-zinc-400">HP</span>
               {inconsciente && !deathSaves.stable
                 ? <span className="font-bold text-red-400">Inconsciente</span>
-                : <span className="font-semibold text-zinc-200">{hpAtual} / {hpMax}</span>
+                : <span className={`font-semibold transition-colors ${
+                    hpFlash === "dano" ? "text-red-300" :
+                    hpFlash === "cura" ? "text-emerald-300" :
+                    "text-zinc-200"
+                  }`}>{hpAtual} / {hpMax}</span>
               }
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">

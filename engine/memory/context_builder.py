@@ -403,14 +403,28 @@ def _deduplicar_por_source_id(chunks: list[dict[str, Any]]) -> list[dict[str, An
 
     Evita que um NPC com description + backstory + personality apareça 3×
     no top-5, desperdiçando budget de tokens com variações do mesmo conteúdo.
+
+    Chunks sem source_id são preservados (chunks de regras SRD legítimos podem
+    não ter source_id). O log de warning marca casos suspeitos para auditoria
+    da ingestão — chunks do módulo deveriam SEMPRE ter source_id.
     """
     vistos: dict[str, dict[str, Any]] = {}
+    sem_source: list[dict[str, Any]] = []
     for chunk in chunks:
         sid = chunk.get("source_id", "")
         if not sid:
+            # Chunks de regras (voxdm_rules) frequentemente não têm source_id —
+            # OK. Mas se vier um chunk de módulo sem source_id, é bug de ingestão.
+            tipo = chunk.get("source_type", "")
+            if tipo and tipo not in ("rule", "spell", "condition", "equipment", "class"):
+                log.warning("chunk_sem_source_id", source_type=tipo, preview=str(chunk.get("text", ""))[:60])
+            sem_source.append(chunk)
             continue
         score = float(chunk.get("_score", 0.0))
         if sid not in vistos or score > float(vistos[sid].get("_score", 0.0)):
             vistos[sid] = chunk
     # Reordena por score descendente para manter a ordem original de relevância
-    return sorted(vistos.values(), key=lambda c: float(c.get("_score", 0.0)), reverse=True)
+    deduped = sorted(vistos.values(), key=lambda c: float(c.get("_score", 0.0)), reverse=True)
+    # Chunks sem source_id vão ao final por score (não dedup, mas mantidos)
+    sem_source_ord = sorted(sem_source, key=lambda c: float(c.get("_score", 0.0)), reverse=True)
+    return deduped + sem_source_ord

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Fila sequencial de reprodução de MP3 via Web Audio API.
@@ -58,6 +58,20 @@ export function useAudio() {
       }
     });
   }, [obterCtx]);
+
+  // Fecha o AudioContext ao desmontar — Chrome permite até 6 contexts por origem,
+  // sem isso navegação repetida vaza contexts e eventualmente bloqueia áudio novo.
+  useEffect(() => {
+    return () => {
+      try { sourceAtualRef.current?.stop(); } catch { /* já encerrado */ }
+      sourceAtualRef.current = null;
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== "closed") {
+        ctx.close().catch(() => { /* irrelevante no unmount */ });
+      }
+      audioCtxRef.current = null;
+    };
+  }, []);
 
   const pararTudo = useCallback(() => {
     // Para o chunk atual imediatamente

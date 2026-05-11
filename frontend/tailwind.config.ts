@@ -38,6 +38,13 @@ const config: Config = {
           "0%":   { transform: "scale(0.8)", opacity: "0.4" },
           "100%": { transform: "scale(1.8)", opacity: "0"   },
         },
+        // Flash de crítico/falha — entra com zoom e some
+        "crit-pop": {
+          "0%":   { transform: "scale(0.5)", opacity: "0"   },
+          "20%":  { transform: "scale(1.15)",opacity: "1"   },
+          "70%":  { transform: "scale(1)",   opacity: "1"   },
+          "100%": { transform: "scale(0.95)",opacity: "0"   },
+        },
       },
       animation: {
         breathe:       "breathe 3.2s ease-in-out infinite",
@@ -45,6 +52,7 @@ const config: Config = {
         speak:         "speak 0.55s ease-in-out infinite",
         ripple:        "ripple 1.4s ease-out infinite",
         "ripple-delay":"ripple-delay 1.4s ease-out 0.7s infinite",
+        "crit-pop":    "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
       },
     },
   },

@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 9 de maio de 2026
+> Atualizado: 11 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -21,7 +21,9 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 - Fase 4 (API + Frontend): ✅ CONCLUÍDA. Main menu 3 telas, ficha completa, dados, seletor de sessão, abertura classe-aware, ambient audio, journal, trust detector.
 - Fase 4.5 (persistência + menu): ✅ CONCLUÍDA. character_store SQLite, GET/PUT /character, HP +/-, inventário, seletor de voz.
 - **Combat Sync (09/05)**: ✅ CONCLUÍDO. `inimigos_combate` agora populado por turno via parsing de texto. CombatTracker UI mostra barras de status dos inimigos. Fix `esperandoRolagem` (regex PT-BR). d100 na toolbar. 244 testes OK.
-Próximo: teste e2e voz no browser → gravar vídeo de combate. Consultar VOXDM_CHECKLIST.md para tarefas abertas.
+- **UX Cinematográfico de Combate (11/05)**: ✅ CONCLUÍDO. CharacterForm com 🎲 Aleatório + 🎲 Rolar 4d6↓ (priorizado por classe). CombatTracker interativo (botão ⚔ atacar por inimigo, pulse em mudança de estado, fade na morte). HP flash vermelho/verde em dano/cura. 5 chips de ações rápidas em combate (Esquivar/Disparada/Desengajar/Ajudar/Mirar). Overlay full-screen "20"/"1" em crit/falha. Splash "COMBATE" na transição calmaria→combate. Vinheta vermelha cinematic mode.
+- **Auditoria Geral + Hardening (11/05)**: ✅ CONCLUÍDO. Relatório completo em `.internal/AUDITORIA_11_05.md`. Corrigidos: `.env.example` com `DEBUG=true` (crítico — expunha `/debug/*`), `API_HOST=0.0.0.0` default trocado pra `127.0.0.1`, `api/main.py` com log de aviso quando `reload` ativo. Hardening do websocket: log no topo, try/except em sync handlers numéricos, limites em gold/xp/inventory/spell_slots. `tts.py` imports no topo, `schemas.py` sem `__import__`, `useGameSession.ts` cleanup chama pararTudo, `useAudio.ts` fecha AudioContext no unmount, `context_builder._deduplicar_por_source_id` preserva chunks sem source_id. Suspense boundary em `/debug/page.tsx` (fix Next 14 build). `dashboard.py` sem `asyncio.get_event_loop()` deprecated. **281/281 testes verdes**. Guia de monitoramento em `.internal/GUIA_MONITORAMENTO.md`.
+Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado).
 
 ---
 
@@ -361,6 +363,23 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `test_working_memory.py` | 60 testes — cobertura completa WorkingMemory incluindo novos campos |
 | saves.md em `test_master_prompt.py` | +11 testes — existência, 6 atributos, injeção em combate |
 
+### UX Cinematográfico de Combate (Sessão 11/05)
+
+> Sessão de polish pré-vídeo. Foco: tornar o combate **visceral e fluido** sem sair do microfone, eliminar fricção da criação de personagem, e dar ao espectador feedback visual constante.
+
+| O que foi feito | Arquivo | Detalhe |
+|---|---|---|
+| 🎲 Personagem completo aleatório | `frontend/components/CharacterForm.tsx` | Botão "🎲 Aleatório" no header do form — preenche raça, classe, background, atributos e local. Preserva nome se já digitado, senão pega de `NOMES_FANTASIA`. |
+| 🎲 Rolar 4d6 descarta menor | `frontend/components/CharacterForm.tsx` | Método clássico de mesa (range 3–18). Distribui rolagens prioritariamente por classe via `PRIORIDADE_POR_CLASSE` (Mago→INT primeiro, Bárbaro→FOR, etc.). Modo `"rolado"` × `"array"` com botão de volta. Atributos ≥16 ganham `ring-1 ring-violet-500/60`. |
+| CombatTracker interativo | `frontend/components/CombatTracker.tsx` | Botão `⚔ atacar` ao lado de cada inimigo vivo durante turno do jogador → envia `Ataco {nome}.` direto. Badge "SEU TURNO" violeta. Pulse vermelho + glow na barra quando estado muda (1.5s via `useEffect` que compara `estadosAnt.current`). Ícone ☠ + line-through + `scale-95` na morte. |
+| HP flash visceral | `frontend/components/CharacterSheet.tsx` | `useEffect` compara `hpAtual` com `hpAnterior.current`. Queda → flash vermelho (`bg-red-900/30 ring-red-600/60 shadow`). Cura → flash esmeralda. 700ms via `setTimeout`. |
+| Chips de ações rápidas em combate | `frontend/app/page.tsx` | 5 botões coloridos: 🛡 Esquivar, 💨 Disparada, ⚡ Desengajar, 🤝 Ajudar, 🎯 Mirar. 1 clique narra a intenção + marca `acao: true` no actionEconomy. Cores por categoria (atk/def/mov). |
+| Overlay de crítico (20) e falha (1) | `frontend/app/page.tsx` | Full-screen, 1.2s. "20" em 8xl violeta com drop-shadow ou "1" em vermelho. Animação `animate-crit-pop` adicionada ao `tailwind.config.ts`. Dispara em rolagem contextual E manual via `dispararCritFlash()`. |
+| Splash "COMBATE" | `frontend/app/page.tsx` | Detecta transição `emCombate: false→true` via `emCombateAnterior.current`. Splash de 2s com ⚔ + "COMBATE" + "Iniciativa". `bg-red-950/30 backdrop-blur-[2px]`. |
+| Vinheta vermelha cinematic | `frontend/app/page.tsx` | `<main>` ganha `shadow-[inset_0_0_120px_-30px_rgba(127,29,29,0.4)]` quando `emCombate`. Header transita pra `bg-red-950/10` com `border-red-900/40`. Tudo via `transition-colors duration-500/700` — não pisca, respira. |
+| Keyframe `crit-pop` | `frontend/tailwind.config.ts` | `scale(0.5) → 1.15 → 1 → 0.95` com fade in/out. 1.2s `cubic-bezier(0.16, 1, 0.3, 1)`. |
+| **Total testes** | | **280/280 passed** (pytest) + 0 erros TS |
+
 ### Combat Sync — Implementado (09/05)
 
 | O que foi feito | Detalhe |
@@ -385,6 +404,7 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `docs/VOXDM_PROJETO.md` | Arquitetura, schema v1.2 completo, stack técnica |
 | `docs/DIRETRIZES_IMPLEMENTACAO.md` | Diretrizes técnicas por arquivo — ler antes de implementar |
 | `docs/VOXDM_CHECKLIST.md` | Tarefas abertas por fase, o que fazer hoje |
+| `.internal/ROTEIRO_COMBATE.md` | Roteiro de gravação do vídeo de combate — 6 cenas + features a mostrar + ideias futuras (não sobe pro GitHub) |
 | `.internal/VOXDM_LOG.md` | O que já foi feito, armadilhas encontradas, sessões |
 | `.internal/VOXDM_PONTE.md` | Ponte técnico↔conteúdo, condições de secrets, ganchos YouTube |
 

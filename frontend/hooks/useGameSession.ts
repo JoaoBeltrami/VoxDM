@@ -397,8 +397,13 @@ export function useGameSession() {
     return () => {
       intentionalCloseRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      pararTudo();
       wsRef.current?.close();
+      // Não encerramos a sessão no servidor aqui — sendBeacon não suporta DELETE
+      // e fetch durante unload é cancelado pelo browser. A sessão fica até o TTL
+      // de 4h limpar automaticamente (limpar_sessoes_inativas em api/state.py).
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

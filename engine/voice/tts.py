@@ -18,6 +18,7 @@ Kokoro:
 """
 
 import asyncio
+import html as _html
 import io
 import json
 import re
@@ -25,6 +26,7 @@ import wave
 from pathlib import Path
 from typing import AsyncIterator
 
+import edge_tts
 import structlog
 from tenacity import (
     retry,
@@ -245,8 +247,8 @@ def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
     """
     texto_com_pronuncia = _aplicar_pronuncias(_limpar_markdown(texto))
     # Escapa &, <, > antes de inserir no XML — sem isso qualquer "&" no texto
-    # do mestre produz SSML inválido e o Edge TTS lê o XML literalmente
-    import html as _html
+    # do mestre produz SSML inválido e o Edge TTS lê o XML literalmente.
+    # Também bloqueia SSML injection se o LLM retornar tags <break/> inventadas.
     texto_seguro = _html.escape(texto_com_pronuncia)
 
     return (
@@ -313,8 +315,6 @@ class EdgeTTSEngine:
         Returns:
             bytes de áudio MP3.
         """
-        import edge_tts
-
         voz = voice_override or self._selecionar_voz(idioma)
         rate = rate_override or EDGE_RATE
         pitch = pitch_override or EDGE_PITCH
@@ -352,8 +352,6 @@ class EdgeTTSEngine:
         Yields:
             Chunks de bytes MP3 prontos para reprodução.
         """
-        import edge_tts
-
         voz = self._selecionar_voz(idioma)
         texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
 

@@ -13,9 +13,13 @@ Exemplo:
     resp = RespostaMestre(texto="Fael franze o cenho...", latencia_ms=820, iteracao=1)
 """
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
+
+# Pattern de session_id (kebab-case) reutilizado nos validators.
+_SESSION_ID_RE = re.compile(r"^[a-z0-9-]+$")
 
 
 class SessaoConfig(BaseModel):
@@ -51,9 +55,7 @@ class SessaoConfig(BaseModel):
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":
-        if self.session_anterior_id and not __import__("re").fullmatch(
-            r"[a-z0-9-]+", self.session_anterior_id
-        ):
+        if self.session_anterior_id and not _SESSION_ID_RE.fullmatch(self.session_anterior_id):
             raise ValueError("session_anterior_id deve estar em kebab-case")
         return self
 

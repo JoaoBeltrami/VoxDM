@@ -168,6 +168,30 @@ export default function Home() {
   const [rolamentosPendentes, setRolamentosPendentes] = useState<RolagemPendente[]>([]);
   const [actionEconomy, setActionEconomy] = useState({ acao: false, acaoBônus: false, reacao: false });
 
+  // Feedback visual de crítico/falha crítica — 1.2s de celebração full-screen
+  const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
+  const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
+    if (critTimerRef.current) clearTimeout(critTimerRef.current);
+    setCritFlash(tipo);
+    critTimerRef.current = setTimeout(() => setCritFlash(null), 1200);
+  }, []);
+  useEffect(() => () => { if (critTimerRef.current) clearTimeout(critTimerRef.current); }, []);
+
+  // Splash "Combate Iniciado!" — dispara na transição calmaria→combate.
+  // Janela curta (2s) pra dar peso de transição sem atrapalhar a leitura da fala.
+  const [battleSplash, setBattleSplash] = useState(false);
+  const emCombateAnterior = useRef(false);
+  useEffect(() => {
+    if (emCombate && !emCombateAnterior.current) {
+      setBattleSplash(true);
+      const t = setTimeout(() => setBattleSplash(false), 2000);
+      emCombateAnterior.current = true;
+      return () => clearTimeout(t);
+    }
+    if (!emCombate) emCombateAnterior.current = false;
+  }, [emCombate]);
+
   // Parseia a última fala do mestre para extrair rolagens pedidas
   useEffect(() => {
     if (historico.length === 0 || respostaAtual) return;
@@ -193,9 +217,11 @@ export default function Home() {
     const critico = r === 20 ? " — CRÍTICO!" : r === 1 ? " — FALHA CRÍTICA!" : "";
     const vsCD = roll.dc !== null ? ` vs CD ${roll.dc} — ${total >= roll.dc ? "Sucesso!" : "Falha!"}` : "";
     const label = roll.label !== "d20" ? `${roll.label} (${modStr}) ` : "";
+    if (r === 20) dispararCritFlash("crit");
+    else if (r === 1) dispararCritFlash("falha");
     enviarComando(`[Rolagem: ${label}d20${modStr} = ${total}${vsCD}${critico}]`);
     setRolamentosPendentes(prev => prev.filter(p => p.id !== roll.id));
-  }, [enviarComando]);
+  }, [enviarComando, dispararCritFlash]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -236,8 +262,46 @@ export default function Home() {
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
     return (
-      <main className="relative flex h-screen flex-col bg-zinc-950">
-        <header className="flex items-center justify-between border-b border-zinc-800/60 px-4 py-3">
+      <main className={`relative flex h-screen flex-col transition-colors duration-700 ${
+        emCombate ? "bg-zinc-950 shadow-[inset_0_0_120px_-30px_rgba(127,29,29,0.4)]" : "bg-zinc-950"
+      }`}>
+        {/* Splash "Combate Iniciado!" — transição cinematográfica calmaria→combate */}
+        {battleSplash && (
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-red-950/30 backdrop-blur-[2px]">
+            <div className="animate-crit-pop text-center">
+              <div className="text-2xl font-light tracking-[0.4em] text-red-400/70 drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]">
+                ⚔
+              </div>
+              <div className="mt-2 text-5xl font-black tracking-[0.2em] text-red-300 drop-shadow-[0_0_40px_rgba(239,68,68,0.9)]">
+                COMBATE
+              </div>
+              <div className="mt-1 text-xs uppercase tracking-widest text-red-500/70">
+                Iniciativa
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Overlay de crítico / falha crítica — celebração visual, 1.2s */}
+        {critFlash && (
+          <div className={`pointer-events-none fixed inset-0 z-50 flex items-center justify-center ${
+            critFlash === "crit" ? "bg-violet-500/10" : "bg-red-900/15"
+          }`}>
+            <div className={`animate-crit-pop text-center font-black tracking-widest ${
+              critFlash === "crit"
+                ? "text-violet-300 drop-shadow-[0_0_40px_rgba(167,139,250,0.9)]"
+                : "text-red-400 drop-shadow-[0_0_30px_rgba(239,68,68,0.8)]"
+            }`}>
+              <div className="text-8xl">{critFlash === "crit" ? "20" : "1"}</div>
+              <div className="mt-2 text-sm uppercase">
+                {critFlash === "crit" ? "Crítico!" : "Falha Crítica!"}
+              </div>
+            </div>
+          </div>
+        )}
+        <header className={`flex items-center justify-between border-b px-4 py-3 transition-colors duration-500 ${
+          emCombate ? "border-red-900/40 bg-red-950/10" : "border-zinc-800/60"
+        }`}>
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full transition-colors duration-500 ${
               orbEstado === "idle"    ? "bg-emerald-500" :
@@ -361,7 +425,13 @@ export default function Home() {
           initDeathSavesStable={deathSavesStable}
         />
 
-        <CombatTracker emCombate={emCombate} inimigos={inimigos} rodada={rodadaCombate} />
+        <CombatTracker
+          emCombate={emCombate}
+          inimigos={inimigos}
+          rodada={rodadaCombate}
+          turnoJogador={!respostaAtual && historico.length > 0 && !ouvindo}
+          onAtacar={(nome) => enviarComando(`Ataco ${nome}.`)}
+        />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {historico.length === 0 && !respostaAtual && (
@@ -394,6 +464,8 @@ export default function Home() {
               else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; }
               else { val = r1; }
               const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
+              if (val === 20) dispararCritFlash("crit");
+              else if (val === 1) dispararCritFlash("falha");
               enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
             };
 
@@ -477,27 +549,64 @@ export default function Home() {
             </div>
           )}
 
-          {/* Economia de ação — só durante combate */}
-          {emCombate && (
-            <div className="flex items-center gap-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-5 py-1.5">
-              {(["acao", "acaoBônus", "reacao"] as const).map(k => {
-                const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
-                return (
-                  <label key={k} className="flex cursor-pointer select-none items-center gap-1.5 text-[10px]">
-                    <input
-                      type="checkbox"
-                      checked={actionEconomy[k]}
-                      onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
-                      className="h-3 w-3 accent-violet-500"
-                    />
-                    <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
-                      {labels[k]}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
+          {/* Combate — ações rápidas + economia de ação */}
+          {emCombate && (() => {
+            const turnoJogadorCombate = !respostaAtual && historico.length > 0 && !ouvindo;
+            // Ações comuns de combate D&D 5e — 1 clique narra a intenção pro mestre.
+            // "Cor" só é decorativa pra distinguir defensiva (azul) de agressiva (vermelha).
+            const acoesCombate: { label: string; comando: string; cor: "atk" | "def" | "mov" }[] = [
+              { label: "🛡 Esquivar",   comando: "Uso minha ação para Esquivar.",         cor: "def" },
+              { label: "💨 Disparada",  comando: "Uso minha ação para Disparar (correr).", cor: "mov" },
+              { label: "⚡ Desengajar", comando: "Uso minha ação para Desengajar.",        cor: "def" },
+              { label: "🤝 Ajudar",     comando: "Uso minha ação para Ajudar um aliado.",  cor: "def" },
+              { label: "🎯 Mirar",      comando: "Uso minha ação para Mirar (vantagem no próximo ataque).", cor: "atk" },
+            ];
+            const cores: Record<"atk" | "def" | "mov", string> = {
+              atk: "border-red-900/60 bg-red-950/30 text-red-300 hover:border-red-500 hover:bg-red-900/40",
+              def: "border-cyan-900/60 bg-cyan-950/30 text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900/40",
+              mov: "border-amber-900/60 bg-amber-950/30 text-amber-300 hover:border-amber-500 hover:bg-amber-900/40",
+            };
+            return (
+              <div className="flex flex-col items-center gap-1.5">
+                {turnoJogadorCombate && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 px-3">
+                    {acoesCombate.map(a => (
+                      <button
+                        key={a.label}
+                        onClick={() => {
+                          enviarComando(a.comando);
+                          setActionEconomy(prev => ({ ...prev, acao: true }));
+                        }}
+                        disabled={actionEconomy.acao}
+                        title={a.comando}
+                        className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${cores[a.cor]}`}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-5 py-1.5">
+                  {(["acao", "acaoBônus", "reacao"] as const).map(k => {
+                    const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
+                    return (
+                      <label key={k} className="flex cursor-pointer select-none items-center gap-1.5 text-[10px]">
+                        <input
+                          type="checkbox"
+                          checked={actionEconomy[k]}
+                          onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
+                          className="h-3 w-3 accent-violet-500"
+                        />
+                        <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
+                          {labels[k]}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="relative">
             <VoxOrb estado={orbEstado} tamanho={64} />

@@ -39,6 +39,18 @@ from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
 from engine.voice.language import detectar_idioma
 
+log = structlog.get_logger()
+
+# Limites de validação para sync_* — protegem contra payloads malformados ou
+# manipulação direta do WebSocket (campo numérico gigante poluindo a UI).
+_MAX_GOLD     = 1_000_000          # 1 milhão de PO já é roleplay
+_MAX_XP       = 1_000_000_000      # 1 bilhão de XP cobre nível 20+ com margem
+_MAX_INVENT   = 50                 # ficha do CharacterSheet tem MAX_ITENS=20, dobramos por segurança
+_MAX_CONDS    = 20                 # 14 condições D&D 5e oficiais + custom
+_MAX_HD       = 20                 # nível máximo
+_MAX_SS_NIVEL = 9                  # 9 níveis de magia em D&D 5e
+_MAX_SS_QTD   = 20                 # absurdamente alto pra cobrir multiclass
+
 # Detecta declaração EXPLÍCITA do jogador de encerrar combate.
 # "paz" removido — falso positivo catastrófico ("deixo você em paz", "estamos em paz").
 # "morreu/caiu/fugiu" removidos — descrevem NPCs, não intenção do jogador de parar.
@@ -154,8 +166,6 @@ def _sincronizar_inimigos_combate(
         iid = _encontrar_id(m.group(1))
         if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") == "intacto":
             working_mem.atualizar_estado_inimigo(iid, "ferido", "ainda de pé")
-
-log = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
 # TTS — singleton lazy, graceful se edge_tts não estiver instalado
@@ -374,50 +384,80 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
                 continue
 
-            # Sync de inventário — CharacterSheet envia lista completa de itens
+            # Sync de inventário — CharacterSheet envia lista completa de itens.
+            # Itens são truncados a 80 chars e lista a _MAX_INVENT (defesa contra payload abusivo).
             if tipo_msg == "sync_inventory":
                 inventory = dados.get("inventory")
                 if isinstance(inventory, list):
-                    sessao.working_mem.player_inventory = [str(i) for i in inventory]
-                    log.info("inventory_sincronizado", session_id=session_id, total=len(sessao.working_mem.player_inventory))
+                    sessao.working_mem.player_inventory = [
+                        str(i)[:80] for i in inventory[:_MAX_INVENT]
+                    ]
+                    log.info("inventory_sincronizado", session_id=session_id,
+                             total=len(sessao.working_mem.player_inventory))
                 continue
 
             # Sync de spell slots — {spell_slots: {"1": {current: N, max: N}, ...}}
+            # Validação estrita: nível 1-9, current/max ints >= 0 e <= _MAX_SS_QTD.
             if tipo_msg == "sync_spell_slots":
                 raw = dados.get("spell_slots", {})
                 if isinstance(raw, dict):
-                    sessao.working_mem.spell_slots = {int(k): v for k, v in raw.items()}
-                    log.info("spell_slots_sincronizados", session_id=session_id, niveis=len(raw))
+                    validados: dict[int, dict[str, int]] = {}
+                    for k, v in raw.items():
+                        try:
+                            nivel = int(k)
+                        except (TypeError, ValueError):
+                            continue
+                        if not (1 <= nivel <= _MAX_SS_NIVEL) or not isinstance(v, dict):
+                            continue
+                        cur = v.get("current", 0)
+                        mx  = v.get("max", 0)
+                        if not isinstance(cur, int) or not isinstance(mx, int):
+                            continue
+                        validados[nivel] = {
+                            "current": max(0, min(_MAX_SS_QTD, cur)),
+                            "max":     max(0, min(_MAX_SS_QTD, mx)),
+                        }
+                    sessao.working_mem.spell_slots = validados
+                    log.info("spell_slots_sincronizados", session_id=session_id,
+                             niveis=len(validados))
                 continue
 
-            # Sync de hit dice restantes
+            # Sync de hit dice restantes — limite no player_level
             if tipo_msg == "sync_hit_dice":
                 current = dados.get("current")
                 if isinstance(current, int):
-                    sessao.working_mem.hit_dice_current = max(0, current)
+                    sessao.working_mem.hit_dice_current = max(
+                        0, min(sessao.working_mem.hit_dice_max, current)
+                    )
                 continue
 
-            # Sync de death saves
+            # Sync de death saves — clamp 0..3 com try/except no cast
             if tipo_msg == "sync_death_saves":
-                sessao.working_mem.death_saves_successes = max(0, min(3, int(dados.get("successes", 0))))
-                sessao.working_mem.death_saves_failures = max(0, min(3, int(dados.get("failures", 0))))
-                sessao.working_mem.death_saves_stable = bool(dados.get("stable", False))
+                try:
+                    succ = int(dados.get("successes", 0))
+                    fail = int(dados.get("failures", 0))
+                except (TypeError, ValueError):
+                    log.warning("death_saves_payload_invalido", session_id=session_id)
+                    continue
+                sessao.working_mem.death_saves_successes = max(0, min(3, succ))
+                sessao.working_mem.death_saves_failures  = max(0, min(3, fail))
+                sessao.working_mem.death_saves_stable    = bool(dados.get("stable", False))
                 log.info("death_saves_sincronizados", session_id=session_id,
                          succ=sessao.working_mem.death_saves_successes,
                          fail=sessao.working_mem.death_saves_failures)
                 continue
 
-            # Sync de ouro
+            # Sync de ouro — limite anti-abuso
             if tipo_msg == "sync_gold":
                 gold = dados.get("gold")
-                if isinstance(gold, int) and gold >= 0:
+                if isinstance(gold, int) and 0 <= gold <= _MAX_GOLD:
                     sessao.working_mem.gold = gold
                 continue
 
-            # Sync de XP
+            # Sync de XP — limite anti-abuso
             if tipo_msg == "sync_xp":
                 xp = dados.get("xp")
-                if isinstance(xp, int) and xp >= 0:
+                if isinstance(xp, int) and 0 <= xp <= _MAX_XP:
                     sessao.working_mem.xp = xp
                 continue
 
