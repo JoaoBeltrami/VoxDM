@@ -571,7 +571,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             try:
                 async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=120
+                    mensagens, temperatura=0.8, max_tokens=200
                 ):
                     resposta_completa += token
                     if latencia_primeiro_token < 0:
@@ -604,6 +604,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Strip de marcadores [Q:...] antes de síntese — evita falar o token em voz alta.
             if tts and buffer_sentenca.strip():
                 flush_texto = strip_marcadores(buffer_sentenca).strip()
+                # Se o stream foi cortado sem pontuação final (max_tokens atingido),
+                # remove a frase incompleta — áudio truncado no meio de uma frase
+                # soa pior do que simplesmente não sintetizar aquele fragmento.
+                if flush_texto and flush_texto[-1] not in ".!?…\"'":
+                    ultimo_term = max(
+                        flush_texto.rfind("."),
+                        flush_texto.rfind("!"),
+                        flush_texto.rfind("?"),
+                        flush_texto.rfind("…"),
+                    )
+                    flush_texto = flush_texto[:ultimo_term + 1] if ultimo_term > 0 else ""
                 if flush_texto:
                     tts_tasks.append(asyncio.create_task(
                         _tts_sentenca(tts_seq_prox, flush_texto)
