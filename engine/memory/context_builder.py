@@ -303,18 +303,35 @@ class ContextBuilder:
         else:
             query_modulo = transcricao
 
-        # Query de regras enriquecida com classe/nível quando em combate ou rolagem detectada
+        # Regras SRD só são buscadas quando há rolagem ativa — reduz prompt em
+        # ~900 chars fora de momentos de resolução mecânica. Humano não relê o
+        # manual de regras entre cada turno de diálogo.
         _tem_rolagem = bool(_RE_ROLAGEM.search(transcricao))
         _tem_combate = working_mem.em_combate or bool(_RE_COMBATE.search(transcricao))
-        if _tem_rolagem and _tem_combate and working_mem.player_class:
-            query_regras = (
-                f"{working_mem.player_class} nível {working_mem.player_level} "
-                f"ataque combate {transcricao}"
-            )
-        else:
+        if _tem_rolagem and _tem_combate:
+            _top_k_regras = 2  # combate ativo + rolagem — reduzido de 3
+            if working_mem.player_class:
+                query_regras = (
+                    f"{working_mem.player_class} nível {working_mem.player_level} "
+                    f"ataque combate {transcricao}"
+                )
+            else:
+                query_regras = transcricao
+        elif _tem_rolagem:
+            _top_k_regras = 2  # salvaguardas e checks de perícia fora de combate
             query_regras = transcricao
+        else:
+            _top_k_regras = 0  # diálogo puro ou ação sem rolagem — sem regras
+            query_regras = ""
 
         # ── Buscas em paralelo (Qdrant) ───────────────────────────────────────
+        # buscar_regras é pulado quando _top_k_regras == 0 — evita roundtrip
+        # desnecessário ao Qdrant nos turnos de diálogo puro.
+        async def _talvez_buscar_regras() -> list[dict[str, Any]]:
+            if _top_k_regras == 0:
+                return []
+            return await self._qdrant.buscar_regras(query_regras, top_k=_top_k_regras)
+
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
             self._qdrant.buscar_modulo(query_modulo, top_k=TOP_K_SEMANTICO + 2),
             self._qdrant.buscar(
@@ -322,7 +339,7 @@ class ContextBuilder:
                 colecao="voxdm_episodic",
                 top_k=TOP_K_EPISODICO,
             ),
-            self._qdrant.buscar_regras(query_regras, top_k=TOP_K_REGRAS),
+            _talvez_buscar_regras(),
             return_exceptions=True,
         )
 

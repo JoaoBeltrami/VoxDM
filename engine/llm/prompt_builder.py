@@ -179,16 +179,31 @@ def validar_master_system() -> tuple[bool, str]:
     return True, "ok"
 
 
-def _formatar_chunks(chunks: list[dict[str, Any]], limite_chars: int) -> str:
-    """Formata chunks como texto, respeitando limite de caracteres aproximado."""
+def _formatar_chunks(
+    chunks: list[dict[str, Any]],
+    limite_chars: int,
+    incluir_prefixo: bool = True,
+) -> str:
+    """Formata chunks como texto, respeitando limite de caracteres aproximado.
+
+    Args:
+        chunks: lista de chunks recuperados do Qdrant.
+        limite_chars: budget aproximado em caracteres.
+        incluir_prefixo: se True, prefixa cada chunk com [source_name].
+            Para chunks de regras SRD, passar False — prefixo coloca o
+            modelo em "modo de leitura de documento" em vez de narração.
+    """
     if not chunks:
         return ""
     partes: list[str] = []
     total = 0
     for chunk in chunks:
         texto = chunk.get("text", "")
-        nome = chunk.get("source_name", chunk.get("source_id", ""))
-        linha = f"[{nome}] {texto}"
+        if incluir_prefixo:
+            nome = chunk.get("source_name", chunk.get("source_id", ""))
+            linha = f"[{nome}] {texto}"
+        else:
+            linha = texto
         if total + len(linha) > limite_chars:
             break
         partes.append(linha)
@@ -269,10 +284,26 @@ def montar_mensagens(
     if sem_texto:
         secoes.append(f"\n=== CONTEÚDO DO MÓDULO ===\n{sem_texto}")
 
-    # Regras SRD relevantes (combate, saves, condições)
-    regras_texto = _formatar_chunks(contexto.chunks_regras, limite_chars=BUDGET_REGRAS * 4)
-    if regras_texto:
-        secoes.append(f"\nREGRAS DE JOGO:\n{regras_texto}")
+    # Detecta combate ANTES do bloco de regras — quando combat.md vai ser
+    # injetado, não duplicamos com chunks SRD (combat.md já cobre modificadores).
+    _em_combate_ativo = contexto.working_memory.em_combate
+    _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
+    _combat_md_presente = _em_combate_ativo or _acao_combate
+
+    # Regras SRD relevantes (saves, condições, checks fora de combate).
+    # combat.md já cobre os modificadores relevantes — injetar regras SRD
+    # simultaneamente duplica conteúdo e estoura o budget do Groq.
+    # Prefixo [source_name] removido — chunks puros mantêm o modelo em modo
+    # de narração em vez de "modo de leitura de documento".
+    regras_texto = ""
+    if not _combat_md_presente:
+        regras_texto = _formatar_chunks(
+            contexto.chunks_regras,
+            limite_chars=BUDGET_REGRAS * 4,
+            incluir_prefixo=False,
+        )
+        if regras_texto:
+            secoes.append(f"\nREGRAS DE JOGO:\n{regras_texto}")
 
     # Guia de rolagem de dados — injetado apenas quando o jogador rola um dado
     if _RE_ROLAGEM.search(contexto.transcricao_atual):
@@ -282,16 +313,18 @@ def montar_mensagens(
             log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
 
     # Camada de combate + salvaguardas — injetadas quando em_combate ativo OU ação detectada
-    _em_combate_ativo = contexto.working_memory.em_combate
-    _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
-    if _em_combate_ativo or _acao_combate:
+    chars_combat = 0
+    if _combat_md_presente:
         combat_texto = _carregar_combat()
         if combat_texto:
             secoes.append(f"\n{combat_texto}")
+            chars_combat = len(combat_texto)
             log.info(
                 "combat_md_injetado",
                 em_combate=_em_combate_ativo,
                 acao_detectada=_acao_combate,
+                chars_combat=chars_combat,
+                chars_regras=len(regras_texto),
                 transcricao=contexto.transcricao_atual[:60],
             )
         saves_texto = _carregar_saves()
