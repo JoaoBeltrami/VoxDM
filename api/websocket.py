@@ -571,7 +571,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             try:
                 async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=300
+                    mensagens, temperatura=0.8, max_tokens=120
                 ):
                     resposta_completa += token
                     if latencia_primeiro_token < 0:

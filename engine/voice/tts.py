@@ -535,6 +535,10 @@ class TTSEngine:
         """
         Sintetiza texto com fallback automático Edge TTS → Kokoro.
 
+        Quando voice_override falha (ex: voz inválida salva em localStorage),
+        tenta a voz padrão EDGE_VOZ_PTBR antes de cair pro Kokoro — evita
+        que uma única configuração inválida force 7-8s de latência em toda sessão.
+
         Args:
             texto:  Fala do Mestre a sintetizar.
             idioma: Idioma do texto.
@@ -552,12 +556,32 @@ class TTSEngine:
                 rate_override=rate,
                 pitch_override=pitch,
             )
-        except Exception as e:
-            log.warning(
-                "Edge TTS falhou — ativando Kokoro fallback",
-                erro=str(e),
-                tipo=type(e).__name__,
-            )
+        except Exception as e_custom:
+            # Se a falha veio de voz customizada, tenta a voz padrão antes do Kokoro
+            if voice and voice != EDGE_VOZ_PTBR:
+                log.warning(
+                    "Edge TTS voz customizada falhou — tentando voz padrão",
+                    voz_falhou=voice,
+                    erro=str(e_custom)[:80],
+                )
+                try:
+                    return await self._edge.sintetizar(
+                        texto, idioma,
+                        voice_override=EDGE_VOZ_PTBR,
+                        rate_override=rate,
+                        pitch_override=pitch,
+                    )
+                except Exception as e_default:
+                    log.warning(
+                        "Edge TTS voz padrão também falhou — ativando Kokoro",
+                        erro=str(e_default)[:80],
+                    )
+            else:
+                log.warning(
+                    "Edge TTS falhou — ativando Kokoro fallback",
+                    erro=str(e_custom),
+                    tipo=type(e_custom).__name__,
+                )
             return await self._kokoro.sintetizar(texto, idioma)
 
     async def sintetizar_stream(

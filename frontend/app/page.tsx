@@ -21,11 +21,9 @@ import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
 const VOZES_PTBR = [
-  { id: "pt-BR-FranciscaNeural", label: "Francisca (feminina)" },
-  { id: "pt-BR-AntonioNeural",   label: "Antonio (masculino)" },
-  { id: "pt-BR-ThalitaNeural",   label: "Thalita (feminina jovem)" },
-  { id: "pt-BR-BrendaNeural",    label: "Brenda (feminina)" },
-  { id: "pt-BR-DonatoNeural",    label: "Donato (masculino)" },
+  { id: "pt-BR-FranciscaNeural",             label: "Francisca (feminina)" },
+  { id: "pt-BR-AntonioNeural",               label: "Antonio (masculino)" },
+  { id: "pt-BR-ThalitaMultilingualNeural",   label: "Thalita (feminina jovem)" },
 ];
 
 const VOZ_PADRAO = "pt-BR-FranciscaNeural";
@@ -154,7 +152,9 @@ type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
 
 function lerVozStorage(): string {
   if (typeof window === "undefined") return VOZ_PADRAO;
-  return localStorage.getItem(LS_VOZ_KEY) ?? VOZ_PADRAO;
+  const salva = localStorage.getItem(LS_VOZ_KEY) ?? VOZ_PADRAO;
+  // Valida contra a lista atual — descarta voz inválida salva em sessão anterior
+  return VOZES_PTBR.find(v => v.id === salva) ? salva : VOZ_PADRAO;
 }
 
 export default function Home() {
