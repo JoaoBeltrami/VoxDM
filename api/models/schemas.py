@@ -40,8 +40,16 @@ class SessaoConfig(BaseModel):
     player_level: int = Field(default=3, ge=1, le=20)  # personagens começam no nível 3
     # Continuação de sessão anterior — pré-popula trust_levels e quest_stages
     session_anterior_id: str | None = None
-    # Voz Edge TTS escolhida pelo jogador nas Opções
-    tts_voice: str = "pt-BR-FranciscaNeural"
+    # Voz Edge TTS escolhida pelo jogador nas Opções — restrito às vozes existentes
+    tts_voice: str = Field(
+        default="pt-BR-FranciscaNeural",
+        pattern=(
+            r"^("
+            r"pt-BR-(FranciscaNeural|AntonioNeural|ThalitaMultilingualNeural)"
+            r"|en-US-(GuyNeural|EricNeural|AriaNeural|JennyNeural)"
+            r")$"
+        ),
+    )
     # Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md
     # Valores: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool"
     dm_profile: str = Field(default="equilibrado", pattern=r"^(rigoroso|equilibrado|tranquilo|rule_of_cool)$")

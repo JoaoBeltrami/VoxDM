@@ -110,7 +110,7 @@ VERBOS_FALA = frozenset({
     "cospe", "ri", "sorri", "solta", "comenta", "replica", "reclama",
     "avisa", "ameaça", "insiste", "acrescenta", "continua", "conclui",
     "admite", "hesita", "interrompe", "corrige", "confirma", "nega",
-    "resmunга", "resmunga", "exclama", "lamenta", "declara", "ordena",
+    "resmunga", "exclama", "lamenta", "declara", "ordena",
     "implora", "suplica", "anuncia", "revela", "confessa", "promete",
 })
 
