@@ -18,6 +18,7 @@ import { InitiativeBar } from "@/components/InitiativeBar";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
+import { trocarLlmBackend } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
 const VOZES_PTBR = [
@@ -46,6 +47,21 @@ function lerDmProfileStorage(): DmProfile {
   return (DM_PROFILES.find(p => p.id === v)?.id) ?? DM_PROFILE_PADRAO;
 }
 
+// Backend LLM — preferência persistida. "auto" = herda do .env do server.
+// Toggle aparece no menu Opções e pode ser trocado em sessão ativa via API.
+type LlmBackendPref = "auto" | "groq" | "ollama";
+const LS_LLM_BACKEND_KEY = "voxdm_llm_backend";
+const LLM_BACKENDS: { id: LlmBackendPref; label: string; descricao: string }[] = [
+  { id: "auto",   label: "🤖 Auto",   descricao: "Usa o default do servidor (Groq com fallback Ollama)." },
+  { id: "groq",   label: "🌩 Groq",   descricao: "Llama 3.3 70B na nuvem — rápido, com limite diário." },
+  { id: "ollama", label: "🏠 Ollama", descricao: "LLM local — ilimitado, mais lento, sem filtros." },
+];
+function lerLlmBackendStorage(): LlmBackendPref {
+  if (typeof window === "undefined") return "auto";
+  const v = localStorage.getItem(LS_LLM_BACKEND_KEY);
+  return LLM_BACKENDS.find(b => b.id === v)?.id ?? "auto";
+}
+
 // Cinema mode — esconde controles utilitários, deixa só o essencial pra gravação.
 // Persistido em localStorage. Toggle via botão canto inferior direito ou Ctrl+Shift+C.
 const LS_CINEMA_KEY = "voxdm_cinema_mode";
@@ -68,10 +84,17 @@ const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguard
 interface RolagemPendente {
   id: string;
   label: string;       // "Persuasão", "Salv. CON"
+  atributo: string;    // "CAR", "FOR" — sempre visível ao jogador (Task 2)
   modificador: number;
   dc: number | null;
   cor: "violet" | "amber" | "cyan" | "rose";
 }
+
+// Mapa de chave do PersonagemConfig → sigla curta do atributo (D&D 5e PT-BR)
+const ATTR_LABEL: Record<string, string> = {
+  str_score: "FOR", dex_score: "DES", con_score: "CON",
+  int_score: "INT", wis_score: "SAB", cha_score: "CAR",
+};
 const ROLL_COLORS: RolagemPendente["cor"][] = ["violet", "amber", "cyan", "rose"];
 
 // [normalizado sem acento, display, chave em PersonagemConfig]
@@ -136,7 +159,7 @@ function parseRolagens(
   }
 
   if (found.length === 0)
-    return [{ id: `rg-${Date.now()}`, label: "d20", modificador: 0, dc, cor: "violet" }];
+    return [{ id: `rg-${Date.now()}`, label: "Teste", atributo: "", modificador: 0, dc, cor: "violet" }];
 
   return found.slice(0, 4).map((f, i) => {
     const score = (p[f.attrKey] as number) ?? 10;
@@ -144,8 +167,30 @@ function parseRolagens(
     const mod = (found.length === 1 && explicitMod !== null)
       ? explicitMod
       : _mod(score) + (isProficient ? prof : 0);
-    return { id: `r${i}-${Date.now()}`, label: f.label, modificador: mod, dc, cor: ROLL_COLORS[i] };
+    return {
+      id: `r${i}-${Date.now()}`,
+      label: f.label,
+      atributo: ATTR_LABEL[f.attrKey as string] ?? "",
+      modificador: mod,
+      dc,
+      cor: ROLL_COLORS[i],
+    };
   });
+}
+
+// Extrai a frase mais recente do texto do mestre que pede a rolagem.
+// Mostra ao jogador o "porquê" sem precisar olhar pra cima — útil em combate
+// quando o histórico já rolou. Limita a 140 chars pra caber numa linha.
+function extrairMotivoRolagem(texto: string): string {
+  if (!texto) return "";
+  const sentencas = texto.match(/[^.!?…]+[.!?…]+/g) ?? [texto];
+  for (let i = sentencas.length - 1; i >= 0; i--) {
+    const s = sentencas[i].trim();
+    if (/\b(rol[ae]|jogue?|teste|salvaguarda|iniciativa|d20|perícia|habilidade)\b/i.test(s)) {
+      return s.length > 140 ? s.slice(0, 137).trim() + "…" : s;
+    }
+  }
+  return "";
 }
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
@@ -191,6 +236,29 @@ export default function Home() {
     setDmProfile(p);
     localStorage.setItem(LS_DM_PROFILE_KEY, p);
   }, []);
+
+  // Backend LLM — preferência local. Aplicada à sessão ativa via API quando
+  // já conectado, ou herdada na próxima sessão. Após bater limite do Groq,
+  // o jogador troca pra Ollama daqui sem reiniciar nada.
+  const [llmBackend, setLlmBackend] = useState<LlmBackendPref>("auto");
+  useEffect(() => { setLlmBackend(lerLlmBackendStorage()); }, []);
+  const handleSalvarLlmBackend = useCallback(async (b: LlmBackendPref) => {
+    setLlmBackend(b);
+    try { localStorage.setItem(LS_LLM_BACKEND_KEY, b); } catch { /* SSR-safe */ }
+    if (sessionId) {
+      const ok = await trocarLlmBackend(sessionId, b);
+      if (!ok) console.warn("Falha ao aplicar backend LLM na sessão ativa");
+    }
+  }, [sessionId]);
+
+  // Aplica preferência salva sempre que uma sessão nova conecta — garante que
+  // "groq" / "ollama" / "auto" do localStorage seja respeitado mesmo sem o
+  // jogador re-clicar no toggle.
+  useEffect(() => {
+    if (!sessionId || !conectado) return;
+    if (llmBackend === "auto") return;  // auto = não sobrescreve default do server
+    trocarLlmBackend(sessionId, llmBackend).catch(() => {});
+  }, [sessionId, conectado, llmBackend]);
 
   // Volume da voz do mestre — hydratado do localStorage, refletido no GainNode
   const [volume, setVolumeState] = useState<number>(VOLUME_PADRAO);
@@ -559,6 +627,12 @@ export default function Home() {
             const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
             if (!turnoJogador) return null;
 
+            // Task 2: motivo do check — frase do mestre que pediu a rolagem.
+            // Aparece como linha discreta abaixo dos chips de dados.
+            const motivoCheck = (rolamentosPendentes.length > 0 || esperandoRolagem)
+              ? extrairMotivoRolagem(ultimaFala)
+              : "";
+
             const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
               const r1 = Math.floor(Math.random() * 20) + 1;
               const r2 = Math.floor(Math.random() * 20) + 1;
@@ -587,10 +661,13 @@ export default function Home() {
                       <button
                         key={roll.id}
                         onClick={() => handleRolagemContextual(roll)}
-                        title={`Rolar ${roll.label}${roll.dc ? ` vs CD ${roll.dc}` : ""}`}
+                        title={`Rolar ${roll.label}${roll.atributo ? ` (${roll.atributo})` : ""}${roll.dc ? ` vs CD ${roll.dc}` : ""}`}
                         className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${ROLL_STYLE[roll.cor]}`}
                       >
                         🎲 {roll.label}
+                        {roll.atributo && (
+                          <span className="font-semibold text-[10px] opacity-90">[{roll.atributo}]</span>
+                        )}
                         <span className="font-normal text-[10px] opacity-80">
                           {roll.modificador >= 0 ? `+${roll.modificador}` : roll.modificador}
                           {roll.dc ? ` / CD${roll.dc}` : ""}
@@ -638,6 +715,12 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+                {/* Task 2: motivo do check — frase recente do mestre que disparou o pedido */}
+                {motivoCheck && (
+                  <p className="max-w-md px-2 text-center text-[11px] italic leading-snug text-zinc-500">
+                    “{motivoCheck}”
+                  </p>
+                )}
               </div>
             );
           })()}
@@ -980,6 +1063,34 @@ export default function Home() {
           </div>
           <p className="text-[10px] text-zinc-600">
             Aplicado na próxima sessão que você iniciar.
+          </p>
+        </div>
+
+        {/* Task 4 — Provedor de LLM (Groq cloud / Ollama local) */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Provedor de LLM</p>
+          <div className="space-y-2">
+            {LLM_BACKENDS.map(b => (
+              <button
+                key={b.id}
+                onClick={() => handleSalvarLlmBackend(b.id)}
+                className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                  llmBackend === b.id
+                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                }`}
+              >
+                <span className="flex items-center justify-between">
+                  <span className="font-semibold">{b.label}</span>
+                  {llmBackend === b.id && <span className="text-violet-400">✓</span>}
+                </span>
+                <span className="text-[11px] text-zinc-500">{b.descricao}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600">
+            Aplicado imediatamente na sessão ativa. Quando o limite diário do Groq
+            estourar, troque pra Ollama daqui sem perder o jogo.
           </p>
         </div>
 

@@ -67,10 +67,34 @@ def _logar_tentativa(retry_state: RetryCallState) -> None:
 
 
 class GroqClient:
-    """Cliente LLM com Groq primário e Ollama como fallback (ou primário via LLM_BACKEND)."""
+    """Cliente LLM com Groq primário e Ollama como fallback (ou primário via LLM_BACKEND).
+
+    Backend pode ser sobrescrito por instância via ``set_backend()`` — útil para
+    permitir que cada sessão escolha seu provedor (toggle no menu Opções) sem
+    afetar outras sessões em andamento.
+    """
 
     def __init__(self) -> None:
         self._groq: AsyncGroq | None = None
+        # None = herda de settings.LLM_BACKEND; "groq" / "ollama" = override por sessão
+        self._backend_override: str | None = None
+
+    def set_backend(self, backend: str | None) -> None:
+        """Sobrescreve o backend para esta sessão.
+
+        Args:
+            backend: "groq", "ollama", ou None para herdar de settings.LLM_BACKEND.
+        """
+        if backend is not None and backend not in ("groq", "ollama"):
+            log.warning("backend_invalido_ignorado", backend=backend)
+            return
+        self._backend_override = backend
+        log.info("groq_backend_alterado", backend=self.backend_efetivo)
+
+    @property
+    def backend_efetivo(self) -> str:
+        """Backend ativo para esta sessão (override ou settings)."""
+        return self._backend_override or settings.LLM_BACKEND
 
     def _get_groq(self) -> AsyncGroq:
         if self._groq is None:
@@ -166,7 +190,7 @@ class GroqClient:
         Se LLM_BACKEND=ollama, usa Ollama direto (sem filtros).
         Se LLM_BACKEND=groq (default), tenta Groq e cai para Ollama se falhar.
         """
-        if settings.LLM_BACKEND == "ollama":
+        if self.backend_efetivo == "ollama":
             texto = await self._chamar_ollama(mensagens, temperatura, max_tokens)
             log.info("ollama_resposta_ok", tokens_estimados=len(texto.split()))
             return texto
@@ -203,48 +227,82 @@ class GroqClient:
         """
         Versão streaming — yield de tokens conforme chegam.
 
-        Se LLM_BACKEND=ollama, usa Ollama streaming (sem filtros).
-        Se LLM_BACKEND=groq (default), usa Groq streaming.
+        Comportamento por backend efetivo:
+          - "ollama": usa Ollama streaming direto (sem filtros).
+          - "groq":   tenta Groq streaming; se falhar antes do primeiro token
+                     (429 TPD, conexão, etc.) ou se a recusa do safety layer
+                     for detectada nos primeiros chars, cai pra Ollama sem
+                     emitir nada pro chamador. Se a falha for **depois** que
+                     tokens já foram emitidos, propaga a exceção — quebrar o
+                     streaming no meio de uma frase é pior que cortar limpo.
         """
-        if settings.LLM_BACKEND == "ollama":
+        if self.backend_efetivo == "ollama":
             async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
                 yield token
             return
 
-        stream = await self._get_groq().chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=mensagens,  # type: ignore[arg-type]
-            temperature=temperatura,
-            max_tokens=max_tokens,
-            stream=True,
-        )
+        # Tentar abrir o stream Groq. Erros aqui (429 TPD, timeout, conn) são
+        # recuperáveis via fallback porque nenhum token foi emitido ainda.
+        try:
+            stream = await self._get_groq().chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=mensagens,  # type: ignore[arg-type]
+                temperature=temperatura,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+        except Exception as erro_abertura:
+            log.warning(
+                "groq_stream_abertura_falhou_usando_ollama",
+                erro=str(erro_abertura)[:160],
+            )
+            async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                yield token
+            return
 
-        # Bufferiza os primeiros _BUFFER_RECUSA chars antes de emitir,
-        # para detectar recusa do safety layer e fazer fallback para Ollama.
+        # Bufferiza os primeiros _BUFFER_RECUSA chars antes de emitir, para
+        # detectar recusa do safety layer. Durante essa janela, se o stream
+        # quebrar (raríssimo, mas TPD pode estourar mid-stream), conseguimos
+        # ainda cair pro Ollama sem o cliente ver nada.
         buffer = ""
         buffer_liberado = False
         chunks_pendentes: list[str] = []
 
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if not delta:
-                continue
+        try:
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if not delta:
+                    continue
 
+                if not buffer_liberado:
+                    buffer += delta
+                    chunks_pendentes.append(delta)
+                    if len(buffer) >= _BUFFER_RECUSA:
+                        buffer_liberado = True
+                        if _e_recusa(buffer):
+                            log.warning("groq_recusa_stream_detectada", preview=buffer[:80])
+                            async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                                yield token
+                            return
+                        for c in chunks_pendentes:
+                            yield c
+                        chunks_pendentes.clear()
+                else:
+                    yield delta
+        except Exception as erro_stream:
+            # Se ainda estamos no buffer (nada emitido), podemos cair pro Ollama
+            # de forma transparente. Se já emitimos, não dá — propagamos pra
+            # que o chamador exiba erro e o jogador refaça o turno.
             if not buffer_liberado:
-                buffer += delta
-                chunks_pendentes.append(delta)
-                if len(buffer) >= _BUFFER_RECUSA:
-                    buffer_liberado = True
-                    if _e_recusa(buffer):
-                        log.warning("groq_recusa_stream_detectada", preview=buffer[:80])
-                        async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
-                            yield token
-                        return
-                    for c in chunks_pendentes:
-                        yield c
-                    chunks_pendentes.clear()
-            else:
-                yield delta
+                log.warning(
+                    "groq_stream_quebrou_no_buffer_usando_ollama",
+                    erro=str(erro_stream)[:160],
+                )
+                async for token in self._chamar_ollama_stream(mensagens, temperatura, max_tokens):
+                    yield token
+                return
+            log.error("groq_stream_quebrou_apos_emissao", erro=str(erro_stream)[:160])
+            raise
 
         # Stream terminou antes de acumular _BUFFER_RECUSA chars
         if not buffer_liberado:
