@@ -18,6 +18,18 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
     # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
     LLM_BACKEND: str = "groq"
+
+    # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
+    # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
+    GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"
+    GEMINI_API_KEY_V2: str = ""           # NÃO reutiliza GEMINI_API_KEY antigo (1.5 Pro)
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    CEREBRAS_API_KEY: str = ""
+    CEREBRAS_MODEL: str = "llama-3.3-70b"
+    # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
+    LLM_PROVIDER_TIMEOUT: float = 30.0
+    # Timeout reduzido pra Ollama no health check inicial (não trava cascata se down).
+    OLLAMA_HEALTH_TIMEOUT: float = 3.0
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False
