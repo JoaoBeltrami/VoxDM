@@ -23,9 +23,10 @@ class Settings(BaseSettings):
     # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
     GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"
     GEMINI_API_KEY_V2: str = ""           # NÃO reutiliza GEMINI_API_KEY antigo (1.5 Pro)
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    CEREBRAS_API_KEY: str = ""
-    CEREBRAS_MODEL: str = "llama-3.3-70b"
+    # gemini-2.5-flash-lite: não tem thinking budget (não corta output) e tem
+    # quota free fresca por modelo. 2.5-flash "full" trunca em max_tokens baixo
+    # porque o budget é consumido pelo reasoning interno antes do texto visível.
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
     # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
     LLM_PROVIDER_TIMEOUT: float = 30.0
     # Timeout reduzido pra Ollama no health check inicial (não trava cascata se down).

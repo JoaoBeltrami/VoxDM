@@ -41,7 +41,6 @@ class TaskType(str, Enum):
 PROV_GROQ_70B:   Final[str] = "groq-70b"
 PROV_GROQ_8B:    Final[str] = "groq-8b"
 PROV_GEMINI:     Final[str] = "gemini-flash"
-PROV_CEREBRAS:   Final[str] = "cerebras-70b"
 PROV_OLLAMA:     Final[str] = "ollama-local"
 
 
@@ -50,7 +49,6 @@ _DEFAULT: Final[list[str]] = [
     PROV_GROQ_70B,
     PROV_GROQ_8B,
     PROV_GEMINI,
-    PROV_CEREBRAS,
     PROV_OLLAMA,
 ]
 
@@ -63,7 +61,6 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
         PROV_GROQ_70B,
         PROV_GROQ_8B,
         PROV_GEMINI,
-        PROV_CEREBRAS,
         PROV_OLLAMA,
     ],
     # Resumo: Gemini é excelente em síntese e tem cota muito maior. Usar como

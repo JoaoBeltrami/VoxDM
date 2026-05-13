@@ -25,12 +25,10 @@ from typing import AsyncIterator
 import structlog
 
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
-from engine.llm.providers.cerebras import CerebrasProvider
 from engine.llm.providers.gemini import GeminiProvider
 from engine.llm.providers.groq import GroqProvider
 from engine.llm.providers.ollama import OllamaProvider
 from engine.llm.tasks import (
-    PROV_CEREBRAS,
     PROV_GEMINI,
     PROV_GROQ_70B,
     PROV_GROQ_8B,
@@ -59,7 +57,6 @@ class LLMRouter:
             PROV_GROQ_70B:  GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
             PROV_GROQ_8B:   GroqProvider(nome=PROV_GROQ_8B,  modelo=settings.GROQ_MODEL_FALLBACK),
             PROV_GEMINI:    GeminiProvider(),
-            PROV_CEREBRAS:  CerebrasProvider(),
             PROV_OLLAMA:    OllamaProvider(),
         }
         # Override por sessão — quando setado, esse provider vai pra frente da
