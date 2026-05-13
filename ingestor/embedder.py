@@ -15,7 +15,8 @@ Exemplo:
 
 import os
 import time
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 import numpy as np
 import structlog
@@ -23,10 +24,13 @@ import structlog
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-# Evita chamada HTTP do transformers para verificar adapter PEFT quando modelo está cacheado.
-# Versões recentes de transformers/huggingface_hub fazem essa chamada via httpx síncrono,
-# que falha dentro de contexto asyncio com "Cannot send a request, as the client has been closed."
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+# ATENÇÃO: HF_HUB_OFFLINE NÃO é setado globalmente aqui.
+# Antes era setado em module-level para evitar uma chamada HTTP do transformers
+# verificando adapter PEFT (que falha dentro de asyncio com httpx síncrono),
+# mas isso envenenava todo o processo — huggingface_hub cacheia o valor em uma
+# constante de módulo no import, impedindo downloads posteriores (ex: Whisper).
+# Agora o flag é aplicado em escopo isolado dentro de _carregar_modelo() via
+# context manager que também restaura a constante após o load.
 
 import transformers
 transformers.logging.set_verbosity_error()
@@ -34,6 +38,42 @@ transformers.logging.set_verbosity_error()
 from sentence_transformers import SentenceTransformer
 
 from config import settings
+
+
+@contextmanager
+def _hf_offline_temporario() -> Iterator[None]:
+    """
+    Aplica HF_HUB_OFFLINE=1 apenas durante o load do SentenceTransformer.
+
+    Necessário para suprimir a chamada de checagem de adapter PEFT do transformers
+    (httpx síncrono que falha em contexto asyncio). Restaura o estado anterior
+    da env var E da constante cacheada em huggingface_hub.constants, permitindo
+    que outros componentes (ex: Faster-Whisper) baixem modelos normalmente.
+    """
+    env_anterior = os.environ.get("HF_HUB_OFFLINE")
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
+    # huggingface_hub.constants.HF_HUB_OFFLINE é lido no import-time e cacheado.
+    # Patcheamos a constante diretamente para que o flag tenha efeito mesmo se
+    # huggingface_hub já estiver importado.
+    constante_anterior: bool | None = None
+    hf_const: Any = None
+    try:
+        import huggingface_hub.constants as hf_const  # type: ignore[no-redef]
+        constante_anterior = bool(hf_const.HF_HUB_OFFLINE)
+        hf_const.HF_HUB_OFFLINE = True
+    except Exception as exc:  # pragma: no cover — best-effort
+        log.warning("hf_offline_patch_falhou", erro=str(exc))
+
+    try:
+        yield
+    finally:
+        if env_anterior is None:
+            os.environ.pop("HF_HUB_OFFLINE", None)
+        else:
+            os.environ["HF_HUB_OFFLINE"] = env_anterior
+        if hf_const is not None and constante_anterior is not None:
+            hf_const.HF_HUB_OFFLINE = constante_anterior
 
 log = structlog.get_logger()
 
@@ -55,19 +95,25 @@ class Embedder:
         self._device: str = "desconhecido"
 
     def _carregar_modelo(self) -> SentenceTransformer:
-        """Carrega o modelo na primeira chamada. Tenta CUDA, cai para CPU."""
+        """Carrega o modelo na primeira chamada. Tenta CUDA, cai para CPU.
+
+        O load acontece dentro de _hf_offline_temporario() — suprime a checagem
+        de adapter PEFT do transformers que falha em contexto asyncio, sem
+        deixar o flag offline permanente no processo.
+        """
         if self._modelo is not None:
             return self._modelo
 
-        try:
-            modelo = SentenceTransformer(MODELO_NOME, device="cuda")
-            self._device = "cuda"
-            log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cuda")
-        except Exception:
-            log.warning("embedder_cuda_indisponivel", fallback="cpu")
-            modelo = SentenceTransformer(MODELO_NOME, device="cpu")
-            self._device = "cpu"
-            log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cpu")
+        with _hf_offline_temporario():
+            try:
+                modelo = SentenceTransformer(MODELO_NOME, device="cuda")
+                self._device = "cuda"
+                log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cuda")
+            except Exception:
+                log.warning("embedder_cuda_indisponivel", fallback="cpu")
+                modelo = SentenceTransformer(MODELO_NOME, device="cpu")
+                self._device = "cpu"
+                log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cpu")
 
         self._modelo = modelo
         return self._modelo

@@ -19,7 +19,9 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(python -m py_compile engine/voice/stt.py engine/voice/tts.py demo/voice_loop.py engine/memory/qdrant_client.py)",
-      "Bash(.venv/Scripts/python.exe -m py_compile engine/voice/stt.py engine/voice/tts.py demo/voice_loop.py engine/memory/qdrant_client.py)"
+      "Bash(.venv/Scripts/python.exe -m py_compile engine/voice/stt.py engine/voice/tts.py demo/voice_loop.py engine/memory/qdrant_client.py)",
+      "Bash(make test *)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -q)"
     ]
   }
 }
