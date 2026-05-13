@@ -177,8 +177,11 @@ export async function salvarEstadoPersonagem(session_id: string, state: Characte
   });
 }
 
-// ── LLM backend toggle (Groq / Ollama) ─────────────────────────────────────
-export type LlmBackend = "groq" | "ollama" | "auto";
+// ── LLM backend toggle ─────────────────────────────────────────────────────
+// "auto" deixa a cascata default rolar. Os outros valores põem aquele provider
+// como primeiro da cascata; se ele falhar com erro recuperável, a cascata
+// continua normalmente (não trava em "USE APENAS X").
+export type LlmBackend = "auto" | "groq" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
 
 export async function obterLlmBackend(session_id: string): Promise<LlmBackend | null> {
   try {

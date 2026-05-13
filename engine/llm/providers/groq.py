@@ -20,7 +20,15 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 import structlog
-from groq import AsyncGroq, APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+from groq import (
+    AsyncGroq,
+    APIConnectionError,
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError,
+)
 
 from config import settings
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
@@ -53,6 +61,25 @@ _ERROS_RECUPERAVEIS = (
     APITimeoutError,
     InternalServerError,
 )
+
+# Quota também aparece disfarçada de outros status codes — o Groq retorna
+# 413 (Payload Too Large) quando o pedido excede TPM (tokens per minute),
+# embora o body contenha "code: rate_limit_exceeded". Sem este detector,
+# 413 escapava da cascata e o websocket caía sem tentar Gemini.
+_PALAVRAS_QUOTA = (
+    "rate_limit_exceeded",
+    "tokens per minute",
+    "tokens per day",
+    "request too large",
+    "payload too large",
+    "quota",
+)
+
+
+def _e_quota_disfarcada(exc: BaseException) -> bool:
+    """True quando o erro é rate-limit não-429 (ex: 413 TPM, 400 com 'quota')."""
+    corpo = str(exc).lower()
+    return any(kw in corpo for kw in _PALAVRAS_QUOTA)
 
 
 class GroqProvider(BaseLLMProvider):
@@ -92,6 +119,17 @@ class GroqProvider(BaseLLMProvider):
                 categoria="rate_limit" if isinstance(e, RateLimitError) else "rede",
                 causa=e,
             ) from e
+        except APIError as e:
+            # Erro de API não na tupla explícita — pode ser 413 TPM (rate limit
+            # disfarçado) ou um 400 legítimo. Só converte em LLMRetriable se
+            # tiver pegada de quota; caso contrário propaga (não é fallback-able).
+            if _e_quota_disfarcada(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] quota disfarçada: {e!s}"[:200],
+                    categoria="rate_limit",
+                    causa=e,
+                ) from e
+            raise
 
         if _e_recusa(texto):
             raise LLMRetriable(
@@ -120,6 +158,14 @@ class GroqProvider(BaseLLMProvider):
                 categoria="rate_limit" if isinstance(e, RateLimitError) else "rede",
                 causa=e,
             ) from e
+        except APIError as e:
+            if _e_quota_disfarcada(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream quota disfarçada: {e!s}"[:200],
+                    categoria="rate_limit",
+                    causa=e,
+                ) from e
+            raise
 
         # Buffer pra detectar refusal antes de emitir qualquer token. Quebra
         # no buffer = ainda dá pra cascatear; quebra após emissão = propaga.
@@ -158,6 +204,15 @@ class GroqProvider(BaseLLMProvider):
                 ) from e
             # Pós-emissão: propaga. Trocar provider mid-frase quebra a narrativa.
             log.error("groq_stream_quebrou_pos_emissao", modelo=self._modelo, erro=str(e)[:160])
+            raise
+        except APIError as e:
+            # Quota disfarçada (ex: 413 TPM) durante o stream — mesma lógica.
+            if not liberado and _e_quota_disfarcada(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream quota disfarçada: {e!s}"[:200],
+                    categoria="rate_limit",
+                    causa=e,
+                ) from e
             raise
 
         # Stream terminou dentro do buffer

@@ -27,7 +27,9 @@ import structlog
 
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import (
+    PROV_GEMINI,
     PROV_GROQ_70B,
+    PROV_GROQ_8B,
     PROV_OLLAMA,
     TaskType,
 )
@@ -38,10 +40,13 @@ log = structlog.get_logger(__name__)
 # Mapa backend (legado) → nome de provider canônico.
 # "auto" remove o override e deixa o router usar a cascata default.
 _BACKEND_PARA_PROVIDER: dict[str, str | None] = {
-    "groq":   PROV_GROQ_70B,
-    "ollama": PROV_OLLAMA,
-    "auto":   None,
-    "":       None,
+    "groq":    PROV_GROQ_70B,   # legado — equivale a "groq-70b"
+    "groq-70b": PROV_GROQ_70B,
+    "groq-8b": PROV_GROQ_8B,
+    "gemini":  PROV_GEMINI,
+    "ollama":  PROV_OLLAMA,
+    "auto":    None,
+    "":        None,
     "default": None,
 }
 

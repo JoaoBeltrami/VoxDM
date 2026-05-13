@@ -47,14 +47,18 @@ function lerDmProfileStorage(): DmProfile {
   return (DM_PROFILES.find(p => p.id === v)?.id) ?? DM_PROFILE_PADRAO;
 }
 
-// Backend LLM — preferência persistida. "auto" = herda do .env do server.
+// Backend LLM — preferência persistida. "auto" = cascata default do servidor.
 // Toggle aparece no menu Opções e pode ser trocado em sessão ativa via API.
-type LlmBackendPref = "auto" | "groq" | "ollama";
+// O backend escolhido é "primeiro da cascata"; se ele falhar com erro
+// recuperável (429/timeout), a cascata continua nos próximos providers.
+type LlmBackendPref = "auto" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
 const LS_LLM_BACKEND_KEY = "voxdm_llm_backend";
 const LLM_BACKENDS: { id: LlmBackendPref; label: string; descricao: string }[] = [
-  { id: "auto",   label: "🤖 Auto",   descricao: "Usa o default do servidor (Groq com fallback Ollama)." },
-  { id: "groq",   label: "🌩 Groq",   descricao: "Llama 3.3 70B na nuvem — rápido, com limite diário." },
-  { id: "ollama", label: "🏠 Ollama", descricao: "LLM local — ilimitado, mais lento, sem filtros." },
+  { id: "auto",     label: "🤖 Auto",        descricao: "Cascata default: 70B → 8B → Gemini → Ollama." },
+  { id: "groq-70b", label: "🌩 Groq 70B",    descricao: "Qualidade máxima. Tem limite diário (TPD)." },
+  { id: "groq-8b",  label: "⚡ Groq 8B",     descricao: "Mais rápido, quota separada do 70B. Qualidade ~70%." },
+  { id: "gemini",   label: "🌟 Gemini",      descricao: "Cota fresca, 4M tokens/dia. Excelente PT-BR." },
+  { id: "ollama",   label: "🏠 Ollama",      descricao: "Local, ilimitado. Precisa de 'ollama serve' rodando." },
 ];
 function lerLlmBackendStorage(): LlmBackendPref {
   if (typeof window === "undefined") return "auto";

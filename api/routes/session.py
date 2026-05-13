@@ -343,8 +343,12 @@ async def trocar_llm_backend(session_id: str, payload: dict[str, str]) -> None:
     if backend in ("", "auto", "default"):
         sessao.groq.set_backend(None)
         return
-    if backend not in ("groq", "ollama"):
-        raise HTTPException(status_code=400, detail="backend inválido — use 'groq', 'ollama' ou 'auto'")
+    valores_aceitos = {"groq", "groq-70b", "groq-8b", "gemini", "ollama"}
+    if backend not in valores_aceitos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"backend inválido — use um de {sorted(valores_aceitos)} ou 'auto'",
+        )
     sessao.groq.set_backend(backend)
 
 
