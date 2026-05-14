@@ -264,6 +264,9 @@ Cache de ~25 frases curtas pré-sintetizadas (`"Hmm…"`, `"Um momento."`, `"Vej
 **Fase 5.6 — Sincronização texto-voz (karaokê reverso)**
 Hoje o texto streama instantâneo e o áudio Edge TTS atrasa 800ms-1.5s. Buffer de tokens + revelação progressiva no ritmo da fala, mantendo o texto **300ms à frente** do áudio. Ilusão de que a voz está digitando, não o contrário. Implementação via `AudioBufferSourceNode.duration` e `requestAnimationFrame`.
 
+**Fase 5.7 — Dados visuais com escolha de visibilidade**
+Espelha duas ferramentas reais de mestre de mesa. Jogador sempre vê dado rolando na UI antes do resultado (construção de tensão). Mestre escolhe entre 3 modos: **aberto** (animação + número), **resultado apenas** (só o valor), **narrado sem número** (só descreve consequência). É o equivalente do *roll behind the screen* — controle dramático que mestres reais usam. Toggle global ou parte do `dm_profile`.
+
 ### Médio prazo
 
 **Fase 6 — Mecânicas D&D 5e completas**

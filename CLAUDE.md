@@ -55,6 +55,17 @@ Hoje tokens do LLM pintam na tela instantâneo (~30/s); áudio TTS atrasa 800ms-
 4. Revela chars no ritmo, com offset +300ms
 5. Edge cases: sentenças muito curtas (<5 chars) revela tudo; LLM mais lento que TTS = revela no ritmo do LLM mesmo (raro porque LLM termina antes de TTS começar)
 
+**Fase 5.7 — Dados visuais com escolha de visibilidade**
+Espelha duas ferramentas reais de mestre na mesa:
+- **Rolagem do jogador**: sempre mostra animação de dado rolando antes do resultado. Componente novo `DadoAnimado.tsx` (Canvas ou CSS 3D transform, ~1.2s de animação parando no valor)
+- **Rolagem do mestre — 3 modos à escolha**:
+  - "Aberto": "Vou rolar pra ataque do orc..." [animação] → 15 (transparência total)
+  - "Resultado apenas": "O ataque resulta em 15" (sem suspense visual)
+  - "Narrado sem número": "O orc te golpeia..." [aplica dano interno] (rule of cool / behind the screen)
+- Controle: toggle global no menu Opções `roll_visibility: "open" | "result_only" | "narrated"`, **ou** parte do `dm_profile` (Rigoroso = sempre aberto, Rule of Cool = sempre narrado)
+- Backend: parse de marcadores `[Rolagem interna: dX = Y]` vs `[Rolagem visível: dX = Y]` na resposta do LLM
+- Reproduz autoridade real de mestre de mesa. Espectador percebe textura diferente — "roll behind the screen" é parte fundamental do hobby, sistema atual nenhum imita bem
+
 **Fase 6 — Mecânicas D&D 5e completas**
 Hoje o LLM narra magias bonito mas não aplica mecânica. SRD 5e já indexado em `voxdm_rules` mas usado só como contexto narrativo. Próximos passos:
 1. **Spell detector**: regex de gatilho "lanço/conjuro/uso X" → busca Qdrant `voxdm_rules` por X → extrai (CD save, dano, área, nível) → injeta no prompt como bloco obrigatório de mecânica
