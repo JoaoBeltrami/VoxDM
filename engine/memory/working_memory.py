@@ -19,7 +19,10 @@ import time
 from dataclasses import dataclass, field
 
 
-MAX_DIALOGOS = 8  # últimas N trocas mantidas em RAM
+MAX_DIALOGOS = 6  # últimas N trocas mantidas em RAM. Reduzido de 8 → 6 em
+# 2026-05-13: prompt estava em ~6270 tokens, estourando TPM 6000 do Groq 8B.
+# A perda narrativa é mínima — RAG episódico cobre o que sair da janela —
+# mas economiza ~15% tokens por turno, abrindo espaço pro 8B virar fallback real.
 
 # Mapeamento de perícia D&D 5e → atributo abreviado (usado em para_texto)
 _PERICIA_ATRIBUTO: dict[str, str] = {
