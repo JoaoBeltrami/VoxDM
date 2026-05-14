@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 11 de maio de 2026
+> Atualizado: 14 de maio de 2026
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -25,7 +25,14 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 - **Auditoria Geral + Hardening (11/05)**: ✅ CONCLUÍDO. Relatório completo em `.internal/AUDITORIA_11_05.md`. Corrigidos: `.env.example` com `DEBUG=true` (crítico — expunha `/debug/*`), `API_HOST=0.0.0.0` default trocado pra `127.0.0.1`, `api/main.py` com log de aviso quando `reload` ativo. Hardening do websocket: log no topo, try/except em sync handlers numéricos, limites em gold/xp/inventory/spell_slots. `tts.py` imports no topo, `schemas.py` sem `__import__`, `useGameSession.ts` cleanup chama pararTudo, `useAudio.ts` fecha AudioContext no unmount, `context_builder._deduplicar_por_source_id` preserva chunks sem source_id. Suspense boundary em `/debug/page.tsx` (fix Next 14 build). `dashboard.py` sem `asyncio.get_event_loop()` deprecated. Guia de monitoramento em `.internal/GUIA_MONITORAMENTO.md`.
 - **Features pós-auditoria (11/05)**: ✅ CONCLUÍDO. (1) **UX — Ducking de áudio ambiente**: `useAmbientAudio` recebe 3º arg `mestreFalando`, master gain transita pra 0.1 quando true e volta a 0.6 quando false (setTargetAtTime, curva exponencial sem cliques). (2) **Segurança — Rate limiting**: `slowapi` em `api/rate_limit.py`, decorators em `/start` (10/min), `/turn` (30/min), `/transcribe` (60/min). Limiter desabilitado em testes via conftest. (3) **Arquitetura — Hot reload de prompts**: `_ler_prompt(path)` em `prompt_builder.py` com cache invalidado por mtime. Vale para master_system, dice, combat, saves, intro_system. Editar `.md` agora pega no próximo turno sem restart. (4) **Som de crítico/falha**: `useCombatSounds` sintético via Web Audio API (zero arquivos). Clarinada heroica em natural 20 (3 osciladores triangle Sol5/Ré6/Sol6 com envelope ADSR), tambor seco em natural 1 (sine 120→40Hz + ruído branco decay). Toggle ON/OFF em Opções, persistido em localStorage.
 - **UX Pré-Vídeo de Combate (11/05 — tarde)**: ✅ CONCLUÍDO. Sessão dedicada de polimento visual em 4 blocos. (1) **Bloco 1 — Presença na cena**: novos componentes `SceneHeader` (local + hora com ícone contextual ☀️/🌤️/🌅/🌙) e `NpcsPresentes` (chips de NPC com ícones de trust 💀⚪🤝⭐). Tipografia Cinzel via Google Fonts. Substitui inline Scene Status Bar. (2) **Bloco 2 — Iniciativa Visual Horizontal** 🎯: `TokenIniciativa` dataclass em `engine/llm/types.py`. Cache de iniciativa `iniciativa_cache: dict[str,int]` + `turno_atual_idx` em `WorkingMemory`. Métodos `popular_iniciativa()` (fallback decrescente 20,19,18 se LLM não propõe), `avancar_turno_iniciativa()` (pula mortos), `calcular_ordem_iniciativa()` (ordena desc). Authority = engine (LLM apenas propõe). `TokenIniciativaPayload` em schemas; payload `fim` agora inclui `iniciativa_ordem`. `InitiativeBar.tsx` com tokens circulares 56px, ring violeta + scale(1.15) + seta ▼ no turno atual, 💀 grayscale em mortos, slide-down 400ms. Regra de iniciativa adicionada em `combat.md`. 10 testes novos. (3) **Bloco 3 — Atmosfera de cena**: hook `useSceneMood` mapeia local/hora/combate → overlayColor + vignetteIntensity + ambientTone. Aplicado em `<main>` com transição 800ms. VoxOrb ganhou ring expansivo no estado "falando". (4) **Bloco 4 — Polimento**: cinema mode (toggle 🎬/🛠️ canto inferior direito + atalho Ctrl+Shift+C + localStorage), esconde PlayerJournal, dice toolbar, combat chips e condições auto-detectadas. **293/293 testes passam, tsc verde.**
-Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado).
+- **Feedback Filipe + Multi-Provider LLM (13–14/05)**: ✅ CONCLUÍDO. Maior refactor da engine de inferência desde o setup.
+  - **UX (Filipe feedback)**: respostas longas dividas em múltiplos balões (`MasterResponse` split por parágrafo ou ~280 chars); chip de dado contextual mostra atributo `[CAR]` + frase do mestre que pediu (`extrairMotivoRolagem`); criação de personagem ganha atribuição manual 4d6 (pool + selects, multiset com ties); toggle de provider LLM no menu Opções.
+  - **Multi-Provider LLM Router**: nova subárvore `engine/llm/router.py` + `engine/llm/providers/` (Groq, Gemini, Ollama). Cascata automática por `TaskType` (NARRATIVE / SUMMARIZATION / CLASSIFICATION / ...). `GroqClient` virou fachada compat delegando ao router — websocket.py, state.py, session.py inalterados. Fallback em cascata para 429 (TPD/TPM), 413 (quota disfarçada), 5xx, timeout, conn refused, refusal. Streaming só cascateia até o primeiro token emitido.
+  - **Gemini multi-key + multi-model**: `GEMINI_API_KEYS=k1,k2,k3` (CSV) — cada chave gerada num projeto Google Cloud distinto tem quota free SEPARADA (1500 RPD por projeto). `GEMINI_MODELS=gemini-2.5-flash-lite,gemini-3.1-flash-lite` — cada modelo tem cota separada por projeto. 3 chaves × 2 modelos = 6 combos internos. Outros modelos Gemini com **thinking budget** (gemini-2.5-flash full, gemini-flash-latest) NÃO usar — consomem max_tokens antes do output visível, entregam só ~40 chars com max=400.
+  - **Engine tuning**: `MAX_DIALOGOS` 8→6 (abre espaço pra Groq 8B caber no TPM 6000); `max_tokens` 200→400 (frases completas); `_FiltroDebugAccess` no `uvicorn.access` silencia polling `/debug/*` do dashboard; warmup paralelo embedder+whisper+tts no startup (4s totais antes do jogador interagir, vs ~9s espalhados antes).
+  - **334/334 testes passam, tsc clean. Branch backup preservada em `backup/pre-filipe-feedback-20260513-175653` no GitHub. README reescrito refletindo estado atual.**
+
+Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado). Fase 5 = task routing real (trust changes, condições D&D, extração de entidades via LLM em vez de regex — fundação `TaskType` já está lá).
 
 ---
 
@@ -78,7 +85,9 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 
 | Componente | Decisão |
 |---|---|
-| LLM de jogo | Groq — `llama-3.3-70b-versatile` |
+| LLM de jogo (primário) | Groq — `llama-3.3-70b-versatile` |
+| LLM cascata interna | Groq 70B → Groq 8B → Gemini (multi-key/model) → Ollama — via `LLMRouter` em `engine/llm/router.py` |
+| Modelos Gemini válidos | `gemini-2.5-flash-lite`, `gemini-3.1-flash-lite` (sem thinking budget) |
 | LLM de conversão | Groq — `llama-3.3-70b-versatile` |
 | STT | RealtimeSTT + Faster-Whisper tiny (GPU) |
 | TTS principal | Edge TTS Microsoft |
@@ -109,9 +118,13 @@ NÃO usar kokoro-tts         → usar: pip install kokoro
 NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1
 
-# Modelos depreciados
+# Modelos depreciados / problemáticos
 NÃO usar Gemini para conversão → free tier extinto (quota=0). Usar: Groq llama-3.3-70b-versatile
-NÃO usar gemini-1.5-pro     → DESCONTINUADO, retorna 404. Usar: gemini-2.0-flash
+NÃO usar gemini-1.5-pro     → DESCONTINUADO, retorna 404
+NÃO usar gemini-2.0-flash   → quota free baixa por padrão, esgota rápido
+NÃO usar gemini-2.5-flash "full"  → thinking budget consome max_tokens antes do output visível.
+                                     A max=400, devolve só ~40 chars (finish=length).
+NÃO usar gemini-flash-latest → alias rotativo que aponta pro 2.5-flash full (mesmo bug)
 NÃO usar llama-3.1-70b      → DEPRECIADO pelo Groq. Usar: llama-3.3-70b-versatile
 
 # Infraestrutura
@@ -422,6 +435,39 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | 4 — Polimento | `frontend/app/page.tsx` | Cinema mode: estado + localStorage `voxdm_cinema_mode`. Atalho Ctrl+Shift+C. Botão flutuante 🎬/🛠️ canto inferior direito. Esconde header buttons, PlayerJournal, dice toolbar, combat chips e chips de condição auto-detectada |
 | Animações | `frontend/tailwind.config.ts` | +4 keyframes/animations: `fade-in` (SceneHeader), `slide-in-right` (NpcsPresentes chips), `slide-down` (InitiativeBar), `stream-pulse` (extra disponível para VoxOrb) |
 | **Total testes** | | **293/293 passed** (283 baseline + 10 iniciativa); `tsc --noEmit` clean |
+
+### Multi-Provider LLM + Feedback Filipe (Sessões 13–14/05)
+
+> Maior refactor da engine de inferência. VoxDM deixa de ser "app que usa Groq" pra ser **engine narrativa agnóstica de inferência** com fallback automático em cascata.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/llm/tasks.py` | `TaskType` enum (NARRATIVE, SUMMARIZATION, CLASSIFICATION, ENTITY_EXTRACTION, MEMORY_COMPRESSION, ...) + `CASCATA_DEFAULT` por tarefa. Provedores referenciados por nome canônico (`groq-70b`, `groq-8b`, `gemini-flash`, `ollama-local`) | ✅ Criado |
+| `engine/llm/providers/base.py` | `BaseLLMProvider` ABC + `LLMRetriable` exception. Contrato: lançar `LLMRetriable` em rate_limit / timeout / conn / 5xx / refusal; propagar tudo mais | ✅ Criado |
+| `engine/llm/providers/groq.py` | Provider Groq com modelo configurável (70B/8B usam mesma classe). Captura 413 disfarçado (`code: rate_limit_exceeded` no body) via `_e_quota_disfarcada()`. Buffer de refusal `_BUFFER_RECUSA=120` chars antes de emitir tokens | ✅ Criado |
+| `engine/llm/providers/gemini.py` | Provider Gemini multi-key + multi-model via endpoint OpenAI-compat `/v1beta/openai`. Cycling interno: `_combos()` yields (key_idx, key, model) — pra cada chave, tenta todos os modelos antes de passar pra próxima | ✅ Criado |
+| `engine/llm/providers/ollama.py` | Provider Ollama local — extraído do `_chamar_ollama` antigo. `disponivel=True` sempre (sem ping ativo); falha de conn vira `LLMRetriable` cat=rede | ✅ Criado |
+| `engine/llm/router.py` | `LLMRouter` — orquestra cascata por `TaskType`. `set_primario(nome)` permite override por sessão (toggle no menu Opções). Streaming cascateia até primeiro token emitido; após isso, propaga erro | ✅ Criado |
+| `engine/llm/groq_client.py` | **Reescrito como fachada legada**. `completar()` / `completar_stream()` / `set_backend()` mantêm assinaturas — websocket.py, state.py, session.py INALTERADOS. `_BACKEND_PARA_PROVIDER` mapeia toggle (groq/groq-8b/gemini/ollama/auto) → provider canônico | ✅ Reescrito |
+| `engine/memory/session_writer.py` | Resumo agora usa `task=TaskType.SUMMARIZATION` (Gemini primeiro — cota grande, bom em síntese) | ✅ Atualizado |
+| `engine/memory/working_memory.py` | `MAX_DIALOGOS` 8→6. Justificativa em comentário: prompt estava em ~6270 tokens, batendo TPM 6000 do Groq 8B; reduzindo a janela libera o 8B como fallback real | ✅ Atualizado |
+| `engine/logging_setup.py` | `_FiltroDebugAccess` no `uvicorn.access` logger silencia GET/POST de `/debug/*` (polling de dashboard) | ✅ Atualizado |
+| `api/main.py` | Lifespan agora roda `asyncio.gather(_warmup_embedder, _warmup_whisper, _warmup_tts)` em paralelo no startup — 4s totais antes do jogador interagir vs ~9s espalhados antes | ✅ Atualizado |
+| `api/routes/session.py` | Novas rotas `GET/PUT /session/{id}/llm-backend` aceitam valores `groq` / `groq-70b` / `groq-8b` / `gemini` / `ollama` / `auto` | ✅ Atualizado |
+| `api/websocket.py` | `max_tokens` 200→400 no turno (frases completas) e 150→300 na abertura | ✅ Atualizado |
+| `config.py` | `GEMINI_API_KEYS` (CSV), `GEMINI_MODELS` (CSV), `GROQ_MODEL_FALLBACK="llama-3.1-8b-instant"`, `LLM_PROVIDER_TIMEOUT=30.0` | ✅ Atualizado |
+| `.env.example` | Seção multi-provider documentada — chaves obrigatórias vs opcionais, link pro AI Studio explicando o pulo do gato (projeto GCP diferente = quota separada) | ✅ Atualizado |
+| `frontend/lib/api.ts` | `trocarLlmBackend(session_id, backend)` + tipo `LlmBackend = "auto" \| "groq" \| "groq-70b" \| "groq-8b" \| "gemini" \| "ollama"` | ✅ Atualizado |
+| `frontend/app/page.tsx` | Toggle no menu Opções com 5 opções (🤖 Auto / 🌩 Groq 70B / ⚡ Groq 8B / 🌟 Gemini / 🏠 Ollama). `extrairMotivoRolagem()` + `ATTR_LABEL` map pra chip de dado contextual. Estado `llmBackend` persistido em localStorage, aplicado automaticamente quando conecta nova sessão | ✅ Atualizado |
+| `frontend/components/MasterResponse.tsx` | `dividirEmBaloes(texto)` — divide resposta longa em N bolhas por parágrafo (`\n\n`) ou sentenças agrupadas em ~280 chars. TTS continua uma chamada única, só a UI fragmenta | ✅ Atualizado |
+| `frontend/components/CharacterForm.tsx` | Modo `"rolado-manual"` — pool de 6 valores 4d6 + selects multiset com ties. Botão **✋ distribuir** alterna entre auto (prioridade de classe) e manual. Estado `valoresRolados: number[]` mantém pool intacto | ✅ Atualizado |
+| `README.md` | Reescrito refletindo estado atual: multi-LLM, cascata por TaskType, quickstart com chaves opcionais, armadilhas Gemini, estrutura `engine/llm/providers/` | ✅ Reescrito |
+| `.gitignore` | Linha 25 corrupta consertada (regras coladas), `srd_data/`, `benchmark/results*.json`, `.claude/scheduled_tasks.lock` adicionados | ✅ Corrigido |
+| **Total testes** | | **334/334 passed**; `tsc --noEmit` clean |
+
+**Branches no GitHub:**
+- `main` — atualizada com merge `--no-ff` preservando todo histórico do refactor
+- `backup/pre-filipe-feedback-20260513-175653` — snapshot do estado anterior pra rollback se precisar
 
 ---
 

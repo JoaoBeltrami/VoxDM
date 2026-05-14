@@ -22,7 +22,14 @@ venv/
 
 # Claude Code — worktrees temporários e settings locais
 .claude/worktrees/
-.claude/settings.local.jsonbenchmark/results*.json
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Benchmark — saídas geradas
+benchmark/results*.json
+
+# SRD 5e — baixado via `make ingest-rules`, grande e regenerável
+srd_data/
 
 # SQLite local
 voxdm.db
