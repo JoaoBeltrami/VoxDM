@@ -166,18 +166,41 @@ export function CharacterForm({ onChange }: Props) {
   const [nivel] = useState(3);
   const [localId, setLocalId] = useState("");
 
-  // "array" = Standard Array picker (15/14/13/12/10/8)
-  // "rolado" = 4d6 drop lowest, valores fixos por atributo
-  const [modoAtributos, setModoAtributos] = useState<"array" | "rolado">("array");
+  // "array"          = Standard Array picker (15/14/13/12/10/8)
+  // "rolado-auto"    = 4d6 drop lowest, distribuído por prioridade de classe
+  // "rolado-manual"  = 4d6 drop lowest, jogador atribui via selects da pool (Task 3)
+  const [modoAtributos, setModoAtributos] = useState<"array" | "rolado-auto" | "rolado-manual">("array");
 
   const [scores, setScores] = useState<Record<AtribKey, number>>({
     str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
   });
 
+  // Pool de valores 4d6 rolados — usado em modo "rolado-manual" pra que o jogador
+  // possa decidir qual rolagem vai pra qual atributo (com bag-of-values: cada
+  // valor pode ser atribuído uma vez, ainda que dois dados tenham caído iguais).
+  const [valoresRolados, setValoresRolados] = useState<number[]>([]);
+
+  // Conta multiset de valores ainda disponíveis (rolados − usados).
+  // Usado pra popular os selects em rolado-manual sem duplicar quando há ties.
+  const valoresUsadosManual = modoAtributos === "rolado-manual"
+    ? ATRIBS.map(a => scores[a.key]).filter(v => v > 0)
+    : [];
+  const remainingRolados = (() => {
+    if (modoAtributos !== "rolado-manual") return [];
+    const usados = [...valoresUsadosManual];
+    const restante: number[] = [];
+    for (const v of valoresRolados) {
+      const idx = usados.indexOf(v);
+      if (idx >= 0) usados.splice(idx, 1);
+      else restante.push(v);
+    }
+    return restante.sort((a, b) => b - a);
+  })();
+
   const assignedValues = Object.values(scores).filter(v => v > 0);
   const remainingValues = modoAtributos === "array"
     ? ARRAY_PADRAO.filter(v => !assignedValues.includes(v))
-    : [];
+    : remainingRolados;
   const allAssigned = assignedValues.length === 6;
 
   const assignScore = (key: AtribKey, value: number) => {
@@ -193,7 +216,27 @@ export function CharacterForm({ onChange }: Props) {
     const novos: Record<AtribKey, number> = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
     ordem.forEach((k, i) => { novos[k] = rolados[i]; });
     setScores(novos);
-    setModoAtributos("rolado");
+    setValoresRolados(rolados);
+    setModoAtributos("rolado-auto");
+  };
+
+  // Task 3: alterna entre auto (priorizado pela classe) e manual (jogador atribui).
+  // Em manual: zera os scores, mantém o pool 4d6 já rolado, e o jogador usa
+  // selects pra colocar cada valor onde quiser.
+  const alternarRolagemManual = () => {
+    if (modoAtributos === "rolado-manual") {
+      // Voltar pra auto: redistribui usando prioridade de classe
+      const ordem: AtribKey[] = PRIORIDADE_POR_CLASSE[classe] ?? ["str","dex","con","int","wis","cha"];
+      const ordenados = [...valoresRolados].sort((a, b) => b - a);
+      const novos: Record<AtribKey, number> = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+      ordem.forEach((k, i) => { novos[k] = ordenados[i] ?? 0; });
+      setScores(novos);
+      setModoAtributos("rolado-auto");
+    } else {
+      // Ir pra manual: zera os slots, mantém o pool intacto
+      setScores({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 });
+      setModoAtributos("rolado-manual");
+    }
   };
 
   // Personagem completo aleatório — raça, classe, background, atributos.
@@ -213,11 +256,13 @@ export function CharacterForm({ onChange }: Props) {
     const novos: Record<AtribKey, number> = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
     ordem.forEach((k, i) => { novos[k as AtribKey] = rolados[i]; });
     setScores(novos);
-    setModoAtributos("rolado");
+    setValoresRolados(rolados);
+    setModoAtributos("rolado-auto");
   };
 
   const resetarParaArray = () => {
     setScores({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 });
+    setValoresRolados([]);
     setModoAtributos("array");
   };
 
@@ -349,15 +394,31 @@ export function CharacterForm({ onChange }: Props) {
             >
               🎲 Rolar 4d6↓
             </button>
-            {modoAtributos === "rolado" && (
-              <button
-                type="button"
-                onClick={resetarParaArray}
-                title="Voltar para o Standard Array (15, 14, 13, 12, 10, 8)"
-                className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300"
-              >
-                array
-              </button>
+            {(modoAtributos === "rolado-auto" || modoAtributos === "rolado-manual") && (
+              <>
+                <button
+                  type="button"
+                  onClick={alternarRolagemManual}
+                  title={modoAtributos === "rolado-manual"
+                    ? "Voltar para distribuição automática (priorizada pela classe)"
+                    : "Distribuir manualmente: arraste os valores rolados pros atributos"}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
+                    modoAtributos === "rolado-manual"
+                      ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                      : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                  }`}
+                >
+                  {modoAtributos === "rolado-manual" ? "✋ manual" : "✋ distribuir"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetarParaArray}
+                  title="Voltar para o Standard Array (15, 14, 13, 12, 10, 8)"
+                  className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300"
+                >
+                  array
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -367,12 +428,25 @@ export function CharacterForm({ onChange }: Props) {
             Standard array: <span className="text-zinc-500">15, 14, 13, 12, 10, 8</span>
           </p>
         )}
-        {modoAtributos === "rolado" && allAssigned && (
+        {modoAtributos === "rolado-auto" && allAssigned && (
           <p className="mb-1.5 text-[10px] text-amber-500/80">
             Rolado: <span className="text-amber-400 font-mono">{
               ATRIBS.map(a => scores[a.key]).sort((a, b) => b - a).join(", ")
-            }</span> · total {ATRIBS.reduce((s, a) => s + scores[a.key], 0)}
+            }</span> · total {ATRIBS.reduce((s, a) => s + scores[a.key], 0)} · auto pela classe
           </p>
+        )}
+        {modoAtributos === "rolado-manual" && (
+          <div className="mb-1.5 flex items-center gap-2 text-[10px]">
+            <span className="text-amber-500/80">Pool:</span>
+            <span className="font-mono text-amber-400">
+              {[...valoresRolados].sort((a, b) => b - a).join(", ")}
+            </span>
+            {remainingRolados.length > 0 && (
+              <span className="text-violet-400">
+                · restam: <span className="font-mono">{remainingRolados.join(", ")}</span>
+              </span>
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-3 gap-1.5">
@@ -401,15 +475,20 @@ export function CharacterForm({ onChange }: Props) {
                   </span>
                 </div>
 
-                {modoAtributos === "array" ? (
+                {modoAtributos === "array" || modoAtributos === "rolado-manual" ? (
                   <select
                     value={valor || ""}
                     onChange={e => assignScore(key, Number(e.target.value))}
-                    className="w-full rounded border border-zinc-700 bg-zinc-900 py-0.5 text-center text-xs text-zinc-200 outline-none focus:border-violet-500"
+                    className={`w-full rounded border bg-zinc-900 py-0.5 text-center text-xs outline-none focus:border-violet-500 ${
+                      modoAtributos === "rolado-manual"
+                        ? "border-amber-800/60 text-amber-200 font-bold"
+                        : "border-zinc-700 text-zinc-200"
+                    }`}
                   >
                     <option value="">—</option>
-                    {disponiveis.map(v => (
-                      <option key={v} value={v}>{v}</option>
+                    {disponiveis.map((v, i) => (
+                      // key precisa ser único — ties no pool (ex: dois 14) causam warning sem o índice
+                      <option key={`${v}-${i}`} value={v}>{v}</option>
                     ))}
                   </select>
                 ) : (
@@ -424,7 +503,7 @@ export function CharacterForm({ onChange }: Props) {
           })}
         </div>
 
-        {modoAtributos === "array" && remainingValues.length > 0 && (
+        {(modoAtributos === "array" || modoAtributos === "rolado-manual") && remainingValues.length > 0 && (
           <p className="mt-1.5 text-xs text-zinc-600">
             Disponíveis: {remainingValues.join(", ")}
           </p>

@@ -55,9 +55,13 @@ class QdrantMemoryClient:
 
     def _get_client(self) -> QdrantClient:
         if self._client is None:
+            # check_compatibility=False silencia o UserWarning do qdrant-client
+            # ao falhar GET /version no Qdrant Cloud (rota não exposta no free tier).
+            # O check é apenas informativo — desligar não afeta queries.
             self._client = QdrantClient(
                 url=settings.QDRANT_URL,
                 api_key=settings.QDRANT_API_KEY,
+                check_compatibility=False,
             )
         return self._client
 

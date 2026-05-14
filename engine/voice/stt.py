@@ -64,8 +64,6 @@ def _obter_whisper() -> Any:
     if _whisper_singleton is None:
         with _whisper_lock:
             if _whisper_singleton is None:
-                import os
-                os.environ["HF_HUB_OFFLINE"] = "0"  # embedder.py seta 1; whisper precisa baixar
                 from faster_whisper import WhisperModel
                 _whisper_singleton = WhisperModel(
                     WHISPER_MODEL,

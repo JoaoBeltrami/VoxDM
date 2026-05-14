@@ -205,28 +205,32 @@ class Neo4jMemoryClient:
             return []
         driver = await self._get_driver()
         async with driver.session() as session:
+            # Usamos properties(n) em vez de referenciar n.gender / n.race
+            # diretamente. Quando essas chaves não existem em nenhum nó da
+            # base, o Neo4j emite warnings 01N52 (UNRECOGNIZED) a cada query,
+            # spammando o log durante a gravação. Ler todas as propriedades
+            # e extrair no Python evita o aviso e é gratuito em custo.
             result = await session.run(
                 """
                 UNWIND $ids AS eid
                 MATCH (n {id: eid})
-                RETURN n.id       AS id,
-                       n.name     AS name,
-                       coalesce(n.gender, '') AS gender,
-                       coalesce(n.race,   '') AS race
+                RETURN n.id AS id, n.name AS name, properties(n) AS props
                 """,
                 {"ids": ids},
             )
             registros = await result.data()
 
-        dados: list[dict[str, Any]] = [
-            {
+        dados: list[dict[str, Any]] = []
+        for r in registros:
+            if not r.get("id"):
+                continue
+            props = r.get("props") or {}
+            dados.append({
                 "id":     r["id"] or "",
                 "name":   r["name"] or "",
-                "gender": r["gender"] or "",
-                "race":   r["race"] or "",
-            }
-            for r in registros if r.get("id")
-        ]
+                "gender": str(props.get("gender") or ""),
+                "race":   str(props.get("race") or ""),
+            })
         log.info("neo4j_dados_npcs", total=len(dados))
         return dados
 

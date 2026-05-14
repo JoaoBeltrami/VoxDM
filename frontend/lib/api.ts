@@ -176,3 +176,33 @@ export async function salvarEstadoPersonagem(session_id: string, state: Characte
     body: JSON.stringify(state),
   });
 }
+
+// ── LLM backend toggle ─────────────────────────────────────────────────────
+// "auto" deixa a cascata default rolar. Os outros valores põem aquele provider
+// como primeiro da cascata; se ele falhar com erro recuperável, a cascata
+// continua normalmente (não trava em "USE APENAS X").
+export type LlmBackend = "auto" | "groq" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
+
+export async function obterLlmBackend(session_id: string): Promise<LlmBackend | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/session/${session_id}/llm-backend`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return (data.backend as LlmBackend) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function trocarLlmBackend(session_id: string, backend: LlmBackend): Promise<boolean> {
+  try {
+    const resp = await fetch(`${API_BASE}/session/${session_id}/llm-backend`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ backend }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}

@@ -18,6 +18,32 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
     # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
     LLM_BACKEND: str = "groq"
+
+    # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
+    # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
+    GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"
+    GEMINI_API_KEY_V2: str = ""           # 1 chave (legado, usado se KEYS vazio)
+    # Múltiplas chaves Gemini separadas por vírgula. Cada chave gerada num
+    # projeto Google Cloud diferente tem quota free SEPARADA (1500 RPD por
+    # projeto). 3 chaves de 3 projetos = 4500 RPD ≈ infinito pra um jogador.
+    # Quando uma chave estoura 429, o provider cicla pra próxima sem cascata.
+    GEMINI_API_KEYS: str = ""
+    # gemini-2.5-flash-lite: não tem thinking budget (não corta output) e tem
+    # quota free fresca por modelo. 2.5-flash "full" trunca em max_tokens baixo
+    # porque o budget é consumido pelo reasoning interno antes do texto visível.
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    # Lista de modelos Gemini a tentar (separados por vírgula) ANTES de
+    # cascatear pro próximo provider. Cada modelo tem cota separada.
+    # gemini-flash-latest também responde sem thinking budget e tem quota
+    # própria — bom segundo modelo dentro do mesmo provider.
+    # 2.5-lite e 3.1-lite são as únicas variantes SEM thinking budget (output
+    # completo a max_tokens=400). flash-latest e 2.5-flash "full" trazem
+    # thinking interno que consome o orçamento antes do texto visível.
+    GEMINI_MODELS: str = "gemini-2.5-flash-lite,gemini-3.1-flash-lite"
+    # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
+    LLM_PROVIDER_TIMEOUT: float = 30.0
+    # Timeout reduzido pra Ollama no health check inicial (não trava cascata se down).
+    OLLAMA_HEALTH_TIMEOUT: float = 3.0
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False

@@ -24,6 +24,7 @@ import structlog
 
 from config import settings
 from engine.llm.groq_client import GroqClient
+from engine.llm.tasks import TaskType
 from engine.memory.working_memory import WorkingMemory
 from engine.memory.qdrant_client import QdrantMemoryClient
 
@@ -68,8 +69,12 @@ async def _resumir_via_groq(working_mem: WorkingMemory) -> str:
 
     try:
         groq = GroqClient()
-        resumo = await groq.completar(mensagens, temperatura=0.4, max_tokens=512)
-        log.info("resumo_gerado_groq", chars=len(resumo))
+        # Resumo prioriza Gemini (cota grande, excelente em síntese) — evita
+        # estourar TPD do Groq com tarefas auxiliares ao encerrar sessão.
+        resumo = await groq.completar(
+            mensagens, temperatura=0.4, max_tokens=512, task=TaskType.SUMMARIZATION,
+        )
+        log.info("resumo_gerado_llm", chars=len(resumo))
         return resumo
     except Exception as e:
         log.warning("resumo_groq_falhou_usando_dialogo", erro=str(e))

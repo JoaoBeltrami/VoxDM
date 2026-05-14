@@ -298,7 +298,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     try:
         async for token in sessao.groq.completar_stream(
-            mensagens_intro, temperatura=0.8, max_tokens=150
+            mensagens_intro, temperatura=0.8, max_tokens=300
         ):
             resposta_intro += token
             await websocket.send_text(
@@ -571,7 +571,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             try:
                 async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=200
+                    mensagens, temperatura=0.8, max_tokens=400
                 ):
                     resposta_completa += token
                     if latencia_primeiro_token < 0:

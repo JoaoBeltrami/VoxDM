@@ -24,6 +24,19 @@ import structlog
 
 from config import settings
 
+
+class _FiltroDebugAccess(logging.Filter):
+    """Suprime logs de acesso uvicorn para rotas /debug/* — ruído puro durante
+    gravação porque o dashboard Streamlit faz polling de 500ms-2s desses
+    endpoints. Mantemos as rotas funcionais; só não logamos cada GET.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "/debug/" in msg and ("GET" in msg or "POST" in msg):
+            return False
+        return True
+
 _LOG_DIR = Path(__file__).parent.parent / ".internal"
 _LOG_PATH = _LOG_DIR / "voxdm.log"
 # 5 MB por arquivo, 3 backups — 20 MB total de teto. Suficiente pra rastrear
@@ -93,5 +106,10 @@ def configurar() -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+    # Cura de log: silencia GET/POST de /debug/* (polling do dashboard).
+    # Mantemos os logs estruturados de erro/turno que vêm via structlog.
+    filtro_debug = _FiltroDebugAccess()
+    logging.getLogger("uvicorn.access").addFilter(filtro_debug)
 
     configurar._aplicado = True  # type: ignore[attr-defined]

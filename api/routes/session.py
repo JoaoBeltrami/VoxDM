@@ -323,6 +323,35 @@ async def status_sessao(session_id: str) -> SessaoInfo:
     return _serializar_info(_get_sessao(session_id))
 
 
+@router.get("/{session_id}/llm-backend")
+async def obter_llm_backend(session_id: str) -> dict[str, str]:
+    """Retorna o backend LLM efetivo desta sessão ("groq" ou "ollama")."""
+    sessao = _get_sessao(session_id)
+    return {"backend": sessao.groq.backend_efetivo}
+
+
+@router.put("/{session_id}/llm-backend", status_code=204)
+async def trocar_llm_backend(session_id: str, payload: dict[str, str]) -> None:
+    """Altera o backend LLM desta sessão em tempo real.
+
+    Aceita ``{"backend": "groq" | "ollama" | "auto"}`` — "auto" remove o
+    override e volta a usar ``settings.LLM_BACKEND``. Útil para o frontend
+    permitir trocar de provedor sem reiniciar a sessão (ex: após 429 TPD).
+    """
+    sessao = _get_sessao(session_id)
+    backend = payload.get("backend", "").strip().lower()
+    if backend in ("", "auto", "default"):
+        sessao.groq.set_backend(None)
+        return
+    valores_aceitos = {"groq", "groq-70b", "groq-8b", "gemini", "ollama"}
+    if backend not in valores_aceitos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"backend inválido — use um de {sorted(valores_aceitos)} ou 'auto'",
+        )
+    sessao.groq.set_backend(backend)
+
+
 @router.get("/{session_id}/character", response_model=CharacterStateSchema)
 async def obter_character_state(session_id: str) -> CharacterStateSchema:
     """Retorna o estado atual do personagem (spell slots, gold, XP, etc.)."""
