@@ -615,13 +615,20 @@ export default function Home() {
               Sessão iniciada — aguardando o mestre...
             </p>
           )}
-          <MasterResponse historico={historico} respostaAtual={respostaAtual} playerName={playerName} />
+          <MasterResponse
+            historico={historico}
+            respostaAtual={respostaAtual}
+            playerName={playerName}
+            mestrePensando={carregando}
+          />
           <div ref={bottomRef} />
         </div>
 
         <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
-          {/* Toolbar de dados — aparece na vez do jogador. Some em cinema mode. */}
-          {!cinemaMode && (() => {
+          {/* Toolbar de dados — aparece na vez do jogador.
+              Cinema mode preserva o essencial (d20 contextual + manual + motivo)
+              e esconde só a linha d4-d12 (uso esporádico fora de combate). */}
+          {(() => {
             const ultimaFala = historico.length > 0
               ? historico[historico.length - 1].mestre
               : "";
@@ -706,19 +713,21 @@ export default function Home() {
                     ▼d20
                   </button>
                 </div>
-                {/* Linha dano */}
-                <div className="flex items-center gap-1.5">
-                  {([4, 6, 8, 10, 12, 100] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => rolarDano(f)}
-                      title={`Rolar d${f}`}
-                      className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
-                    >
-                      d{f}
-                    </button>
-                  ))}
-                </div>
+                {/* Linha dano — só fora de cinema mode (uso esporádico). */}
+                {!cinemaMode && (
+                  <div className="flex items-center gap-1.5">
+                    {([4, 6, 8, 10, 12, 100] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => rolarDano(f)}
+                        title={`Rolar d${f}`}
+                        className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
+                      >
+                        d{f}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Task 2: motivo do check — frase recente do mestre que disparou o pedido */}
                 {motivoCheck && (
                   <p className="max-w-md px-2 text-center text-[11px] italic leading-snug text-zinc-500">

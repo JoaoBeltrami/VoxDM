@@ -6,6 +6,10 @@ interface Props {
   historico: TurnoHistorico[];
   respostaAtual: string;
   playerName?: string | null;
+  /** True quando o jogador enviou um comando mas o LLM ainda não emitiu o primeiro
+   *  token. Mascara o gap silencioso (2-6s no Gemini) com uma bolha de 3 pontinhos
+   *  pulsantes — espectador entende que o Mestre está pensando, não que travou. */
+  mestrePensando?: boolean;
 }
 
 // Quebra a resposta do mestre em múltiplos balões.
@@ -38,7 +42,7 @@ function dividirEmBaloes(texto: string): string[] {
   return baloes.length > 0 ? baloes : [trim];
 }
 
-export function MasterResponse({ historico, respostaAtual, playerName }: Props) {
+export function MasterResponse({ historico, respostaAtual, playerName, mestrePensando = false }: Props) {
   return (
     <div className="flex flex-col gap-4 overflow-y-auto">
       {historico.map((turno) => (
@@ -110,6 +114,21 @@ export function MasterResponse({ historico, respostaAtual, playerName }: Props) 
           })()}
         </div>
       ))}
+
+      {/* Indicador "Mestre pensando" — preenche o gap entre enviar e primeiro
+          token (~2-6s no Gemini). Some instantaneamente quando o stream começa. */}
+      {mestrePensando && !respostaAtual && (
+        <div
+          className="self-start rounded-xl bg-zinc-800/80 px-4 py-3"
+          aria-label="Mestre pensando"
+        >
+          <span className="inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:200ms]" />
+            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:400ms]" />
+          </span>
+        </div>
+      )}
 
       {/* Token streaming em tempo real */}
       {respostaAtual && (

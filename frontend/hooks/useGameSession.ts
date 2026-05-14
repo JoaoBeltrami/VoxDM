@@ -12,6 +12,28 @@ import {
 } from "@/lib/api";
 import { useAudio } from "@/hooks/useAudio";
 
+/** Converte erros técnicos vindos do server em frases narrativas pro jogador.
+ *  O erro bruto continua acessível via console pra debug — mas a tela mantém
+ *  imersão durante gravação. Casos cobertos: cascata LLM esgotada, rate limit
+ *  específico, conexão derrubada, erro de prompt. Default: aviso genérico. */
+function narrarErro(bruto: string): string {
+  const b = bruto.toLowerCase();
+  if (b.includes("todos os providers") || b.includes("llm falhou") || b.includes("cascata")) {
+    return "O Mestre cerra os olhos por um instante, reordenando a história. Aguarde alguns segundos e tente novamente.";
+  }
+  if (b.includes("rate limit") || b.includes("429") || b.includes("quota")) {
+    return "O Mestre precisa de um respiro. Refaça sua ação em instantes.";
+  }
+  if (b.includes("conexão") || b.includes("connect") || b.includes("websocket")) {
+    return "A conexão com o Mestre vacila. Refaça a ação assim que reconectar.";
+  }
+  if (b.includes("timeout") || b.includes("indisponível")) {
+    return "O Mestre demora demais para responder. Pode ser uma boa hora para um gole d'água.";
+  }
+  // Erro desconhecido — mantém o texto bruto mas com prefixo narrativo
+  return `Algo se desviou nas tramas da narrativa. (${bruto.slice(0, 80)})`;
+}
+
 export interface TurnoHistorico {
   id: number;
   jogador: string;   // "" quando é mensagem de abertura do mestre
@@ -334,7 +356,15 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "erro") {
-        setEstado(s => ({ ...s, erro: msg.conteudo ?? "Erro desconhecido", carregando: false }));
+        // Erro técnico vai pro console (e logs do server); ao jogador
+        // apresentamos uma frase narrativa pra não quebrar imersão na gravação.
+        const erroBruto = msg.conteudo ?? "Erro desconhecido";
+        console.warn("[VoxDM] erro recebido:", erroBruto);
+        setEstado(s => ({
+          ...s,
+          erro: narrarErro(erroBruto),
+          carregando: false,
+        }));
         textoAtualRef.current = "";
         turnoAtualRef.current = null;
       }
