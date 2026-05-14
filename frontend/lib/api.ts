@@ -99,6 +99,9 @@ export interface PersonagemConfig {
   player_race?: string;
   player_class?: string;
   player_background?: string;
+  // Descrição livre do personagem (até 600 chars) — molda a abertura narrativa.
+  // Opcional: quando vazio, mestre improvisa só com nome/raça/classe.
+  player_description?: string;
   player_level?: number;
   player_hp?: number;
   player_hp_max?: number;

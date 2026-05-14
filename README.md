@@ -267,6 +267,9 @@ Hoje o texto streama instantâneo e o áudio Edge TTS atrasa 800ms-1.5s. Buffer 
 **Fase 5.7 — Dados visuais com escolha de visibilidade**
 Espelha duas ferramentas reais de mestre de mesa. Jogador sempre vê dado rolando na UI antes do resultado (construção de tensão). Mestre escolhe entre 3 modos: **aberto** (animação + número), **resultado apenas** (só o valor), **narrado sem número** (só descreve consequência). É o equivalente do *roll behind the screen* — controle dramático que mestres reais usam. Toggle global ou parte do `dm_profile`.
 
+**Fase 5.8 — Imagem ambiente gerada por IA**
+Quando troca de local ou entra combate, o LLM gera uma prompt curta de imagem (ex: *"Vila Drevamor, noite fria de inverno, taverna iluminada, fantasy art, atmosfera tensa"*) e dispara pro provider. Imagem aparece como fundo difuso em `<main>` ou em painel lateral, trocando com fade quando muda a cena. Preserva o DNA "100% voz" — não vira simulador de tabuleiro. Provedores: **Pollinations.ai** primário (free sem cadastro, ~5-10s, backend SDXL), **HuggingFace Inference** secundário, **SDXL local** opcional pra quem quiser controle total. Cascata análoga à do LLM. Não bloqueia o jogo se falhar.
+
 ### Médio prazo
 
 **Fase 6 — Mecânicas D&D 5e completas**
@@ -281,6 +284,7 @@ Hoje a engine **narra** magias mas não **aplica mecânica**. SRD 5e já ingesta
 
 ### Longo prazo
 
+- **Fase 8 — Mini-tactical grid próprio**: Canvas 8×8 ou 12×12 só em combate. Tokens automáticos baseados em `inimigos_combate` + jogador, posições estimadas pelo LLM. Mostra movimentação, área de magias (Bola de Fogo em 20 pés visualizada). Só faz sentido depois da Fase 6 (mecânicas D&D) — aí o grid tem valor mecânico real, não só estético.
 - App mobile (React Native ou Flutter) após engine validada e canal monetizado
 - Múltiplos jogadores na mesma sessão via WebRTC
 - Curse of Strahd (adiado — copyright; só depois da engine validada com módulo original "Os Filhos de Valdrek")

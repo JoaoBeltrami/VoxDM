@@ -103,6 +103,7 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
         player_race=config.player_race,
         player_class=config.player_class,
         player_background=config.player_background,
+        player_description=config.player_description,
         player_level=config.player_level,
         tts_voice=config.tts_voice,
         dm_profile=config.dm_profile,

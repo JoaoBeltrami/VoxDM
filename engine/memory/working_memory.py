@@ -79,6 +79,11 @@ class WorkingMemory:
     player_race: str
     player_class: str
     player_background: str
+    # Descrição livre opcional escrita pelo jogador na criação (até ~600 chars).
+    # Inclui personalidade, motivação, aparência, segredos. Usado em
+    # `_enviar_abertura` pra moldar o tom da intro narrativa, e nada mais
+    # (não vai no prompt de cada turno pra não inflar tokens).
+    player_description: str
     player_level: int
 
     # Estado do jogador
@@ -174,6 +179,7 @@ class WorkingMemory:
         player_race: str = "",
         player_class: str = "",
         player_background: str = "",
+        player_description: str = "",
         player_level: int = 1,
         tts_voice: str = "pt-BR-FranciscaNeural",
         dm_profile: str = "equilibrado",
@@ -216,6 +222,7 @@ class WorkingMemory:
             player_race=player_race,
             player_class=player_class,
             player_background=player_background,
+            player_description=player_description,
             player_level=player_level,
             player_hp=player_hp,
             player_hp_max=player_hp_max,

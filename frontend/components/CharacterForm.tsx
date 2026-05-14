@@ -163,6 +163,11 @@ export function CharacterForm({ onChange }: Props) {
   const [raca, setRaca] = useState("");
   const [classe, setClasse] = useState("");
   const [background, setBackground] = useState("");
+  // Descrição livre do personagem — opcional. Quando preenchida, o Mestre
+  // usa pra moldar a abertura narrativa (motivação, segredos, aparência).
+  // Limite de 600 chars previne abuso e estouro de tokens na intro.
+  const DESC_MAX = 600;
+  const [descricao, setDescricao] = useState("");
   const [nivel] = useState(3);
   const [localId, setLocalId] = useState("");
 
@@ -288,6 +293,7 @@ export function CharacterForm({ onChange }: Props) {
       player_race:       raca,
       player_class:      classe,
       player_background: background,
+      player_description: descricao.trim(),
       player_level:      nivel,
       player_hp:         hpFinal,
       player_hp_max:     hpFinal,
@@ -302,7 +308,7 @@ export function CharacterForm({ onChange }: Props) {
       skill_profs: allSkills,
       save_profs:  CLASS_SAVES[classe] ?? [],
     });
-  }, [nome, raca, classe, background, nivel, localId, scores]);
+  }, [nome, raca, classe, background, descricao, nivel, localId, scores]);
 
   return (
     <div className="w-full space-y-4 text-left">
@@ -379,6 +385,26 @@ export function CharacterForm({ onChange }: Props) {
           <option value="">— Escolher —</option>
           {BACKGROUNDS_DND.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
+      </div>
+
+      {/* Descrição livre — opcional. Molda a abertura narrativa do Mestre. */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs text-zinc-400">
+            Quem é seu personagem?
+            <span className="ml-1 text-[10px] text-zinc-600">(opcional)</span>
+          </label>
+          <span className={`text-[10px] ${descricao.length > DESC_MAX * 0.9 ? "text-amber-400" : "text-zinc-600"}`}>
+            {descricao.length}/{DESC_MAX}
+          </span>
+        </div>
+        <textarea
+          value={descricao}
+          onChange={e => setDescricao(e.target.value.slice(0, DESC_MAX))}
+          placeholder="Aparência, personalidade, motivação, segredo... O mestre usa pra moldar sua entrada na cena."
+          rows={3}
+          className="w-full resize-none rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs leading-relaxed text-zinc-100 outline-none focus:border-violet-500"
+        />
       </div>
 
       {/* Atributos — Standard Array OU 4d6 drop lowest */}

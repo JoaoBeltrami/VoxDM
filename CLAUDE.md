@@ -66,6 +66,13 @@ Espelha duas ferramentas reais de mestre na mesa:
 - Backend: parse de marcadores `[Rolagem interna: dX = Y]` vs `[Rolagem visível: dX = Y]` na resposta do LLM
 - Reproduz autoridade real de mestre de mesa. Espectador percebe textura diferente — "roll behind the screen" é parte fundamental do hobby, sistema atual nenhum imita bem
 
+**Fase 5.8 — Imagem ambiente gerada por IA por cena**
+Preserva DNA "100% voz" + adiciona visual. Quando troca `location_id` ou entra combate, LLM gera prompt curto de imagem ("Vila Drevamor, noite fria, taverna, fantasy art, atmosfera tensa") via task type novo `IMAGE_PROMPT` (cascata: 8B → Gemini). Imagem aparece como fundo `<main>` (blur+opacity) ou painel lateral, troca com fade. Providers em ordem de preferência:
+- **Pollinations.ai** (primário): free, sem cadastro, sem API key — `https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=576&model=flux`. Backend SDXL. Latência ~5-10s.
+- **HuggingFace Inference** (secundário): free com rate limit. Precisa de `HF_TOKEN` opcional.
+- **SDXL local** (terciário): roda na GPU mesma do Whisper. ~15-30s na RTX 2060. Controle total.
+Não bloqueia jogo: async fire-and-forget; se falhar, fundo permanece o anterior. Cacheia por hash do prompt (mesma cena = mesma imagem na sessão).
+
 **Fase 6 — Mecânicas D&D 5e completas**
 Hoje o LLM narra magias bonito mas não aplica mecânica. SRD 5e já indexado em `voxdm_rules` mas usado só como contexto narrativo. Próximos passos:
 1. **Spell detector**: regex de gatilho "lanço/conjuro/uso X" → busca Qdrant `voxdm_rules` por X → extrai (CD save, dano, área, nível) → injeta no prompt como bloco obrigatório de mecânica
@@ -75,6 +82,9 @@ Hoje o LLM narra magias bonito mas não aplica mecânica. SRD 5e já indexado em
 5. **Multiclass**: stretch — `player_class` vira `list[ClasseNivel]`
 
 **Fase 7 — App mobile** (React Native ou Flutter) — só depois da engine validada e canal monetizado.
+
+**Fase 8 — Mini-tactical grid próprio**
+Só faz sentido DEPOIS da Fase 6 (mecânicas) — aí o grid tem valor mecânico (movimento, área de magias). Canvas próprio em `<TacticalGrid />`, 8×8 ou 12×12 quadrados, aparece só em combate. Tokens automáticos baseados em `inimigos_combate` + jogador. Posições iniciais auto-arranjadas (3-6 quadrados do jogador, depende do tipo de inimigo: arqueiro longe, melee perto). LLM pode propor movimentação via tag `[Token: goblin moves 2N]` parseada pelo frontend. NÃO é VTT completo — é "grid de combate VoxDM-specific", focado em ser limpo + cinematográfico, não em substituir Foundry/Roll20. VTTs free com API decente não existem (Foundry $50, Roll20 Pro pago, Owlbear sem API externa). Tactical grid próprio é melhor que bridge frágil.
 
 **Adiado:** Curse of Strahd (copyright — só com engine validada com módulo original).
 

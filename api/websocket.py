@@ -270,6 +270,12 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             + (f", background {wm.player_background}" if wm.player_background else "")
             + f". Nível {wm.player_level}."
         )
+        # Descrição livre do jogador — quando preenchida, vira tempero narrativo
+        # forte na abertura. Não é usada em turnos subsequentes (evita inflar
+        # tokens). Sanitizamos com strip pra não passar quebras de linha cruas.
+        if wm.player_description:
+            desc = wm.player_description.strip().replace("\n", " ")
+            partes.append(f"Sobre o personagem (palavras do jogador): {desc}")
         if wm.active_quest_hooks:
             partes.append(f"Quests: {', '.join(wm.active_quest_hooks)}.")
         if wm.npcs_presentes:

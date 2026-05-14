@@ -37,6 +37,11 @@ class SessaoConfig(BaseModel):
     player_race: str = ""
     player_class: str = ""
     player_background: str = ""
+    # Descrição livre do personagem (opcional, max 600 chars) — passado por
+    # texto pelo jogador na criação. Quando preenchido, o LLM usa pra moldar
+    # a abertura: traços, segredos, motivações, aparência. NÃO substitui
+    # classe/raça — é tempero narrativo. Limite previne abuso e estouro de tokens.
+    player_description: str = Field(default="", max_length=600)
     player_level: int = Field(default=3, ge=1, le=20)  # personagens começam no nível 3
     # Continuação de sessão anterior — pré-popula trust_levels e quest_stages
     session_anterior_id: str | None = None
