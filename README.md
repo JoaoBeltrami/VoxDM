@@ -253,10 +253,34 @@ cd frontend && npx tsc --noEmit
 
 ## Roadmap
 
-- **Próximo (Fase 5):** task routing real — trust changes, condições D&D, extração de entidades via LLM (hoje regex)
-- **Médio prazo:** múltiplos perfis de DM (Rigoroso / Equilibrado / Tranquilo / Rule of Cool) com overlays de prompt
-- **Longo prazo:** app mobile (React Native ou Flutter); múltiplos jogadores na mesma sessão
-- **Adiado:** Curse of Strahd (copyright — só depois da engine validada com módulo original)
+### Próximo
+
+**Fase 5 — Task routing real via LLM**
+Trust changes, condições D&D auto-detectadas e extração de entidades hoje rodam via regex em pt-BR. A fundação (`TaskType` enum + cascata por tarefa) já está pronta — falta plugar Groq 8B/Gemini nos lugares onde regex erra (sintaxe não óbvia, contexto sutil).
+
+**Fase 5.5 — Áudio de "pensamento" (zero-silêncio)**
+Cache de ~25 frases curtas pré-sintetizadas (`"Hmm…"`, `"Um momento."`, `"Vejamos."`) em RAM no servidor. Quando o primeiro token do LLM não chega em 1.2s, dispara áudio random de thinking — mascarando 100% da latência percebida. Mestres humanos fazem isso na mesa; soa natural. Variantes por contexto (pós-rolagem / pós-pergunta-NPC / combate) e voz do NPC ativo na v2.
+
+**Fase 5.6 — Sincronização texto-voz (karaokê reverso)**
+Hoje o texto streama instantâneo e o áudio Edge TTS atrasa 800ms-1.5s. Buffer de tokens + revelação progressiva no ritmo da fala, mantendo o texto **300ms à frente** do áudio. Ilusão de que a voz está digitando, não o contrário. Implementação via `AudioBufferSourceNode.duration` e `requestAnimationFrame`.
+
+### Médio prazo
+
+**Fase 6 — Mecânicas D&D 5e completas**
+Hoje a engine **narra** magias mas não **aplica mecânica**. SRD 5e já ingestado em `voxdm_rules` (Qdrant) — usado só como contexto narrativo. Próximo passo:
+- Spell detector: "lanço Bola de Fogo" → busca mecânica no Qdrant → injeta no prompt como bloco obrigatório (CD save, dados de dano, área, slot consumido)
+- Subclass picker no `CharacterForm`: Guerreiro → Campeão/Mestre de Batalha/Cavaleiro Místico
+- Spell slot tracker ativo (já existe na `WorkingMemory`, falta detector que decrementa)
+- Class features: Action Surge, Rage, Sneak Attack com chips visíveis na ficha
+- Multiclass: stretch goal
+
+**Múltiplos perfis de DM** (rigoroso/equilibrado/tranquilo/rule_of_cool) — fundação `dm_profile` já existe, falta calibrar overlays.
+
+### Longo prazo
+
+- App mobile (React Native ou Flutter) após engine validada e canal monetizado
+- Múltiplos jogadores na mesma sessão via WebRTC
+- Curse of Strahd (adiado — copyright; só depois da engine validada com módulo original "Os Filhos de Valdrek")
 
 ---
 

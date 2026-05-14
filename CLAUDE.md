@@ -32,7 +32,40 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
   - **Engine tuning**: `MAX_DIALOGOS` 8→6 (abre espaço pra Groq 8B caber no TPM 6000); `max_tokens` 200→400 (frases completas); `_FiltroDebugAccess` no `uvicorn.access` silencia polling `/debug/*` do dashboard; warmup paralelo embedder+whisper+tts no startup (4s totais antes do jogador interagir, vs ~9s espalhados antes).
   - **334/334 testes passam, tsc clean. Branch backup preservada em `backup/pre-filipe-feedback-20260513-175653` no GitHub. README reescrito refletindo estado atual.**
 
-Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado). Fase 5 = task routing real (trust changes, condições D&D, extração de entidades via LLM em vez de regex — fundação `TaskType` já está lá).
+Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado).
+
+### Fases planejadas (não implementadas)
+
+**Fase 5 — Task routing via LLM (em vez de regex)**
+Substituir os regex de `trust_detector.py`, condições auto-detectadas (`useGameSession.ts`), `_RE_ALVO_ATAQUE`/`_RE_INIMIGO_MORTO` etc. por chamadas LLM curtas via `TaskType.CLASSIFICATION` ou `ENTITY_EXTRACTION` (Groq 8B). Cada lugar vira um prompt de 5-15 linhas com output JSON estruturado. Fundação já existe — só plugar.
+
+**Fase 5.5 — Áudio de "pensamento" pra mascarar latência**
+Arquitetura:
+1. Lista de ~25 frases curtas (`"Hmm... deixe-me ver."`, `"Um momento."`, `"Vejamos."`, `"Bom..."`)
+2. Pré-sintetizar todas via Edge TTS no startup (paralelo com warmup atual; ~10s extras, ~5MB RAM)
+3. No websocket, timer de 1.2s desde envio do comando — se primeiro token do LLM não chegou, envia `audio_chunk` random da cache (já pré-sintetizado) pro frontend
+4. Frontend já tem fila sequencial em `useAudio` — thinking audio entra como mais um chunk; áudio real emenda no fim da fila
+Variantes futuras: por contexto (pós-rolagem, pós-pergunta a NPC, combate) e por voz do NPC ativo (usa `voice_manager`). Evitar repetição imediata. Encadear 2 frases se latência > 6s.
+
+**Fase 5.6 — Sincronização texto-voz (karaokê reverso)**
+Hoje tokens do LLM pintam na tela instantâneo (~30/s); áudio TTS atrasa 800ms-1.5s. Texto fica MUITO à frente do áudio. Quero o oposto suave: texto sempre 300ms à frente da fala correspondente. Implementação:
+1. `useGameSession` bufferiza tokens em vez de revelar direto
+2. Quando 1º `audio_chunk` toca, inicia `requestAnimationFrame` loop
+3. Estima `chars/seg` da sentença atual via `AudioBufferSourceNode.duration` ÷ `len(sentenca)`
+4. Revela chars no ritmo, com offset +300ms
+5. Edge cases: sentenças muito curtas (<5 chars) revela tudo; LLM mais lento que TTS = revela no ritmo do LLM mesmo (raro porque LLM termina antes de TTS começar)
+
+**Fase 6 — Mecânicas D&D 5e completas**
+Hoje o LLM narra magias bonito mas não aplica mecânica. SRD 5e já indexado em `voxdm_rules` mas usado só como contexto narrativo. Próximos passos:
+1. **Spell detector**: regex de gatilho "lanço/conjuro/uso X" → busca Qdrant `voxdm_rules` por X → extrai (CD save, dano, área, nível) → injeta no prompt como bloco obrigatório de mecânica
+2. **Subclass picker no `CharacterForm`**: ao escolher classe (ex: Guerreiro), perguntar subclasse (Campeão/Mestre de Batalha/Cavaleiro Místico) — afeta features no system prompt
+3. **Spell slot tracker ativo**: `wm.spell_slots[nivel]` já existe; falta detector que decrementa quando jogador casta, e prompt impedindo casts sem slots
+4. **Class features**: Action Surge (Guerreiro), Rage (Bárbaro), Sneak Attack (Ladino) — chips visíveis na ficha, detector que aplica
+5. **Multiclass**: stretch — `player_class` vira `list[ClasseNivel]`
+
+**Fase 7 — App mobile** (React Native ou Flutter) — só depois da engine validada e canal monetizado.
+
+**Adiado:** Curse of Strahd (copyright — só com engine validada com módulo original).
 
 ---
 
