@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     LLM_PROVIDER_TIMEOUT: float = 30.0
     # Timeout reduzido pra Ollama no health check inicial (não trava cascata se down).
     OLLAMA_HEALTH_TIMEOUT: float = 3.0
+    # Quanto tempo o Ollama mantém o modelo na VRAM após última request.
+    # Default Ollama "5m" causa cold-start de ~20s se o jogador demorar.
+    # "30m" cobre sessão de gravação inteira mantendo first-token em ~1s.
+    # "-1" ou "0" = permanente / nunca / ver docs Ollama.
+    OLLAMA_KEEP_ALIVE: str = "30m"
     WANDB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     DEBUG: bool = False

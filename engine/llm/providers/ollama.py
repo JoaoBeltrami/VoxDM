@@ -33,6 +33,11 @@ class OllamaProvider(BaseLLMProvider):
         self._modelo = settings.OLLAMA_MODEL
         self._base_url = settings.OLLAMA_BASE_URL.rstrip("/")
         self._timeout = settings.LLM_PROVIDER_TIMEOUT
+        # keep_alive controla por quanto tempo o Ollama mantém o modelo na
+        # VRAM após a última request. Default Ollama = "5m" → cold-start de
+        # ~20s no llama3.1:8b se o jogador demorar entre turnos. "30m" cobre
+        # uma sessão de gravação inteira mantendo first-token em ~1s.
+        self._keep_alive = settings.OLLAMA_KEEP_ALIVE
 
     @property
     def disponivel(self) -> bool:
@@ -52,6 +57,7 @@ class OllamaProvider(BaseLLMProvider):
             "messages": mensagens,
             "options": {"temperature": temperatura, "num_predict": max_tokens},
             "stream": False,
+            "keep_alive": self._keep_alive,
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -77,6 +83,7 @@ class OllamaProvider(BaseLLMProvider):
             "messages": mensagens,
             "options": {"temperature": temperatura, "num_predict": max_tokens},
             "stream": True,
+            "keep_alive": self._keep_alive,
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:

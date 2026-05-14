@@ -53,8 +53,11 @@ async def _tarefa_limpeza() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup e shutdown controlados pela engine.
 
-    Os três warmups rodam em paralelo — todos carregam em GPU/disco, sem
-    contender por CPU. Reduz "tempo até primeiro turno" de ~12s para ~5s.
+    Os três warmups críticos (embedder, whisper, tts) rodam em paralelo e
+    bloqueiam o startup — ~4s totais. Ollama é warmupado em background
+    (não bloqueia): se o serviço estiver rodando, carrega o modelo na VRAM
+    enquanto o jogador faz o setup inicial; se não, logo warning e a cascata
+    só descobre na primeira chamada.
     """
     log.info("voxdm_api_iniciando", versao=_VERSAO, debug=settings.DEBUG)
     await asyncio.gather(
@@ -64,8 +67,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     log.info("voxdm_warmup_completo")
     _task_limpeza = asyncio.create_task(_tarefa_limpeza())
+    # Ollama warmup em background — não atrasa o startup. Probe rápido detecta
+    # se vale a pena tentar; depois faz uma mini-completion pra carregar a VRAM.
+    _task_ollama = asyncio.create_task(_warmup_ollama_bg())
     yield
     _task_limpeza.cancel()
+    _task_ollama.cancel()
     log.info("voxdm_api_encerrando", sessoes_abertas=len(_sessoes_ativas()))
 
 
@@ -106,6 +113,41 @@ async def _warmup_whisper() -> None:
         log.info("whisper_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
     except Exception as e:
         log.warning("whisper_warmup_falhou", erro=str(e), dica="primeira transcrição será mais lenta")
+
+
+async def _warmup_ollama_bg() -> None:
+    """Pré-carrega o modelo Ollama na VRAM, **em background, não bloqueante**.
+
+    Fluxo:
+      1. Probe rápido (2s) em /api/version — se Ollama não responde, skip silencioso.
+      2. Dispara mini-completion ("hi") com keep_alive — força o modelo a entrar
+         na VRAM. Pode levar 15-25s no primeiro carregamento de um 8B Q4 numa GPU
+         de 8GB. Como roda em background, o startup da API não espera.
+      3. Após isso, o primeiro fallback Ollama no jogo real entrega em ~1s.
+
+    Falhas são todas absorvidas (log warning) — Ollama é último recurso da
+    cascata; se o jogador não tem instalado, o resto do sistema funciona igual.
+    """
+    import time as _time
+    try:
+        import httpx
+        # Probe rápido pra decidir se vale a pena carregar
+        async with httpx.AsyncClient(timeout=settings.OLLAMA_HEALTH_TIMEOUT) as client:
+            r = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/version")
+            if r.status_code != 200:
+                log.info("ollama_warmup_pulado", motivo=f"version status={r.status_code}")
+                return
+        # Mini-completion pra carregar modelo na VRAM (assíncrono, não bloqueia API)
+        t0 = _time.perf_counter()
+        from engine.llm.providers.ollama import OllamaProvider
+        provider = OllamaProvider()
+        await provider.completar(
+            [{"role": "user", "content": "hi"}],
+            temperatura=0.1, max_tokens=4,
+        )
+        log.info("ollama_warmup_ok", ms=int((_time.perf_counter() - t0) * 1000))
+    except Exception as e:
+        log.info("ollama_warmup_pulado", motivo=str(e)[:120])
 
 
 async def _warmup_tts() -> None:
