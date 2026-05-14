@@ -81,6 +81,14 @@ Hoje o LLM narra magias bonito mas não aplica mecânica. SRD 5e já indexado em
 4. **Class features**: Action Surge (Guerreiro), Rage (Bárbaro), Sneak Attack (Ladino) — chips visíveis na ficha, detector que aplica
 5. **Multiclass**: stretch — `player_class` vira `list[ClasseNivel]`
 
+**Fase 6.5 — Refactor: desafogar WorkingMemory**
+Atacar SÓ depois da Fase 6 (mecânicas D&D), quando spell slots/class features/multiclass vão pedir clemência. Hoje `engine/memory/working_memory.py` é Deus-Objeto carregando jogador + NPCs + trust + faction + diálogo + combate + quests + character state + condições + action economy. Camadas existentes (`episodic_memory`, `semantic_memory`, `context_builder`) estão subutilizadas e existem justamente pra absorver responsabilidade em paralelo. Refactor sugerido:
+- `combat_state.py` novo (inimigos_combate, iniciativa_cache, log_consequencias, rodada_combate) — só vive durante combate
+- `character_state.py` (já existe como SQLite) vira fonte única da verdade do PJ; WorkingMemory consulta, não acumula
+- `episodic_memory` absorve "memória longa" de NPCs e eventos chave
+- `context_builder` orquestra via `asyncio.gather()` em vez de WorkingMemory ser middleman sequencial
+Padrão: facade compat como no LLMRouter — `para_texto()`, `adicionar_dialogo()` preservam contrato; migração interna invisível pros 5+ consumidores. Vinhetas paralelas reduzem latência de montagem de prompt, e cada camada vai pro prompt SÓ se relevante (RAG seletivo, não dump completo). 60+ testes dependem de WorkingMemory hoje — migrar com cuidado.
+
 **Fase 7 — App mobile** (React Native ou Flutter) — só depois da engine validada e canal monetizado.
 
 **Fase 8 — Mini-tactical grid próprio**
