@@ -24,6 +24,13 @@ os.environ.setdefault("QDRANT_API_KEY",      "test-qdrant-key")
 os.environ.setdefault("NEO4J_URI",           "neo4j+s://test.databases.neo4j.io")
 os.environ.setdefault("NEO4J_PASSWORD",      "test-neo4j-password")
 
+# Pula warmups no lifespan da API durante testes: TestClient(app) com context
+# manager dispara o lifespan, e os warmups baixam Whisper (~500MB), carregam
+# embedder e fazem 20 sínteses Edge TTS pra thinking_cache — transformam
+# uma suite de segundos em minutos. Em dev/prod (uvicorn direto) a flag fica
+# vazia e os warmups rodam normalmente.
+os.environ["VOXDM_SKIP_WARMUP"] = "1"
+
 
 # Desabilita rate limiter durante testes — TestClient dispara N requests em
 # sequência, estouraria o limite mesmo em uso legítimo. O limiter continua

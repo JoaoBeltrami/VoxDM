@@ -33,3 +33,4 @@ srd_data/
 
 # SQLite local
 voxdm.db
+engine/voice/_thinking_cache_data/

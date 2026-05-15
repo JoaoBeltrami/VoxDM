@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 14 de maio de 2026
+> Atualizado: 14 de maio de 2026 — Thinking Audio + Histórico de Rolagens
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -31,21 +31,58 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
   - **Gemini multi-key + multi-model**: `GEMINI_API_KEYS=k1,k2,k3` (CSV) — cada chave gerada num projeto Google Cloud distinto tem quota free SEPARADA (1500 RPD por projeto). `GEMINI_MODELS=gemini-2.5-flash-lite,gemini-3.1-flash-lite` — cada modelo tem cota separada por projeto. 3 chaves × 2 modelos = 6 combos internos. Outros modelos Gemini com **thinking budget** (gemini-2.5-flash full, gemini-flash-latest) NÃO usar — consomem max_tokens antes do output visível, entregam só ~40 chars com max=400.
   - **Engine tuning**: `MAX_DIALOGOS` 8→6 (abre espaço pra Groq 8B caber no TPM 6000); `max_tokens` 200→400 (frases completas); `_FiltroDebugAccess` no `uvicorn.access` silencia polling `/debug/*` do dashboard; warmup paralelo embedder+whisper+tts no startup (4s totais antes do jogador interagir, vs ~9s espalhados antes).
   - **334/334 testes passam, tsc clean. Branch backup preservada em `backup/pre-filipe-feedback-20260513-175653` no GitHub. README reescrito refletindo estado atual.**
+- **Thinking Audio + Histórico de Rolagens (14/05)**: ✅ CONCLUÍDO. Sessão de polimento UX antes de mexer em auth.
+  - **Thinking Audio (Fase 5.5)**: `engine/voice/thinking_cache.py` pré-sintetiza 20 frases PT-BR ("Hmm...", "Deixe-me ver.", etc.) via Edge TTS no warmup paralelo (`_warmup_thinking_cache` em `api/main.py`). `_criar_task_thinking()` em `api/websocket.py` agenda envio de `audio_chunk` se o `asyncio.Event` do primeiro token não disparar em 1.2s; plugado em `_enviar_abertura` e no loop principal de turnos, com cleanup via `try/finally`. Cache ~5MB RAM; falhas silenciosas (cache vazio = sem mascaramento, jogo segue).
+  - **Histórico de Rolagens**: `RolagemLog` interface + estado `rolagens: RolagemLog[]` em `useGameSession.ts` (limite 10 últimas). Função `registrarRolagem(tipo, resultado, motivo?)` exposta, plugada nas três funções de dado de `page.tsx` (contextual, d20 manual com vantagem/desvantagem, dado de dano). `CharacterSheet.tsx` ganhou seção colapsável "Últimas rolagens" (5 visíveis) com cor especial pra crit/falha em d20.
+  - **CLAUDE.md atualizado**, Fase 5.5 movida pra "concluídas". Próximo natural: Fase 4.6 (Auth & Multi-tenant) ou continuar polimento UX (5.7 dados visuais).
+- **Lampejo + Cache persistente + Health Warmup (15/05)**: ✅ CONCLUÍDO.
+  - **Lampejo (feat de mestre veterano)**: nova ferramenta narrativa — LLM pode inserir `[LAMPEJO: <texto>]` em momentos dramáticos (pós-crítico, NPC com peso emocional, local simbólico). Backend extrai com `_RE_LAMPEJO`, envia mensagem WS separada `tipo: "lampejo"`, sintetiza TTS com `rate=-25%, pitch=-3Hz` (lento, grave, etéreo). Frontend renderiza bolha gradient violeta-índigo, Cinzel itálico, fade-in 800ms, badge "✦ Lampejo". Seção dedicada em `master_system.md` com regras de uso (3 momentos válidos, máx 1 por turno, formato exato).
+  - **Cache persistente do thinking_cache**: MP3s sintetizados ficam em `engine/voice/_thinking_cache_data/<sha1>.mp3`. Boots subsequentes carregam <100ms em vez de re-sintetizar 20 frases (~6-10s). gitignored.
+  - **/health reporta warmup**: novo campo `warmup: {embedder, whisper, tts, thinking_cache, ollama}` com status `pending|ok|failed|skipped`. Frontend pode polar pra mostrar "Inicializando mestre…" no boot. Setado em cada `_warmup_*` em `api/main.py`.
+  - **Fix de raiz pros testes**: flag `VOXDM_SKIP_WARMUP=1` no lifespan + `conftest.py` ativa por padrão. Suite saiu de 10min → 30s.
+  - **334/334 testes passam, tsc clean.**
 
-Próximo: gravar vídeo de combate com roteiro em `.internal/ROTEIRO_COMBATE.md` (não rastreado).
+Próximo: Fase 4.6 (Auth & Multi-tenant) — fortaleza pessoal pra liberar acesso a amigos via Cloudflare Access. Roteiro de combate em `.internal/ROTEIRO_COMBATE.md` (não rastreado) segue válido pra qualquer gravação que use a polish atual.
 
 ### Fases planejadas (não implementadas)
+
+**Fase 4.6 — Auth & Multi-tenant**
+Pré-requisito pra expor a engine a amigos via Cloudflare Tunnel sem virar porta aberta na internet.
+- `engine/auth/identity.py` — dataclass `Owner(email, is_admin)` como cross-cutting concern.
+- `engine/auth/jwt_validator.py` — pyjwt RS256 + cache de certs Cloudflare (TTL 1h, refresh em rotation). Validar `aud` claim (Access App AUD tag) sempre, NUNCA aceitar `alg: none` ou HS256.
+- `api/auth.py` — `Depends(get_owner)` lê `Cf-Access-Jwt-Assertion`; em `DEBUG=True` aceita fallback `DEV_USER_EMAIL`; em prod, 401 se ausente.
+- `session_id` → UUID v4 server-side em `POST /session/start`. Frontend nunca envia, só recebe. Hoje é `Date.now().toString(36).slice(-5)` em `page.tsx:226` — previsível e editável pelo user, vira authz bug em multi-tenant.
+- Coluna `owner_email` em `character_store` SQLite + migração + filtros em queries.
+- Payload `owner_email` em `voxdm_episodic` (Qdrant) + filtros em **todas** as funções de `episodic_memory.py` e `semantic_memory.py` (também `buscar_npc`).
+- Backfill script atribuindo todas as sessões existentes ao email admin.
+- 404 (não 403) quando owner não bate — evita enumeração de sessões alheias.
+- Origin check no WebSocket (`api/websocket.py` não tem hoje — site malicioso pode abrir ws no browser do amigo logado).
+- Rate limit por email autenticado, não por IP (`api/rate_limit.py:25` hoje usa `get_remote_address` — atrás de Tunnel todo mundo é a mesma IP).
+- `/debug/*` exige `is_admin(owner)` mesmo com DEBUG=true (defense in depth, evita expor se DEBUG vazar pra prod).
+- localStorage frontend namespaced por email (`voxdm:${email}:journal:${sessionId}` etc.) + botão logout que limpa storage local.
+- Frontend servido por `StaticFiles` do FastAPI — uma única porta atrás de uma única Access App.
+- Testes unitários de isolamento: user A faz query, user B não vê.
+
+**Fase 4.7 — Cloudflare Tunnel + Access**
+Após 4.6 estar verde, expor via:
+- Domínio próprio comprado (`.xyz`, `.dev`, etc.) com nameservers no Cloudflare.
+- `cloudflared tunnel login` + `tunnel create voxdm` + config.yml + `route dns voxdm voxdm.<dominio>`.
+- Zero Trust Access App self-hosted no hostname, com IdP One-Time PIN e policy de allowlist por email.
+- Session duration: 1h-24h conforme conveniência.
+- `cloudflared` como Windows service (autostart).
+- Firewall Windows bloqueia 8000 inbound, permite só loopback.
+- `dashboard.py` em **segunda Access App** (admin-only), hostname separado tipo `voxdm-debug.<dominio>` — NUNCA no mesmo tunnel da app principal.
 
 **Fase 5 — Task routing via LLM (em vez de regex)**
 Substituir os regex de `trust_detector.py`, condições auto-detectadas (`useGameSession.ts`), `_RE_ALVO_ATAQUE`/`_RE_INIMIGO_MORTO` etc. por chamadas LLM curtas via `TaskType.CLASSIFICATION` ou `ENTITY_EXTRACTION` (Groq 8B). Cada lugar vira um prompt de 5-15 linhas com output JSON estruturado. Fundação já existe — só plugar.
 
-**Fase 5.5 — Áudio de "pensamento" pra mascarar latência**
-Arquitetura:
-1. Lista de ~25 frases curtas (`"Hmm... deixe-me ver."`, `"Um momento."`, `"Vejamos."`, `"Bom..."`)
-2. Pré-sintetizar todas via Edge TTS no startup (paralelo com warmup atual; ~10s extras, ~5MB RAM)
-3. No websocket, timer de 1.2s desde envio do comando — se primeiro token do LLM não chegou, envia `audio_chunk` random da cache (já pré-sintetizado) pro frontend
-4. Frontend já tem fila sequencial em `useAudio` — thinking audio entra como mais um chunk; áudio real emenda no fim da fila
-Variantes futuras: por contexto (pós-rolagem, pós-pergunta a NPC, combate) e por voz do NPC ativo (usa `voice_manager`). Evitar repetição imediata. Encadear 2 frases se latência > 6s.
+**Fase 5.5 — Áudio de "pensamento" pra mascarar latência** ✅ CONCLUÍDA (14/05/26)
+Implementação efetiva:
+- `engine/voice/thinking_cache.py` — 20 frases curtas em PT-BR, pré-sintetizadas via Edge TTS no warmup paralelo do lifespan.
+- `api/main.py` — novo `_warmup_thinking_cache()` agregado ao `asyncio.gather` de startup.
+- `api/websocket.py` — helper `_criar_task_thinking()` agenda envio de `audio_chunk` se o `asyncio.Event` do primeiro token não disparar em 1.2s. Plugado em `_enviar_abertura` (cobre cold path da intro) e no loop principal de turnos. Limpeza via `try/finally` garante que a task não vaze entre turnos.
+- Custos efetivos: cache ocupa ~5MB RAM, warmup ~10s em paralelo (não atrasa startup percebido). Falhas individuais são silenciosas — se Edge TTS estiver fora no boot, cache fica vazio e o jogo segue sem mascaramento.
+Variantes futuras (não implementadas ainda): por contexto (pós-rolagem, pós-pergunta a NPC, combate) e por voz do NPC ativo (usa `voice_manager`). Evitar repetição imediata. Encadear 2 frases se latência > 6s.
 
 **Fase 5.6 — Sincronização texto-voz (karaokê reverso)**
 Hoje tokens do LLM pintam na tela instantâneo (~30/s); áudio TTS atrasa 800ms-1.5s. Texto fica MUITO à frente do áudio. Quero o oposto suave: texto sempre 300ms à frente da fala correspondente. Implementação:
@@ -530,6 +567,18 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 **Branches no GitHub:**
 - `main` — atualizada com merge `--no-ff` preservando todo histórico do refactor
 - `backup/pre-filipe-feedback-20260513-175653` — snapshot do estado anterior pra rollback se precisar
+
+### Thinking Audio + Histórico de Rolagens (Sessão 14/05)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/voice/thinking_cache.py` | Cache de áudios de pensamento — 20 frases PT-BR pré-sintetizadas via Edge TTS no warmup. API: `warmup()`, `pegar_random(exceto=None)`, `disponivel()`. Falha silenciosa se Edge TTS estiver fora — cache vazio, jogo segue | ✅ Criado |
+| `api/main.py` | `_warmup_thinking_cache()` agregado ao `asyncio.gather` do lifespan paralelo (ao lado de embedder/whisper/tts) | ✅ Atualizado |
+| `api/websocket.py` | Helper `_criar_task_thinking(websocket, evento)` agenda envio de `audio_chunk` se `asyncio.Event` do primeiro token não disparar em 1.2s. Plugado em `_enviar_abertura` (intro) e no loop de turnos, com `try/finally` garantindo cleanup da task entre turnos | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | Interface `RolagemLog` + estado `rolagens: RolagemLog[]` (limite 10) + callback `registrarRolagem(tipo, resultado, motivo?)` | ✅ Atualizado |
+| `frontend/app/page.tsx` | `registrarRolagem` plugado em 3 funções de dado: `handleRolagemContextual` (com motivo = label do atributo), `rolarD20` (tipo "d20"/"d20▲"/"d20▼"), `rolarDano` (motivo = "Dano") | ✅ Atualizado |
+| `frontend/components/CharacterSheet.tsx` | Nova seção colapsável "Últimas rolagens" exibindo 5 mais recentes, com cor especial pra crit (violeta) e falha crítica (vermelho) em d20 | ✅ Atualizado |
+| **Total testes** | | **334/334 passed**; `tsc --noEmit` clean |
 
 ---
 

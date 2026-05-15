@@ -41,8 +41,21 @@ export interface TurnoHistorico {
   latencia_ms: number;
   chunks_lore: string[];
   chunks_regras: string[];
-  tipo?: "normal" | "recap";
+  tipo?: "normal" | "recap" | "lampejo";
 }
+
+/** Registro de uma rolagem feita pelo jogador. Mantemos as N últimas pra exibir
+ *  na ficha — dá clareza do que está acontecendo e ajuda o espectador a seguir
+ *  uma cena de combate sem reler o histórico. */
+export interface RolagemLog {
+  id: number;
+  timestamp: number;
+  tipo: string;       // "d20", "4d6", "d100", "d20+v" (vantagem), etc.
+  resultado: number;
+  motivo?: string;    // "FOR", "Ataque", "Iniciativa" — extraído do contexto
+}
+
+const MAX_ROLAGENS_HISTORICO = 10;
 
 interface EstadoSessao {
   sessionId: string | null;
@@ -80,6 +93,8 @@ interface EstadoSessao {
   iniciativaOrdem: TokenIniciativa[];
   // Quests que avançaram no último turno — limpa sozinho após 4s
   questNotificacao: string | null;
+  // Últimas N rolagens do jogador, mais recente primeiro
+  rolagens: RolagemLog[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -115,6 +130,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   consequencias: [],
   iniciativaOrdem: [],
   questNotificacao: null,
+  rolagens: [],
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -217,9 +233,33 @@ export function useGameSession() {
 
       if (msg.tipo === "token" && msg.conteudo) {
         textoAtualRef.current += msg.conteudo;
-        // Strip de marcadores [Q:...] do display em tempo real — nunca visível ao jogador
-        const exibicao = textoAtualRef.current.replace(/\[Q:[^\]]*\]/g, "").trimEnd();
+        // Strip de marcadores [Q:...] e [LAMPEJO:...] — nunca visíveis na bolha
+        // principal. Lampejos chegam como mensagem própria `tipo: "lampejo"`.
+        const exibicao = textoAtualRef.current
+          .replace(/\[Q:[^\]]*\]/g, "")
+          .replace(/\[LAMPEJO:[^\]]*\]/gi, "")
+          .trimEnd();
         setEstado(s => ({ ...s, respostaAtual: exibicao }));
+      }
+
+      if (msg.tipo === "lampejo" && msg.conteudo) {
+        // Lampejo entra no histórico como item especial — UI renderiza
+        // com gradient violeta, Cinzel itálico, fade lento.
+        setEstado(s => ({
+          ...s,
+          historico: [
+            ...s.historico,
+            {
+              id: Date.now() + Math.floor(Math.random() * 1000),
+              jogador: "",
+              mestre: msg.conteudo ?? "",
+              latencia_ms: 0,
+              chunks_lore: [],
+              chunks_regras: [],
+              tipo: "lampejo",
+            },
+          ],
+        }));
       }
 
       if (msg.tipo === "fim") {
@@ -429,6 +469,19 @@ export function useGameSession() {
     wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
 
+  const registrarRolagem = useCallback(
+    (tipo: string, resultado: number, motivo?: string) => {
+      setEstado(s => ({
+        ...s,
+        rolagens: [
+          { id: Date.now(), timestamp: Date.now(), tipo, resultado, motivo },
+          ...s.rolagens,
+        ].slice(0, MAX_ROLAGENS_HISTORICO),
+      }));
+    },
+    [],
+  );
+
   const dispensarCondicaoDetectada = useCallback((cond: string) => {
     setEstado(s => ({
       ...s,
@@ -467,6 +520,7 @@ export function useGameSession() {
     enviarComando,
     desconectar,
     sincronizarEstado,
+    registrarRolagem,
     dispensarCondicaoDetectada,
     pararAudio: pararTudo,
     setVolume,

@@ -14,6 +14,7 @@ Exemplo:
 """
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
@@ -40,6 +41,16 @@ log = structlog.get_logger()
 
 _VERSAO = "0.1.0"
 
+# Status de cada warmup: "pending" → "ok" / "failed" / "skipped".
+# Lido pelo /health para o frontend mostrar "Inicializando mestre..." vs "Pronto".
+_WARMUP_STATUS: dict[str, str] = {
+    "embedder": "pending",
+    "whisper": "pending",
+    "tts": "pending",
+    "thinking_cache": "pending",
+    "ollama": "pending",
+}
+
 
 async def _tarefa_limpeza() -> None:
     """Remove sessões inativas a cada 30 minutos."""
@@ -60,19 +71,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     só descobre na primeira chamada.
     """
     log.info("voxdm_api_iniciando", versao=_VERSAO, debug=settings.DEBUG)
-    await asyncio.gather(
-        _warmup_embedder(),
-        _warmup_whisper(),
-        _warmup_tts(),
-    )
-    log.info("voxdm_warmup_completo")
-    _task_limpeza = asyncio.create_task(_tarefa_limpeza())
-    # Ollama warmup em background — não atrasa o startup. Probe rápido detecta
-    # se vale a pena tentar; depois faz uma mini-completion pra carregar a VRAM.
-    _task_ollama = asyncio.create_task(_warmup_ollama_bg())
+    # VOXDM_SKIP_WARMUP=1 desliga todos os warmups (embedder, whisper, tts,
+    # thinking_cache, ollama). Usado em testes (conftest.py seta automaticamente)
+    # para evitar downloads de modelo Whisper + 20 sínteses Edge TTS que
+    # transformam uma suite de 5s em 10min. Em dev/prod fica vazio = roda tudo.
+    if os.environ.get("VOXDM_SKIP_WARMUP") == "1":
+        log.info("voxdm_warmup_pulado", motivo="VOXDM_SKIP_WARMUP=1")
+        for k in _WARMUP_STATUS:
+            _WARMUP_STATUS[k] = "skipped"
+        _task_limpeza = asyncio.create_task(_tarefa_limpeza())
+        _task_ollama = None
+    else:
+        await asyncio.gather(
+            _warmup_embedder(),
+            _warmup_whisper(),
+            _warmup_tts(),
+            _warmup_thinking_cache(),
+        )
+        log.info("voxdm_warmup_completo")
+        _task_limpeza = asyncio.create_task(_tarefa_limpeza())
+        # Ollama warmup em background — não atrasa o startup. Probe rápido detecta
+        # se vale a pena tentar; depois faz uma mini-completion pra carregar a VRAM.
+        _task_ollama = asyncio.create_task(_warmup_ollama_bg())
     yield
     _task_limpeza.cancel()
-    _task_ollama.cancel()
+    if _task_ollama is not None:
+        _task_ollama.cancel()
     log.info("voxdm_api_encerrando", sessoes_abertas=len(_sessoes_ativas()))
 
 
@@ -90,8 +114,10 @@ async def _warmup_embedder() -> None:
         loop = asyncio.get_running_loop()
         embedder = Embedder()
         await loop.run_in_executor(None, embedder.gerar, ["warmup"])
+        _WARMUP_STATUS["embedder"] = "ok"
         log.info("embedder_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
     except Exception as e:
+        _WARMUP_STATUS["embedder"] = "failed"
         log.warning("embedder_warmup_falhou", erro=str(e), dica="primeira requisição será mais lenta")
 
 
@@ -110,8 +136,10 @@ async def _warmup_whisper() -> None:
         from engine.voice.stt import _obter_whisper
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _obter_whisper)
+        _WARMUP_STATUS["whisper"] = "ok"
         log.info("whisper_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
     except Exception as e:
+        _WARMUP_STATUS["whisper"] = "failed"
         log.warning("whisper_warmup_falhou", erro=str(e), dica="primeira transcrição será mais lenta")
 
 
@@ -145,9 +173,32 @@ async def _warmup_ollama_bg() -> None:
             [{"role": "user", "content": "hi"}],
             temperatura=0.1, max_tokens=4,
         )
+        _WARMUP_STATUS["ollama"] = "ok"
         log.info("ollama_warmup_ok", ms=int((_time.perf_counter() - t0) * 1000))
     except Exception as e:
+        _WARMUP_STATUS["ollama"] = "failed"
         log.info("ollama_warmup_pulado", motivo=str(e)[:120])
+
+
+async def _warmup_thinking_cache() -> None:
+    """Pré-sintetiza frases curtas de "pensamento" do Mestre.
+
+    Cache fica em RAM (~5MB pra 20 frases). Quando o LLM demora mais que
+    ~1.2s pro primeiro token, o websocket dispara uma dessas frases pra
+    mascarar a latência — o jogador ouve "Hmm... deixe-me ver" em vez
+    de silêncio. Falha aqui só significa "joga sem mascaramento" — não
+    interrompe a API.
+    """
+    t0 = time.perf_counter()
+    try:
+        from engine.voice.thinking_cache import warmup as warmup_thinking
+        await warmup_thinking()
+        _WARMUP_STATUS["thinking_cache"] = "ok"
+        log.info("thinking_cache_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
+    except Exception as e:
+        _WARMUP_STATUS["thinking_cache"] = "failed"
+        log.warning("thinking_cache_warmup_falhou", erro=str(e),
+                    dica="latência alta será percebida como silêncio")
 
 
 async def _warmup_tts() -> None:
@@ -165,8 +216,10 @@ async def _warmup_tts() -> None:
         _get_dicionario()  # carrega dicionário de pronúncia (~120 termos)
         # Sintetiza um quantum mínimo de áudio só pra esquentar HTTP/TLS Edge TTS
         await TTSEngine().sintetizar("Olá.", idioma=Idioma.PTBR)
+        _WARMUP_STATUS["tts"] = "ok"
         log.info("tts_warmup_ok", ms=int((time.perf_counter() - t0) * 1000))
     except Exception as e:
+        _WARMUP_STATUS["tts"] = "failed"
         log.warning("tts_warmup_falhou", erro=str(e), dica="primeira fala terá latência extra de ~500ms")
 
 
@@ -216,12 +269,21 @@ if settings.DEBUG:
 
 @app.get("/health", tags=["infra"])
 async def health_check() -> dict[str, Any]:
-    """Verifica se a API está respondendo e retorna o estado básico."""
+    """Verifica se a API está respondendo e retorna o estado básico.
+
+    Inclui `warmup` com status por subsistema — frontend pode polar isso
+    no boot pra mostrar "Inicializando mestre..." em vez de deixar o jogador
+    tentar interagir com o servidor antes dos modelos carregarem.
+    """
+    pendentes = [k for k, v in _WARMUP_STATUS.items() if v == "pending"]
     return {
         "status": "ok",
         "versao": _VERSAO,
         "debug": settings.DEBUG,
         "sessoes_ativas": len(_sessoes_ativas()),
+        "warmup": dict(_WARMUP_STATUS),
+        "warmup_pendentes": pendentes,
+        "warmup_pronto": len(pendentes) == 0,
     }
 
 

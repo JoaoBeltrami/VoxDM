@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PersonagemConfig, SpellSlot } from "@/lib/api";
+import type { RolagemLog } from "@/hooks/useGameSession";
 
 interface Props {
   personagem: PersonagemConfig;
@@ -30,6 +31,8 @@ interface Props {
   initDeathSavesSuccesses?: number;
   initDeathSavesFailures?: number;
   initDeathSavesStable?: boolean;
+  // Histórico das últimas rolagens do jogador (passado pelo useGameSession)
+  rolagens?: RolagemLog[];
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -139,6 +142,7 @@ export function CharacterSheet({
   initSpellSlots, initHitDiceCurrent, initGold = 0, initXP = 0,
   initInspiration = false,
   initDeathSavesSuccesses = 0, initDeathSavesFailures = 0, initDeathSavesStable = false,
+  rolagens = [],
 }: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
@@ -147,6 +151,7 @@ export function CharacterSheet({
   const [questsAberto, setQuestsAberto] = useState(false);
   const [npcsAberto, setNpcsAberto] = useState(false);
   const [spellsAberto, setSpellsAberto] = useState(false);
+  const [rolagensAberto, setRolagensAberto] = useState(true);
 
   const { player_name, player_race, player_class, player_level = 3,
           player_background, player_hp_max,
@@ -895,6 +900,41 @@ export function CharacterSheet({
               </div>
             )}
           </div>
+
+          {/* Histórico de rolagens — últimas 5 ações com d20/dano/etc */}
+          {rolagens.length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <button onClick={() => setRolagensAberto(a => !a)}
+                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <span>
+                  Últimas rolagens
+                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{rolagens.length}</span>
+                </span>
+                <span>{rolagensAberto ? "▲" : "▼"}</span>
+              </button>
+              {rolagensAberto && (
+                <ul className="mt-2 space-y-0.5">
+                  {rolagens.slice(0, 5).map(r => {
+                    const cor = r.resultado === 20 && r.tipo.startsWith("d20")
+                      ? "text-violet-400 font-bold"
+                      : r.resultado === 1 && r.tipo.startsWith("d20")
+                        ? "text-red-500 font-bold"
+                        : "text-zinc-200";
+                    return (
+                      <li key={r.id} className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-400">
+                          {r.tipo}
+                          {r.motivo && <span className="ml-1 text-zinc-500">· {r.motivo}</span>}
+                        </span>
+                        <span className={cor}>{r.resultado}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* NPCs presentes */}
           {Object.keys(npcsTrust).length > 0 && (

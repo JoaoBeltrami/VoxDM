@@ -155,7 +155,7 @@ class TokenIniciativaPayload(BaseModel):
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
-    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk"
+    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo"
     conteudo: str = ""
     conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
     sequencia: int = 0       # índice sequencial do chunk de áudio

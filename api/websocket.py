@@ -173,6 +173,114 @@ def _sincronizar_inimigos_combate(
             working_mem.atualizar_estado_inimigo(iid, "ferido", "ainda de pé")
 
 # ---------------------------------------------------------------------------
+# Lampejo — visões dramáticas com voz alterada
+# ---------------------------------------------------------------------------
+
+# Captura `[LAMPEJO: <texto>]` ou `[Lampejo: ...]` (case-insensitive) na resposta
+# do LLM. Tudo entre o ":" e o "]" vira o conteúdo. Preserva pontuação interna,
+# mas para no primeiro "]" (não suporta colchetes aninhados — não precisa).
+_RE_LAMPEJO = re.compile(r"\[LAMPEJO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
+# Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
+# Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
+_LAMPEJO_RATE: str = "-25%"
+_LAMPEJO_PITCH: str = "-3Hz"
+
+
+def _extrair_lampejos(texto: str) -> tuple[str, list[str]]:
+    """Separa lampejos do texto narrativo principal.
+
+    Returns (texto_limpo, [lampejos]). Mantém ordem de aparição.
+    """
+    lampejos = [m.group(1).strip() for m in _RE_LAMPEJO.finditer(texto)]
+    texto_limpo = _RE_LAMPEJO.sub("", texto).strip()
+    # Colapsa quebras duplas que sobram após o strip
+    texto_limpo = re.sub(r"\n{3,}", "\n\n", texto_limpo)
+    return texto_limpo, lampejos
+
+
+async def _enviar_lampejo(
+    websocket: WebSocket, tts: Any, texto: str, voice: str | None
+) -> None:
+    """Envia um lampejo: mensagem `lampejo` com o texto + audio_chunk com voz alterada.
+
+    Falha silenciosa — lampejo é tempero, nunca trava o turno.
+    """
+    if not texto.strip():
+        return
+    try:
+        await websocket.send_text(
+            MensagemWS(tipo="lampejo", conteudo=texto).model_dump_json()
+        )
+        if tts is not None:
+            audio = await tts.sintetizar(
+                texto, voice=voice,
+                rate=_LAMPEJO_RATE, pitch=_LAMPEJO_PITCH,
+            )
+            if audio:
+                await websocket.send_text(
+                    MensagemWS(
+                        tipo="audio_chunk",
+                        conteudo_b64=base64.b64encode(audio).decode("ascii"),
+                        sequencia=999,
+                    ).model_dump_json()
+                )
+        log.info("lampejo_emitido", chars=len(texto))
+    except Exception as e:
+        log.warning("lampejo_falhou", erro=str(e)[:120])
+
+
+# ---------------------------------------------------------------------------
+# Thinking audio — dispara áudio pré-sintetizado se LLM demorar > 1.2s
+# ---------------------------------------------------------------------------
+
+# Limiar pra disparar "Hmm... deixe-me ver" enquanto LLM monta a resposta.
+# 1.2s captura todo turno que cai em fallback de cascata (Groq → 8B → Gemini)
+# sem disparar em turnos rápidos (~500-900ms são comuns no caminho feliz).
+_THINKING_DELAY_S: float = 1.2
+
+
+def _criar_task_thinking(
+    websocket: WebSocket, primeiro_token_evento: asyncio.Event
+) -> asyncio.Task:
+    """Agenda envio de áudio de pensamento se o LLM não emitir token em 1.2s.
+
+    A task aguarda o evento `primeiro_token_evento` com timeout. Se o token
+    chegou antes, retorna silenciosa. Se estourou o timeout, pega uma frase
+    aleatória do cache e envia como `audio_chunk` — a fila sequencial do
+    `useAudio` toca a frase antes do TTS real chegar.
+
+    Tudo embrulhado em try/except: falha aqui nunca afeta o turno do jogador.
+    """
+    async def _executar() -> None:
+        try:
+            try:
+                await asyncio.wait_for(
+                    primeiro_token_evento.wait(), timeout=_THINKING_DELAY_S
+                )
+                return  # token chegou a tempo — silêncio é OK
+            except asyncio.TimeoutError:
+                pass
+            from engine.voice.thinking_cache import pegar_random
+            resultado = pegar_random()
+            if resultado is None:
+                return  # cache vazio (warmup falhou) — silêncio
+            frase, audio_bytes = resultado
+            await websocket.send_text(
+                MensagemWS(
+                    tipo="audio_chunk",
+                    conteudo_b64=base64.b64encode(audio_bytes).decode("ascii"),
+                    sequencia=0,
+                ).model_dump_json()
+            )
+            log.info("thinking_audio_disparado", frase=frase)
+        except Exception as e:
+            log.debug("thinking_audio_falhou", erro=str(e)[:120])
+
+    return asyncio.create_task(_executar())
+
+
+# ---------------------------------------------------------------------------
 # TTS — singleton lazy, graceful se edge_tts não estiver instalado
 # ---------------------------------------------------------------------------
 
@@ -302,10 +410,17 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     resposta_intro = ""
     tts = _obter_tts()
 
+    # Thinking audio: dispara "Hmm..." se o LLM demorar > 1.2s pra começar.
+    # Especialmente útil na abertura (cold path, sem warmup do contexto RAG).
+    primeiro_token_intro = asyncio.Event()
+    task_thinking_intro = _criar_task_thinking(websocket, primeiro_token_intro)
+
     try:
         async for token in sessao.groq.completar_stream(
             mensagens_intro, temperatura=0.8, max_tokens=300
         ):
+            if not primeiro_token_intro.is_set():
+                primeiro_token_intro.set()
             resposta_intro += token
             await websocket.send_text(
                 MensagemWS(tipo="token", conteudo=token).model_dump_json()
@@ -317,6 +432,13 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         await websocket.send_text(
             MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()
         )
+    finally:
+        # Garante que a task thinking não fique pendurada após falha precoce
+        primeiro_token_intro.set()
+        try:
+            await task_thinking_intro
+        except Exception:
+            pass
 
     # Uma única síntese TTS do texto completo — sem fragmentação em sentenças
     if tts:
@@ -575,6 +697,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 ).model_dump_json()
                             )
 
+            # Thinking audio: dispara "Hmm..." pré-sintetizado se o LLM
+            # demorar > 1.2s pro primeiro token. Mascarar latência sem
+            # afetar a resposta real — fila do useAudio toca antes do TTS.
+            primeiro_token_evento = asyncio.Event()
+            task_thinking = _criar_task_thinking(websocket, primeiro_token_evento)
+
             try:
                 async for token in sessao.groq.completar_stream(
                     mensagens, temperatura=0.8, max_tokens=400
@@ -582,6 +710,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     resposta_completa += token
                     if latencia_primeiro_token < 0:
                         latencia_primeiro_token = int((time.perf_counter() - t0) * 1000)
+                        primeiro_token_evento.set()
                     await websocket.send_text(
                         MensagemWS(tipo="token", conteudo=token).model_dump_json()
                     )
@@ -604,6 +733,16 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                 )
                 continue
+            finally:
+                # Solta a task thinking em qualquer caminho de saída (sucesso,
+                # exceção, continue). Setar o evento faz a task acordar e
+                # retornar silenciosa se ainda não disparou.
+                primeiro_token_evento.set()
+                if not task_thinking.done():
+                    try:
+                        await task_thinking
+                    except Exception:
+                        pass
 
             # Flush da última sentença (sem pontuação final) e aguarda todas as tasks.
             # A maioria já terminou durante o stream — gather retorna quase imediatamente.
@@ -629,6 +768,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             if tts_tasks:
                 await asyncio.gather(*tts_tasks, return_exceptions=True)
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
+
+            # Lampejos — extraímos ANTES de quests pra remover dos markers do texto
+            # que vai pro pipeline (registrar_fala, episodic memory). Lampejos
+            # vão como mensagem separada com TTS de voz alterada.
+            resposta_completa, lampejos = _extrair_lampejos(resposta_completa)
+            for texto_lampejo in lampejos:
+                await _enviar_lampejo(websocket, tts, texto_lampejo, voice=sessao.working_mem.tts_voice)
 
             # Detecção de quests — strip de [Q:...] antes do pipeline pós-turno.
             # Ordem crítica: detectar_e_aplicar_quests ANTES de aplicar_pos_turno

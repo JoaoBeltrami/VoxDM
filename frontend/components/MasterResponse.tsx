@@ -48,6 +48,24 @@ export function MasterResponse({ historico, respostaAtual, playerName, mestrePen
       {historico.map((turno) => (
         <div key={turno.id} className="flex flex-col gap-2">
 
+          {/* Lampejo — visão dramática, sussurro do passado/futuro.
+              Gradient violeta-índigo, Cinzel itálico, fade-in lento.
+              Mestre veterano usa pra flashbacks, presságios, sussurros etéreos. */}
+          {turno.tipo === "lampejo" && turno.mestre && (
+            <div
+              className="self-center w-[85%] rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-950/60 via-indigo-950/40 to-violet-900/30 px-6 py-4 shadow-[0_0_24px_-8px_rgba(139,92,246,0.4)] animate-[fade-in_800ms_ease-out]"
+              role="note"
+            >
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-violet-300/70">
+                ✦ Lampejo
+              </p>
+              <p className="text-base leading-relaxed italic text-violet-100/90"
+                 style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}>
+                {turno.mestre}
+              </p>
+            </div>
+          )}
+
           {/* Recap da sessão anterior — exibido com estilo sepia antes da abertura */}
           {turno.tipo === "recap" && turno.mestre && (
             <div className="self-start w-full rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3">
@@ -61,7 +79,7 @@ export function MasterResponse({ historico, respostaAtual, playerName, mestrePen
           )}
 
           {/* Fala do jogador — omitida em mensagens de abertura (jogador == "") */}
-          {turno.tipo !== "recap" && turno.jogador && (
+          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.jogador && (
             <div className="self-end flex flex-col items-end gap-0.5">
               {playerName && (
                 <span className="mr-1 text-xs text-violet-400/70">{playerName}</span>
@@ -73,7 +91,7 @@ export function MasterResponse({ historico, respostaAtual, playerName, mestrePen
           )}
 
           {/* Resposta do Mestre — quebrada em múltiplos balões quando longa */}
-          {turno.tipo !== "recap" && turno.mestre && (() => {
+          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.mestre && (() => {
             const baloes = dividirEmBaloes(turno.mestre);
             return (
               <div className="flex flex-col gap-1.5">

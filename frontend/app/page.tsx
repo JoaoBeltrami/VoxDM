@@ -218,6 +218,7 @@ export default function Home() {
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
+    rolagens, registrarRolagem,
   } = useGameSession();
 
   const [tela, setTela] = useState<Tela>("menu");
@@ -389,9 +390,10 @@ export default function Home() {
     const label = roll.label !== "d20" ? `${roll.label} (${modStr}) ` : "";
     if (r === 20) dispararCritFlash("crit");
     else if (r === 1) dispararCritFlash("falha");
+    registrarRolagem("d20", total, roll.label !== "d20" ? roll.label : undefined);
     enviarComando(`[Rolagem: ${label}d20${modStr} = ${total}${vsCD}${critico}]`);
     setRolamentosPendentes(prev => prev.filter(p => p.id !== roll.id));
-  }, [enviarComando, dispararCritFlash]);
+  }, [enviarComando, dispararCritFlash, registrarRolagem]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -599,6 +601,7 @@ export default function Home() {
           initDeathSavesSuccesses={deathSavesSuccesses}
           initDeathSavesFailures={deathSavesFailures}
           initDeathSavesStable={deathSavesStable}
+          rolagens={rolagens}
         />
 
         <CombatTracker
@@ -649,17 +652,20 @@ export default function Home() {
               const r2 = Math.floor(Math.random() * 20) + 1;
               let val: number;
               let sufixo = "";
-              if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; }
-              else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; }
+              let tipoLog = "d20";
+              if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; tipoLog = "d20▲"; }
+              else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; tipoLog = "d20▼"; }
               else { val = r1; }
               const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
               if (val === 20) dispararCritFlash("crit");
               else if (val === 1) dispararCritFlash("falha");
+              registrarRolagem(tipoLog, val);
               enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
             };
 
             const rolarDano = (faces: number) => {
               const val = Math.floor(Math.random() * faces) + 1;
+              registrarRolagem(`d${faces}`, val, "Dano");
               enviarComando(`[Rolagem: d${faces} = ${val}]`);
             };
 
