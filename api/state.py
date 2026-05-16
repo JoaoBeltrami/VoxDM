@@ -41,6 +41,10 @@ class SessaoAtiva:
     context_builder: ContextBuilder
     groq: GroqClient
     voice_manager: VoiceManager
+    # Email do dono da sessão — vem do JWT do Cloudflare Access (ou DEV_USER em
+    # debug). Toda checagem de autorização em rotas que aceitam session_id deve
+    # comparar com este campo. Vazio = legado pré-auth (não deve ocorrer pós-4.6).
+    owner_email: str = ""
     iteracoes: int = 0
     criada_em: float = field(default_factory=time.time)
     ultima_atividade: float = field(default_factory=time.time)

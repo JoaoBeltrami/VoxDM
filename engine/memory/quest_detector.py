@@ -36,6 +36,13 @@ _RE_Q = re.compile(
     re.IGNORECASE,
 )
 
+# Marcadores de Mestre Veterano (features Fase 4.6 DM) — removidos do TTS
+# mas mantidos na resposta completa para extração pelo turn_pipeline
+_RE_MESTRE_VET = re.compile(
+    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO):[^\]]*\]",
+    re.IGNORECASE,
+)
+
 # Também limpa espaços/newlines residuais deixados pelos marcadores
 _RE_TRAILING_WS = re.compile(r"\n{3,}")
 
@@ -141,11 +148,20 @@ def detectar_e_aplicar_quests(
 
 
 def strip_marcadores(texto: str) -> str:
-    """Remove apenas os marcadores [Q:...] do texto, sem alterar WorkingMemory.
+    """Remove marcadores de sistema do texto antes de enviar para TTS.
 
-    Útil para limpar o buffer de TTS durante o streaming antes de sintetizar.
+    Remove:
+        [Q:quest_id:stage_id]   — progressão de quest
+        [FIO: ...]              — fio narrativo em aberto
+        [CLIFFHANGER: ...]      — encerramento dramático
+        [AGENDA: npc → plano]   — agenda paralela de NPC
+        [LAMPEJO: ...]          — flash de perspectiva (sintetizado à parte)
+
+    Não altera WorkingMemory — só higieniza o buffer para TTS.
     """
-    return _RE_Q.sub("", texto).strip()
+    limpa = _RE_Q.sub("", texto)
+    limpa = _RE_MESTRE_VET.sub("", limpa)
+    return limpa.strip()
 
 
 # ── Rewards ────────────────────────────────────────────────────────────────────

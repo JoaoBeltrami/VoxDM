@@ -159,6 +159,7 @@ class EpisodicMemory:
                     texto = str(p.payload.get("text", ""))
                     por_sessao[sid] = {
                         "session_id": sid,
+                        "owner_email": str(p.payload.get("owner_email", "")),
                         "timestamp": ts,
                         "location_final": str(p.payload.get("location_final", "")),
                         "npcs_mencionados": list(p.payload.get("npcs_mencionados", [])),

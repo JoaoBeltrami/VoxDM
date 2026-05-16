@@ -97,6 +97,7 @@ class SessionWriter:
         working_mem: WorkingMemory,
         session_id: str | None = None,
         npcs_mencionados: list[str] | None = None,
+        owner_email: str = "",
     ) -> dict[str, Any]:
         """
         Resumo + upsert no Qdrant. Retorna o dict de estado persistido.
@@ -116,6 +117,7 @@ class SessionWriter:
 
         payload: dict[str, Any] = {
             "session_id": sid,
+            "owner_email": owner_email,   # isolamento multi-tenant
             "text": resumo,
             "trust_levels": working_mem.trust_levels,
             "faction_standings": working_mem.faction_standings,

@@ -25,7 +25,10 @@ _SESSION_ID_RE = re.compile(r"^[a-z0-9-]+$")
 class SessaoConfig(BaseModel):
     """Parâmetros para iniciar uma nova sessão de jogo."""
 
-    session_id: str = Field(..., pattern=r"^[a-z0-9-]+$", description="ID em kebab-case")
+    # session_id é gerado pelo SERVIDOR (UUID v4) em POST /session/start.
+    # Campo aceito por compat (testes legados podem passar), mas é IGNORADO
+    # na criação — o backend sempre gera novo. Frontend nunca envia em produção.
+    session_id: str = Field(default="", description="Ignorado em /start — servidor gera UUID v4")
     location_id: str = "drevamor"
     location_nome: str = "Drevamor"
     time_of_day: str = "noite"
@@ -193,3 +196,6 @@ class MensagemWS(BaseModel):
     # Quests que avançaram neste turno — notificação ao jogador
     # Cada entrada: {quest_id, stage_id, recompensas: ["+300 XP", "Obteve: X", ...]}
     quest_avancos: list[dict[str, Any]] = Field(default_factory=list)
+    # DM Feat 1: Fios Soltos — threads narrativas abertas para exibição no frontend
+    # Atualizado no "fim" sempre que a lista muda. Máx 5 fios simultâneos.
+    fios_soltos: list[str] = Field(default_factory=list)

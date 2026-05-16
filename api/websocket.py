@@ -480,9 +480,37 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
     Escuta comandos de texto do cliente, monta o contexto RAG de 3 camadas,
     chama Groq em modo streaming e envia cada token de volta ao cliente.
     Publica métricas na telemetria ao final de cada turno.
+
+    Segurança (executada ANTES do accept para não desperdiçar recursos):
+    1. Origin check — browsers sempre enviam Origin em handshake WS.
+       Bloqueia sites maliciosos tentando abrir WS no browser do usuário logado.
+    2. Auth — valida JWT/DEV_USER via get_owner_ws.
+    3. Ownership — session_id deve pertencer ao owner autenticado.
     """
+    from config import settings
+    from api.auth import get_owner_ws
+
+    # 1. Origin check — CORS não se aplica a WS nativamente, fazemos manual.
+    # Em DEBUG local (Next.js em :3000) podemos não ter Origin — permitir vazio.
+    origens_permitidas = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    origin = websocket.headers.get("origin", "")
+    if origens_permitidas and origin and origin not in origens_permitidas:
+        log.warning("ws_origin_bloqueado", origin=origin, session_id=session_id)
+        await websocket.close(code=1008)
+        return
+
+    # 2. Auth (antes do accept — rejeita sem aceitar a conexão)
+    try:
+        owner = await get_owner_ws(dict(websocket.headers))
+    except Exception as exc:
+        log.warning("ws_auth_falhou", session_id=session_id, erro=str(exc)[:120])
+        await websocket.close(code=1008)
+        return
+
+    # 3. Aceita a conexão — usuário autenticado, agora pode enviar mensagens de erro
     await websocket.accept()
 
+    # 4. Sessão deve existir — usuário autenticado recebe mensagem de erro legível
     sessao = sessions.get(session_id)
     if not sessao:
         await websocket.send_text(
@@ -494,7 +522,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
         await websocket.close(code=1008)
         return
 
-    log.info("ws_conectado", session_id=session_id)
+    # 5. Ownership — 1008 sem mensagem (evita enumeração: intruso não sabe se existe)
+    if not owner.pode_ver(sessao.owner_email):
+        log.warning(
+            "ws_ownership_negado",
+            session_id=session_id,
+            owner_req=owner.email,
+            owner_sessao=sessao.owner_email,
+        )
+        await websocket.close(code=1008)
+        return
+
+    log.info("ws_conectado", session_id=session_id, owner=owner.email)
 
     try:
         while True:
@@ -883,6 +922,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         }
                         for qid, sid in avanco_quests
                     ],
+                    fios_soltos=list(sessao.working_mem.fios_soltos),
                 ).model_dump_json()
             )
 

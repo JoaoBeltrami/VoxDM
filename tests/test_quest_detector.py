@@ -70,6 +70,49 @@ def test_strip_sem_marcador_inalterado():
     assert strip_marcadores(texto) == texto
 
 
+def test_strip_remove_fio():
+    texto = "O ferreiro sabe algo. [FIO: O ferreiro mencionou Valdrek na mina]"
+    resultado = strip_marcadores(texto)
+    assert "[FIO:" not in resultado
+    assert "O ferreiro sabe algo." in resultado
+
+
+def test_strip_remove_cliffhanger():
+    texto = "A porta se abre. [CLIFFHANGER: É Valdrek, com o corpo de Bjorn]"
+    resultado = strip_marcadores(texto)
+    assert "[CLIFFHANGER:" not in resultado
+    assert "A porta se abre." in resultado
+
+
+def test_strip_remove_agenda():
+    texto = "Narrativa. [AGENDA: fael-valdreksson → planeja desertar à meia-noite]"
+    resultado = strip_marcadores(texto)
+    assert "[AGENDA:" not in resultado
+    assert "Narrativa." in resultado
+
+
+def test_strip_remove_lampejo():
+    texto = "Algo surgiu. [LAMPEJO: Uma memória da infância]"
+    resultado = strip_marcadores(texto)
+    assert "[LAMPEJO:" not in resultado
+    assert "Algo surgiu." in resultado
+
+
+def test_strip_remove_multiplos_tipos():
+    """Texto com marcadores mistos — todos devem ser removidos."""
+    texto = (
+        "Início. [Q:combate-inicial:encontro-carnicais] "
+        "[FIO: Pista sobre o espião] "
+        "[CLIFFHANGER: Tudo explode] fim."
+    )
+    resultado = strip_marcadores(texto)
+    assert "[Q:" not in resultado
+    assert "[FIO:" not in resultado
+    assert "[CLIFFHANGER:" not in resultado
+    assert "Início." in resultado
+    assert "fim." in resultado
+
+
 # ── detectar_e_aplicar_quests ─────────────────────────────────────────────────
 
 def test_avanca_quest_valida():

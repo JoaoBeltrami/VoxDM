@@ -14,14 +14,18 @@ Exemplo:
     DELETE /session/sess-01       → 204 (salva memória episódica)
 """
 
+import random
 import time
-from typing import Any
+import uuid
+from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from api.auth import get_owner
 from api.rate_limit import limiter
 from api.turn_pipeline import aplicar_pos_turno
+from engine.auth.identity import Owner
 from engine.llm.types import RE_COMBATE as _RE_COMBATE
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
@@ -57,12 +61,55 @@ router = APIRouter(prefix="/session", tags=["session"])
 # Limite máximo de upload de áudio: 10 MB
 _MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
+# ── Pool de Cartas de Improviso (DM Feat 4) ───────────────────────────────────
+# 3 cartas sorteadas por sessão fornecem ao LLM twists prontos para usar.
+# Não requerem chamada LLM — sorteio instantâneo e determinístico.
+_POOL_CARTAS: list[str] = [
+    "Um aliado inesperado surge de onde menos se espera",
+    "A situação se complica: um terceiro interessado entra em cena",
+    "O ambiente muda drasticamente (clima, luz, colapso estrutural)",
+    "Uma verdade inconveniente sobre um NPC é revelada",
+    "O objetivo principal se torna temporariamente inacessível",
+    "Um segredo do passado do personagem emerge à superfície",
+    "Uma criatura ou facção já derrotada retorna de forma surpreendente",
+    "O tempo esgota: uma ameaça que parecia distante se aproxima",
+    "Um item comum revela ter propriedades mágicas inesperadas",
+    "Um NPC de confiança age de forma suspeita e misteriosa",
+    "Uma rota de fuga ou entrada alternativa é descoberta",
+    "O vilão demonstra vulnerabilidade humana inesperada",
+    "Uma traição menor cria rachadura no grupo ou aliança",
+    "Uma oportunidade única se abre mas exige sacrifício",
+    "Informação falsa circula e complica as decisões do jogador",
+]
+
+
+@router.get("/me")
+async def minha_identidade(
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, str | bool]:
+    """Retorna a identidade do usuário autenticado.
+
+    Usado pelo frontend na inicialização para obter email + flag de admin.
+    Funciona em DEBUG (DEV_USER_EMAIL) e em prod (JWT Cloudflare Access).
+    """
+    return {"email": owner.email, "is_admin": owner.is_admin}
+
 
 @router.get("/list", response_model=list[SessaoListaItem])
-async def listar_sessoes_salvas() -> list[SessaoListaItem]:
-    """Lista sessões disponíveis na memória episódica para exibir no seletor."""
+async def listar_sessoes_salvas(
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> list[SessaoListaItem]:
+    """Lista sessões disponíveis na memória episódica para exibir no seletor.
+
+    Admin vê todas. Usuário comum vê apenas as próprias (filtro por owner_email).
+    """
     mem = EpisodicMemory()
     entradas = await mem.listar_com_metadata()
+
+    # Filtro de isolamento: não-admin só vê sessões do próprio email
+    if not owner.is_admin:
+        entradas = [e for e in entradas if e.get("owner_email", "") == owner.email]
+
     return [
         SessaoListaItem(
             session_id=e["session_id"],
@@ -77,13 +124,17 @@ async def listar_sessoes_salvas() -> list[SessaoListaItem]:
 
 @router.post("/start", response_model=SessaoInfo, status_code=201)
 @limiter.limit("10/minute")
-async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
-    """Cria uma nova sessão de jogo com os parâmetros fornecidos."""
-    if config.session_id in sessions:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Sessão '{config.session_id}' já existe — DELETE para encerrar antes de criar nova",
-        )
+async def iniciar_sessao(
+    request: Request,
+    config: SessaoConfig,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> SessaoInfo:
+    """Cria uma nova sessão de jogo. ID é gerado pelo servidor (UUID v4)."""
+    # Servidor é fonte da verdade do session_id — frontend NUNCA decide.
+    # Isso elimina a possibilidade de jogador autenticado adivinhar/digitar
+    # session_id alheio. Ignoramos qualquer config.session_id que venha
+    # do cliente. UUID v4 = 122 bits de entropia.
+    config.session_id = f"sess-{uuid.uuid4().hex[:12]}"
 
     if len(sessions) >= MAX_SESSOES:
         raise HTTPException(
@@ -120,6 +171,14 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
     context_builder = ContextBuilder()
     voice_manager = VoiceManager(narrator_voz=config.tts_voice or "pt-BR-FranciscaNeural")
 
+    # DM Feat 4: sorteia 3 Cartas de Improviso para a sessão
+    working_mem.cartas_improviso = random.sample(_POOL_CARTAS, k=min(3, len(_POOL_CARTAS)))
+    log.info(
+        "cartas_improviso_sorteadas",
+        session_id=config.session_id,
+        cartas=working_mem.cartas_improviso,
+    )
+
     # Carrega catálogo e efeitos de quests do módulo
     from config import settings
     _quest_catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
@@ -133,6 +192,7 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
         context_builder=context_builder,
         groq=GroqClient(),
         voice_manager=voice_manager,
+        owner_email=owner.email,
         quest_catalog=_quest_catalog,
         quest_efeitos=_quest_efeitos,
     )
@@ -220,9 +280,14 @@ async def iniciar_sessao(request: Request, config: SessaoConfig) -> SessaoInfo:
 
 @router.post("/{session_id}/turn", response_model=RespostaMestre)
 @limiter.limit("30/minute")
-async def processar_turno(request: Request, session_id: str, comando: ComandoJogador) -> RespostaMestre:
+async def processar_turno(
+    request: Request,
+    session_id: str,
+    comando: ComandoJogador,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> RespostaMestre:
     """Processa um turno: texto do jogador → resposta completa do Mestre (síncrono)."""
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     t0 = time.perf_counter()
 
     sessao.working_mem.registrar_fala("player", comando.texto)
@@ -292,15 +357,16 @@ async def processar_turno(request: Request, session_id: str, comando: ComandoJog
 async def transcrever_audio(
     request: Request,
     session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
     audio: UploadFile = File(..., description="Arquivo de áudio webm/opus do MediaRecorder"),
 ) -> TranscricaoResponse:
     """Transcreve áudio via Faster-Whisper GPU e retorna texto.
 
     Recebe bytes de áudio do browser (MediaRecorder opus/webm), transcreve com
     Faster-Whisper tiny na GPU e retorna o texto para envio pelo WebSocket.
-    Limite: 10 MB. Sessão deve existir.
+    Limite: 10 MB. Sessão deve existir e pertencer ao owner.
     """
-    _get_sessao(session_id)  # garante sessão válida antes de processar áudio
+    _get_sessao(session_id, owner)  # garante sessão válida + autorizada antes do áudio
 
     audio_bytes = await audio.read(_MAX_AUDIO_BYTES + 1)
     if len(audio_bytes) > _MAX_AUDIO_BYTES:
@@ -319,27 +385,37 @@ async def transcrever_audio(
 
 
 @router.get("/{session_id}/status", response_model=SessaoInfo)
-async def status_sessao(session_id: str) -> SessaoInfo:
+async def status_sessao(
+    session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> SessaoInfo:
     """Retorna o estado resumido de uma sessão ativa."""
-    return _serializar_info(_get_sessao(session_id))
+    return _serializar_info(_get_sessao(session_id, owner))
 
 
 @router.get("/{session_id}/llm-backend")
-async def obter_llm_backend(session_id: str) -> dict[str, str]:
+async def obter_llm_backend(
+    session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, str]:
     """Retorna o backend LLM efetivo desta sessão ("groq" ou "ollama")."""
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     return {"backend": sessao.groq.backend_efetivo}
 
 
 @router.put("/{session_id}/llm-backend", status_code=204)
-async def trocar_llm_backend(session_id: str, payload: dict[str, str]) -> None:
+async def trocar_llm_backend(
+    session_id: str,
+    payload: dict[str, str],
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> None:
     """Altera o backend LLM desta sessão em tempo real.
 
     Aceita ``{"backend": "groq" | "ollama" | "auto"}`` — "auto" remove o
     override e volta a usar ``settings.LLM_BACKEND``. Útil para o frontend
     permitir trocar de provedor sem reiniciar a sessão (ex: após 429 TPD).
     """
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     backend = payload.get("backend", "").strip().lower()
     if backend in ("", "auto", "default"):
         sessao.groq.set_backend(None)
@@ -354,9 +430,12 @@ async def trocar_llm_backend(session_id: str, payload: dict[str, str]) -> None:
 
 
 @router.get("/{session_id}/character", response_model=CharacterStateSchema)
-async def obter_character_state(session_id: str) -> CharacterStateSchema:
+async def obter_character_state(
+    session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> CharacterStateSchema:
     """Retorna o estado atual do personagem (spell slots, gold, XP, etc.)."""
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     wm = sessao.working_mem
     return CharacterStateSchema(
         spell_slots=wm.spell_slots,
@@ -373,9 +452,13 @@ async def obter_character_state(session_id: str) -> CharacterStateSchema:
 
 
 @router.put("/{session_id}/character", status_code=204)
-async def salvar_character_state(session_id: str, state: CharacterStateSchema) -> None:
+async def salvar_character_state(
+    session_id: str,
+    state: CharacterStateSchema,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> None:
     """Persiste o estado do personagem no SQLite e atualiza a WorkingMemory."""
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     wm = sessao.working_mem
 
     wm.spell_slots = dict(state.spell_slots)
@@ -392,6 +475,7 @@ async def salvar_character_state(session_id: str, state: CharacterStateSchema) -
     store = CharacterStore()
     await store.salvar(CharacterState(
         session_id=session_id,
+        owner_email=sessao.owner_email,
         spell_slots=wm.spell_slots,
         hit_dice_current=wm.hit_dice_current,
         hit_dice_max=wm.hit_dice_max,
@@ -411,9 +495,12 @@ async def salvar_character_state(session_id: str, state: CharacterStateSchema) -
 
 
 @router.delete("/{session_id}", status_code=204)
-async def encerrar_sessao(session_id: str) -> None:
+async def encerrar_sessao(
+    session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> None:
     """Encerra a sessão, salva estado do personagem + memória episódica."""
-    sessao = _get_sessao(session_id)
+    sessao = _get_sessao(session_id, owner)
     wm = sessao.working_mem
 
     # Persiste estado do personagem antes de destruir a sessão
@@ -421,6 +508,7 @@ async def encerrar_sessao(session_id: str) -> None:
         store = CharacterStore()
         await store.salvar(CharacterState(
             session_id=session_id,
+            owner_email=sessao.owner_email,
             spell_slots=wm.spell_slots,
             hit_dice_current=wm.hit_dice_current,
             hit_dice_max=wm.hit_dice_max,
@@ -442,7 +530,7 @@ async def encerrar_sessao(session_id: str) -> None:
 
     try:
         writer = SessionWriter()
-        await writer.fechar_sessao(wm, session_id=session_id)
+        await writer.fechar_sessao(wm, session_id=session_id, owner_email=sessao.owner_email)
         log.info("sessao_episodica_salva", session_id=session_id)
     except Exception as e:
         log.warning(
@@ -457,9 +545,25 @@ async def encerrar_sessao(session_id: str) -> None:
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _get_sessao(session_id: str) -> SessaoAtiva:
+def _get_sessao(session_id: str, owner: Owner | None = None) -> SessaoAtiva:
+    """Busca sessão e verifica autorização do owner.
+
+    Política de segurança: SE o owner for fornecido E não for admin E não for
+    dono da sessão → 404 (não 403). 404 deliberado evita enumeração: atacante
+    autenticado não consegue distinguir "session_id não existe" de
+    "session_id existe mas é de outro user".
+    """
     sessao = sessions.get(session_id)
     if not sessao:
+        raise HTTPException(status_code=404, detail=f"Sessão '{session_id}' não encontrada")
+    if owner is not None and not owner.pode_ver(sessao.owner_email):
+        # 404 deliberado — mesmo erro de "não existe", para não vazar existência
+        log.warning(
+            "sessao_acesso_negado",
+            session_id=session_id,
+            owner_request=owner.email,
+            owner_sessao=sessao.owner_email,
+        )
         raise HTTPException(status_code=404, detail=f"Sessão '{session_id}' não encontrada")
     return sessao
 

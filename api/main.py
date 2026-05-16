@@ -21,8 +21,11 @@ from typing import Any, AsyncIterator
 
 import structlog
 import uvicorn
+from pathlib import Path
+
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -285,6 +288,18 @@ async def health_check() -> dict[str, Any]:
         "warmup_pendentes": pendentes,
         "warmup_pronto": len(pendentes) == 0,
     }
+
+
+# ── StaticFiles (Bloco 7) ────────────────────────────────────────────────────
+# Serve o Next.js exportado (next export → frontend/out/) na rota raiz.
+# Ativado APENAS quando o diretório existe — em dev local o dev server Next.js
+# na porta 3000 é preferido. Em prod atrás do Cloudflare Tunnel, uma única
+# porta/Access App cobre API + frontend.
+_FRONTEND_OUT = Path(__file__).parent.parent / "frontend" / "out"
+if _FRONTEND_OUT.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_FRONTEND_OUT / "_next" / "static"), html=False), name="next-static")
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_OUT), html=True), name="frontend")
+    log.info("frontend_estatico_montado", path=str(_FRONTEND_OUT))
 
 
 @app.websocket("/ws/game/{session_id}")

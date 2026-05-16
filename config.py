@@ -81,6 +81,21 @@ class Settings(BaseSettings):
     # Ex: CORS_ORIGINS=http://localhost:3000,https://meudominio.com
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Fase 4.6 — Auth multi-tenant via Cloudflare Access
+    # ------------------------------------------------------------------
+    # CF_TEAM_DOMAIN: subdomínio Zero Trust do seu team (sem https://, sem path)
+    #   Ex: "beltrami" → certs em https://beltrami.cloudflareaccess.com/cdn-cgi/access/certs
+    # CF_ACCESS_AUD: AUD tag da Access App (encontra em Zero Trust → Access → Apps → Overview)
+    #   Validar `aud` claim no JWT EVITA que JWT de outra app sua seja aceito.
+    # DEV_USER_EMAIL: email usado em DEBUG=True quando o header CF não chega
+    #   (rodando localhost direto, sem Tunnel). NUNCA é fallback em prod.
+    # ADMIN_EMAILS: lista CSV de emails que podem ver tudo + acessar /debug/*.
+    #   Outras pessoas só veem o que possuem.
+    CF_TEAM_DOMAIN: str = ""
+    CF_ACCESS_AUD: str = ""
+    DEV_USER_EMAIL: str = "admin@example.com"
+    ADMIN_EMAILS: str = "admin@example.com"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(

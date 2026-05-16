@@ -165,6 +165,33 @@ class WorkingMemory:
     xp: int = 0
     inspiration: bool = False
 
+    # ── Features de Mestre Veterano ──────────────────────────────────────────
+
+    # DM Feat 1: Fios Soltos — fios narrativos que o mestre quer resolver
+    # O LLM insere [FIO: <texto>] e a engine coleta em lista circular (max 5).
+    # Injetados no prompt como "Fios em aberto:" para o mestre não esquecer.
+    fios_soltos: list[str] = field(default_factory=list)
+
+    # DM Feat 2: Cliffhanger — override de encerramento da sessão atual.
+    # Se preenchido, o mestre termina a sessão nessa nota dramática em vez
+    # de gerar recap genérico. Limpo após ser usado pelo session_writer.
+    cliffhanger_pendente: str = ""
+
+    # DM Feat 3: Agenda paralela dos NPCs — npc_id → descrição do plano.
+    # O LLM insere [AGENDA: npc-id → texto] e a engine popula este dict.
+    # O context_builder injeta agendas no prompt como contexto de motivação.
+    agenda_npcs: dict[str, str] = field(default_factory=dict)
+
+    # DM Feat 4: Cartas de Improviso — lista de 3 elementos prontos para usar.
+    # Populadas no início de cada sessão por chamada LLM de classification.
+    # Cada carta: string curta com twist/complicação/oportunidade.
+    cartas_improviso: list[str] = field(default_factory=list)
+
+    # DM Feat 5: Pacing Meter — 0-10 (0=totalmente calmo, 10=clímax total).
+    # Incrementado por combate/drama, decrementado por calmaria/social.
+    # O prompt_builder varia densidade narrativa de acordo.
+    pacing_nivel: float = 3.0
+
     @classmethod
     def nova_sessao(
         cls,

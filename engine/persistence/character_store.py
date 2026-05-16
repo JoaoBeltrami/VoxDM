@@ -30,6 +30,7 @@ DB_PATH = Path(__file__).parent.parent.parent / "voxdm.db"
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS character_state (
     session_id             TEXT    PRIMARY KEY,
+    owner_email            TEXT    NOT NULL DEFAULT '',
     spell_slots            TEXT    NOT NULL DEFAULT '{}',
     hit_dice_current       INTEGER NOT NULL DEFAULT 3,
     hit_dice_max           INTEGER NOT NULL DEFAULT 3,
@@ -48,12 +49,17 @@ CREATE TABLE IF NOT EXISTS character_state (
 )
 """
 
+# Migração idempotente — adiciona coluna owner_email em bancos existentes sem a coluna.
+# SQLite não suporta IF NOT EXISTS em ALTER COLUMN; o try/except faz a mesma coisa.
+_MIGRATE_OWNER_EMAIL = "ALTER TABLE character_state ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''"
+
 
 @dataclass
 class CharacterState:
     """Estado persistível do personagem — complementa a WorkingMemory volátil."""
 
     session_id: str
+    owner_email: str = ""  # email do dono — rastreabilidade multi-tenant
     spell_slots: dict[int, dict[str, int]] = field(default_factory=dict)
     hit_dice_current: int = 3
     hit_dice_max: int = 3
@@ -79,6 +85,11 @@ class CharacterStore:
         async with aiosqlite.connect(DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             await conn.execute(_CREATE_TABLE)
+            # Migração idempotente: adiciona owner_email em bancos pre-4.6
+            try:
+                await conn.execute(_MIGRATE_OWNER_EMAIL)
+            except Exception:
+                pass  # coluna já existe — ignorar
             await conn.commit()
             yield conn
 
@@ -90,12 +101,13 @@ class CharacterStore:
             await conn.execute(
                 """
                 INSERT INTO character_state
-                    (session_id, spell_slots, hit_dice_current, hit_dice_max, hit_dice_type,
-                     death_saves_successes, death_saves_failures, death_saves_stable,
-                     gold, xp, inspiration, hp_current, hp_max, inventory, conditions,
-                     updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                    (session_id, owner_email, spell_slots, hit_dice_current, hit_dice_max,
+                     hit_dice_type, death_saves_successes, death_saves_failures,
+                     death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
+                     inventory, conditions, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
+                    owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
                     hit_dice_current=excluded.hit_dice_current,
                     hit_dice_max=excluded.hit_dice_max,
@@ -114,6 +126,7 @@ class CharacterStore:
                 """,
                 (
                     state.session_id,
+                    state.owner_email,
                     slots_json,
                     state.hit_dice_current,
                     state.hit_dice_max,
@@ -150,6 +163,7 @@ class CharacterStore:
 
         return CharacterState(
             session_id=session_id,
+            owner_email=str(row["owner_email"] or ""),
             spell_slots=slots,
             hit_dice_current=row["hit_dice_current"],
             hit_dice_max=row["hit_dice_max"],

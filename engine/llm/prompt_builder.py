@@ -339,6 +339,62 @@ def montar_mensagens(
         if quests_texto:
             secoes.append(f"\n{quests_texto}")
 
+    # ── Features de Mestre Veterano ──────────────────────────────────────────
+
+    # Feat 1: Fios Soltos — tópicos narrativos em aberto, para o mestre não esquecer
+    fios = getattr(contexto.working_memory, "fios_soltos", [])
+    if fios:
+        lista_fios = "\n".join(f"• {f}" for f in fios)
+        secoes.append(
+            f"\n=== FIOS NARRATIVOS EM ABERTO ===\n{lista_fios}\n"
+            "Trate-os como oportunidades — mencione ou aprofunde 1 por turno se a cena permitir."
+        )
+
+    # Feat 2: Cliffhanger — encerramento dramático planejado
+    cliffhanger = getattr(contexto.working_memory, "cliffhanger_pendente", "")
+    if cliffhanger:
+        secoes.append(
+            f"\n=== CLIFFHANGER GUARDADO ===\n{cliffhanger}\n"
+            "Quando o jogador indicar que quer encerrar a sessão (\"parar\", \"sair\", \"por hoje é\"), "
+            "narre esta cena dramática como última linha antes de encerrar."
+        )
+
+    # Feat 3: Agenda Paralela dos NPCs — motivações em background
+    agenda = getattr(contexto.working_memory, "agenda_npcs", {})
+    if agenda:
+        items = "\n".join(f"• {npc}: {plano}" for npc, plano in agenda.items())
+        secoes.append(
+            f"\n=== AGENDA DOS NPCs (background) ===\n{items}\n"
+            "Estes planos correm em paralelo à ação do jogador. Deixe transparecer através "
+            "de comportamento, não de monólogo — sem revelar diretamente."
+        )
+
+    # Feat 4: Cartas de Improviso — elementos prontos para usar
+    cartas = getattr(contexto.working_memory, "cartas_improviso", [])
+    if cartas:
+        lista_cartas = "\n".join(f"• {c}" for c in cartas)
+        secoes.append(
+            f"\n=== CARTAS DE IMPROVISO (use 1 se a cena pedir) ===\n{lista_cartas}"
+        )
+
+    # Feat 5: Pacing Meter — ajusta densidade narrativa
+    pacing = getattr(contexto.working_memory, "pacing_nivel", 3.0)
+    if pacing >= 8.0:
+        secoes.append(
+            "\n[PACING: CLÍMAX] — Tensão máxima. Frases curtas, urgentes. "
+            "Sem pausas descritivas longas. Cada palavra conta."
+        )
+    elif pacing >= 6.0:
+        secoes.append(
+            "\n[PACING: ALTO] — Ação acelerada. Descrições vívidas mas rápidas. "
+            "Não deixe o ritmo cair."
+        )
+    elif pacing <= 1.5:
+        secoes.append(
+            "\n[PACING: BAIXO] — Momento de respiro. Ambiente, detalhes sensoriais, "
+            "personagens com textura. Pode haver silêncio significativo."
+        )
+
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)
     if ep_texto:

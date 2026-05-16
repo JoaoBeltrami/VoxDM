@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 14 de maio de 2026 — Thinking Audio + Histórico de Rolagens
+> Atualizado: 16 de maio de 2026 — Fase 4.6 Auth + 5 DM Veteran Features
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 4.5 concluída. Combat sync implementado. Pendente: teste e2e local com GPU + Cloudflare Tunnel.**
+**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -42,11 +42,35 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
   - **Fix de raiz pros testes**: flag `VOXDM_SKIP_WARMUP=1` no lifespan + `conftest.py` ativa por padrão. Suite saiu de 10min → 30s.
   - **334/334 testes passam, tsc clean.**
 
-Próximo: Fase 4.6 (Auth & Multi-tenant) — fortaleza pessoal pra liberar acesso a amigos via Cloudflare Access. Roteiro de combate em `.internal/ROTEIRO_COMBATE.md` (não rastreado) segue válido pra qualquer gravação que use a polish atual.
+- **Fase 4.6 — Auth & Multi-tenant (16/05)**: ✅ CONCLUÍDA.
+  - **Fundação auth**: `engine/auth/identity.py` (`Owner` dataclass, `pode_ver()`), `engine/auth/jwt_validator.py` (RS256 + cache Cloudflare 1h, rejeita alg:none/HS256), `api/auth.py` (`get_owner` Depends + `get_owner_ws` + `exige_admin`). Em `DEBUG=True` usa `DEV_USER_EMAIL` sem JWT.
+  - **UUID v4 server-side**: `POST /session/start` ignora qualquer `session_id` do cliente, gera `sess-{uuid4().hex[:12]}` internamente. Frontend não decide mais o ID — elimina adivinhação de sessões alheias.
+  - **owner_email em SQLite**: `character_store.py` ganhou coluna `owner_email` com migração idempotente (`ALTER TABLE ... ADD COLUMN` em try/except). `CharacterState` tem `owner_email: str = ""`. Queries de `salvar()`/`carregar()` persistem/lêem o campo.
+  - **owner_email em Qdrant**: `session_writer.fechar_sessao()` inclui `owner_email` no payload episódico. `episodic_memory.listar_com_metadata()` retorna o campo. `GET /session/list` filtra por owner para não-admins (admin vê tudo).
+  - **WebSocket hardening**: origin check antes de `accept()` (fecha cod 1008 se origem inválida); auth antes de `accept()`; sessão checada DEPOIS de `accept()` (envia erro JSON ao usuário autenticado); ownership check silencioso (404 sem revelar existência). `get_owner_ws` funciona igual ao REST via headers.
+  - **Rate limit por email**: `api/rate_limit.py` reescrito — `_get_chave_por_usuario()` usa `Cf-Access-Authenticated-User-Email`, fallback `DEV_USER_EMAIL` em DEBUG, fallback IP. Elimina "todo mundo é a mesma IP atrás de Tunnel".
+  - **`/debug/*` exige admin**: `Depends(exige_admin)` em todos os 5 endpoints. Admin = email em `settings.ADMIN_EMAILS` (CSV). 403 se autenticado mas não-admin.
+  - **StaticFiles opcional**: `api/main.py` monta `frontend/out/` sob `/` quando o diretório existe (next export). Sem frontend exportado, serve só a API.
+  - **`GET /session/me`**: endpoint que retorna `{email, is_admin}` do usuário autenticado. Usado pelo frontend na inicialização.
+  - **Frontend**: `ownerEmail` + `ownerAdmin` via `/session/me` exibidos no header. Botão logout limpa `voxdm_*` localStorage e redireciona para `/cdn-cgi/access/logout`. `sessionInput` removido da UI (servidor gera UUID agora). `criarSessao()` não recebe mais `session_id`.
+  - **Testes**: 34 testes REST (era 17) — `test_me`, formato UUID, 3 testes de isolamento com `dependency_overrides`. WS tests atualizados para usar `_criar_sessao_ws()` com IDs gerados pelo servidor. `conftest.py` com `DEV_USER_EMAIL=test@voxdm.test` + `ADMIN_EMAILS=test@voxdm.test`.
+
+- **5 DM Veteran Features (16/05)**: ✅ CONCLUÍDAS.
+  - **Feat 1 — Fios Soltos**: `[FIO: texto]` na resposta do LLM → `working_mem.fios_soltos` (lista circular máx 5) → injetado no prompt como `=== FIOS NARRATIVOS EM ABERTO ===` → enviado no `fim` WS como `fios_soltos` → frontend exibe painel colapsável "Fios narrativos (N)". `strip_marcadores()` remove do texto antes do TTS.
+  - **Feat 2 — Cliffhanger**: `[CLIFFHANGER: texto]` → `working_mem.cliffhanger_pendente` → injetado no prompt como `=== CLIFFHANGER GUARDADO ===` com instrução de resolver na próxima cena. Máx 1 por turno, último vence.
+  - **Feat 3 — Agenda NPC**: `[AGENDA: npc-id → plano]` → `working_mem.agenda_npcs` (dict id→plano) → injetado no prompt como `=== AGENDA DOS NPCs (background) ===`. LLM pode atualizar planos de forma incremental.
+  - **Feat 4 — Cartas de Improviso**: 15 cartas temáticas em pool. 3 sorteadas aleatoriamente no `POST /session/start`. Injetadas no prompt como `=== CARTAS DE IMPROVISO ===`. Sem LLM call — sorteio instantâneo.
+  - **Feat 5 — Pacing Meter**: `working_mem.pacing_nivel` (float 0–10, padrão 3.0). Atualizado a cada turno: +1.5 em combate, -0.5 pós-combate, -0.3 após 3 turnos calmos, +0.2 exploração normal. Prompt recebe `[PACING: CLÍMAX]` (≥8), `[PACING: ALTO]` (≥5) ou `[PACING: BAIXO]` (<3) como instrução de densidade narrativa.
+  - **Infra compartilhada**: `api/turn_pipeline.py` — regexes `_RE_FIO`, `_RE_CLIFFHANGER`, `_RE_AGENDA`. Steps 9–12 em `aplicar_pos_turno()`. `engine/memory/quest_detector.strip_marcadores()` estendido para limpar `[FIO]`, `[CLIFFHANGER]`, `[AGENDA]`, `[LAMPEJO]` antes do TTS. `engine/llm/prompts/master_system.md` documenta todos os marcadores com exemplos e regras.
+  - **356/356 testes passam, tsc clean.**
+
+Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou Fase 5.6 (sincronização texto-voz). Roteiro de combate em `.internal/ROTEIRO_COMBATE.md` (não rastreado) segue válido.
 
 ### Fases planejadas (não implementadas)
 
-**Fase 4.6 — Auth & Multi-tenant**
+**Fase 4.6 — Auth & Multi-tenant** ✅ CONCLUÍDA (16/05/26) — ver histórico acima.
+
+**Fase 4.6 (planejamento original para referência):**
 Pré-requisito pra expor a engine a amigos via Cloudflare Tunnel sem virar porta aberta na internet.
 - `engine/auth/identity.py` — dataclass `Owner(email, is_admin)` como cross-cutting concern.
 - `engine/auth/jwt_validator.py` — pyjwt RS256 + cache de certs Cloudflare (TTL 1h, refresh em rotation). Validar `aud` claim (Access App AUD tag) sempre, NUNCA aceitar `alg: none` ou HS256.
@@ -579,6 +603,38 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `frontend/app/page.tsx` | `registrarRolagem` plugado em 3 funções de dado: `handleRolagemContextual` (com motivo = label do atributo), `rolarD20` (tipo "d20"/"d20▲"/"d20▼"), `rolarDano` (motivo = "Dano") | ✅ Atualizado |
 | `frontend/components/CharacterSheet.tsx` | Nova seção colapsável "Últimas rolagens" exibindo 5 mais recentes, com cor especial pra crit (violeta) e falha crítica (vermelho) em d20 | ✅ Atualizado |
 | **Total testes** | | **334/334 passed**; `tsc --noEmit` clean |
+
+### Fase 4.6 — Auth & Multi-tenant + 5 DM Features (Sessão 16/05)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/auth/identity.py` | `Owner(email, is_admin)` dataclass + `pode_ver(owner_email)` — cross-cutting concern de autorização. `is_admin` por `settings.ADMIN_EMAILS` (CSV) | ✅ Criado |
+| `engine/auth/jwt_validator.py` | Validação JWT RS256 do Cloudflare Access — certs com cache 1h, valida `aud`, rejeita `alg:none`/HS256. `DEV_USER_EMAIL` em DEBUG sem JWT | ✅ Criado |
+| `api/auth.py` | `get_owner` FastAPI Depends (REST) + `get_owner_ws` (WebSocket via headers) + `exige_admin`. 401 se ausente em prod, 403 se não-admin em `/debug/*` | ✅ Criado |
+| `api/models/schemas.py` | Campo `fios_soltos: list[str]` em `MensagemWS`. `SessaoConfig.session_id` documentado como ignorado (servidor gera UUID) | ✅ Atualizado |
+| `api/rate_limit.py` | Reescrito — `_get_chave_por_usuario()`: `Cf-Access-Authenticated-User-Email` > `DEV_USER_EMAIL` > IP. Rate limit por identidade, não por IP | ✅ Reescrito |
+| `api/routes/debug.py` | `Depends(exige_admin)` em todos os 5 endpoints — `/debug/*` agora exige email em `ADMIN_EMAILS` | ✅ Atualizado |
+| `api/routes/session.py` | `owner` Depends em todas as rotas. `GET /session/me`. UUID v4 gerado no `POST /start`. Pool de 15 Cartas de Improviso + sorteio de 3 por sessão. Filtro de isolamento em `GET /list` | ✅ Atualizado |
+| `api/websocket.py` | Origin check + auth + `accept()` + session check + ownership check (nessa ordem). `fios_soltos` no payload `fim` | ✅ Atualizado |
+| `api/main.py` | StaticFiles opcional para `frontend/out/` | ✅ Atualizado |
+| `engine/auth/__init__.py` | Package auth | ✅ Criado |
+| `engine/memory/session_writer.py` | `fechar_sessao()` recebe `owner_email`, inclui no payload Qdrant | ✅ Atualizado |
+| `engine/memory/episodic_memory.py` | `listar_com_metadata()` retorna `owner_email` de cada entrada | ✅ Atualizado |
+| `engine/memory/working_memory.py` | 5 novos campos DM: `fios_soltos`, `cliffhanger_pendente`, `agenda_npcs`, `cartas_improviso`, `pacing_nivel` | ✅ Atualizado |
+| `engine/memory/quest_detector.py` | `strip_marcadores()` agora remove `[FIO]`, `[CLIFFHANGER]`, `[AGENDA]`, `[LAMPEJO]` além de `[Q:]`. `_RE_MESTRE_VET` pattern | ✅ Atualizado |
+| `engine/llm/prompt_builder.py` | Injeção dos 5 features DM: Fios Soltos, Cliffhanger, Agenda NPCs, Cartas de Improviso, Pacing Meter | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Seção "Marcadores de Mestre Veterano" com `[FIO]`, `[CLIFFHANGER]`, `[AGENDA]` — exemplos e regras | ✅ Atualizado |
+| `engine/persistence/character_store.py` | Coluna `owner_email` com migração idempotente. `CharacterState.owner_email: str = ""` | ✅ Atualizado |
+| `api/turn_pipeline.py` | `_RE_FIO`, `_RE_CLIFFHANGER`, `_RE_AGENDA`. Steps 9–12 em `aplicar_pos_turno()`: pacing, fios, cliffhanger, agenda | ✅ Atualizado |
+| `config.py` | `ADMIN_EMAILS: str`, `CORS_ORIGINS` já existia. `DEV_USER_EMAIL` default `admin@localhost` | ✅ Atualizado |
+| `frontend/lib/api.ts` | `criarSessao()` sem `session_id`. `IdentidadeUsuario` + `obterIdentidade()`. `MensagemWS.fios_soltos?: string[]` | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `fiosSoltos: string[]` em estado + ESTADO_INICIAL. Sincronizado no `fim` handler | ✅ Atualizado |
+| `frontend/app/page.tsx` | `ownerEmail`/`ownerAdmin` via `/session/me`. Logout button. `setSessionInput` restaurado (compat). Painel Fios Soltos colapsável | ✅ Atualizado |
+| `tests/conftest.py` | `DEBUG=true`, `DEV_USER_EMAIL=test@voxdm.test`, `ADMIN_EMAILS=test@voxdm.test` nos setdefaults | ✅ Atualizado |
+| `tests/test_api_session.py` | 34 testes (era 17) — `/me`, UUID format, 3 isolation tests via `dependency_overrides` | ✅ Reescrito |
+| `tests/test_websocket.py` | WS tests usam `_criar_sessao_ws()` com UUID gerado pelo servidor. 6 novos testes de DM features markers | ✅ Atualizado |
+| `tests/test_quest_detector.py` | +6 testes para `strip_marcadores` com `[FIO]`, `[CLIFFHANGER]`, `[AGENDA]`, `[LAMPEJO]`, combinados | ✅ Atualizado |
+| **Total testes** | | **356/356 passed**; `tsc --noEmit` clean |
 
 ---
 

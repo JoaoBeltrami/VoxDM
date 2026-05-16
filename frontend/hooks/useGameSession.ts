@@ -95,6 +95,8 @@ interface EstadoSessao {
   questNotificacao: string | null;
   // Últimas N rolagens do jogador, mais recente primeiro
   rolagens: RolagemLog[];
+  // DM Feat 1: Fios Soltos — threads narrativas em aberto (máx 5)
+  fiosSoltos: string[];
 }
 
 const MAX_RECONNECTS = 3;
@@ -131,6 +133,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   iniciativaOrdem: [],
   questNotificacao: null,
   rolagens: [],
+  fiosSoltos: [],
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -289,6 +292,7 @@ export function useGameSession() {
           inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
           consequencias: msg.log_consequencias ?? [],
           iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
+          fiosSoltos: msg.fios_soltos ?? [],
         };
 
         const novoTurnoBase = {
@@ -337,6 +341,7 @@ export function useGameSession() {
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
+            fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -376,6 +381,7 @@ export function useGameSession() {
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
+            fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -436,17 +442,22 @@ export function useGameSession() {
     wsRef.current = ws;
   }, [tocarChunk]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const conectar = useCallback(async (sessionId: string, personagem?: PersonagemConfig) => {
+  const conectar = useCallback(async (
+    _sessionIdIgnorado: string,  // mantido por compat de chamada; servidor gera o ID
+    personagem?: PersonagemConfig,
+  ) => {
     intentionalCloseRef.current = false;
     reconnectCountRef.current = 0;
-    sessionIdRef.current = sessionId;
     personagemRef.current = personagem;
 
     setEstado(s => ({ ...s, carregando: true, erro: null }));
     try {
-      await criarSessao(sessionId, personagem);
+      // Servidor gera o session_id — retornado em SessaoInfo.session_id
+      const info = await criarSessao(personagem);
+      const sessaoId = info.session_id;
+      sessionIdRef.current = sessaoId;
       const nome = personagem?.player_name?.trim() || null;
-      _conectarWS(sessionId, nome);
+      _conectarWS(sessaoId, nome);
     } catch (e) {
       setEstado(s => ({ ...s, carregando: false, erro: String(e) }));
     }

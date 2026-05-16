@@ -18,7 +18,7 @@ import { InitiativeBar } from "@/components/InitiativeBar";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
-import { trocarLlmBackend } from "@/lib/api";
+import { trocarLlmBackend, obterIdentidade } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
 const VOZES_PTBR = [
@@ -214,7 +214,7 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
-    iniciativaOrdem,
+    iniciativaOrdem, fiosSoltos,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
@@ -223,10 +223,18 @@ export default function Home() {
 
   const [tela, setTela] = useState<Tela>("menu");
 
-  // ID gerado automaticamente — kebab-case, único por timestamp
-  const [sessionInput, setSessionInput] = useState(() =>
-    `sess-${Date.now().toString(36).slice(-5)}`
-  );
+  // Identidade do usuário autenticado — carregada do backend na montagem
+  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [ownerAdmin, setOwnerAdmin] = useState<boolean>(false);
+  useEffect(() => {
+    obterIdentidade().then(id => {
+      if (id) { setOwnerEmail(id.email); setOwnerAdmin(id.is_admin); }
+    }).catch(() => {});
+  }, []);
+
+  // Session input removido — servidor gera UUID v4. Mantido como string vazia
+  // para compat com handleConectar que ainda passa sessionInput ao conectar().
+  const [sessionInput, setSessionInput] = useState("");
   const [personagem, setPersonagem] = useState<PersonagemConfig>({});
   const [ouvindo, setOuvindo] = useState(false);
 
@@ -510,6 +518,12 @@ export default function Home() {
             }`} />
             <span className="text-xs text-zinc-500">
               {sessionId}{playerName ? ` · ${playerName}` : ""}
+              {ownerEmail && (
+                <span className="ml-2 text-zinc-600" title={`Autenticado como ${ownerEmail}`}>
+                  · {ownerEmail.split("@")[0]}
+                  {ownerAdmin && <span className="ml-1 text-violet-500/70" title="Admin">★</span>}
+                </span>
+              )}
               {reconectando && <span className="ml-2 text-yellow-500">reconectando...</span>}
             </span>
           </div>
@@ -563,6 +577,28 @@ export default function Home() {
             >
               Encerrar
             </button>
+            {ownerEmail && (
+              <button
+                onClick={() => {
+                  // Limpa prefs locais deste usuário e redireciona para logout CF Access
+                  const prefix = `voxdm_`;
+                  Object.keys(localStorage)
+                    .filter(k => k.startsWith(prefix))
+                    .forEach(k => localStorage.removeItem(k));
+                  // Em produção o Cloudflare Access redireciona para /cdn-cgi/access/logout
+                  // Em debug local apenas recarrega (sem CF)
+                  if (window.location.hostname !== "localhost") {
+                    window.location.href = "/cdn-cgi/access/logout";
+                  } else {
+                    window.location.reload();
+                  }
+                }}
+                title={`Sair (${ownerEmail})`}
+                className="text-xs text-zinc-600 transition hover:text-red-400"
+              >
+                Sair
+              </button>
+            )}
           </div>
         </header>
 
@@ -752,6 +788,27 @@ export default function Home() {
                   {c}
                 </p>
               ))}
+            </div>
+          )}
+
+          {/* Fios Soltos — threads narrativas abertas (DM Feat 1). Some em cinema mode. */}
+          {!cinemaMode && fiosSoltos.length > 0 && (
+            <div className="max-w-sm w-full">
+              <details className="group">
+                <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-violet-400/70 hover:text-violet-300 transition-colors list-none">
+                  <span className="text-violet-500">◈</span>
+                  Fios narrativos ({fiosSoltos.length})
+                  <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                  <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+                </summary>
+                <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-violet-900/40">
+                  {fiosSoltos.map((fio, i) => (
+                    <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                      {fio}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </div>
           )}
 

@@ -3,10 +3,10 @@ Endpoints de debug — introspection da engine para o dashboard Streamlit.
 
 Por que existe: expõe working memory e telemetria em tempo real sem poluir os
     endpoints de jogo. O dashboard.py consome estes endpoints via polling.
-Dependências: FastAPI, api/state, engine/telemetry, config
-Armadilha: NUNCA registrar estes endpoints em produção. A proteção está em
-    api/main.py — o router só é incluído se settings.DEBUG=True.
-    Não adicionar autenticação aqui; controlar no app principal.
+Dependências: FastAPI, api/state, engine/telemetry, config, api/auth
+Armadilha: registrado APENAS quando settings.DEBUG=True (api/main.py).
+    Além disso, cada endpoint exige is_admin(owner) — defense in depth caso
+    DEBUG vaze pra produção. Nunca expor a não-admins.
 
 Exemplo:
     GET /debug/sessoes                  → lista sessões ativas
@@ -14,12 +14,14 @@ Exemplo:
     GET /debug/telemetria?n=20          → últimos N eventos do pub/sub
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.auth import exige_admin
 from api.state import sessions
+from engine.auth.identity import Owner
 from engine.telemetry import read_latest
 
 log = structlog.get_logger()
@@ -27,7 +29,9 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 
 
 @router.get("/sessoes")
-async def listar_sessoes() -> dict[str, Any]:
+async def listar_sessoes(
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
     """Lista todas as sessões ativas com metadados básicos."""
     return {
         "total": len(sessions),
@@ -46,7 +50,10 @@ async def listar_sessoes() -> dict[str, Any]:
 
 
 @router.get("/estado/{session_id}")
-async def estado_sessao(session_id: str) -> dict[str, Any]:
+async def estado_sessao(
+    session_id: str,
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
     """Retorna a working memory completa e serializada de uma sessão."""
     sessao = sessions.get(session_id)
     if not sessao:
@@ -80,7 +87,10 @@ async def estado_sessao(session_id: str) -> dict[str, Any]:
 
 
 @router.get("/working-memory/{session_id}")
-async def working_memory_completo(session_id: str) -> dict[str, Any]:
+async def working_memory_completo(
+    session_id: str,
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
     """Retorna working memory completa incluindo combate, RPG e flags de narrativa."""
     sessao = sessions.get(session_id)
     if not sessao:
@@ -146,14 +156,20 @@ async def working_memory_completo(session_id: str) -> dict[str, Any]:
 
 
 @router.get("/telemetria")
-async def telemetria(n: int = 20) -> dict[str, Any]:
+async def telemetria(
+    _owner: Annotated[Owner, Depends(exige_admin)],
+    n: int = 20,
+) -> dict[str, Any]:
     """Retorna os últimos N eventos do pub/sub de telemetria (JSONL)."""
     eventos = read_latest(n)
     return {"total": len(eventos), "eventos": eventos}
 
 
 @router.get("/ultimo-turno/{session_id}")
-async def ultimo_turno(session_id: str) -> dict[str, Any]:
+async def ultimo_turno(
+    session_id: str,
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
     """Retorna snapshot completo do último turno: prompt enviado ao Groq, RAG scores e breakdown de latência."""
     sessao = sessions.get(session_id)
     if not sessao:

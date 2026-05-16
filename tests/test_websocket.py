@@ -69,11 +69,18 @@ def test_ws_sessao_inexistente(client):
     assert "nao-existe" in msg["conteudo"]
 
 
+def _criar_sessao_ws(client: TestClient) -> str:
+    """Cria sessão via REST e retorna o session_id gerado pelo servidor."""
+    resp = client.post("/session/start", json={})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["session_id"]
+
+
 def test_ws_turno_streaming_tokens(client):
     """Fluxo completo: criar sessão → WS → 4 tokens → mensagem fim."""
-    client.post("/session/start", json={"session_id": "ws-01"})
+    sid = _criar_sessao_ws(client)
 
-    with client.websocket_connect("/ws/game/ws-01") as ws:
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
         ws.send_json({"texto": "O que há na taverna?"})
         msgs = []
         while True:
@@ -93,9 +100,9 @@ def test_ws_turno_streaming_tokens(client):
 
 def test_ws_json_invalido_envia_erro_e_continua(client):
     """JSON malformado → erro de formato, loop continua, próximo turno funciona."""
-    client.post("/session/start", json={"session_id": "ws-02"})
+    sid = _criar_sessao_ws(client)
 
-    with client.websocket_connect("/ws/game/ws-02") as ws:
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
         ws.send_text("nao_eh_json{{")
         msg_erro = ws.receive_json()
 
@@ -113,9 +120,9 @@ def test_ws_json_invalido_envia_erro_e_continua(client):
 
 def test_ws_texto_vazio_ignorado(client):
     """Texto em branco não gera resposta — servidor espera próxima mensagem."""
-    client.post("/session/start", json={"session_id": "ws-03"})
+    sid = _criar_sessao_ws(client)
 
-    with client.websocket_connect("/ws/game/ws-03") as ws:
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
         ws.send_json({"texto": "   "})
         ws.send_json({"texto": "olá"})
         msgs = []
@@ -132,9 +139,9 @@ def test_ws_texto_vazio_ignorado(client):
 
 def test_ws_texto_longo_rejeitado(client):
     """Texto > 500 chars → erro imediato, sem chamar o LLM."""
-    client.post("/session/start", json={"session_id": "ws-04"})
+    sid = _criar_sessao_ws(client)
 
-    with client.websocket_connect("/ws/game/ws-04") as ws:
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
         ws.send_json({"texto": "x" * 501})
         msg = ws.receive_json()
 
@@ -144,9 +151,9 @@ def test_ws_texto_longo_rejeitado(client):
 
 def test_ws_fim_inclui_campos_combate(client):
     """Mensagem 'fim' sempre inclui em_combate e inimigos_combate."""
-    client.post("/session/start", json={"session_id": "ws-05"})
+    sid = _criar_sessao_ws(client)
 
-    with client.websocket_connect("/ws/game/ws-05") as ws:
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
         ws.send_json({"texto": "O que há na taverna?"})
         msgs = []
         while True:

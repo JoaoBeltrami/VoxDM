@@ -80,6 +80,8 @@ export interface MensagemWS {
   iniciativa_ordem?: TokenIniciativa[];
   // Quests que avançaram neste turno — notificação ao jogador
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
+  // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
+  fios_soltos?: string[];
 }
 
 /** Token na barra de iniciativa — espelha api/models/schemas.TokenIniciativaPayload. */
@@ -123,10 +125,10 @@ export interface PersonagemConfig {
 }
 
 export async function criarSessao(
-  session_id: string,
   personagem?: PersonagemConfig,
 ): Promise<SessaoInfo> {
-  const body: Record<string, unknown> = { session_id, ...personagem };
+  // session_id é gerado pelo servidor (UUID v4) — o cliente não envia nem recebe input do user.
+  const body: Record<string, unknown> = { ...personagem };
   const resp = await fetch(`${API_BASE}/session/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -134,6 +136,21 @@ export async function criarSessao(
   });
   if (!resp.ok) throw new Error(await resp.text());
   return resp.json();
+}
+
+export interface IdentidadeUsuario {
+  email: string;
+  is_admin: boolean;
+}
+
+export async function obterIdentidade(): Promise<IdentidadeUsuario | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/session/me`);
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function encerrarSessao(session_id: string): Promise<void> {

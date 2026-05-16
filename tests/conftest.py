@@ -24,6 +24,12 @@ os.environ.setdefault("QDRANT_API_KEY",      "test-qdrant-key")
 os.environ.setdefault("NEO4J_URI",           "neo4j+s://test.databases.neo4j.io")
 os.environ.setdefault("NEO4J_PASSWORD",      "test-neo4j-password")
 
+# Auth em modo debug: get_owner usa DEV_USER_EMAIL quando DEBUG=True e nenhum
+# header Cloudflare está presente. Permite testes sem JWT real.
+os.environ.setdefault("DEBUG",          "true")
+os.environ.setdefault("DEV_USER_EMAIL", "test@voxdm.test")
+os.environ.setdefault("ADMIN_EMAILS",   "test@voxdm.test")
+
 # Pula warmups no lifespan da API durante testes: TestClient(app) com context
 # manager dispara o lifespan, e os warmups baixam Whisper (~500MB), carregam
 # embedder e fazem 20 sínteses Edge TTS pra thinking_cache — transformam

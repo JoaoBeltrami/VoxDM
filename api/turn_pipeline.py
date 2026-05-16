@@ -34,6 +34,20 @@ from engine.memory.working_memory import WorkingMemory
 
 log = structlog.get_logger()
 
+# ── Regexes das Features de Mestre Veterano ───────────────────────────────────
+
+# DM Feat 1: Fio solto — LLM emite [FIO: descrição do plot thread em aberto]
+# Ex: "[FIO: O ferreiro mencionou ter visto Valdrek na mina há 3 semanas]"
+_RE_FIO = re.compile(r"\[FIO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
+# DM Feat 2: Cliffhanger — LLM emite [CLIFFHANGER: frase dramática de encerramento]
+# Ex: "[CLIFFHANGER: E então a porta se abre — é Valdrek, segurando o corpo de Bjorn]"
+_RE_CLIFFHANGER = re.compile(r"\[CLIFFHANGER:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
+# DM Feat 3: Agenda paralela de NPC — LLM emite [AGENDA: npc-id → descrição do plano]
+# Ex: "[AGENDA: fael-valdreksson → planeja desertar à meia-noite com a chave do cofre]"
+_RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -193,5 +207,48 @@ def aplicar_pos_turno(
         working_mem.turnos_sem_tensao = 0
     else:
         working_mem.turnos_sem_tensao += 1
+
+    # ── Features de Mestre Veterano ───────────────────────────────────────────
+
+    # 9. Pacing Meter (Feat 5) — ajusta nível de tensão narrativa
+    if working_mem.em_combate:
+        # Combate eleva o pacing
+        working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 1.5)
+    elif working_mem.saiu_combate_recentemente:
+        # Logo após combate: reduz levemente (respiração pós-batalha)
+        working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.5)
+    elif working_mem.turnos_sem_tensao > 3:
+        # Muitos turnos calmos: reduz pacing gradualmente
+        working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.3)
+    else:
+        # Turno normal de exploração/social: leve aumento
+        working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
+    log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
+
+    # 10. Fios Soltos (Feat 1) — coleta [FIO: ...] da resposta do LLM
+    for m in _RE_FIO.finditer(resposta_completa):
+        fio = m.group(1).strip()
+        if fio and fio not in working_mem.fios_soltos:
+            working_mem.fios_soltos.append(fio)
+            # Mantém lista circular de max 5 fios — remove o mais antigo se exceder
+            if len(working_mem.fios_soltos) > 5:
+                working_mem.fios_soltos.pop(0)
+            log.info("fio_solto_registrado", fio=fio[:60])
+
+    # 11. Cliffhanger (Feat 2) — captura [CLIFFHANGER: ...] da resposta do LLM
+    for m in _RE_CLIFFHANGER.finditer(resposta_completa):
+        ch = m.group(1).strip()
+        if ch:
+            working_mem.cliffhanger_pendente = ch
+            log.info("cliffhanger_registrado", texto=ch[:80])
+            break  # Máx 1 cliffhanger por turno — o último vence
+
+    # 12. Agenda NPC (Feat 3) — coleta [AGENDA: npc-id → plano]
+    for m in _RE_AGENDA.finditer(resposta_completa):
+        npc_id = m.group(1).strip().lower()
+        plano = m.group(2).strip()
+        if npc_id and plano:
+            working_mem.agenda_npcs[npc_id] = plano
+            log.info("agenda_npc_atualizada", npc_id=npc_id, plano=plano[:60])
 
     return mudancas_trust
