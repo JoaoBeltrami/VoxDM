@@ -23,12 +23,14 @@ import structlog
 log = structlog.get_logger()
 
 # Detecta verbos de casting no texto do jogador.
-# Cobre conjugações mais comuns em PT-BR: presente, passado, gerúndio.
-# "lanço .{1,30}" captura "lanço Bola de Fogo", mas é genérico o suficiente
-# pra não colidir com "lanço uma pedra" — o nome da magia é extraído depois.
+# "lanço" e "conjuro" sozinhos são mantidos como triggers de primeira passagem —
+# a validação real é feita por extrair_nome_magia + buscar_dados_magia:
+# se não extrair um nome de magia válido, nenhum slot é decrementado.
+# Os sufixos genéricos ".{1,30}" foram removidos pois não adicionavam valor
+# e tornavam o regex verboso sem benefício de filtragem.
 _RE_CASTING = re.compile(
     r"\b(lanço|conjuro|uso a magia|uso o feitiço|lanço a magia|lanço o feitiço|"
-    r"lanço .{1,30}|conjuro .{1,30}|casto|castando)\b",
+    r"conjuro a magia|conjuro o feitiço|casto|castando)\b",
     re.IGNORECASE,
 )
 

@@ -253,6 +253,12 @@ class WorkingMemory:
         hd_tipo = hit_dice_type if hit_dice_type is not None else _HIT_DICE_TIPO.get(player_class, 8)
         hd_atual = hit_dice_current if hit_dice_current is not None else player_level
 
+        # Se o frontend não enviou spell_slots (default {}), inicializa pela tabela SRD
+        # para que o backend possa rastrear e decrementar corretamente.
+        if not spell_slots and player_class:
+            from engine.magic.spell_list import slots_padrao
+            spell_slots = slots_padrao(player_class, player_level)
+
         wm = cls(
             location_id=location_id,
             location_nome=location_nome,

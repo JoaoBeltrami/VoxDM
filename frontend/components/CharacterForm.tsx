@@ -395,7 +395,7 @@ export function CharacterForm({ onChange }: Props) {
           </label>
           <select
             value={classe}
-            onChange={e => { setClasse(e.target.value); setSubclasse(""); }}
+            onChange={e => { setClasse(e.target.value); setSubclasse(""); setSelectedSpells([]); setNivelTabSpells(0); }}
             className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
           >
             <option value="">— Escolher —</option>

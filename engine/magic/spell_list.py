@@ -560,3 +560,90 @@ def nivel_da_spell(nome_pt: str, classe: str) -> int | None:
         if spell.nome_pt.lower() == nome_lower:
             return spell.nivel
     return None
+
+
+# ── Tabelas de spell slots SRD 5e (espelha CharacterSheet.tsx) ───────────────
+
+# Full casters (Mago, Clérigo, Druida, Bardo, Feiticeiro): slots por nível de personagem
+# Índice 0 = nível 1 do personagem. Lista interna: slots por nível de spell (1-based index).
+_SLOTS_CONJURADOR_PLENO: list[list[int]] = [
+    [2],                # nível 1
+    [3],                # nível 2
+    [4, 2],             # nível 3
+    [4, 3],             # nível 4
+    [4, 3, 2],          # nível 5
+    [4, 3, 3],          # nível 6
+    [4, 3, 3, 1],       # nível 7
+    [4, 3, 3, 2],       # nível 8
+    [4, 3, 3, 3, 1],    # nível 9
+    [4, 3, 3, 3, 2],    # nível 10
+]
+
+# Half casters (Paladino, Ranger): slots começam no nível 2
+_SLOTS_MEIO_CONJURADOR: list[list[int]] = [
+    [],                 # nível 1 — sem slots
+    [2],                # nível 2
+    [3],                # nível 3
+    [3],                # nível 4
+    [4, 2],             # nível 5
+    [4, 3],             # nível 6
+    [4, 3, 2],          # nível 7
+    [4, 3, 3],          # nível 8
+    [4, 3, 3, 1],       # nível 9
+    [4, 3, 3, 2],       # nível 10
+]
+
+# Bruxo: Pact Magic — (nível_do_slot, qtd_slots) por nível de personagem
+_SLOTS_BRUXO: list[tuple[int, int]] = [
+    (1, 1), (1, 2), (2, 2), (2, 2), (3, 2),
+    (3, 2), (4, 2), (4, 2), (5, 2), (5, 2),
+]
+
+_FULL_CASTERS = {"mago", "clérigo", "druida", "bardo", "feiticeiro"}
+_HALF_CASTERS = {"paladino", "ranger"}
+
+
+def slots_padrao(classe: str, nivel_personagem: int) -> dict[int, dict[str, int]]:
+    """Retorna spell slots padrão SRD 5e para a classe e nível do personagem.
+
+    Usado para inicializar WorkingMemory quando o frontend não envia spell_slots
+    (ex: personagem recém-criado ou restaurado de sessão sem estado salvo).
+
+    Args:
+        classe: Nome da classe do personagem (qualquer case).
+        nivel_personagem: Nível do personagem (1–10+, clampado a 10).
+
+    Returns:
+        dict[nivel_spell, {"current": N, "max": N}]
+        Retorna {} para classes sem casting (Guerreiro, Bárbaro, etc.).
+
+    Exemplos:
+        slots_padrao("Mago", 3)
+        # → {1: {"current": 4, "max": 4}, 2: {"current": 2, "max": 2}}
+        slots_padrao("Bruxo", 3)
+        # → {2: {"current": 2, "max": 2}}
+        slots_padrao("Guerreiro", 3)
+        # → {}
+    """
+    classe_lower = classe.lower()
+    # Índice na tabela — clampa em 10 (máx suportado)
+    idx = max(0, min(9, nivel_personagem - 1))
+
+    if classe_lower == "bruxo":
+        nivel_slot, qtd = _SLOTS_BRUXO[idx]
+        return {nivel_slot: {"current": qtd, "max": qtd}}
+
+    if classe_lower in _FULL_CASTERS:
+        tabela = _SLOTS_CONJURADOR_PLENO
+    elif classe_lower in _HALF_CASTERS:
+        tabela = _SLOTS_MEIO_CONJURADOR
+    else:
+        return {}  # Não-conjurador
+
+    linha = tabela[idx]
+    resultado: dict[int, dict[str, int]] = {}
+    for i, max_slots in enumerate(linha):
+        if max_slots > 0:
+            nivel_spell = i + 1
+            resultado[nivel_spell] = {"current": max_slots, "max": max_slots}
+    return resultado

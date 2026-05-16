@@ -288,39 +288,6 @@ def montar_mensagens(
         )
     secoes.append(wm_texto)
 
-    # ── Magias Conhecidas ────────────────────────────────────────────────────
-    # Injetadas logo após o working_memory para restringir o casting do LLM.
-    # Lookup do nível de cada magia via spell_list.py para formatar por nível.
-    spells_conhecidas = getattr(contexto.working_memory, "spells_conhecidas", [])
-    if spells_conhecidas:
-        from engine.magic.spell_list import nivel_da_spell
-        player_class_lower = getattr(contexto.working_memory, "player_class", "").lower()
-        # Agrupa por nível: truques (0) primeiro, depois 1–9
-        por_nivel: dict[int, list[str]] = {}
-        sem_nivel: list[str] = []
-        for nome in spells_conhecidas:
-            nivel = nivel_da_spell(nome, player_class_lower)
-            if nivel is None:
-                sem_nivel.append(nome)
-            else:
-                por_nivel.setdefault(nivel, []).append(nome)
-
-        partes_spells: list[str] = []
-        if 0 in por_nivel:
-            partes_spells.append(f"Truques: {', '.join(por_nivel[0])}")
-        for lv in sorted(k for k in por_nivel if k > 0):
-            partes_spells.append(f"Nível {lv}: {', '.join(por_nivel[lv])}")
-        if sem_nivel:
-            partes_spells.append(f"Outras: {', '.join(sem_nivel)}")
-
-        lista_spells = " | ".join(partes_spells)
-        secoes.append(
-            f"\n=== MAGIAS CONHECIDAS DO PERSONAGEM ===\n{lista_spells}\n"
-            "Importante: o personagem SÓ pode conjurar as magias listadas acima. "
-            "Se tentar conjurar outra, narre que não a conhece."
-        )
-        log.info("magias_conhecidas_injetadas", total=len(spells_conhecidas))
-
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:
         secoes.append(_formatar_relacoes(contexto.relacoes_grafo))

@@ -41,9 +41,14 @@ _RE_DESCANSO_CURTO = re.compile(
 )
 
 # Detecta declarações de descanso longo no texto do jogador.
-# "dormir", "acampar" e "descanso longo" são os mais comuns em PT-BR de mesa.
+# Exige intenção explícita do JOGADOR (1ª pessoa) para evitar falso positivo
+# em narrativa de NPCs: "quero dormir", "vou acampar", "quero fazer descanso longo",
+# "dormimos", "acampamos". "dormir aqui" e "acampar" isolados (3ª pessoa) são ignorados.
 _RE_DESCANSO_LONGO = re.compile(
-    r"\b(descanso longo|descansar longo|dormir|acampar|acampamos|dormimos)\b",
+    r"\b(descanso longo|descansar longo"
+    r"|quero dormir|vou dormir|preciso dormir"
+    r"|quero acampar|vou acampar|podemos acampar"
+    r"|dormimos|acampamos)\b",
     re.IGNORECASE,
 )
 

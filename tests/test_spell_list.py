@@ -239,8 +239,12 @@ class TestWorkingMemorySpells:
 
 class TestPromptInjecao:
     def _criar_contexto(self, spells: list[str], player_class: str = "Mago"):
-        """Helper que cria um ContextoMontado mínimo para testar o prompt."""
-        from unittest.mock import MagicMock
+        """Helper que cria um ContextoMontado mínimo para testar o prompt.
+
+        spells_conhecidas é passado tanto para working_memory quanto para
+        contexto.spells_conhecidas — que é o campo lido pelo prompt_builder
+        (via bloco autoritativo alimentado pelo websocket).
+        """
         from engine.memory.working_memory import WorkingMemory
         from engine.llm.types import ContextoMontado
 
@@ -257,6 +261,7 @@ class TestPromptInjecao:
             relacoes_grafo=[],
             secrets_visiveis=[],
             transcricao_atual="falo com o viajante",
+            spells_conhecidas=list(spells),  # campo lido pelo prompt_builder
         )
 
     def test_spells_conhecidas_injetadas_no_system(self):
@@ -293,7 +298,9 @@ class TestPromptInjecao:
         contexto = self._criar_contexto(["Raio de Gelo"])
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
         system = msgs[0]["content"]
-        assert "SÓ pode conjurar" in system or "só pode conjurar" in system.lower()
+        # Verifica qualquer forma de restrição de casting no prompt
+        system_lower = system.lower()
+        assert "somente conhece" in system_lower or "só pode conjurar" in system_lower or "somente pode conjurar" in system_lower
 
     def test_prompt_agrupa_truques_separados(self):
         """Truques e magias de nível 1+ devem aparecer em grupos separados."""

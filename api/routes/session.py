@@ -278,8 +278,11 @@ async def iniciar_sessao(
         except Exception as e:
             log.warning("character_state_restauracao_falhou", erro=str(e))
 
-    # Inicializa magias conhecidas a partir do config (selecionadas na criação)
-    sessao.spells_conhecidas = list(config.player_spells)
+    # Inicializa magias conhecidas a partir do config (selecionadas na criação).
+    # Só sobrescreve se o frontend enviou magias novas — não apaga a restauração
+    # do SQLite que já ocorreu acima em sessão continuada.
+    if config.player_spells:
+        sessao.spells_conhecidas = list(config.player_spells)
     if sessao.spells_conhecidas:
         log.info(
             "spells_conhecidas_carregadas",
@@ -516,6 +519,7 @@ async def salvar_character_state(
         hp_max=wm.player_hp_max,
         inventory=list(wm.player_inventory),
         conditions=list(wm.player_conditions),
+        spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no PUT
     ))
     log.info("character_state_salvo_via_put", session_id=session_id)
 
@@ -549,6 +553,7 @@ async def encerrar_sessao(
             hp_max=wm.player_hp_max,
             inventory=list(wm.player_inventory),
             conditions=list(wm.player_conditions),
+            spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no encerramento
         ))
         log.info("character_state_salvo_no_encerramento", session_id=session_id)
     except Exception as e:

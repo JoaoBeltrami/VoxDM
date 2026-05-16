@@ -87,7 +87,10 @@ def test_detectar_descanso_prioridade_longo_sobre_curto():
 
 def test_detectar_descanso_case_insensitive():
     assert detectar_descanso("DESCANSO CURTO") == "curto"
-    assert detectar_descanso("DORMIR") == "longo"
+    # "DORMIR" isolado (3ª pessoa narrativa) não aciona mais — exige 1ª pessoa
+    assert detectar_descanso("DORMIR") is None
+    # Mas intenção explícita do jogador aciona
+    assert detectar_descanso("QUERO DORMIR") == "longo"
 
 
 # ── Testes de restaurar_slots ─────────────────────────────────────────────────

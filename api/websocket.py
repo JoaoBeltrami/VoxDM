@@ -471,6 +471,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             death_saves_successes=wm.death_saves_successes,
             death_saves_failures=wm.death_saves_failures,
             death_saves_stable=wm.death_saves_stable,
+            # Sincroniza class_features e fios_soltos já na abertura
+            # para que a ficha mostre os recursos corretos antes do primeiro turno.
+            class_features=wm.class_features,
+            fios_soltos=wm.fios_soltos,
         ).model_dump_json()
     )
 

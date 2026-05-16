@@ -158,6 +158,7 @@ export function CharacterSheet({
   const [questsAberto, setQuestsAberto] = useState(false);
   const [npcsAberto, setNpcsAberto] = useState(false);
   const [spellsAberto, setSpellsAberto] = useState(false);
+  const [magiasAberto, setMagiasAberto] = useState(false); // separado de spellsAberto para poder ver slots e lista ao mesmo tempo
   const [rolagensAberto, setRolagensAberto] = useState(true);
 
   const { player_name, player_race, player_class, player_level = 3,
@@ -731,13 +732,13 @@ export function CharacterSheet({
           {/* Magias Conhecidas — exibidas apenas para personagens com spells selecionadas */}
           {knownSpells.length > 0 && (
             <div className="mb-3 border-b border-zinc-800 pb-3">
-              <button onClick={() => setSpellsAberto(a => !a)}
+              <button onClick={() => setMagiasAberto(a => !a)}
                 className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
               >
                 <span>Magias ({knownSpells.length})</span>
-                <span>{spellsAberto ? "▲" : "▼"}</span>
+                <span>{magiasAberto ? "▲" : "▼"}</span>
               </button>
-              {spellsAberto && (() => {
+              {magiasAberto && (() => {
                 // Agrupa magias por nível usando nivelDaSpell — truques primeiro
                 const classeLower = (player_class ?? "").toLowerCase();
                 const porNivel: Record<number, string[]> = {};
