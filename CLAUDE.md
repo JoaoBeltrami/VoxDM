@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 16 de maio de 2026 — Fase 6 + Lista de Magias com seleção na criação e ficha
+> Atualizado: 16 de maio de 2026 — Fase 6 + Lista de Magias + Recap oral + Consequências visíveis
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Fase 6 completa (spell detector + slot tracker + subclass picker + class features). Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Fase 6 completa (spell detector + slot tracker + subclass picker + class features + spell list). Recap oral + Consequências visíveis implementados. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -681,6 +681,35 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `tests/test_spell_list.py` | 48 testes — queries por classe/nível, tabela de progressão, fallback para classe desconhecida, integração com prompt builder | ✅ Criado |
 | `tests/test_character_store.py` | +3 testes roundtrip de `spells_conhecidas` (lista vazia, múltiplas magias, preservação de ordem) | ✅ Atualizado |
 | **Total testes** | | **492/492 passed**; `tsc --noEmit` clean |
+
+### Recap oral + Consequências visíveis (Sessão 16/05)
+
+> Duas features de DM veterano implementadas em paralelo. Recap = experiência cinematográfica de retomada de sessão. Consequências = memória viva das ações do jogador no mundo.
+
+**Feature 2 — Recap oral no início de sessão continuada**
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `api/websocket.py` | `_enviar_recap_sessao_anterior(websocket, sessao)` — busca resumo anterior, LLM condensa em 2-3 frases PT-BR via `TaskType.SUMMARIZATION` (max_tokens=120), envia `tipo="recap"` WS, sintetiza TTS com `rate="-15%"` `pitch="-2Hz"` (voz grave/lenta cinematográfica), envia `audio_chunk`. Falha silenciosa em qualquer step | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `textoRecap: string` no estado; handler `tipo="recap"` popula; `limparRecap` limpa; `enviarComando` limpa no primeiro input do jogador | ✅ Atualizado |
+| `frontend/app/page.tsx` | Bolha âmbar `bg-amber-950/20 border-amber-800/30`, Cinzel itálico, prefixo 📜, renderizada antes de `<MasterResponse>`. `useEffect` dispara `limparRecap` após 30s automático | ✅ Atualizado |
+| `tests/test_recap.py` | 16 testes — silenciosa sem resumo, `tipo="recap"`, texto com frase de abertura, silenciosa em exceção LLM/TTS, `audio_chunk` com TTS, `TaskType.SUMMARIZATION`, `max_tokens<=120` | ✅ Criado |
+
+**Feature 3 — Consequências visíveis**
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/memory/quest_detector.py` | `strip_marcadores()` agora remove `[CONSEQUÊNCIA: ...]` do texto antes do TTS | ✅ Atualizado |
+| `api/turn_pipeline.py` | `_RE_CONSEQUENCIA` + step 13 em `aplicar_pos_turno()` — extrai matches, chama `wm.registrar_consequencia()` com dedup guard | ✅ Atualizado |
+| `api/models/schemas.py` | `consequencias: list[str] = Field(default_factory=list)` em `MensagemWS` | ✅ Atualizado |
+| `api/websocket.py` | `consequencias=list(wm.log_consequencias)` nos dois payloads `fim` (abertura + turno principal) | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | `[CONSEQUÊNCIA: texto]` documentado em "Marcadores de Mestre Veterano" — máx 1-2/turno, só efeitos além da cena atual | ✅ Atualizado |
+| `frontend/lib/api.ts` | `consequencias?: string[]` em `MensagemWS` | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `consequencias: string[]` no estado; sincronizado do `fim` handler (compat backward com `log_consequencias`) | ✅ Atualizado |
+| `frontend/app/page.tsx` | Painel colapsável "⚡ Consequências (N)" `bg-orange-950/20 border-orange-900/40`, oculto em cinema mode, segue padrão exato dos Fios Soltos | ✅ Atualizado |
+| `tests/test_quest_detector.py` | +3 testes — remove `[CONSEQUÊNCIA]`, preserva texto ao redor, remoção combinada com `[FIO]` | ✅ Atualizado |
+| `tests/test_websocket.py` | +4 testes — regex captura texto, case-insensitive, `aplicar_pos_turno` extrai para `log_consequencias`, deduplicação | ✅ Atualizado |
+| **Total testes** | | **515/515 passed**; `tsc --noEmit` clean |
 
 ---
 

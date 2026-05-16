@@ -49,6 +49,11 @@ _RE_CLIFFHANGER = re.compile(r"\[CLIFFHANGER:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 # Ex: "[AGENDA: fael-valdreksson → planeja desertar à meia-noite com a chave do cofre]"
 _RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Feature 3: Consequências visíveis — LLM emite [CONSEQUÊNCIA: efeito duradouro no mundo]
+# Ex: "[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito]"
+# Efeitos válidos: NPC morto, aliança formada, local destruído, reputação alterada.
+_RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -259,5 +264,14 @@ def aplicar_pos_turno(
         if npc_id and plano:
             working_mem.agenda_npcs[npc_id] = plano
             log.info("agenda_npc_atualizada", npc_id=npc_id, plano=plano[:60])
+
+    # 13. Consequências visíveis (Feature 3) — coleta [CONSEQUÊNCIA: efeito duradouro]
+    # Efeitos que persistem além da cena: NPCs mortos, alianças, locais destruídos,
+    # reputação alterada. Lista circular de máx 5 via registrar_consequencia().
+    for m in _RE_CONSEQUENCIA.finditer(resposta_completa):
+        consequencia = m.group(1).strip()
+        if consequencia and not any(consequencia in ex for ex in working_mem.log_consequencias):
+            working_mem.registrar_consequencia(consequencia)
+            log.info("consequencia_registrada_llm", texto=consequencia[:80])
 
     return mudancas_trust

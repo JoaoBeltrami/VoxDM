@@ -255,6 +255,12 @@ Use para documentar motivações que o jogador ainda não descobriu.
 Exemplo: `[AGENDA: fael-valdreksson → planeja fugir para Tharnvik ao amanhecer com a chave do cofre]`
 A engine injeta as agendas nos próximos prompts para você manter consistência comportamental.
 
+**[CONSEQUÊNCIA: texto]** — Registra um efeito duradouro que o jogador causou no mundo.
+Use quando uma ação tiver impacto que persiste além da cena atual: NPC morto, aliança formada, local destruído, reputação alterada, segredo revelado.
+Exemplo: `[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito após a briga na taverna]`
+Máx 1-2 por turno, só para efeitos reais e permanentes — não use para consequências imediatas já narradas.
+A engine exibe as consequências no painel do jogador como registro do impacto das suas escolhas no mundo.
+
 **Regras de uso:**
 - Marcadores são opcionais — use só quando a cena pede. Não force.
 - Um marcador por tipo por turno (ex: 1 FIO + 1 AGENDA = OK; 2 FIOs = só o último conta).

@@ -334,3 +334,51 @@ def test_re_rolagem_visivel_nao_captura_rolagem_jogador():
     """[Rolagem: d20 = X] (sem 'visível') não deve ser capturado."""
     from api.websocket import _RE_ROLAGEM_VISIVEL
     assert _RE_ROLAGEM_VISIVEL.search("[Rolagem: d20 = 15]") is None
+
+
+# ── Consequências visíveis (Feature 3) ────────────────────────────────────────
+
+def test_re_consequencia_captura_marcador():
+    """_RE_CONSEQUENCIA deve capturar o texto entre [CONSEQUÊNCIA: ...]."""
+    from api.turn_pipeline import _RE_CONSEQUENCIA
+    texto = "Bjorn caiu. [CONSEQUÊNCIA: A guilda soube da morte de Bjorn]"
+    m = _RE_CONSEQUENCIA.search(texto)
+    assert m is not None
+    assert m.group(1) == "A guilda soube da morte de Bjorn"
+
+
+def test_re_consequencia_case_insensitive():
+    """Regex deve funcionar com variações de capitalização."""
+    from api.turn_pipeline import _RE_CONSEQUENCIA
+    texto = "[consequência: Reputação melhorou em Drevamor]"
+    m = _RE_CONSEQUENCIA.search(texto)
+    assert m is not None
+    assert "Reputação melhorou" in m.group(1)
+
+
+def test_aplicar_pos_turno_extrai_consequencia_llm():
+    """aplicar_pos_turno deve extrair [CONSEQUÊNCIA: ...] e chamar registrar_consequencia."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test")
+    resposta = "A guarda te reconhece. [CONSEQUÊNCIA: A guarda passou a monitorar o jogador]"
+    aplicar_pos_turno(wm, "observo a guarda", resposta)
+
+    assert any("guarda passou a monitorar" in c for c in wm.log_consequencias)
+
+
+def test_aplicar_pos_turno_nao_duplica_consequencia():
+    """Mesma consequência emitida duas vezes não deve ser duplicada na lista."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test")
+    texto_conseq = "A aliança foi selada com os aldeões"
+    resposta = f"Ótimo. [CONSEQUÊNCIA: {texto_conseq}]"
+    # Aplica duas vezes simulando dois turnos com o mesmo marcador
+    aplicar_pos_turno(wm, "concordo", resposta)
+    aplicar_pos_turno(wm, "confirmo", resposta)
+
+    ocorrencias = [c for c in wm.log_consequencias if texto_conseq in c]
+    assert len(ocorrencias) == 1

@@ -113,6 +113,36 @@ def test_strip_remove_multiplos_tipos():
     assert "fim." in resultado
 
 
+def test_strip_remove_consequencia():
+    """[CONSEQUÊNCIA: ...] deve ser removido do texto para TTS."""
+    texto = "A guarda te reconhece. [CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito]"
+    resultado = strip_marcadores(texto)
+    assert "[CONSEQUÊNCIA:" not in resultado
+    assert "A guarda te reconhece." in resultado
+
+
+def test_strip_consequencia_preserva_texto_ao_redor():
+    """Texto antes e depois do marcador deve ser preservado intacto."""
+    texto = "O vilarejo está quieto. [CONSEQUÊNCIA: Aliança formada com os aldeões de Tharnvik] A noite cai."
+    resultado = strip_marcadores(texto)
+    assert "[CONSEQUÊNCIA:" not in resultado
+    assert "O vilarejo está quieto." in resultado
+    assert "A noite cai." in resultado
+
+
+def test_strip_consequencia_combinada_com_fio():
+    """[CONSEQUÊNCIA] e [FIO] no mesmo texto — ambos removidos, texto preservado."""
+    texto = (
+        "Bjorn caiu. [CONSEQUÊNCIA: Bjorn foi abatido pelo jogador — a guilda saberá] "
+        "[FIO: A família de Bjorn mora na Rua da Ferragem] Silêncio."
+    )
+    resultado = strip_marcadores(texto)
+    assert "[CONSEQUÊNCIA:" not in resultado
+    assert "[FIO:" not in resultado
+    assert "Bjorn caiu." in resultado
+    assert "Silêncio." in resultado
+
+
 # ── detectar_e_aplicar_quests ─────────────────────────────────────────────────
 
 def test_avanca_quest_valida():

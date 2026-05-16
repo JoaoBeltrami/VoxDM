@@ -358,6 +358,94 @@ def _get_intro_system() -> str:
         return _intro_cache  # mantém última versão boa, ou "" se nunca leu
 
 
+async def _enviar_recap_sessao_anterior(
+    websocket: WebSocket, sessao: SessaoAtiva
+) -> None:
+    """Narra em voz um recap de 2-3 frases da sessão anterior antes da abertura principal.
+
+    Por que existe: sessão continuada começa "fria" — o jogador pode não lembrar o que
+        aconteceu. Um parágrafo narrativo curto, narrado com voz mais grave e lenta,
+        ativa a memória e cria transição cinematográfica entre sessões.
+    Dependências: groq_client (TaskType.SUMMARIZATION), engine/voice/tts (sintetizar)
+    Armadilha: NUNCA bloquear a abertura normal por falha aqui.
+        Todo o bloco em try/except amplo — qualquer exception = log.warning + return.
+
+    Fluxo:
+        1. Usa sessao.resumo_anterior (já populado pelo session.py)
+        2. Chama LLM para condensar em 2-3 frases narrativas PT-BR
+        3. Envia mensagem WS tipo="recap" com o texto gerado
+        4. Sintetiza TTS com rate="-15%", pitch="-2Hz" (voz grave e lenta)
+        5. Envia audio_chunk com o áudio do recap
+    """
+    if not sessao.resumo_anterior:
+        return
+    try:
+        from engine.llm.tasks import TaskType
+
+        # Prompt inline para condensar o resumo bruto em narração de abertura.
+        # Sem arquivo externo: o recap é uma feature específica da abertura e não
+        # precisa de hot-reload. Max_tokens curto (120) pra manter 2-3 frases.
+        prompt_recap = (
+            "Você é um narrador de RPG. "
+            "A partir do resumo abaixo da sessão anterior, "
+            "crie UMA narração de abertura em 2-3 frases curtas em português falado. "
+            "Comece com \"Da última vez...\" ou \"Na sessão anterior...\". "
+            "Não mencione mecânicas. Só prosa narrativa.\n\n"
+            f"RESUMO: {sessao.resumo_anterior[:800]}"
+        )
+        mensagens_recap = [
+            {"role": "system", "content": "Você é um narrador literário conciso."},
+            {"role": "user",   "content": prompt_recap},
+        ]
+
+        texto_recap = await sessao.groq.completar(
+            mensagens=mensagens_recap,
+            task=TaskType.SUMMARIZATION,
+            temperatura=0.6,
+            max_tokens=120,
+        )
+        texto_recap = texto_recap.strip()
+
+        if not texto_recap:
+            log.warning("recap_llm_vazio", session_id=sessao.session_id)
+            return
+
+        # Envia texto antes do áudio para o frontend exibir a bolha
+        await websocket.send_text(
+            MensagemWS(tipo="recap", conteudo=texto_recap).model_dump_json()
+        )
+        log.info("recap_enviado", session_id=sessao.session_id, chars=len(texto_recap))
+
+        # TTS com prosody distinta: mais lento e grave → soar como narrador de abertura
+        _RECAP_RATE: str = "-15%"
+        _RECAP_PITCH: str = "-2Hz"
+        tts = _obter_tts()
+        if tts:
+            audio = await tts.sintetizar(
+                texto_recap,
+                voice=sessao.working_mem.tts_voice,
+                rate=_RECAP_RATE,
+                pitch=_RECAP_PITCH,
+            )
+            if audio:
+                await websocket.send_text(
+                    MensagemWS(
+                        tipo="audio_chunk",
+                        conteudo_b64=base64.b64encode(audio).decode("ascii"),
+                        sequencia=0,
+                    ).model_dump_json()
+                )
+                log.info("recap_tts_enviado", session_id=sessao.session_id, bytes=len(audio))
+
+    except Exception as exc:
+        # Falha silenciosa — o recap é complemento, nunca deve bloquear a sessão
+        log.warning(
+            "recap_falhou",
+            session_id=sessao.session_id,
+            erro=str(exc)[:160],
+        )
+
+
 async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     """
     Gera e transmite a mensagem de abertura do mestre quando iteracoes == 0.
@@ -367,6 +455,12 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     """
     t0 = time.perf_counter()
     wm = sessao.working_mem
+
+    # Recap da sessão anterior — narrado ANTES da abertura principal.
+    # Gera via LLM (2-3 frases) + TTS com voz mais grave/lenta.
+    # Falha silenciosa: se falhar, a abertura normal continua normalmente.
+    if sessao.resumo_anterior:
+        await _enviar_recap_sessao_anterior(websocket, sessao)
 
     # Contexto da cena para o prompt de abertura
     contexto_abertura = wm.para_texto(incluir_dialogo=False)
@@ -404,16 +498,6 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         {"role": "system", "content": f"{_get_intro_system()}\n\n{contexto_abertura}{_LEMBRETE_SAIDA}"},
         {"role": "user", "content": intro_user},
     ]
-
-    # Recap da sessão anterior — enviado antes do streaming de abertura
-    if sessao.resumo_anterior:
-        await websocket.send_text(
-            MensagemWS(
-                tipo="recap",
-                conteudo=sessao.resumo_anterior,
-            ).model_dump_json()
-        )
-        log.info("recap_anterior_enviado", session_id=sessao.session_id, chars=len(sessao.resumo_anterior))
 
     resposta_intro = ""
     tts = _obter_tts()
@@ -471,10 +555,11 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             death_saves_successes=wm.death_saves_successes,
             death_saves_failures=wm.death_saves_failures,
             death_saves_stable=wm.death_saves_stable,
-            # Sincroniza class_features e fios_soltos já na abertura
+            # Sincroniza class_features, fios_soltos e consequencias já na abertura
             # para que a ficha mostre os recursos corretos antes do primeiro turno.
             class_features=wm.class_features,
             fios_soltos=wm.fios_soltos,
+            consequencias=list(wm.log_consequencias),
         ).model_dump_json()
     )
 
@@ -1057,6 +1142,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         for qid, sid in avanco_quests
                     ],
                     fios_soltos=list(sessao.working_mem.fios_soltos),
+                    consequencias=list(sessao.working_mem.log_consequencias),
                     class_features=dict(sessao.working_mem.class_features),
                 ).model_dump_json()
             )

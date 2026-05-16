@@ -239,6 +239,7 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
+    textoRecap, limparRecap,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
@@ -433,6 +434,14 @@ export default function Home() {
     const t = setTimeout(dispensarQuestNotificacao, 4000);
     return () => clearTimeout(t);
   }, [questNotificacao, dispensarQuestNotificacao]);
+
+  // Recap da sessão anterior — some automaticamente após 30s.
+  // Também some quando o jogador envia o primeiro comando (ver enviarComando).
+  useEffect(() => {
+    if (!textoRecap) return;
+    const t = setTimeout(limparRecap, 30_000);
+    return () => clearTimeout(t);
+  }, [textoRecap, limparRecap]);
 
   // Parseia a última fala do mestre para extrair rolagens pedidas
   useEffect(() => {
@@ -777,6 +786,26 @@ export default function Home() {
               Sessão iniciada — aguardando o mestre...
             </p>
           )}
+
+          {/* Bolha de recap destacada — aparece antes das bolhas principais
+              quando o jogador continua uma sessão anterior. Some após 30s ou
+              no primeiro envio de comando. Renderiza apenas enquanto textoRecap
+              não foi limpo — não duplica o item já gravado no histórico. */}
+          {textoRecap && (
+            <div className="mb-4 rounded-xl border border-amber-800/30 bg-amber-950/20 px-5 py-4 animate-[fade-in_600ms_ease-out]">
+              <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600/80">
+                <span>📜</span>
+                <span>Anteriormente…</span>
+              </p>
+              <p
+                className="text-sm leading-relaxed italic text-amber-200/80"
+                style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}
+              >
+                {textoRecap}
+              </p>
+            </div>
+          )}
+
           <MasterResponse
             historico={historico}
             respostaAtual={textoSincronizado}
@@ -907,17 +936,6 @@ export default function Home() {
             );
           })()}
 
-          {/* Consequências narrativas recentes — fora de combate, como memória do mundo */}
-          {!emCombate && consequencias.length > 0 && (
-            <div className="max-w-xs space-y-0.5 text-center">
-              {consequencias.map((c, i) => (
-                <p key={i} className="text-[10px] italic leading-relaxed text-zinc-600">
-                  {c}
-                </p>
-              ))}
-            </div>
-          )}
-
           {/* Fios Soltos — threads narrativas abertas (DM Feat 1). Some em cinema mode. */}
           {!cinemaMode && fiosSoltos.length > 0 && (
             <div className="max-w-sm w-full">
@@ -932,6 +950,27 @@ export default function Home() {
                   {fiosSoltos.map((fio, i) => (
                     <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
                       {fio}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+
+          {/* Consequências visíveis — efeitos duradouros das escolhas do jogador. Some em cinema mode. */}
+          {!cinemaMode && consequencias.length > 0 && (
+            <div className="max-w-sm w-full">
+              <details className="group">
+                <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-orange-400/70 hover:text-orange-300 transition-colors list-none">
+                  <span className="text-orange-500">⚡</span>
+                  Consequências ({consequencias.length})
+                  <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                  <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+                </summary>
+                <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-orange-900/40">
+                  {consequencias.map((c, i) => (
+                    <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                      • {c}
                     </li>
                   ))}
                 </ul>

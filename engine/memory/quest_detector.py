@@ -41,7 +41,7 @@ _RE_Q = re.compile(
 # Inclui "Rolagem visível" (Fase 5.7) — o número é narrado pelo LLM,
 # o marcador é capturado pelo websocket e enviado como "dado_rolado".
 _RE_MESTRE_VET = re.compile(
-    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO)(?::[^\]]*)?\]"
+    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO|CONSEQUÊNCIA)(?::[^\]]*)?\]"
     r"|"
     r"\[Rolagem\s+visível:[^\]]*\]",
     re.IGNORECASE,
@@ -160,6 +160,7 @@ def strip_marcadores(texto: str) -> str:
         [CLIFFHANGER: ...]            — encerramento dramático
         [AGENDA: npc → plano]         — agenda paralela de NPC
         [LAMPEJO: ...]                — flash de perspectiva (sintetizado à parte)
+        [CONSEQUÊNCIA: ...]           — efeito duradouro no mundo (Feature 3)
         [Rolagem visível: dX = Y]     — rolagem do mestre (Fase 5.7); número já foi
                                         enviado como "dado_rolado" pelo websocket
 

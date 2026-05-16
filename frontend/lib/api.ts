@@ -82,6 +82,8 @@ export interface MensagemWS {
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
   // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
   fios_soltos?: string[];
+  // Feature 3: Consequências visíveis — efeitos duradouros no mundo (máx 5)
+  consequencias?: string[];
   // Class features — sincronizadas no "fim" para atualizar chips na ficha
   class_features?: Record<string, {
     nome: string;

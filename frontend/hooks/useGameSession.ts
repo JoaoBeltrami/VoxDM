@@ -105,6 +105,9 @@ interface EstadoSessao {
   // Fase 5.8: URL da imagem de fundo gerada pelo Pollinations.ai para a cena atual.
   // Vazia até o servidor enviar a primeira mensagem "scene_image".
   sceneImageUrl: string;
+  // Recap da sessão anterior — exibido em destaque antes das bolhas principais.
+  // Some após 30s ou quando o jogador enviar o primeiro comando.
+  textoRecap: string;
 }
 
 const MAX_RECONNECTS = 3;
@@ -145,6 +148,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   classFeatures: {},
   dadoAtivo: null,
   sceneImageUrl: "",
+  textoRecap: "",
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -235,8 +239,11 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "recap" && msg.conteudo) {
+        // Popula textoRecap para exibição em destaque com fade-out de 30s,
+        // e adiciona ao histórico como item permanente para o log de exportação.
         setEstado(s => ({
           ...s,
+          textoRecap: msg.conteudo ?? "",
           historico: [
             ...s.historico,
             {
@@ -327,7 +334,7 @@ export function useGameSession() {
           deathSavesStable: msg.death_saves_stable,
           emCombate: msg.em_combate ?? false,
           inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
-          consequencias: msg.log_consequencias ?? [],
+          consequencias: msg.consequencias ?? msg.log_consequencias ?? [],
           iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
           fiosSoltos: msg.fios_soltos ?? [],
           classFeatures: (msg.class_features ?? {}) as Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>,
@@ -507,6 +514,8 @@ export function useGameSession() {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     turnoAtualRef.current = { jogador: texto, id: Date.now() };
     textoAtualRef.current = "";
+    // Limpa o recap quando o jogador fala pela primeira vez — imersão não quebra
+    setEstado(s => s.textoRecap ? { ...s, textoRecap: "" } : s);
     wsRef.current.send(JSON.stringify({ texto }));
   }, []);
 
@@ -570,6 +579,11 @@ export function useGameSession() {
     setEstado(s => ({ ...s, dadoAtivo: null }));
   }, []);
 
+  // Limpa o recap da sessão anterior — chamado após 30s ou no primeiro envio do jogador
+  const limparRecap = useCallback(() => {
+    setEstado(s => ({ ...s, textoRecap: "" }));
+  }, []);
+
   return {
     ...estado,
     conectar,
@@ -582,6 +596,7 @@ export function useGameSession() {
     pararAudio: pararTudo,
     setVolume,
     dispensarQuestNotificacao: () => setEstado(s => ({ ...s, questNotificacao: null })),
+    limparRecap,
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
     // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)
     audioTocando,

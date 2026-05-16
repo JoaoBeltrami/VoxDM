@@ -204,6 +204,9 @@ class MensagemWS(BaseModel):
     # DM Feat 1: Fios Soltos — threads narrativas abertas para exibição no frontend
     # Atualizado no "fim" sempre que a lista muda. Máx 5 fios simultâneos.
     fios_soltos: list[str] = Field(default_factory=list)
+    # Feature 3: Consequências visíveis — efeitos duradouros no mundo emitidos via
+    # [CONSEQUÊNCIA: ...]. Lista circular máx 5 (working_mem.log_consequencias).
+    consequencias: list[str] = Field(default_factory=list)
     # Class features — enviadas no "fim" para sincronizar os chips na ficha.
     # Mapa feature_id → {nome, disponivel, usos_max, usos_atual, restaura}.
     class_features: dict[str, dict[str, Any]] = Field(default_factory=dict)
