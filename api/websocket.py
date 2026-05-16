@@ -83,15 +83,6 @@ _RE_FIM_COMBATE_LLM = re.compile(
     re.IGNORECASE,
 )
 
-# Extrai nome do alvo quando o jogador declara um ataque
-# Ex: "ataco o goblin com minha espada" → "goblin"
-_RE_ALVO_ATAQUE = re.compile(
-    r"\b(?:ataco?|atacar|golpei?o|firo|lanço|apunhalo|atinge?|atinjo|acerto)\s+"
-    r"(?:o|a|ao?s?|na?s?)\s+"
-    r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,30}?)(?=\s+(?:com|de|usando|n[ao])\b|[.!,?]|$)",
-    re.IGNORECASE,
-)
-
 # Captura [Rolagem visível: dX = Y] na resposta do LLM.
 # Usado quando roll_visibility="open" ou "result_only" — frontend recebe
 # mensagem "dado_rolado" separada antes do texto chegar ao TTS.
@@ -100,85 +91,17 @@ _RE_ROLAGEM_VISIVEL = re.compile(
     re.IGNORECASE,
 )
 
-# Detecta estado de saúde dos inimigos no texto do LLM
-_RE_INIMIGO_MORTO = re.compile(
-    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
-    r"(?:caiu|morreu|está morto|está morta|foi abatido|foi abatida|jaz|tombou|desmorona)\b",
-    re.IGNORECASE,
+# Os regexes de combate e o sync de inimigos vivem em api/turn_pipeline para que
+# o endpoint REST `/turn` e o WebSocket usem a MESMA implementação. Re-exportados
+# aqui só por compat com tests legados que importam de api.websocket.
+from api.turn_pipeline import (  # noqa: E402
+    _RE_ALVO_ATAQUE,
+    _RE_INIMIGO_MORTO,
+    _RE_INIMIGO_GRAVE,
+    _RE_INIMIGO_FERIDO,
+    _slugify,
+    sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
-_RE_INIMIGO_GRAVE = re.compile(
-    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
-    r"(?:gravemente ferido|muito ferido|mal consegue|vacila|claudica|cambaleando|aos trancos)\b",
-    re.IGNORECASE,
-)
-_RE_INIMIGO_FERIDO = re.compile(
-    r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
-    r"(?:está ferido|foi atingido|foi atingida|sangra|grita de dor|recua|recuou|tropeçou)\b",
-    re.IGNORECASE,
-)
-
-
-def _slugify(nome: str) -> str:
-    """Converte nome livre para id kebab-case: 'Goblin Cruel' → 'goblin-cruel'."""
-    import unicodedata
-    normalizado = unicodedata.normalize("NFD", nome.strip().lower())
-    sem_acento = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9]+", "-", sem_acento).strip("-")
-
-
-def _sincronizar_inimigos_combate(
-    working_mem: Any, texto_jogador: str, resposta_llm: str
-) -> None:
-    """Popula e atualiza inimigos_combate a partir do turno atual.
-
-    Estratégia:
-    1. Se jogador declara ataque com alvo nomeado → registrar inimigo (estado: intacto)
-    2. Varrer resposta do LLM por descritores de saúde e atualizar estado dos registrados
-    """
-    if not working_mem.em_combate:
-        return
-
-    # 1 — Detectar novos alvos no texto do jogador
-    for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
-        nome = m.group(1).strip().rstrip(".,!?")
-        if nome:
-            inimigo_id = _slugify(nome)
-            if inimigo_id not in working_mem.inimigos_combate:
-                working_mem.registrar_inimigo(inimigo_id, nome.title(), "intacto")
-                log.info("combate_inimigo_registrado", id=inimigo_id, nome=nome)
-
-    if not working_mem.inimigos_combate:
-        return
-
-    nomes_registrados = {
-        dados["nome"].lower(): iid
-        for iid, dados in working_mem.inimigos_combate.items()
-    }
-
-    def _encontrar_id(trecho: str) -> str | None:
-        trecho_lower = trecho.strip().lower()
-        for nome_reg, iid in nomes_registrados.items():
-            # Correspondência se o nome registrado contiver parte do trecho ou vice-versa
-            if nome_reg in trecho_lower or trecho_lower in nome_reg:
-                return iid
-        return None
-
-    # 2 — Atualizar estado pelos descritores na resposta do LLM
-    for m in _RE_INIMIGO_MORTO.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
-        if iid:
-            working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
-            log.info("combate_inimigo_morto", id=iid)
-
-    for m in _RE_INIMIGO_GRAVE.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
-        if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") not in ("morto",):
-            working_mem.atualizar_estado_inimigo(iid, "gravemente ferido", "quase sem forças")
-
-    for m in _RE_INIMIGO_FERIDO.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
-        if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") == "intacto":
-            working_mem.atualizar_estado_inimigo(iid, "ferido", "ainda de pé")
 
 # ---------------------------------------------------------------------------
 # Lampejo — visões dramáticas com voz alterada

@@ -251,6 +251,69 @@ def test_sincronizar_inimigos_atualiza_estado_ferido():
     assert mem.inimigos_combate["guarda"]["estado"] == "ferido"
 
 
+def test_sincronizar_inimigos_dedup_prefere_nome_mais_especifico():
+    """Bug #1: 'O goblin arqueiro caiu' não pode marcar 'goblin' simples como morto."""
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("masmorra", "Masmorra", "sess-dedup")
+    mem.entrar_combate()
+    mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    mem.registrar_inimigo("goblin-arqueiro", "Goblin Arqueiro", "intacto")
+
+    _sincronizar_inimigos_combate(mem, "", "O goblin arqueiro caiu no chão.")
+
+    # Só o arqueiro morre; o goblin simples permanece intacto.
+    assert mem.inimigos_combate["goblin-arqueiro"]["estado"] == "morto"
+    assert mem.inimigos_combate["goblin"]["estado"] == "intacto"
+
+
+def test_sincronizar_inimigos_ignora_pronome_voce_como_alvo():
+    """Bug #3: 'ataco o você' não pode registrar pronome como inimigo."""
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("rua", "Rua", "sess-pronome-alvo")
+    mem.entrar_combate()
+
+    _sincronizar_inimigos_combate(mem, "Ataco o você sem querer.", "Algo acontece.")
+
+    # Pronome não vira inimigo.
+    assert "voce" not in mem.inimigos_combate
+    assert len(mem.inimigos_combate) == 0
+
+
+def test_sincronizar_inimigos_ignora_pronome_no_estado():
+    """Bug #3: LLM narrando 'você está ferido' não pode marcar pronome como ferido."""
+    from api.websocket import _sincronizar_inimigos_combate
+    from engine.memory.working_memory import WorkingMemory
+
+    mem = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-pronome-estado")
+    mem.entrar_combate()
+    mem.registrar_inimigo("orc", "Orc", "intacto")
+
+    _sincronizar_inimigos_combate(
+        mem, "", "Você foi atingido pelo orc no braço."
+    )
+
+    # Orc permanece intacto; "você" não foi registrado como inimigo.
+    assert mem.inimigos_combate["orc"]["estado"] == "intacto"
+    assert "voce" not in mem.inimigos_combate
+
+
+def test_encontrar_id_inimigo_palavra_inteira():
+    """_encontrar_id_inimigo deve usar match por palavra inteira, não substring solta."""
+    from api.turn_pipeline import _encontrar_id_inimigo
+
+    nomes = {"orc": "orc", "orco da neve": "orco-da-neve"}
+    # "norco" não casa com "orc" (não é palavra inteira)
+    assert _encontrar_id_inimigo("norco", nomes) is None
+    # "o orc" casa com "orc"
+    assert _encontrar_id_inimigo("o orc", nomes) == "orc"
+    # "o orco da neve" prefere o mais longo
+    assert _encontrar_id_inimigo("o orco da neve", nomes) == "orco-da-neve"
+
+
 def test_sincronizar_inimigos_nao_roda_fora_de_combate():
     from api.websocket import _sincronizar_inimigos_combate
     from engine.memory.working_memory import WorkingMemory

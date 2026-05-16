@@ -89,11 +89,49 @@ _RE_FIM_COMBATE_LLM = re.compile(
 )
 
 
+# Pronomes em PT-BR que NUNCA devem virar id de inimigo. Sem isso, frases como
+# "você está ferido" ou "ataco o você" (LLM gago) viram registro espúrio.
+_PRONOMES: frozenset[str] = frozenset({
+    "você", "vocês", "voce", "voces",
+    "eu", "nós", "nos",
+    "me", "te", "lhe", "se",
+    "ele", "ela", "eles", "elas",
+    "isso", "isto", "aquilo",
+})
+
+
 def _slugify(nome: str) -> str:
     """Converte nome livre para id kebab-case."""
     normalizado = unicodedata.normalize("NFD", nome.strip().lower())
     sem_acento = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
     return re.sub(r"[^a-z0-9]+", "-", sem_acento).strip("-")
+
+
+def _encontrar_id_inimigo(
+    trecho: str, nomes_registrados: dict[str, str]
+) -> str | None:
+    """Mapeia um trecho do LLM para o id de um inimigo registrado.
+
+    Regra: o nome registrado precisa aparecer como **palavra inteira** dentro do
+    trecho. Se vários candidatos baterem, vence o nome registrado mais **longo**
+    (mais específico) — assim "goblin arqueiro" não colide com "goblin" simples
+    quando o LLM narra "o goblin arqueiro caiu".
+
+    Pronomes (você/eu/nós/...) nunca casam — protege contra LLM narrar "você
+    está ferido" virando registro espúrio de inimigo chamado "você".
+    """
+    trecho_lower = trecho.strip().lower()
+    if not trecho_lower or trecho_lower in _PRONOMES:
+        return None
+    candidatos: list[tuple[int, str]] = []
+    for nome_reg, iid in nomes_registrados.items():
+        if re.search(rf"\b{re.escape(nome_reg)}\b", trecho_lower):
+            candidatos.append((len(nome_reg), iid))
+    if not candidatos:
+        return None
+    # Maior tamanho primeiro; tiebreaker por id (determinístico)
+    candidatos.sort(key=lambda t: (-t[0], t[1]))
+    return candidatos[0][1]
 
 
 def sincronizar_inimigos_combate(
@@ -109,11 +147,19 @@ def sincronizar_inimigos_combate(
 
     for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
         nome = m.group(1).strip().rstrip(".,!?")
-        if nome:
-            inimigo_id = _slugify(nome)
-            if inimigo_id not in working_mem.inimigos_combate:
-                working_mem.registrar_inimigo(inimigo_id, nome.title(), "intacto")
-                log.info("combate_inimigo_registrado", id=inimigo_id, nome=nome)
+        if not nome:
+            continue
+        # Rejeita se o nome inteiro ou a PRIMEIRA palavra é pronome — protege
+        # contra LLM/STT gerando frases como "ataco o você" ou "atinjo nós dois"
+        primeira_palavra = nome.split()[0].lower() if nome.split() else ""
+        if nome.lower() in _PRONOMES or primeira_palavra in _PRONOMES:
+            continue
+        inimigo_id = _slugify(nome)
+        if not inimigo_id:
+            continue
+        if inimigo_id not in working_mem.inimigos_combate:
+            working_mem.registrar_inimigo(inimigo_id, nome.title(), "intacto")
+            log.info("combate_inimigo_registrado", id=inimigo_id, nome=nome)
 
     if not working_mem.inimigos_combate:
         return
@@ -123,26 +169,19 @@ def sincronizar_inimigos_combate(
         for iid, dados in working_mem.inimigos_combate.items()
     }
 
-    def _encontrar_id(trecho: str) -> str | None:
-        trecho_lower = trecho.strip().lower()
-        for nome_reg, iid in nomes_registrados.items():
-            if nome_reg in trecho_lower or trecho_lower in nome_reg:
-                return iid
-        return None
-
     for m in _RE_INIMIGO_MORTO.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
+        iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)
         if iid:
             working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
             log.info("combate_inimigo_morto", id=iid)
 
     for m in _RE_INIMIGO_GRAVE.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
+        iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)
         if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") not in ("morto",):
             working_mem.atualizar_estado_inimigo(iid, "gravemente ferido", "quase sem forças")
 
     for m in _RE_INIMIGO_FERIDO.finditer(resposta_llm):
-        iid = _encontrar_id(m.group(1))
+        iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)
         if iid and working_mem.inimigos_combate.get(iid, {}).get("estado") == "intacto":
             working_mem.atualizar_estado_inimigo(iid, "ferido", "ainda de pé")
 
