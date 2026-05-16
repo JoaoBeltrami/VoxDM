@@ -27,6 +27,27 @@ log = structlog.get_logger()
 
 DB_PATH = Path(__file__).parent.parent.parent / "voxdm.db"
 
+
+async def _aplicar_migracao_idempotente(
+    conn: aiosqlite.Connection, sql: str, coluna: str
+) -> None:
+    """Roda uma migração ALTER TABLE engolindo SÓ o erro 'duplicate column'.
+
+    Bug #13: a versão antiga era `try: ...; except Exception: pass` — qualquer
+    erro (DB locked, disco cheio, permissão) era silenciosamente ignorado.
+    Depois o INSERT seguinte dava `no such column` e o jogador via "Erro" sem
+    pista do motivo. Agora só `OperationalError` com mensagem de coluna
+    duplicada é tolerada; o resto sobe.
+    """
+    try:
+        await conn.execute(sql)
+    except aiosqlite.OperationalError as e:
+        msg = str(e).lower()
+        if "duplicate column" in msg or "duplicate column name" in msg:
+            return  # Migração já aplicada — OK
+        log.error("character_store_migracao_falhou", coluna=coluna, erro=str(e))
+        raise
+
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS character_state (
     session_id             TEXT    PRIMARY KEY,
@@ -92,16 +113,12 @@ class CharacterStore:
         async with aiosqlite.connect(DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             await conn.execute(_CREATE_TABLE)
-            # Migração idempotente: adiciona owner_email em bancos pre-4.6
-            try:
-                await conn.execute(_MIGRATE_OWNER_EMAIL)
-            except Exception:
-                pass  # coluna já existe — ignorar
-            # Migração idempotente: adiciona spells_conhecidas em bancos pre-Fase 6.1
-            try:
-                await conn.execute(_MIGRATE_SPELLS)
-            except Exception:
-                pass  # coluna já existe — ignorar
+            # Migrações idempotentes — adicionam colunas em bancos antigos.
+            # Bug #13: o except antigo era `except Exception: pass` e mascarava
+            # falhas reais (DB locked, disco cheio, permissão). Agora só engole
+            # "duplicate column" do aiosqlite — o resto explode normalmente.
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_OWNER_EMAIL, "owner_email")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_SPELLS, "spells_conhecidas")
             await conn.commit()
             yield conn
 

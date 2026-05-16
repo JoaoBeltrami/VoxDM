@@ -31,8 +31,12 @@ export function useAudio(opcoes?: UseAudioOptions) {
   const sourceAtualRef = useRef<AudioBufferSourceNode | null>(null);
   // Cauda da Promise chain — garante execução sequencial
   const filaRef = useRef<Promise<void>>(Promise.resolve());
-  // Flag de parada — quando true, chunks na fila são descartados
-  const parandoRef = useRef(false);
+  // Bug #11: epoch counter — pararTudo() incrementa; chunks capturam o valor
+  // no momento do enqueue. Quando o then() do chunk executa, compara: se o
+  // epoch mudou, é um chunk pré-pararTudo e deve ser descartado. Elimina
+  // a race que existia com o reset via microtask (chunks novos enfileirados
+  // imediatamente depois de pararTudo eram engolidos por parandoRef ainda=true).
+  const epochRef = useRef(0);
   // Ref estável para callbacks — evita re-criar tocarChunk quando callbacks mudam
   const onDuracaoRef = useRef(opcoes?.onDuracao);
   const onTocandoChangeRef = useRef(opcoes?.onTocandoChange);
@@ -61,6 +65,9 @@ export function useAudio(opcoes?: UseAudioOptions) {
   }, []);
 
   const tocarChunk = useCallback((base64mp3: string) => {
+    // Captura o epoch no MOMENTO do enqueue. Se pararTudo bumpar o epoch
+    // antes desse then() rodar, somos um chunk pré-stop e devemos sair.
+    const epochInicio = epochRef.current;
     chunksAtivosRef.current++;
     // Primeiro chunk na fila dispara onTocandoChange(true)
     if (chunksAtivosRef.current === 1) {
@@ -68,8 +75,8 @@ export function useAudio(opcoes?: UseAudioOptions) {
     }
 
     filaRef.current = filaRef.current.then(async () => {
-      // Descarta chunk se pararTudo() foi chamado
-      if (parandoRef.current) {
+      // Descarta se o chunk foi enfileirado ANTES do último pararTudo().
+      if (epochInicio !== epochRef.current) {
         chunksAtivosRef.current = Math.max(0, chunksAtivosRef.current - 1);
         return;
       }
@@ -130,8 +137,7 @@ export function useAudio(opcoes?: UseAudioOptions) {
   }, []);
 
   const pararTudo = useCallback(() => {
-    // Para o chunk atual imediatamente
-    parandoRef.current = true;
+    // Para o chunk atual imediatamente.
     try {
       sourceAtualRef.current?.stop();
     } catch {
@@ -140,10 +146,11 @@ export function useAudio(opcoes?: UseAudioOptions) {
     sourceAtualRef.current = null;
     chunksAtivosRef.current = 0;
     onTocandoChangeRef.current?.(false);
-    // Reseta a fila (chunks pendentes serão descartados via parandoRef)
-    filaRef.current = Promise.resolve().then(() => {
-      parandoRef.current = false; // libera fila para próxima sessão
-    });
+    // Bumpa o epoch: chunks pendentes (com epoch antigo) serão descartados
+    // quando suas tasks rodarem. Chunks novos (enqueued depois deste ponto)
+    // pegam o novo epoch e tocam normalmente.
+    epochRef.current++;
+    filaRef.current = Promise.resolve();
   }, []);
 
   const setVolume = useCallback((v: number) => {
