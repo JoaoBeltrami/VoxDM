@@ -82,6 +82,21 @@ _RE_PERDEU = re.compile(r"\[PERDEU:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 _RE_MERCADO = re.compile(r"\[MERCADO\]", re.IGNORECASE)
 _RE_FIM_MERCADO = re.compile(r"\[FIM_MERCADO\]", re.IGNORECASE)
 
+# Feature companions/party: aliados que lutam ao lado do jogador.
+# `[COMPANION_ADD: id|nome|tipo|hp|ca|atq|dano]` — adiciona/atualiza companion.
+#   Ex: `[COMPANION_ADD: lyssa|Lyssa|hireling|25|15|+4|1d8 cortante]`
+# `[COMPANION_HP: id|±N motivo]` — ajusta HP (dano/cura).
+# `[COMPANION_REMOVE: id]` — companion morre/dispensa/fim de summon.
+_RE_COMPANION_ADD = re.compile(
+    r"\[COMPANION_ADD:\s*([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|(\d+)\|(\d+)\|([^|\]]+)\|([^\]]+?)\s*\]",
+    re.IGNORECASE,
+)
+_RE_COMPANION_HP = re.compile(
+    r"\[COMPANION_HP:\s*([^|\]]+)\|\s*([+-]?\d+)\s*([^\]]*?)\s*\]",
+    re.IGNORECASE,
+)
+_RE_COMPANION_REMOVE = re.compile(r"\[COMPANION_REMOVE:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -383,6 +398,38 @@ def aplicar_pos_turno(
     if _RE_FIM_MERCADO.search(resposta_completa):
         working_mem.em_mercado = False
         log.info("mercado_fechado")
+
+    # 13.6. Companions/party — aliados controlados.
+    for m in _RE_COMPANION_ADD.finditer(resposta_completa):
+        try:
+            cid = m.group(1).strip().lower()
+            nome = m.group(2)
+            tipo = m.group(3)
+            hp = int(m.group(4))
+            ca = int(m.group(5))
+            atq = m.group(6)
+            dano = m.group(7)
+        except (ValueError, AttributeError):
+            continue
+        if cid:
+            working_mem.registrar_companion(cid, nome, tipo, hp, ca, atq, dano)
+            log.info("companion_registrado", id=cid, nome=nome, tipo=tipo)
+
+    for m in _RE_COMPANION_HP.finditer(resposta_completa):
+        cid = m.group(1).strip().lower()
+        try:
+            delta = int(m.group(2))
+        except ValueError:
+            continue
+        ok = working_mem.ajustar_hp_companion(cid, delta)
+        if ok:
+            log.info("companion_hp_ajustado", id=cid, delta=delta,
+                     hp_novo=working_mem.companions[cid].get("hp"))
+
+    for m in _RE_COMPANION_REMOVE.finditer(resposta_completa):
+        cid = m.group(1).strip().lower()
+        if working_mem.remover_companion(cid):
+            log.info("companion_removido", id=cid)
 
     # 14. Combate tático — posições de inimigos e movimento do jogador.
     # Só processa se estamos em combate (posições fora de combate são

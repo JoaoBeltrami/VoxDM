@@ -101,6 +101,16 @@ export interface MensagemWS {
   movimento_total_ft?: number;
   // Feature economia — true quando jogador em mercado/loja.
   em_mercado?: boolean;
+  // Feature companions/party — aliados ativos.
+  companions?: Record<string, {
+    nome: string;
+    tipo: string;
+    hp: number;
+    hp_max: number;
+    ca: number;
+    atq: string;
+    dano: string;
+  }>;
   // Feature progressão — enviado em tipo="level_up" com o resumo do level up.
   level_up?: {
     nivel_antigo: number;

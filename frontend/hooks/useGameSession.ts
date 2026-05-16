@@ -115,6 +115,12 @@ interface EstadoSessao {
   // Feature economia — true quando o jogador está em loja/mercado/taverna-vendedor.
   // Habilita UI de venda no inventário e badge no header.
   emMercado: boolean;
+  // Feature companions/party — aliados ativos (hireling/familiar/animal/summon).
+  companions: Record<string, {
+    nome: string; tipo: string;
+    hp: number; hp_max: number;
+    ca: number; atq: string; dano: string;
+  }>;
   // Nível atual do personagem (Feature progressão). Atualizado via msg.player_level
   // ou inferido do resumo de level up (pulse de "subiu pra X").
   playerLevel: number;
@@ -175,6 +181,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   movimentoRestanteFt: 30,
   movimentoTotalFt: 30,
   emMercado: false,
+  companions: {},
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -444,6 +451,7 @@ export function useGameSession() {
             movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
             movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
             emMercado: msg.em_mercado ?? s.emMercado,
+            companions: (msg.companions ?? s.companions) as EstadoSessao["companions"],
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
@@ -491,6 +499,7 @@ export function useGameSession() {
             movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
             movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
             emMercado: msg.em_mercado ?? s.emMercado,
+            companions: (msg.companions ?? s.companions) as EstadoSessao["companions"],
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,

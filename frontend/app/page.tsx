@@ -13,6 +13,7 @@ import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
+import { CompanionsPanel } from "@/components/CompanionsPanel";
 import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
@@ -238,7 +239,7 @@ export default function Home() {
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
-    emMercado,
+    emMercado, companions,
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap,
@@ -794,6 +795,13 @@ export default function Home() {
           movimentoRestanteFt={movimentoRestanteFt}
           movimentoTotalFt={movimentoTotalFt}
         />
+
+        {!cinemaMode && (
+          <CompanionsPanel
+            companions={companions}
+            onComandar={(nome) => enviarComando(`${nome}, ataque o inimigo mais próximo.`)}
+          />
+        )}
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {historico.length === 0 && !respostaAtual && (

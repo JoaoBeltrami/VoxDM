@@ -487,6 +487,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             movimento_restante_ft=wm.movimento_restante_ft,
             movimento_total_ft=wm.movimento_total_ft,
             em_mercado=wm.em_mercado,
+            companions=dict(wm.companions),
         ).model_dump_json()
     )
 
@@ -1132,6 +1133,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     movimento_restante_ft=sessao.working_mem.movimento_restante_ft,
                     movimento_total_ft=sessao.working_mem.movimento_total_ft,
                     em_mercado=sessao.working_mem.em_mercado,
+                    companions=dict(sessao.working_mem.companions),
                 ).model_dump_json()
             )
 

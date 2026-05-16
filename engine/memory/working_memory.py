@@ -156,6 +156,16 @@ class WorkingMemory:
     # Frontend pode habilitar UI de venda quando true.
     em_mercado: bool = False
 
+    # ── Companions (Feature party) ──────────────────────────────────────────
+    # Aliados controlados pelo jogador ou fixos da campanha: hireling, animal
+    # companion (Ranger), familiar (Find Familiar — Mago/Bruxo), summons.
+    # Não confundir com NPCs apresentados (esses só conversam, não lutam).
+    # Estrutura: companion_id (kebab-case) → {
+    #   nome: str, tipo: str (hireling/familiar/animal/summon),
+    #   hp: int, hp_max: int, ca: int, atq: str ("+4"), dano: str ("1d8+2 cortante")
+    # }
+    companions: dict[str, dict[str, str | int]] = field(default_factory=dict)
+
     # NPCs que foram formalmente apresentados ao jogador (mencionados pelo DM).
     # Apenas estes aparecem no HUD — os demais estão no local mas não foram introduzidos.
     npcs_apresentados: set[str] = field(default_factory=set)
@@ -502,6 +512,54 @@ class WorkingMemory:
             "distancia_ft": int(distancia_ft),
             "cobertura": bool(cobertura),
         }
+
+    # ── Companions ──────────────────────────────────────────────────────────
+
+    def registrar_companion(
+        self, companion_id: str, nome: str, tipo: str,
+        hp: int, ca: int, atq: str, dano: str,
+    ) -> None:
+        """Adiciona ou atualiza um companion. Idempotente — re-registrar
+        sobrescreve apenas se o id já existir.
+
+        Args:
+            companion_id: kebab-case ('lyssa', 'corvo-familiar')
+            tipo: 'hireling' | 'familiar' | 'animal' | 'summon'
+            hp/hp_max: HP atual e máximo (registramos `hp` como atual; max=hp na criação)
+            ca: classe de armadura
+            atq: bônus de ataque ('+4')
+            dano: notação de dano ('1d8+2 cortante')
+        """
+        self.companions[companion_id] = {
+            "nome": nome.strip(),
+            "tipo": tipo.strip().lower(),
+            "hp": max(0, int(hp)),
+            "hp_max": max(1, int(hp)),
+            "ca": int(ca),
+            "atq": atq.strip(),
+            "dano": dano.strip(),
+        }
+
+    def ajustar_hp_companion(self, companion_id: str, delta: int) -> bool:
+        """Aplica delta de HP a um companion (negativo = dano, positivo = cura).
+
+        Returns True se aplicado; False se id não existir. HP clamp em [0, hp_max].
+        """
+        comp = self.companions.get(companion_id)
+        if not comp:
+            return False
+        hp_max = int(comp.get("hp_max", 1))
+        hp_atual = int(comp.get("hp", 0))
+        novo = max(0, min(hp_max, hp_atual + int(delta)))
+        comp["hp"] = novo
+        return True
+
+    def remover_companion(self, companion_id: str) -> bool:
+        """Remove um companion (morto, dispensado, fim da convocação).
+
+        Returns True se removido; False se id não existir.
+        """
+        return self.companions.pop(companion_id, None) is not None
 
     def aplicar_movimento(self, delta_ft: int) -> int:
         """Consome movimento do jogador NA rodada atual.

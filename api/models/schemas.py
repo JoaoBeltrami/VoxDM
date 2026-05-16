@@ -223,6 +223,9 @@ class MensagemWS(BaseModel):
     # Feature economia: true quando o jogador está em loja/mercado/taverna-vendedor.
     # LLM sinaliza com [MERCADO] / [FIM_MERCADO]. Frontend habilita UI de venda.
     em_mercado: bool = False
+    # Feature companions/party — aliados ativos com HP/CA/atq/dano.
+    # Estrutura: id → {nome, tipo, hp, hp_max, ca, atq, dano}.
+    companions: dict[str, dict[str, Any]] = Field(default_factory=dict)
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

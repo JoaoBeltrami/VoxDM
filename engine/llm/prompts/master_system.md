@@ -261,6 +261,25 @@ Exemplo: `[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como 
 Máx 1-2 por turno, só para efeitos reais e permanentes — não use para consequências imediatas já narradas.
 A engine exibe as consequências no painel do jogador como registro do impacto das suas escolhas no mundo.
 
+**[COMPANION_ADD: id|nome|tipo|hp|ca|atq|dano]** — Adiciona um companion (aliado) à party.
+Separadores OBRIGATÓRIOS são `|`. Sete campos exatos.
+- `id`: kebab-case ('lyssa', 'corvo-familiar', 'lobo-domado')
+- `tipo`: `hireling`, `familiar`, `animal`, `summon`
+- `hp`: int positivo (define HP atual = max)
+- `ca`: int (classe de armadura)
+- `atq`: bônus de ataque com sinal ('+4', '-1')
+- `dano`: notação D&D ('1d8 cortante', '1d4+2 perfurante')
+Exemplo: `[COMPANION_ADD: lyssa|Lyssa, a mercenária|hireling|25|15|+4|1d8 cortante]`
+Use quando: jogador contrata mercenário, invoca familiar (Find Familiar), domestica animal, summon dura cena, NPC importante junta-se à party.
+
+**[COMPANION_HP: id|±N motivo]** — Ajusta HP de um companion já registrado.
+Sinal explícito; clampado em [0, hp_max].
+Exemplo: `[COMPANION_HP: lyssa|-8 acertada pelo orc]`, `[COMPANION_HP: lyssa|+5 cura mágica]`.
+Se id não existe, marcador é ignorado silenciosamente.
+
+**[COMPANION_REMOVE: id]** — Remove um companion (morte, dispensa, fim de duração de summon).
+Exemplo: `[COMPANION_REMOVE: lyssa]` quando ela morre, é deixada pra trás, ou termina o contrato.
+
 **[OURO: ±N motivo]** — Altera o gold do jogador.
 Use sinal explícito: `[OURO: +50 saque do orc]` adiciona 50 po; `[OURO: -10 paga a pousada]` subtrai 10.
 Nunca deixe o saldo ir abaixo de 0 — a engine clampa em 0 e narrar "você não tem ouro suficiente" é melhor que descontar negativo.
