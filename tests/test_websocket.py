@@ -301,6 +301,37 @@ def test_sincronizar_inimigos_ignora_pronome_no_estado():
     assert "voce" not in mem.inimigos_combate
 
 
+def test_pipeline_reseta_turno_para_jogador():
+    """Bug #8: após pipeline, turno_atual_idx volta a 0 (jogador) — não cicla."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-init")
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc", "Orc", "intacto")
+    wm.iniciativa_cache = {"jogador": 10, "orc": 15}
+    wm.turno_atual_idx = 99  # estado sujo
+
+    aplicar_pos_turno(wm, "Ataco o orc.", "O orc rosna.")
+
+    assert wm.turno_atual_idx == 0
+
+
+def test_pipeline_avanca_rodada_em_combate():
+    """Bug #8: avancar_rodada continua sendo chamado normalmente."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("masmorra", "Masmorra", "sess-rod")
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc", "Orc", "intacto")
+    rodada_antes = wm.rodada_combate
+
+    aplicar_pos_turno(wm, "Ataco.", "O orc reage.")
+
+    assert wm.rodada_combate == rodada_antes + 1
+
+
 def test_limpar_markdown_remove_marcador_longo():
     """Bug #2 defensiva: marcador com texto longo (>200 chars) deve ser removido pelo TTS."""
     from engine.voice.tts import _limpar_markdown

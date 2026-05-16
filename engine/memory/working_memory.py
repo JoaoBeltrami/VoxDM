@@ -604,8 +604,11 @@ class WorkingMemory:
         # Inimigos — preencher na ordem em que apareceram, valor decrescente do
         # topo se LLM não propôs. Começa em 20 e desce, pulando o valor do jogador
         # pra evitar empate sem critério de desempate.
+        # Bug #6: o fallback antigo travava em 1 quando muitos inimigos (5+)
+        # entravam sem proposta — vários terminavam empatados em 1. Agora
+        # decrementamos passando por todos os valores válidos antes de clampar,
+        # e o range pode chegar a 0 (em vez de min=1) quando esgota.
         proposta_llm = proposta_llm or {}
-        # valores já em uso para evitar duplicatas no fallback
         em_uso = set(self.iniciativa_cache.values())
         proximo_fallback = 20
         for inimigo_id in self.inimigos_combate.keys():
@@ -613,9 +616,10 @@ class WorkingMemory:
                 continue
             valor = proposta_llm.get(inimigo_id)
             if valor is None:
-                while proximo_fallback in em_uso and proximo_fallback > 1:
+                # Pula valores já em uso, decrementando até encontrar livre.
+                while proximo_fallback in em_uso and proximo_fallback > -50:
                     proximo_fallback -= 1
-                valor = max(1, proximo_fallback)
+                valor = proximo_fallback
                 proximo_fallback -= 1
             self.iniciativa_cache[inimigo_id] = valor
             em_uso.add(valor)
@@ -668,9 +672,15 @@ class WorkingMemory:
                 morto=estado == "morto",
             ))
 
-        # Ordenar por iniciativa desc — desempate por tipo (jogador primeiro) só
-        # importa visualmente; numericamente já basta pra estabilidade.
-        tokens.sort(key=lambda t: (-t.iniciativa, 0 if t.tipo == "jogador" else 1))
+        # Ordenar por iniciativa desc. Desempate: jogador primeiro, depois id
+        # alfabético — torna a ordem 100% determinística entre re-cálculos
+        # (sem isso, dois inimigos com mesma iniciativa podiam pingar de posição
+        # entre turnos por causa da ordem do dict).
+        tokens.sort(key=lambda t: (
+            -t.iniciativa,
+            0 if t.tipo == "jogador" else 1,
+            t.id,
+        ))
 
         # Marca turno atual entre os vivos
         vivos = [t for t in tokens if not t.morto]

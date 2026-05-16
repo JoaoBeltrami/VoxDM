@@ -528,6 +528,33 @@ def test_calcular_ordem_marca_morto():
     assert morto.morto is True
 
 
+def test_popular_iniciativa_sem_empates_com_muitos_inimigos():
+    """Bug #6: 10 inimigos sem proposta — todos devem ter iniciativa única."""
+    wm = _wm()
+    wm.entrar_combate()
+    for i in range(10):
+        wm.registrar_inimigo(f"inim-{i}", f"Inim {i}")
+    wm.popular_iniciativa()
+
+    valores = list(wm.iniciativa_cache.values())
+    assert len(valores) == len(set(valores)), f"Duplicatas em iniciativa: {valores}"
+
+
+def test_calcular_ordem_deterministica_em_empate():
+    """Bug #6 tiebreaker: dois inimigos com mesma iniciativa têm ordem estável."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("zebra", "Zebra")
+    wm.registrar_inimigo("alpha", "Alpha")
+    wm.popular_iniciativa({"zebra": 15, "alpha": 15})
+
+    ordem1 = [t.id for t in wm.calcular_ordem_iniciativa()]
+    ordem2 = [t.id for t in wm.calcular_ordem_iniciativa()]
+    assert ordem1 == ordem2
+    # Alpha vence empate por ordem alfabética
+    assert ordem1.index("alpha") < ordem1.index("zebra")
+
+
 def test_avancar_turno_pula_mortos():
     wm = _wm()
     wm.entrar_combate()

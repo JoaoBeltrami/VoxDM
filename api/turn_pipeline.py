@@ -209,6 +209,12 @@ def aplicar_pos_turno(
     sincronizar_inimigos_combate(working_mem, texto_jogador, resposta_completa)
 
     # 3. Iniciativa — engine é authority
+    # Bug #8: cada chamada de pipeline = uma rodada COMPLETA (jogador age,
+    # narração descreve player + todos NPCs). Antes incrementávamos
+    # turno_atual_idx em +1 a cada turno do jogador, fazendo a InitiativeBar
+    # mostrar "orc1" highlighted enquanto era a vez do jogador digitar.
+    # Agora: popular iniciativa (idempotente) e voltar pro jogador (idx=0).
+    # O avanço de rodada acontece no step 6, mais abaixo.
     if working_mem.em_combate and working_mem.inimigos_combate:
         inimigos_sem_ini = [
             iid for iid in working_mem.inimigos_combate
@@ -217,8 +223,8 @@ def aplicar_pos_turno(
         if inimigos_sem_ini:
             log.warning("iniciativa_fallback", inimigos=inimigos_sem_ini)
         working_mem.popular_iniciativa()
-        if working_mem.rodada_combate >= 1:
-            working_mem.avancar_turno_iniciativa()
+        # Volta o cursor visual pro jogador — é a próxima vez que ele vai agir.
+        working_mem.turno_atual_idx = 0
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
     # Ordem: antes do trust, pois o descanso é uma ação completa do jogador.
