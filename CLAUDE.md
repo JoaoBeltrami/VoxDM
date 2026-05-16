@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 16 de maio de 2026 — Fase 6 + Lista de Magias + Recap oral + Consequências visíveis
+> Atualizado: 16 de maio de 2026 — Auditoria de bugs + 4 features de game design (XP/level up, combate tático, economia, companions)
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -710,6 +710,77 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `tests/test_quest_detector.py` | +3 testes — remove `[CONSEQUÊNCIA]`, preserva texto ao redor, remoção combinada com `[FIO]` | ✅ Atualizado |
 | `tests/test_websocket.py` | +4 testes — regex captura texto, case-insensitive, `aplicar_pos_turno` extrai para `log_consequencias`, deduplicação | ✅ Atualizado |
 | **Total testes** | | **515/515 passed**; `tsc --noEmit` clean |
+
+### Auditoria de Bugs + 4 Features de Game Design (Sessão 16/05 — tarde)
+
+> Sessão dedicada: auditoria profunda → 12 bugs corrigidos → 4 features novas de mecânica D&D que faltavam pra engine ser jogo de verdade.
+
+**Auditoria — 12 bugs reais (6 commits)**
+
+| Bug | Arquivo | Sintoma |
+|---|---|---|
+| #1 dedup de inimigos | `api/turn_pipeline.py` | `goblin` simples era marcado morto quando LLM narrava `o goblin arqueiro caiu`. Match bidirecional virou whole-word + longest-match. |
+| #3 pronomes virando inimigos | `api/turn_pipeline.py` | `você está ferido` registrava "você" como NPC. Adicionado `_PRONOMES` filtrando alvo e estado. |
+| #2 marcadores no TTS | `api/websocket.py`, `engine/voice/tts.py` | `[FIO: ...]` lidos pelo Edge TTS em sentenças streaming (strip rodava só no flush). Agora strip por chunk; flush só dispara com `[/]` balanceados; limit 200→500 chars no `_limpar_markdown`. |
+| #4 frase final perdida | `api/websocket.py` | max_tokens=400 cortava resposta sem pontuação → fragmento desaparecia. Agora sintetiza fragmento mesmo sem `.!?`. |
+| #5 spell decrementa slot sem conhecer | `api/websocket.py` | Mago dizia `lanço bola de fogo` sem ter selecionado a magia; slot 3 sumia. Validação contra `sessao.spells_conhecidas`. |
+| #15 nome de magia inflado | `engine/magic/spell_detector.py` | `lanço meu olhar para o orc` capturava `meu olhar para o orc`. Stopwords (para/em/contra/meu/...) cortam o nome. |
+| #6 iniciativa empate em 1 | `engine/memory/working_memory.py` | 5+ inimigos sem proposta colidiam em iniciativa=1. Fallback agora desce até -50; tiebreaker por id alfabético. |
+| #8 turno_idx ciclando errado | `api/turn_pipeline.py` | InitiativeBar mostrava "orc1" highlighted quando era a vez do jogador. Agora `turno_idx = 0` ao fim do pipeline (1 turno player = 1 rodada). |
+| #7 inimigos zerados fora de combate | `frontend/hooks/useGameSession.ts` | Frontend apagava o tracker mesmo quando o backend só omitia o campo. Agora preserva se ausente, limpa só se explicitamente vazio. |
+| #10 descanso em discurso indireto | `engine/magic/slot_tracker.py` | `ele perguntou se eu quero dormir` restaurava slots. 1ª pessoa singular agora exige início de frase (`^`/`[.!?,]`). |
+| #11 useAudio.pararTudo race | `frontend/hooks/useAudio.ts` | Microtask reset de `parandoRef` engolia chunks novos enfileirados síncronos. Substituído por epoch counter — chunks pré-stop morrem por id de geração. |
+| #13 character_store migration mascarava erros | `engine/persistence/character_store.py` | `except Exception: pass` engolia DB locked / disco cheio. Helper `_aplicar_migracao_idempotente` ignora só `duplicate column`. |
+
+Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimigos de `api/turn_pipeline.py` (era duplicação literal).
+
+**Feature 1 — Progressão XP/Level Up** (commit `79b66b5`)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/progression.py` | Tabela SRD XP_THRESHOLDS (lv 1-20). `calcular_novo_nivel(xp, atual)` → pode pular múltiplos. `aplicar_level_up(wm, novo)` muta WM: HP_max += (média_hit_die + mod_CON) por nível ganho, mín 1; hit_dice_max/current sobem; spell_slots recalculados; features renovadas | ✅ Criado |
+| `api/turn_pipeline.py` | `_RE_XP = \[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]`. `aplicar_xp_e_detectar_level_up()` extrai marcadores, soma em `wm.xp`, retorna resumo do level up se cruzou threshold | ✅ Atualizado |
+| `api/websocket.py` | Após pipeline, emite mensagem WS `tipo="level_up"` com resumo (`nivel_antigo`, `nivel_novo`, `hp_ganho`, `hp_max_novo`, `slots_novos`, `features_novas`). Falha silenciosa | ✅ Atualizado |
+| `engine/persistence/character_store.py` | Coluna `player_level` (migração idempotente, default 3). `salvar`/`carregar` preservam. `aplicar_character_state` restaura o nível mais alto | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Documentação `[XP: +N motivo]` com tabela de CR→XP do SRD (25/50/100/200) e diretrizes (combate, quest, descoberta, diplomacia). Stripped do TTS via `_RE_MESTRE_VET` | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `levelUp` state, `dismissLevelUp` exposto. Handler `tipo="level_up"` popula e atualiza `playerLevel` | ✅ Atualizado |
+| `frontend/app/page.tsx` | Modal full-screen com gradient âmbar, Cinzel, lista de ganhos (HP, slots, features). Auto-dismiss 12s ou clique. Pulso via `crit-pop` animation | ✅ Atualizado |
+| `tests/test_progression.py` | 23 testes — tabela SRD, cálculo, level up múltiplo, HP min 1, spells recalculados, features renovadas, integração com pipeline | ✅ Criado |
+
+**Feature 2 — Combate Tático** (commit `81ccf6f`)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/memory/working_memory.py` | `posicoes_combate: dict[id, {distancia_ft, cobertura}]`, `movimento_restante_ft`/`movimento_total_ft` (padrão 30). Métodos `registrar_posicao`, `aplicar_movimento`. `avancar_rodada` renova movimento; `entrar/sair_combate` limpam tactical state | ✅ Atualizado |
+| `api/turn_pipeline.py` | `_RE_POSICAO = \[POSICAO: npc-id = N ft cobertura?\]`. `_RE_MOVIMENTO = \[MOV: -N ft motivo\]`. Step 14 extrai (só roda em combate) | ✅ Atualizado |
+| `api/models/schemas.py` | `posicoes_combate`, `movimento_restante_ft`, `movimento_total_ft` em `MensagemWS` | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Docs com tabela de referência de distâncias (5/30/60/120 ft = corpo a corpo/médio/longo/long range) | ✅ Atualizado |
+| `frontend/components/CombatTracker.tsx` | Barra "Movimento N/30 ft" no topo; chip de distância 🎯/🛡 colorido por banda ao lado de cada inimigo. Slug do nome como fallback se id não bater | ✅ Atualizado |
+| `tests/test_combate_tatico.py` | 16 testes — regex, registrar/clamp posições, aplicar/clamp movimento, renovação por rodada, fim de combate, strip TTS | ✅ Criado |
+
+**Feature 3 — Inventário/Economia** (commit `0769077`)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/memory/working_memory.py` | `em_mercado: bool` — true em loja/mercado/taverna-vendedor | ✅ Atualizado |
+| `api/turn_pipeline.py` | 5 marcadores: `[OURO: ±N motivo]`, `[LOOT: item]`, `[PERDEU: item]`, `[MERCADO]`, `[FIM_MERCADO]`. Step 13.5 do pipeline. Gold clampado em 0; loot dedupa por nome lower; perdeu match case-insensitive | ✅ Atualizado |
+| `frontend/components/CharacterSheet.tsx` | Badge "🏪 mercado" no header do inventário quando `em_mercado=true`. Botão "vender" âmbar ao lado de cada item, envia `Vendo {item}.` ao mestre — mestre responde com `[OURO: +preço]` e `[PERDEU: item]` | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Docs com fluxo de compra/venda. Sinal explícito obrigatório no OURO. LOOT dedup; PERDEU case-insensitive | ✅ Atualizado |
+| `tests/test_economia.py` | 16 testes — regex, soma/subtrai/clamp, dedup, mercado toggle, fluxo compra+venda completo, strip TTS | ✅ Criado |
+
+**Feature 4 — Companions/Party** (commit `a5619e1`)
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/memory/working_memory.py` | `companions: dict[id, {nome, tipo, hp, hp_max, ca, atq, dano}]`. Métodos `registrar_companion`, `ajustar_hp_companion` (clamp [0, hp_max]), `remover_companion`. Tipos: hireling/familiar/animal/summon | ✅ Atualizado |
+| `api/turn_pipeline.py` | 3 marcadores: `[COMPANION_ADD: id\|nome\|tipo\|hp\|ca\|atq\|dano]`, `[COMPANION_HP: id\|±N motivo]`, `[COMPANION_REMOVE: id]`. Step 13.6 extrai | ✅ Atualizado |
+| `frontend/components/CompanionsPanel.tsx` | Painel emerald com chips por companion: ícone por tipo (🛡/🦉/🐺/✨), badges CA/atq/dano, barra de HP colorida por % (verde→laranja→cinza morto), botão "⚔ comandar" envia `{nome}, ataque...`. Oculto em cinema mode | ✅ Criado |
+| `engine/llm/prompts/master_system.md` | Docs detalhada com formato exato dos pipes, quando usar (contratar, invocar familiar, domesticar, summon, NPC importante junta-se) | ✅ Atualizado |
+| `tests/test_companions.py` | 14 testes — regex (3 markers), métodos WM (registrar/ajustar/clamp/remover), pipeline (add/hp/remove via marcador), strip TTS | ✅ Criado |
+
+**Strip de marcadores** — `_RE_MESTRE_VET` em `engine/memory/quest_detector.py` agora cobre: FIO, CLIFFHANGER, AGENDA, LAMPEJO, CONSEQUÊNCIA, XP, POSICAO, MOV, OURO, LOOT, PERDEU, MERCADO, FIM_MERCADO, COMPANION_ADD, COMPANION_HP, COMPANION_REMOVE.
+
+**Total: 12 bugs fixed + 4 features novas. 599/599 testes passam, tsc clean. Toda a sessão em commits granulares pra rollback fácil.**
 
 ---
 
