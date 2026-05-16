@@ -41,14 +41,16 @@ _RE_DESCANSO_CURTO = re.compile(
 )
 
 # Detecta declarações de descanso longo no texto do jogador.
-# Exige intenção explícita do JOGADOR (1ª pessoa) para evitar falso positivo
-# em narrativa de NPCs: "quero dormir", "vou acampar", "quero fazer descanso longo",
-# "dormimos", "acampamos". "dormir aqui" e "acampar" isolados (3ª pessoa) são ignorados.
+# Bug #10: padrões em 1ª pessoa do singular ("quero dormir", "vou acampar")
+# precisam estar em INÍCIO de frase pra evitar falso positivo em discurso
+# indireto: "ele perguntou se eu quero dormir lá" não deve restaurar slots.
+# A verificação "início de frase" = começo da string ou após pontuação `.!?,`.
+# Padrões neutros (plural / substantivo) seguem usando \b solto pois não
+# têm ambiguidade — "dormimos" e "descanso longo" sempre indicam intent.
 _RE_DESCANSO_LONGO = re.compile(
-    r"\b(descanso longo|descansar longo"
-    r"|quero dormir|vou dormir|preciso dormir"
-    r"|quero acampar|vou acampar|podemos acampar"
-    r"|dormimos|acampamos)\b",
+    r"(?:^|[.!?,]\s+)\s*(?:quero|vou|preciso)\s+dormir"
+    r"|(?:^|[.!?,]\s+)\s*(?:quero|vou|podemos|preciso)\s+acampar"
+    r"|\b(?:descanso longo|descansar longo|dormimos|acampamos)\b",
     re.IGNORECASE,
 )
 

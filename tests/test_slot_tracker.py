@@ -85,6 +85,18 @@ def test_detectar_descanso_prioridade_longo_sobre_curto():
     assert detectar_descanso(texto) == "longo"
 
 
+def test_detectar_descanso_nao_pega_discurso_indireto():
+    """Bug #10: 'ele perguntou se eu quero dormir lá' não pode restaurar slots."""
+    assert detectar_descanso("Ele perguntou se eu quero dormir lá.") is None
+    assert detectar_descanso("Penso se vou dormir hoje à noite.") is None
+
+
+def test_detectar_descanso_pega_apos_pontuacao():
+    """Após '.' ou ',' continua valendo como 1ª pessoa explícita."""
+    assert detectar_descanso("Estou cansado. Quero dormir.") == "longo"
+    assert detectar_descanso("Ok, vou dormir agora.") == "longo"
+
+
 def test_detectar_descanso_case_insensitive():
     assert detectar_descanso("DESCANSO CURTO") == "curto"
     # "DORMIR" isolado (3ª pessoa narrativa) não aciona mais — exige 1ª pessoa

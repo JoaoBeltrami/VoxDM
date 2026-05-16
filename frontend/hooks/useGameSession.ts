@@ -323,6 +323,14 @@ export function useGameSession() {
         const npcsTrustAtual = msg.npcs_trust ?? {};
         const spellSlotsAtual = parseSpellSlots(msg.spell_slots);
 
+        // Bug #7: só usa o dicionário de inimigos do payload se de fato veio um
+        // (key presente, mesmo que vazio em fim de combate). Quando o backend não
+        // envia `inimigos_combate` (turno fora de combate), preserva o último
+        // snapshot — evita o pisca da CombatTracker que apagava o pulse-on-change.
+        const inimigosNoPayload =
+          msg.inimigos_combate !== undefined && msg.inimigos_combate !== null;
+        const emCombateAtual = msg.em_combate ?? false;
+
         const rpgUpdate = {
           spellSlots: Object.keys(spellSlotsAtual).length > 0 ? spellSlotsAtual : undefined,
           hitDiceCurrent: msg.hit_dice_current,
@@ -332,8 +340,12 @@ export function useGameSession() {
           deathSavesSuccesses: msg.death_saves_successes,
           deathSavesFailures: msg.death_saves_failures,
           deathSavesStable: msg.death_saves_stable,
-          emCombate: msg.em_combate ?? false,
-          inimigos: (msg.inimigos_combate ?? {}) as Record<string, { nome: string; estado: string; hp_rel?: string }>,
+          emCombate: emCombateAtual,
+          inimigos: (
+            inimigosNoPayload
+              ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)
+              : null  // null = "preserve estado anterior"
+          ) as Record<string, { nome: string; estado: string; hp_rel?: string }> | null,
           consequencias: msg.consequencias ?? msg.log_consequencias ?? [],
           iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
           fiosSoltos: msg.fios_soltos ?? [],
@@ -382,7 +394,9 @@ export function useGameSession() {
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
-            inimigos: rpgUpdate.inimigos,
+            // Se o payload trouxe inimigos (ainda em combate ou primeira mensagem
+            // pós-combate com dict vazio), aplica; senão preserva o anterior.
+            inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
@@ -423,7 +437,9 @@ export function useGameSession() {
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
-            inimigos: rpgUpdate.inimigos,
+            // Se o payload trouxe inimigos (ainda em combate ou primeira mensagem
+            // pós-combate com dict vazio), aplica; senão preserva o anterior.
+            inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
