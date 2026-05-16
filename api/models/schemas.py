@@ -213,6 +213,13 @@ class MensagemWS(BaseModel):
     # Progressão: payload do tipo="level_up" carrega o resumo do level up
     # ({nivel_antigo, nivel_novo, hp_ganho, hp_max_novo, slots_novos, features_novas}).
     level_up: dict[str, Any] | None = None
+    # Combate tático: posições relativas dos inimigos em pés (Feature posicionamento).
+    # Mapa npc_id → {distancia_ft: int, cobertura: bool}. Vazio fora de combate.
+    posicoes_combate: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Movimento restante do jogador na rodada atual (em pés).
+    movimento_restante_ft: int = 30
+    # Movimento total por rodada (speed da raça em pés).
+    movimento_total_ft: int = 30
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

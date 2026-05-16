@@ -138,6 +138,18 @@ class WorkingMemory:
     # Índice no array de iniciativa ordenado (pulando mortos) — quem age agora
     turno_atual_idx: int = 0
 
+    # ── Combate tático (Feature posicionamento) ─────────────────────────────
+    # Posição relativa de cada inimigo em relação ao jogador, em pés (ft).
+    # LLM emite [POSICAO: npc-id = N ft] e a engine extrai.
+    # Default: 30 ft (alcance médio de melee/short range arcane).
+    # Estrutura: npc_id → {distancia_ft: int, cobertura: bool}
+    posicoes_combate: dict[str, dict[str, int | bool]] = field(default_factory=dict)
+    # Movimento restante do jogador NA RODADA ATUAL. SRD: 30 ft padrão.
+    # Resetado para 30 (ou speed da raça) ao avançar rodada.
+    movimento_restante_ft: int = 30
+    # Velocidade do jogador em ft/rodada. Anão=25, Halfling=25, demais=30.
+    movimento_total_ft: int = 30
+
     # NPCs que foram formalmente apresentados ao jogador (mencionados pelo DM).
     # Apenas estes aparecem no HUD — os demais estão no local mas não foram introduzidos.
     npcs_apresentados: set[str] = field(default_factory=set)
@@ -452,11 +464,51 @@ class WorkingMemory:
         # Reseta cache de iniciativa — será populado quando primeiros inimigos aparecerem
         self.iniciativa_cache = {}
         self.turno_atual_idx = 0
+        # Reseta tactical state — posições e movimento de novo combate são frescos
+        self.posicoes_combate = {}
+        self.movimento_restante_ft = self.movimento_total_ft
 
     def avancar_rodada(self) -> None:
         """Incrementa contador de rodada dentro do combate ativo."""
         if self.em_combate:
             self.rodada_combate += 1
+            # Movimento se renova a cada rodada (SRD: speed inteiro por rodada)
+            self.movimento_restante_ft = self.movimento_total_ft
+
+    # ── Combate tático ──────────────────────────────────────────────────────
+
+    def registrar_posicao(
+        self, npc_id: str, distancia_ft: int, cobertura: bool = False
+    ) -> None:
+        """Atualiza a posição relativa de um NPC em relação ao jogador.
+
+        Distância em pés (SRD). Cobertura indica se o NPC está atrás de algo
+        (parede, coluna, mesa) — dá +2 CA contra ataques à distância e Vantagem
+        em saves contra magias de área (regra simplificada).
+
+        Idempotente: chamar com mesmos valores não muda nada.
+        """
+        if distancia_ft < 0:
+            distancia_ft = 0
+        if distancia_ft > 999:
+            distancia_ft = 999
+        self.posicoes_combate[npc_id] = {
+            "distancia_ft": int(distancia_ft),
+            "cobertura": bool(cobertura),
+        }
+
+    def aplicar_movimento(self, delta_ft: int) -> int:
+        """Consome movimento do jogador NA rodada atual.
+
+        delta_ft positivo = movimento usado. Não pode exceder
+        movimento_restante_ft. Retorna o quanto realmente foi consumido
+        (clampado por restante disponível).
+        """
+        if delta_ft <= 0:
+            return 0
+        consumido = min(delta_ft, self.movimento_restante_ft)
+        self.movimento_restante_ft -= consumido
+        return consumido
 
     # ── Inimigos em combate ───────────────────────────────────────────────────
 
@@ -503,6 +555,9 @@ class WorkingMemory:
         # Limpa cache de iniciativa — próximo combate rola tudo de novo
         self.iniciativa_cache.clear()
         self.turno_atual_idx = 0
+        # Tactical state limpo
+        self.posicoes_combate.clear()
+        self.movimento_restante_ft = self.movimento_total_ft
         self.saiu_combate_recentemente = True
         self.turnos_sem_tensao = 0
 

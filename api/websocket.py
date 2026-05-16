@@ -483,6 +483,9 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             class_features=wm.class_features,
             fios_soltos=wm.fios_soltos,
             consequencias=list(wm.log_consequencias),
+            posicoes_combate=dict(wm.posicoes_combate),
+            movimento_restante_ft=wm.movimento_restante_ft,
+            movimento_total_ft=wm.movimento_total_ft,
         ).model_dump_json()
     )
 
@@ -1124,6 +1127,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     fios_soltos=list(sessao.working_mem.fios_soltos),
                     consequencias=list(sessao.working_mem.log_consequencias),
                     class_features=dict(sessao.working_mem.class_features),
+                    posicoes_combate=dict(sessao.working_mem.posicoes_combate),
+                    movimento_restante_ft=sessao.working_mem.movimento_restante_ft,
+                    movimento_total_ft=sessao.working_mem.movimento_total_ft,
                 ).model_dump_json()
             )
 

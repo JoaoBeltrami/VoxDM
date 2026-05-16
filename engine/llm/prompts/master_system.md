@@ -261,6 +261,22 @@ Exemplo: `[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como 
 Máx 1-2 por turno, só para efeitos reais e permanentes — não use para consequências imediatas já narradas.
 A engine exibe as consequências no painel do jogador como registro do impacto das suas escolhas no mundo.
 
+**[POSICAO: npc-id = N ft]** — Marca a distância de um inimigo em pés (SRD).
+Use no início de combate (anuncia posições iniciais) e quando alguém se move significativamente.
+Adicione "cobertura" depois do ft se o inimigo está atrás de algo: `[POSICAO: orco-arqueiro = 60 ft cobertura]`.
+Exemplos: `[POSICAO: goblin = 5 ft]` (corpo a corpo), `[POSICAO: bruxa = 90 ft]` (longe).
+A engine exibe um chip "🎯 Goblin (5 ft)" ou "🛡 Orco Arqueiro (60 ft, cobertura)" pro jogador entender o teatro mental.
+Distâncias padrão de referência:
+- 5 ft: encostado, corpo a corpo
+- 15-30 ft: dash distance (1 ação de Dash cobre)
+- 30-60 ft: short range arcane / arrow range
+- 60-120 ft: long range bow
+
+**[MOV: -N ft motivo]** — Marca movimento do JOGADOR na rodada (decrementa wm.movimento_restante_ft).
+Use quando o jogador se desloca dentro do combate. SRD: padrão 30 ft por rodada.
+Exemplo: `[MOV: -20 ft em direção ao orc]` → consome 20 dos 30 ft, restam 10.
+Se o jogador quiser correr mais (Dash), é uma ação completa — você anuncia que "ele usa sua ação para correr" e emite outro `[MOV: -30 ft]`.
+
 **[XP: +N motivo]** — Concede experiência ao jogador. A engine acumula em `wm.xp` e detecta level up via tabela SRD.
 Use generosamente, mas só quando há mérito claro:
 - Combate vencido: 25 XP por monstro CR≤1/4, 50 XP CR½, 100 XP CR1, 200 XP CR2, ... (escala SRD)

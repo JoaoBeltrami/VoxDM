@@ -237,6 +237,7 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
+    posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap,
@@ -786,6 +787,9 @@ export default function Home() {
           rodada={rodadaCombate}
           turnoJogador={!respostaAtual && historico.length > 0 && !ouvindo}
           onAtacar={(nome) => enviarComando(`Ataco ${nome}.`)}
+          posicoes={posicoesCombate}
+          movimentoRestanteFt={movimentoRestanteFt}
+          movimentoTotalFt={movimentoTotalFt}
         />
 
         <div className="flex-1 overflow-y-auto px-4 py-4">

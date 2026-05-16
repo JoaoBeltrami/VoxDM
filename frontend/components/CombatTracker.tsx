@@ -27,6 +27,28 @@ interface CombatTrackerProps {
   rodada: number;
   turnoJogador?: boolean;
   onAtacar?: (nome: string) => void;
+  /** Feature combate tático: posições relativas em pés. Chave = npc_id (kebab-case). */
+  posicoes?: Record<string, { distancia_ft: number; cobertura: boolean }>;
+  /** Movimento restante do jogador na rodada atual (em pés). */
+  movimentoRestanteFt?: number;
+  /** Movimento total por rodada (speed da raça). */
+  movimentoTotalFt?: number;
+}
+
+function slugify(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function rangeBand(ft: number): { label: string; cor: string } {
+  if (ft <= 5)  return { label: "corpo a corpo", cor: "bg-red-900/40 text-red-300" };
+  if (ft <= 30) return { label: `${ft} ft`,       cor: "bg-amber-900/40 text-amber-300" };
+  if (ft <= 60) return { label: `${ft} ft`,       cor: "bg-blue-900/40 text-blue-300" };
+  return         { label: `${ft} ft (longe)`,    cor: "bg-zinc-800/60 text-zinc-400" };
 }
 
 /**
@@ -36,7 +58,10 @@ interface CombatTrackerProps {
  * "ataco o goblin" quebra ritmo. Um clique no inimigo envia "Atacar X" pro mestre
  * e mantém o vídeo fluindo. Mudanças de estado pulsam por 1.5s pra dar peso ao impacto.
  */
-export function CombatTracker({ emCombate, inimigos, rodada, turnoJogador, onAtacar }: CombatTrackerProps) {
+export function CombatTracker({
+  emCombate, inimigos, rodada, turnoJogador, onAtacar,
+  posicoes = {}, movimentoRestanteFt, movimentoTotalFt,
+}: CombatTrackerProps) {
   // Rastreia mudança de estado por inimigo pra disparar pulso visual
   const estadosAnt = useRef<Record<string, string>>({});
   const [pulsando, setPulsando] = useState<Record<string, boolean>>({});
@@ -92,6 +117,24 @@ export function CombatTracker({ emCombate, inimigos, rodada, turnoJogador, onAta
         )}
       </div>
 
+      {/* Movimento do jogador — barra de speed restante na rodada */}
+      {movimentoTotalFt !== undefined && movimentoTotalFt > 0 && (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[9px] uppercase tracking-widest text-zinc-500">Movimento</span>
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-900">
+            <div
+              className="h-full rounded-full bg-emerald-600/70 transition-all duration-500"
+              style={{
+                width: `${Math.max(0, Math.min(100, ((movimentoRestanteFt ?? movimentoTotalFt) / movimentoTotalFt) * 100))}%`
+              }}
+            />
+          </div>
+          <span className="font-mono text-[10px] text-zinc-400">
+            {movimentoRestanteFt ?? movimentoTotalFt}/{movimentoTotalFt} ft
+          </span>
+        </div>
+      )}
+
       {lista.length === 0 ? (
         <p className="text-[10px] italic text-zinc-700">
           Declare um ataque pra rastrear inimigos ("ataco o goblin")
@@ -118,6 +161,18 @@ export function CombatTracker({ emCombate, inimigos, rodada, turnoJogador, onAta
                   }`}>
                     {!vivo && <span className="text-zinc-700">☠</span>}
                     {ini.nome}
+                    {/* Chip de distância (Feature combate tático) — tenta id da chave
+                        ou slug do nome como fallback. Cobertura adiciona escudo. */}
+                    {vivo && (() => {
+                      const pos = posicoes[id] ?? posicoes[slugify(ini.nome)];
+                      if (!pos) return null;
+                      const rb = rangeBand(pos.distancia_ft);
+                      return (
+                        <span className={`ml-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-mono ${rb.cor}`}>
+                          {pos.cobertura ? "🛡" : "🎯"} {rb.label}
+                        </span>
+                      );
+                    })()}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-semibold ${cfg.corTexto} ${pulse ? "animate-pulse" : ""}`}>

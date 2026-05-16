@@ -59,6 +59,19 @@ _RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECAS
 # Backend acumula em wm.xp e detecta level up via tabela SRD.
 _RE_XP = re.compile(r"\[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 
+# Feature combate tático: LLM emite [POSICAO: npc-id = N ft] (ou "= N ft cobertura").
+# Ex: "[POSICAO: goblin = 10 ft]", "[POSICAO: orco-arqueiro = 60 ft cobertura]"
+# Engine atualiza wm.posicoes_combate para o CombatTracker mostrar chip de distância.
+_RE_POSICAO = re.compile(
+    r"\[POSICAO:\s*([a-z0-9-]+)\s*=\s*(\d+)\s*ft\s*(cobertura)?\s*\]",
+    re.IGNORECASE,
+)
+
+# Movimento do jogador na rodada — LLM emite [MOV: -N ft motivo] quando o jogador
+# se desloca. Backend decrementa wm.movimento_restante_ft (max 30 padrão).
+# Ex: "[MOV: -20 ft em direção ao orc]" → restante 30→10.
+_RE_MOVIMENTO = re.compile(r"\[MOV:\s*-?(\d+)\s*ft\s*([^\]]*?)\s*\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -323,6 +336,31 @@ def aplicar_pos_turno(
         if consequencia and not any(consequencia in ex for ex in working_mem.log_consequencias):
             working_mem.registrar_consequencia(consequencia)
             log.info("consequencia_registrada_llm", texto=consequencia[:80])
+
+    # 14. Combate tático — posições de inimigos e movimento do jogador.
+    # Só processa se estamos em combate (posições fora de combate são
+    # irrelevantes e podem confundir o estado).
+    if working_mem.em_combate:
+        for m in _RE_POSICAO.finditer(resposta_completa):
+            npc_id = m.group(1).strip().lower()
+            try:
+                dist = int(m.group(2))
+            except ValueError:
+                continue
+            cobertura = bool(m.group(3))
+            if npc_id:
+                working_mem.registrar_posicao(npc_id, dist, cobertura=cobertura)
+                log.info("posicao_registrada", npc_id=npc_id, dist=dist, cobertura=cobertura)
+
+        for m in _RE_MOVIMENTO.finditer(resposta_completa):
+            try:
+                ft = int(m.group(1))
+            except ValueError:
+                continue
+            motivo = m.group(2).strip() or "movimento"
+            consumido = working_mem.aplicar_movimento(ft)
+            log.info("movimento_consumido", ft=consumido, motivo=motivo,
+                     restante=working_mem.movimento_restante_ft)
 
     return mudancas_trust
 

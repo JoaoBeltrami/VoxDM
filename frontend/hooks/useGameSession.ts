@@ -108,6 +108,10 @@ interface EstadoSessao {
   // Recap da sessão anterior — exibido em destaque antes das bolhas principais.
   // Some após 30s ou quando o jogador enviar o primeiro comando.
   textoRecap: string;
+  // Feature combate tático — posições dos inimigos em pés e movimento do jogador.
+  posicoesCombate: Record<string, { distancia_ft: number; cobertura: boolean }>;
+  movimentoRestanteFt: number;
+  movimentoTotalFt: number;
   // Nível atual do personagem (Feature progressão). Atualizado via msg.player_level
   // ou inferido do resumo de level up (pulse de "subiu pra X").
   playerLevel: number;
@@ -164,6 +168,9 @@ const ESTADO_INICIAL: EstadoSessao = {
   textoRecap: "",
   playerLevel: 3,
   levelUp: null,
+  posicoesCombate: {},
+  movimentoRestanteFt: 30,
+  movimentoTotalFt: 30,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -385,6 +392,13 @@ export function useGameSession() {
           npcsTrust: Object.keys(npcsTrustAtual).length > 0 ? npcsTrustAtual : undefined,
         };
 
+        // Feature combate tático — sincroniza posições + movimento. Espelha lógica
+        // de inimigos: undefined no payload preserva, presente (mesmo {}) substitui.
+        const posicoesNoPayload = msg.posicoes_combate !== undefined && msg.posicoes_combate !== null;
+        const novasPosicoes = posicoesNoPayload
+          ? (msg.posicoes_combate as Record<string, { distancia_ft: number; cobertura: boolean }>)
+          : null;
+
         // Detectar condições mencionadas no texto do mestre
         const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
 
@@ -422,6 +436,9 @@ export function useGameSession() {
             // pós-combate com dict vazio), aplica; senão preserva o anterior.
             inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
+            posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
+            movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
+            movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
@@ -465,6 +482,9 @@ export function useGameSession() {
             // pós-combate com dict vazio), aplica; senão preserva o anterior.
             inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
+            posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
+            movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
+            movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,

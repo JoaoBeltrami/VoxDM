@@ -95,6 +95,10 @@ export interface MensagemWS {
   // Dado rolado pelo mestre (Fase 5.7) — enviado em tipo="dado_rolado"
   dado_tipo?: string;      // "d4", "d6", "d8", "d10", "d12", "d20", "d100"
   dado_resultado?: number; // valor do dado (1-max)
+  // Feature combate tático — posições de inimigos em pés (chips de distância).
+  posicoes_combate?: Record<string, { distancia_ft: number; cobertura: boolean }>;
+  movimento_restante_ft?: number;
+  movimento_total_ft?: number;
   // Feature progressão — enviado em tipo="level_up" com o resumo do level up.
   level_up?: {
     nivel_antigo: number;
