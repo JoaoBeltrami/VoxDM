@@ -112,6 +112,9 @@ interface EstadoSessao {
   posicoesCombate: Record<string, { distancia_ft: number; cobertura: boolean }>;
   movimentoRestanteFt: number;
   movimentoTotalFt: number;
+  // Feature economia — true quando o jogador está em loja/mercado/taverna-vendedor.
+  // Habilita UI de venda no inventário e badge no header.
+  emMercado: boolean;
   // Nível atual do personagem (Feature progressão). Atualizado via msg.player_level
   // ou inferido do resumo de level up (pulse de "subiu pra X").
   playerLevel: number;
@@ -171,6 +174,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   posicoesCombate: {},
   movimentoRestanteFt: 30,
   movimentoTotalFt: 30,
+  emMercado: false,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -439,6 +443,7 @@ export function useGameSession() {
             posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
             movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
             movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
+            emMercado: msg.em_mercado ?? s.emMercado,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
@@ -485,6 +490,7 @@ export function useGameSession() {
             posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
             movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
             movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
+            emMercado: msg.em_mercado ?? s.emMercado,
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,

@@ -486,6 +486,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             posicoes_combate=dict(wm.posicoes_combate),
             movimento_restante_ft=wm.movimento_restante_ft,
             movimento_total_ft=wm.movimento_total_ft,
+            em_mercado=wm.em_mercado,
         ).model_dump_json()
     )
 
@@ -1130,6 +1131,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     posicoes_combate=dict(sessao.working_mem.posicoes_combate),
                     movimento_restante_ft=sessao.working_mem.movimento_restante_ft,
                     movimento_total_ft=sessao.working_mem.movimento_total_ft,
+                    em_mercado=sessao.working_mem.em_mercado,
                 ).model_dump_json()
             )
 

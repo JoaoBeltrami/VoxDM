@@ -220,6 +220,9 @@ class MensagemWS(BaseModel):
     movimento_restante_ft: int = 30
     # Movimento total por rodada (speed da raça em pés).
     movimento_total_ft: int = 30
+    # Feature economia: true quando o jogador está em loja/mercado/taverna-vendedor.
+    # LLM sinaliza com [MERCADO] / [FIM_MERCADO]. Frontend habilita UI de venda.
+    em_mercado: bool = False
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

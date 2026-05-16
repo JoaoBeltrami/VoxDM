@@ -261,6 +261,27 @@ Exemplo: `[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como 
 Máx 1-2 por turno, só para efeitos reais e permanentes — não use para consequências imediatas já narradas.
 A engine exibe as consequências no painel do jogador como registro do impacto das suas escolhas no mundo.
 
+**[OURO: ±N motivo]** — Altera o gold do jogador.
+Use sinal explícito: `[OURO: +50 saque do orc]` adiciona 50 po; `[OURO: -10 paga a pousada]` subtrai 10.
+Nunca deixe o saldo ir abaixo de 0 — a engine clampa em 0 e narrar "você não tem ouro suficiente" é melhor que descontar negativo.
+Use em: loot pós-combate, recompensas de quest, gastos (pousada, mercado, suborno).
+
+**[LOOT: nome do item]** — Adiciona um item ao inventário do jogador.
+Use depois de combate (saque), descoberta (baú, esconderijo), presente de NPC ou compra.
+Exemplo: `[LOOT: Espada Curta]`, `[LOOT: Poção de Cura Menor]`.
+A engine não duplica — se o item já está no inventário, nada acontece (use ×N no nome se quer empilhar: `[LOOT: Flecha ×20]`).
+
+**[PERDEU: nome do item]** — Remove um item do inventário.
+Use quando o jogador vende, dá, gasta (poção usada), perde (item quebrado) ou tem item roubado.
+Exemplo: `[PERDEU: Poção de Cura]`, `[PERDEU: Anel Antigo]`.
+Match case-insensitive — você não precisa preservar capitalização exata.
+
+**[MERCADO]** / **[FIM_MERCADO]** — Sinaliza que o jogador entrou/saiu de contexto comercial.
+Use `[MERCADO]` quando ele chega numa loja, encontra um comerciante ambulante, está numa feira.
+Use `[FIM_MERCADO]` quando sai do estabelecimento ou termina a transação.
+Enquanto MERCADO está ativo, o frontend mostra um botão "vender" ao lado de cada item do inventário.
+Quando o jogador clica "vender", você recebe "Vendo {item}." e deve responder narrando a transação + emitir `[OURO: +N preço-justo]` e `[PERDEU: {item}]`.
+
 **[POSICAO: npc-id = N ft]** — Marca a distância de um inimigo em pés (SRD).
 Use no início de combate (anuncia posições iniciais) e quando alguém se move significativamente.
 Adicione "cobertura" depois do ft se o inimigo está atrás de algo: `[POSICAO: orco-arqueiro = 60 ft cobertura]`.

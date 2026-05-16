@@ -238,6 +238,7 @@ export default function Home() {
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
+    emMercado,
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap,
@@ -779,6 +780,8 @@ export default function Home() {
           rolagens={rolagens}
           classFeatures={classFeatures}
           knownSpells={personagem.player_spells ?? []}
+          emMercado={emMercado}
+          onVenderItem={(item) => enviarComando(`Vendo ${item}.`)}
         />
 
         <CombatTracker

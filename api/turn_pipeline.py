@@ -72,6 +72,16 @@ _RE_POSICAO = re.compile(
 # Ex: "[MOV: -20 ft em direção ao orc]" → restante 30→10.
 _RE_MOVIMENTO = re.compile(r"\[MOV:\s*-?(\d+)\s*ft\s*([^\]]*?)\s*\]", re.IGNORECASE)
 
+# Feature economia: [OURO: ±N motivo] / [LOOT: item] / [PERDEU: item]
+# [OURO: +50 saque do orc] adiciona 50 po; [OURO: -10 paga a pousada] tira 10.
+# [LOOT: poção de cura] adiciona ao inventário; [PERDEU: poção de cura] remove.
+# [MERCADO] / [FIM_MERCADO] flag pra UI de venda no frontend.
+_RE_OURO = re.compile(r"\[OURO:\s*([+-]?)(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+_RE_LOOT = re.compile(r"\[LOOT:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+_RE_PERDEU = re.compile(r"\[PERDEU:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+_RE_MERCADO = re.compile(r"\[MERCADO\]", re.IGNORECASE)
+_RE_FIM_MERCADO = re.compile(r"\[FIM_MERCADO\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -336,6 +346,43 @@ def aplicar_pos_turno(
         if consequencia and not any(consequencia in ex for ex in working_mem.log_consequencias):
             working_mem.registrar_consequencia(consequencia)
             log.info("consequencia_registrada_llm", texto=consequencia[:80])
+
+    # 13.5. Economia — ouro, loot, mercado.
+    # Idempotência: cada marcador é processado uma vez por turno. Não há buffer
+    # entre turnos, então re-aplicar a mesma resposta dobraria o efeito (ok pq
+    # cada resposta é única no tempo).
+    for m in _RE_OURO.finditer(resposta_completa):
+        sinal = m.group(1)
+        try:
+            qtd = int(m.group(2))
+        except ValueError:
+            continue
+        if sinal == "-":
+            qtd = -qtd
+        working_mem.gold = max(0, working_mem.gold + qtd)
+        log.info("ouro_alterado", delta=qtd, novo=working_mem.gold,
+                 motivo=m.group(3)[:60])
+
+    for m in _RE_LOOT.finditer(resposta_completa):
+        item = m.group(1).strip()
+        if item and item.lower() not in (i.lower() for i in working_mem.player_inventory):
+            working_mem.player_inventory.append(item)
+            log.info("loot_adicionado", item=item[:60])
+
+    for m in _RE_PERDEU.finditer(resposta_completa):
+        item_alvo = m.group(1).strip().lower()
+        for i, item_existente in enumerate(working_mem.player_inventory):
+            if item_existente.lower() == item_alvo:
+                removido = working_mem.player_inventory.pop(i)
+                log.info("item_removido", item=removido[:60])
+                break
+
+    if _RE_MERCADO.search(resposta_completa):
+        working_mem.em_mercado = True
+        log.info("mercado_aberto")
+    if _RE_FIM_MERCADO.search(resposta_completa):
+        working_mem.em_mercado = False
+        log.info("mercado_fechado")
 
     # 14. Combate tático — posições de inimigos e movimento do jogador.
     # Só processa se estamos em combate (posições fora de combate são

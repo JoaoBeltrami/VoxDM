@@ -38,6 +38,11 @@ interface Props {
   classFeatures?: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
   // Magias conhecidas pelo personagem (nomes PT-BR) — exibidas agrupadas por nível
   knownSpells?: string[];
+  // Feature economia: true quando jogador está em loja/mercado/taverna-vendedor.
+  // Habilita botão "vender" ao lado de cada item do inventário.
+  emMercado?: boolean;
+  // Callback quando jogador clica "vender" — envia comando "Vendo {item}" ao mestre.
+  onVenderItem?: (item: string) => void;
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -150,6 +155,8 @@ export function CharacterSheet({
   rolagens = [],
   classFeatures = {},
   knownSpells = [],
+  emMercado = false,
+  onVenderItem,
 }: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
@@ -1164,7 +1171,14 @@ export function CharacterSheet({
             <button onClick={() => setInventarioAberto(a => !a)}
               className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
             >
-              <span>Inventário ({itens.length}/{MAX_ITENS})</span>
+              <span className="flex items-center gap-1.5">
+                Inventário ({itens.length}/{MAX_ITENS})
+                {emMercado && (
+                  <span className="rounded bg-amber-900/50 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-amber-300">
+                    🏪 mercado
+                  </span>
+                )}
+              </span>
               <span>{inventarioAberto ? "▲" : "▼"}</span>
             </button>
             {inventarioAberto && (
@@ -1187,7 +1201,18 @@ export function CharacterSheet({
                       {itens.map((item, idx) => (
                         <li key={idx} className="flex items-center justify-between gap-1">
                           <span className="truncate text-xs text-zinc-400">{item}</span>
-                          <button onClick={() => removerItem(idx)} className="shrink-0 text-xs text-zinc-700 transition hover:text-red-400">×</button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {emMercado && onVenderItem && (
+                              <button
+                                onClick={() => onVenderItem(item)}
+                                title={`Vender ${item}`}
+                                className="rounded border border-amber-800/60 bg-amber-900/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300 transition hover:border-amber-500 hover:bg-amber-700/40 hover:text-amber-100"
+                              >
+                                vender
+                              </button>
+                            )}
+                            <button onClick={() => removerItem(idx)} className="text-xs text-zinc-700 transition hover:text-red-400">×</button>
+                          </div>
                         </li>
                       ))}
                     </ul>

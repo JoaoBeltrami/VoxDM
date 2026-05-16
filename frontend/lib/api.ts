@@ -99,6 +99,8 @@ export interface MensagemWS {
   posicoes_combate?: Record<string, { distancia_ft: number; cobertura: boolean }>;
   movimento_restante_ft?: number;
   movimento_total_ft?: number;
+  // Feature economia — true quando jogador em mercado/loja.
+  em_mercado?: boolean;
   // Feature progressão — enviado em tipo="level_up" com o resumo do level up.
   level_up?: {
     nivel_antigo: number;

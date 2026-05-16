@@ -150,6 +150,12 @@ class WorkingMemory:
     # Velocidade do jogador em ft/rodada. Anão=25, Halfling=25, demais=30.
     movimento_total_ft: int = 30
 
+    # ── Economia (Feature inventário/economia) ──────────────────────────────
+    # True quando o jogador está num local que aceita comércio (loja, mercado,
+    # taverna como vendedor). LLM sinaliza com [MERCADO] / [FIM_MERCADO].
+    # Frontend pode habilitar UI de venda quando true.
+    em_mercado: bool = False
+
     # NPCs que foram formalmente apresentados ao jogador (mencionados pelo DM).
     # Apenas estes aparecem no HUD — os demais estão no local mas não foram introduzidos.
     npcs_apresentados: set[str] = field(default_factory=set)
