@@ -209,8 +209,10 @@ def _limpar_markdown(texto: str) -> str:
     )
 
     # ── JSON e colchetes técnicos ────────────────────────────────────────────
-    texto = re.sub(r'\{[^}]{0,200}\}', '', texto)
-    texto = re.sub(r'\[[^\]]{0,200}\]', '', texto)
+    # Limite 500 (era 200): marcadores [CONSEQUÊNCIA: ...] e [FIO: ...] podem
+    # exceder 200 chars; [^\]] previne backtracking patológico.
+    texto = re.sub(r'\{[^}]{0,500}\}', '', texto)
+    texto = re.sub(r'\[[^\]]{0,500}\]', '', texto)
 
     # ── Markdown ─────────────────────────────────────────────────────────────
     texto = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', texto)       # bold/italic

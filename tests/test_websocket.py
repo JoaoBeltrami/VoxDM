@@ -301,6 +301,29 @@ def test_sincronizar_inimigos_ignora_pronome_no_estado():
     assert "voce" not in mem.inimigos_combate
 
 
+def test_limpar_markdown_remove_marcador_longo():
+    """Bug #2 defensiva: marcador com texto longo (>200 chars) deve ser removido pelo TTS."""
+    from engine.voice.tts import _limpar_markdown
+
+    marcador_longo = "[CONSEQUÊNCIA: " + "Drevamor agora é reconhecido pela guarda " * 6 + "]"
+    texto = f"A guarda chega. {marcador_longo} Ele recua."
+    limpo = _limpar_markdown(texto)
+    assert "CONSEQUÊNCIA" not in limpo
+    assert "[" not in limpo and "]" not in limpo
+
+
+def test_strip_marcadores_em_sentenca_streaming():
+    """Bug #2: cada sentença deve sair limpa do strip antes do TTS."""
+    from engine.memory.quest_detector import strip_marcadores
+
+    # Cenário: buffer_sentenca acabou de fechar com '.' e contém marcador completo
+    buffer = "O ferreiro hesita. [FIO: Drevamor descobriu sobre a mina secreta]."
+    limpo = strip_marcadores(buffer).strip()
+    assert "FIO" not in limpo
+    assert "ferreiro hesita" in limpo
+    assert "mina secreta" not in limpo  # texto do fio removido junto
+
+
 def test_encontrar_id_inimigo_palavra_inteira():
     """_encontrar_id_inimigo deve usar match por palavra inteira, não substring solta."""
     from api.turn_pipeline import _encontrar_id_inimigo

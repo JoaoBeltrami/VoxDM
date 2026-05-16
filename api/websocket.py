@@ -845,11 +845,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     )
                     if tts:
                         buffer_sentenca += token
-                        if buffer_sentenca.rstrip()[-1:] in ".!?" and len(buffer_sentenca.split()) >= 4:
-                            tts_tasks.append(asyncio.create_task(
-                                _tts_sentenca(tts_seq_prox, buffer_sentenca.strip())
-                            ))
-                            tts_seq_prox += 1
+                        # Só flush se: terminou em pontuação E ≥4 palavras E todos os
+                        # colchetes de marcador estão FECHADOS. O último guard impede
+                        # que `[FIO: drevamor descobriu` chegue ao TTS por ainda estar
+                        # streamando — o `]` pode vir nos próximos tokens.
+                        if (
+                            buffer_sentenca.rstrip()[-1:] in ".!?"
+                            and len(buffer_sentenca.split()) >= 4
+                            and buffer_sentenca.count("[") == buffer_sentenca.count("]")
+                        ):
+                            # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
+                            # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
+                            texto_tts = strip_marcadores(buffer_sentenca).strip()
+                            if texto_tts:
+                                tts_tasks.append(asyncio.create_task(
+                                    _tts_sentenca(tts_seq_prox, texto_tts)
+                                ))
+                                tts_seq_prox += 1
                             buffer_sentenca = ""
 
             except Exception as e:
@@ -878,9 +890,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Strip de marcadores [Q:...] antes de síntese — evita falar o token em voz alta.
             if tts and buffer_sentenca.strip():
                 flush_texto = strip_marcadores(buffer_sentenca).strip()
-                # Se o stream foi cortado sem pontuação final (max_tokens atingido),
-                # remove a frase incompleta — áudio truncado no meio de uma frase
-                # soa pior do que simplesmente não sintetizar aquele fragmento.
+                # Se o stream foi cortado sem pontuação final (max_tokens=400 atingido),
+                # busca o último ponto pra cortar limpo. Se não houver pontuação alguma,
+                # sintetiza o texto inteiro mesmo assim — soa truncado, mas é melhor que
+                # silêncio total (bug #4: a frase desaparecia inteira do áudio).
                 if flush_texto and flush_texto[-1] not in ".!?…\"'":
                     ultimo_term = max(
                         flush_texto.rfind("."),
@@ -888,7 +901,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         flush_texto.rfind("?"),
                         flush_texto.rfind("…"),
                     )
-                    flush_texto = flush_texto[:ultimo_term + 1] if ultimo_term > 0 else ""
+                    if ultimo_term > 0:
+                        flush_texto = flush_texto[:ultimo_term + 1]
+                    # else: mantém flush_texto inteiro — fragmento sem pontuação é melhor que nada
                 if flush_texto:
                     tts_tasks.append(asyncio.create_task(
                         _tts_sentenca(tts_seq_prox, flush_texto)
