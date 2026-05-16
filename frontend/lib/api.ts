@@ -135,6 +135,8 @@ export interface PersonagemConfig {
   save_profs?: string[];
   // Subclasse D&D 5e escolhida no CharacterForm
   player_subclass?: string;
+  // Magias selecionadas na criação — lista de nomes PT-BR (truques + magias)
+  player_spells?: string[];
 }
 
 export async function criarSessao(

@@ -201,6 +201,13 @@ class WorkingMemory:
     # restaura: "turno" | "curto" | "longo"
     class_features: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    # ── Magias Conhecidas — Fase 6.2 ─────────────────────────────────────────
+    # Lista de nomes PT-BR das magias que o personagem conhece/preparou.
+    # Selecionadas no CharacterForm e usadas pelo prompt_builder para restringir
+    # o casting do LLM apenas às magias desta lista.
+    # Exemplo: ["Bola de Fogo", "Míssil Mágico", "Raio de Gelo"]
+    spells_conhecidas: list[str] = field(default_factory=list)
+
     @classmethod
     def nova_sessao(
         cls,
@@ -234,6 +241,7 @@ class WorkingMemory:
         gold: int = 0,
         xp: int = 0,
         inspiration: bool = False,
+        player_spells: list[str] | None = None,
     ) -> "WorkingMemory":
         """Cria uma WorkingMemory com estado inicial zerado."""
         # Tipo do dado de vida por classe (SRD 5e)
@@ -294,6 +302,9 @@ class WorkingMemory:
         # Inicializa class features a partir de classe + subclasse (quando definidas)
         if player_class:
             wm.inicializar_features_classe(player_class, player_subclass)
+        # Magias conhecidas selecionadas no CharacterForm
+        if player_spells:
+            wm.spells_conhecidas = list(player_spells)
         return wm
 
     def inicializar_features_classe(self, player_class: str, player_subclass: str = "") -> None:

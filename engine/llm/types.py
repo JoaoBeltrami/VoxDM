@@ -109,3 +109,7 @@ class ContextoMontado:
     relacoes_grafo: list[dict[str, Any]]         # do Neo4j
     secrets_visiveis: list[SecretVisivel]
     transcricao_atual: str
+    # Magias conhecidas pelo personagem — lista de nomes PT-BR selecionados
+    # na criação. Injetadas no prompt como restrição de repertório.
+    # Populadas em api/websocket.py a partir de SessaoAtiva.spells_conhecidas.
+    spells_conhecidas: list[str] = field(default_factory=list)

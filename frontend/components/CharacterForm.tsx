@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { PersonagemConfig } from "@/lib/api";
+import {
+  spellsDaClasse, spellsPorNivel, limiteProgressao,
+  type SpellEntry,
+} from "@/lib/spells";
 
 const CLASSES_DND = [
   "Bárbaro", "Bardo", "Clérigo", "Druida", "Guerreiro",
@@ -197,6 +201,11 @@ export function CharacterForm({ onChange }: Props) {
     str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
   });
 
+  // Magias selecionadas no CharacterForm — sincronizadas no onChange
+  const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
+  // Aba ativa na seção de magias: "truques" | 1 | 2 | 3 | 4 | 5
+  const [nivelTabSpells, setNivelTabSpells] = useState<number>(0);
+
   // Pool de valores 4d6 rolados — usado em modo "rolado-manual" pra que o jogador
   // possa decidir qual rolagem vai pra qual atributo (com bag-of-values: cada
   // valor pode ser atribuído uma vez, ainda que dois dados tenham caído iguais).
@@ -329,8 +338,9 @@ export function CharacterForm({ onChange }: Props) {
       cha_score:  scores.cha || 10,
       skill_profs: allSkills,
       save_profs:  CLASS_SAVES[classe] ?? [],
+      player_spells: selectedSpells,
     });
-  }, [nome, raca, classe, subclasse, background, descricao, nivel, localId, scores]);
+  }, [nome, raca, classe, subclasse, background, descricao, nivel, localId, scores, selectedSpells]);
 
   return (
     <div className="w-full space-y-4 text-left">
@@ -413,6 +423,114 @@ export function CharacterForm({ onChange }: Props) {
           </select>
         </div>
       )}
+
+      {/* Seleção de Magias — só para classes conjuradoras */}
+      {(() => {
+        const CLASSES_SPELLCASTERS = ["Mago", "Clérigo", "Druida", "Bardo", "Feiticeiro", "Bruxo", "Paladino", "Ranger"];
+        if (!classe || !CLASSES_SPELLCASTERS.includes(classe)) return null;
+        const classeLower = classe.toLowerCase();
+        const limites = limiteProgressao(classeLower, nivel);
+        if (limites.nivel_max === 0 && limites.magias === 0) return null; // nível 1 sem magia (Paladino/Ranger)
+
+        const niveisDisponiveis = [0, ...Array.from({ length: limites.nivel_max }, (_, i) => i + 1)];
+        const truquesSelecionados = selectedSpells.filter(n => spellsDaClasse(classeLower).find(s => s.nome_pt === n && s.nivel === 0)).length;
+        const magiasSelecionadas = selectedSpells.filter(n => spellsDaClasse(classeLower).find(s => s.nome_pt === n && s.nivel > 0)).length;
+        const totalSelecionadas = selectedSpells.length;
+        const totalPermitido = limites.truques + limites.magias;
+
+        const toggleSpell = (spell: SpellEntry) => {
+          const jaSelecionada = selectedSpells.includes(spell.nome_pt);
+          if (jaSelecionada) {
+            setSelectedSpells(prev => prev.filter(n => n !== spell.nome_pt));
+            return;
+          }
+          // Verifica limite por tipo
+          if (spell.nivel === 0 && truquesSelecionados >= limites.truques) return;
+          if (spell.nivel > 0 && magiasSelecionadas >= limites.magias) return;
+          setSelectedSpells(prev => [...prev, spell.nome_pt]);
+        };
+
+        const spellsNaAba: SpellEntry[] = spellsPorNivel(classeLower, nivelTabSpells);
+
+        return (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs text-zinc-400">Magias</label>
+              <span className={`text-[10px] font-semibold ${totalSelecionadas >= totalPermitido ? "text-violet-400" : "text-zinc-500"}`}>
+                {totalSelecionadas}/{totalPermitido} selecionadas
+              </span>
+            </div>
+
+            {/* Tabs por nível */}
+            <div className="mb-2 flex gap-1 flex-wrap">
+              {niveisDisponiveis.map(lv => {
+                const rotulo = lv === 0 ? "Truques" : `Nível ${lv}`;
+                const ativo = nivelTabSpells === lv;
+                return (
+                  <button
+                    key={lv}
+                    type="button"
+                    onClick={() => setNivelTabSpells(lv)}
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                      ativo
+                        ? "border border-violet-500 bg-violet-900/40 text-violet-300"
+                        : "border border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {rotulo}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Lista de spells na aba ativa */}
+            <div className="space-y-1 max-h-48 overflow-y-auto rounded border border-zinc-800 bg-zinc-900/50 p-2">
+              {spellsNaAba.length === 0 && (
+                <p className="text-[10px] text-zinc-600">Nenhuma magia disponível neste nível.</p>
+              )}
+              {spellsNaAba.map(spell => {
+                const selecionada = selectedSpells.includes(spell.nome_pt);
+                const ehTruque = spell.nivel === 0;
+                const limiteAtingido = !selecionada && (
+                  (ehTruque && truquesSelecionados >= limites.truques) ||
+                  (!ehTruque && magiasSelecionadas >= limites.magias)
+                );
+                return (
+                  <label
+                    key={spell.nome_pt}
+                    className={`flex items-start gap-2 cursor-pointer rounded p-1.5 transition ${
+                      selecionada
+                        ? "bg-violet-900/20 border border-violet-700/40"
+                        : limiteAtingido
+                          ? "opacity-50 cursor-not-allowed border border-transparent"
+                          : "hover:bg-zinc-800/60 border border-transparent"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-violet-500"
+                      checked={selecionada}
+                      disabled={limiteAtingido}
+                      onChange={() => !limiteAtingido && toggleSpell(spell)}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-zinc-200 leading-tight">{spell.nome_pt}</p>
+                      <p className="text-[10px] text-zinc-400 leading-tight">{spell.desc_curta}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Resumo das selecionadas */}
+            {totalSelecionadas > 0 && (
+              <p className="mt-1.5 text-[10px] text-violet-400">
+                Selecionadas: {selectedSpells.slice(0, 6).join(", ")}{selectedSpells.length > 6 ? ` +${selectedSpells.length - 6}` : ""}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Background — obrigatório: afeta perícias */}
       <div>

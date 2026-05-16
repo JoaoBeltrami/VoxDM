@@ -56,6 +56,10 @@ class SessaoAtiva:
     # Efeitos on_complete por stage — quest_id → stage_id → [effect_dicts]
     # Usado pelo quest_detector para aplicar recompensas após avanço de quest
     quest_efeitos: dict[str, dict[str, list[dict]]] = field(default_factory=dict)
+    # Cache de magias conhecidas — lista de nomes PT-BR selecionados na criação.
+    # Inicializado em api/routes/session.py no POST /start e imutável por turno.
+    # Injetado em ContextoMontado.spells_conhecidas antes de montar_mensagens().
+    spells_conhecidas: list[str] = field(default_factory=list)
 
 
 # Store global — keyed by session_id (kebab-case)

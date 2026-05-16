@@ -760,6 +760,7 @@ export default function Home() {
           initDeathSavesStable={deathSavesStable}
           rolagens={rolagens}
           classFeatures={classFeatures}
+          knownSpells={personagem.player_spells ?? []}
         />
 
         <CombatTracker

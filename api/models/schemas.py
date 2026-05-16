@@ -73,6 +73,9 @@ class SessaoConfig(BaseModel):
     # Proficiências derivadas de classe + background
     skill_profs: list[str] = Field(default_factory=list)
     save_profs: list[str] = Field(default_factory=list)
+    # Magias selecionadas na criação — lista de nomes PT-BR (truques + magias).
+    # Usadas para popular SessaoAtiva.spells_conhecidas e injetar no prompt.
+    player_spells: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":

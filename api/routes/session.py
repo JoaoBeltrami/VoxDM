@@ -167,6 +167,7 @@ async def iniciar_sessao(
         cha_score=config.cha_score,
         skill_profs=list(config.skill_profs),
         save_profs=list(config.save_profs),
+        player_spells=list(config.player_spells) if config.player_spells else None,
     )
 
     context_builder = ContextBuilder()
@@ -263,15 +264,39 @@ async def iniciar_sessao(
             char_state = await store.carregar(config.session_anterior_id)
             if char_state:
                 working_mem.aplicar_character_state(char_state)
+                # Restaura magias conhecidas — persistem entre sessões
+                if char_state.spells_conhecidas and not sessao.spells_conhecidas:
+                    sessao.spells_conhecidas = list(char_state.spells_conhecidas)
                 log.info(
                     "character_state_restaurado",
                     session_id=config.session_id,
                     gold=char_state.gold,
                     xp=char_state.xp,
                     slots=len(char_state.spell_slots),
+                    spells=len(char_state.spells_conhecidas),
                 )
         except Exception as e:
             log.warning("character_state_restauracao_falhou", erro=str(e))
+
+    # Inicializa magias conhecidas a partir do config (selecionadas na criação)
+    sessao.spells_conhecidas = list(config.player_spells)
+    if sessao.spells_conhecidas:
+        log.info(
+            "spells_conhecidas_carregadas",
+            session_id=config.session_id,
+            total=len(sessao.spells_conhecidas),
+        )
+
+    # Persiste spells_conhecidas no CharacterStore para restauração futura
+    if sessao.spells_conhecidas:
+        try:
+            store = CharacterStore()
+            char_state = await store.carregar(config.session_id) or CharacterState(session_id=config.session_id)
+            char_state.owner_email = owner.email
+            char_state.spells_conhecidas = sessao.spells_conhecidas
+            await store.salvar(char_state)
+        except Exception as e:
+            log.warning("spells_conhecidas_save_falhou", session_id=config.session_id, erro=str(e))
 
     sessions[config.session_id] = sessao
     log.info("sessao_criada", session_id=config.session_id, location=config.location_id)

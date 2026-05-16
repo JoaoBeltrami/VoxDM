@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS character_state (
     hp_max                 INTEGER NOT NULL DEFAULT 30,
     inventory              TEXT    NOT NULL DEFAULT '[]',
     conditions             TEXT    NOT NULL DEFAULT '[]',
+    spells_conhecidas      TEXT    NOT NULL DEFAULT '[]',
     updated_at             REAL    NOT NULL DEFAULT (unixepoch())
 )
 """
@@ -52,6 +53,9 @@ CREATE TABLE IF NOT EXISTS character_state (
 # Migração idempotente — adiciona coluna owner_email em bancos existentes sem a coluna.
 # SQLite não suporta IF NOT EXISTS em ALTER COLUMN; o try/except faz a mesma coisa.
 _MIGRATE_OWNER_EMAIL = "ALTER TABLE character_state ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''"
+
+# Migração idempotente — adiciona coluna spells_conhecidas em bancos existentes (pré-Fase 6.1).
+_MIGRATE_SPELLS = "ALTER TABLE character_state ADD COLUMN spells_conhecidas TEXT NOT NULL DEFAULT '[]'"
 
 
 @dataclass
@@ -74,6 +78,9 @@ class CharacterState:
     hp_max: int = 30
     inventory: list[str] = field(default_factory=list)
     conditions: list[str] = field(default_factory=list)
+    # Magias selecionadas na criação do personagem — lista de nomes PT-BR
+    # Ordem preservada: truques primeiro, depois magias por nível crescente.
+    spells_conhecidas: list[str] = field(default_factory=list)
 
 
 class CharacterStore:
@@ -90,6 +97,11 @@ class CharacterStore:
                 await conn.execute(_MIGRATE_OWNER_EMAIL)
             except Exception:
                 pass  # coluna já existe — ignorar
+            # Migração idempotente: adiciona spells_conhecidas em bancos pre-Fase 6.1
+            try:
+                await conn.execute(_MIGRATE_SPELLS)
+            except Exception:
+                pass  # coluna já existe — ignorar
             await conn.commit()
             yield conn
 
@@ -104,8 +116,8 @@ class CharacterStore:
                     (session_id, owner_email, spell_slots, hit_dice_current, hit_dice_max,
                      hit_dice_type, death_saves_successes, death_saves_failures,
                      death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
-                     inventory, conditions, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                     inventory, conditions, spells_conhecidas, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
                     owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
@@ -122,6 +134,7 @@ class CharacterStore:
                     hp_max=excluded.hp_max,
                     inventory=excluded.inventory,
                     conditions=excluded.conditions,
+                    spells_conhecidas=excluded.spells_conhecidas,
                     updated_at=unixepoch()
                 """,
                 (
@@ -141,6 +154,7 @@ class CharacterStore:
                     state.hp_max,
                     json.dumps(state.inventory),
                     json.dumps(state.conditions),
+                    json.dumps(state.spells_conhecidas),
                 ),
             )
             await conn.commit()
@@ -178,6 +192,7 @@ class CharacterStore:
             hp_max=row["hp_max"],
             inventory=json.loads(row["inventory"]),
             conditions=json.loads(row["conditions"]),
+            spells_conhecidas=json.loads(row["spells_conhecidas"] or "[]"),
         )
 
     async def deletar(self, session_id: str) -> None:

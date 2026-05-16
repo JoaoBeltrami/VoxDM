@@ -23,6 +23,7 @@ from engine.llm.types import (
     RE_ROLAGEM as _RE_ROLAGEM,
     RE_COMBATE as _RE_COMBATE,
 )
+from engine.magic.spell_list import nivel_da_spell
 
 # Re-exportados para compatibilidade com importações existentes
 __all__ = ["ContextoMontado", "SecretVisivel", "montar_mensagens", "invalidar_cache",
@@ -287,6 +288,39 @@ def montar_mensagens(
         )
     secoes.append(wm_texto)
 
+    # ── Magias Conhecidas ────────────────────────────────────────────────────
+    # Injetadas logo após o working_memory para restringir o casting do LLM.
+    # Lookup do nível de cada magia via spell_list.py para formatar por nível.
+    spells_conhecidas = getattr(contexto.working_memory, "spells_conhecidas", [])
+    if spells_conhecidas:
+        from engine.magic.spell_list import nivel_da_spell
+        player_class_lower = getattr(contexto.working_memory, "player_class", "").lower()
+        # Agrupa por nível: truques (0) primeiro, depois 1–9
+        por_nivel: dict[int, list[str]] = {}
+        sem_nivel: list[str] = []
+        for nome in spells_conhecidas:
+            nivel = nivel_da_spell(nome, player_class_lower)
+            if nivel is None:
+                sem_nivel.append(nome)
+            else:
+                por_nivel.setdefault(nivel, []).append(nome)
+
+        partes_spells: list[str] = []
+        if 0 in por_nivel:
+            partes_spells.append(f"Truques: {', '.join(por_nivel[0])}")
+        for lv in sorted(k for k in por_nivel if k > 0):
+            partes_spells.append(f"Nível {lv}: {', '.join(por_nivel[lv])}")
+        if sem_nivel:
+            partes_spells.append(f"Outras: {', '.join(sem_nivel)}")
+
+        lista_spells = " | ".join(partes_spells)
+        secoes.append(
+            f"\n=== MAGIAS CONHECIDAS DO PERSONAGEM ===\n{lista_spells}\n"
+            "Importante: o personagem SÓ pode conjurar as magias listadas acima. "
+            "Se tentar conjurar outra, narre que não a conhece."
+        )
+        log.info("magias_conhecidas_injetadas", total=len(spells_conhecidas))
+
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:
         secoes.append(_formatar_relacoes(contexto.relacoes_grafo))
@@ -404,6 +438,38 @@ def montar_mensagens(
             "\n[PACING: BAIXO] — Momento de respiro. Ambiente, detalhes sensoriais, "
             "personagens com textura. Pode haver silêncio significativo."
         )
+
+    # Magias conhecidas do personagem — restrição de repertório mágico.
+    # Injetadas ANTES dos chunks episódicos para ter peso maior no system prompt.
+    spells_conhecidas = getattr(contexto, "spells_conhecidas", [])
+    if spells_conhecidas:
+        # Agrupa por nível usando lookup estático (sem I/O)
+        classe_attr = getattr(contexto.working_memory, "player_class", "")
+        truques: list[str] = []
+        por_nivel: dict[int, list[str]] = {}
+        for nome in spells_conhecidas:
+            nivel = nivel_da_spell(nome, classe_attr)
+            if nivel == 0:
+                truques.append(nome)
+            elif nivel is not None:
+                por_nivel.setdefault(nivel, []).append(nome)
+            else:
+                # Magia não encontrada na lista estática — ainda assim incluir
+                por_nivel.setdefault(99, []).append(nome)
+        linhas: list[str] = []
+        if truques:
+            linhas.append(f"Truques: {', '.join(truques)}")
+        for nivel_k in sorted(k for k in por_nivel if k != 99):
+            linhas.append(f"Nível {nivel_k}: {', '.join(por_nivel[nivel_k])}")
+        if 99 in por_nivel:
+            linhas.append(f"Outras: {', '.join(por_nivel[99])}")
+        secoes.append(
+            "\n=== MAGIAS CONHECIDAS DO PERSONAGEM ===\n"
+            + "\n".join(linhas)
+            + "\nO personagem SOMENTE conhece as magias acima. "
+            "Se tentar conjurar outra, narre educadamente que não a domina."
+        )
+        log.info("spells_conhecidas_injetadas", total=len(spells_conhecidas))
 
     # Memória episódica (sessões anteriores)
     ep_texto = _formatar_chunks(contexto.chunks_episodicos, limite_chars=BUDGET_EPISODICO * 4)

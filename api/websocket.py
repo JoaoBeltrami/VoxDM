@@ -761,6 +761,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                         session_id=session_id,
                                     )
 
+                # Injeta magias conhecidas no contexto antes de montar o prompt
+                contexto.spells_conhecidas = sessao.spells_conhecidas
                 mensagens = montar_mensagens(contexto)
             except Exception as e:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))

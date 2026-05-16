@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PersonagemConfig, SpellSlot } from "@/lib/api";
 import type { RolagemLog } from "@/hooks/useGameSession";
+import { nivelDaSpell } from "@/lib/spells";
 
 interface Props {
   personagem: PersonagemConfig;
@@ -35,6 +36,8 @@ interface Props {
   rolagens?: RolagemLog[];
   // Class features — chips de recursos de classe (Fase 6), sincronizados via WS
   classFeatures?: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
+  // Magias conhecidas pelo personagem (nomes PT-BR) — exibidas agrupadas por nível
+  knownSpells?: string[];
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -146,6 +149,7 @@ export function CharacterSheet({
   initDeathSavesSuccesses = 0, initDeathSavesFailures = 0, initDeathSavesStable = false,
   rolagens = [],
   classFeatures = {},
+  knownSpells = [],
 }: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
@@ -721,6 +725,95 @@ export function CharacterSheet({
                     })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Magias Conhecidas — exibidas apenas para personagens com spells selecionadas */}
+          {knownSpells.length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <button onClick={() => setSpellsAberto(a => !a)}
+                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <span>Magias ({knownSpells.length})</span>
+                <span>{spellsAberto ? "▲" : "▼"}</span>
+              </button>
+              {spellsAberto && (() => {
+                // Agrupa magias por nível usando nivelDaSpell — truques primeiro
+                const classeLower = (player_class ?? "").toLowerCase();
+                const porNivel: Record<number, string[]> = {};
+                const semNivel: string[] = [];
+                for (const nome of knownSpells) {
+                  const lv = nivelDaSpell(nome, classeLower);
+                  if (lv === null) { semNivel.push(nome); continue; }
+                  if (!porNivel[lv]) porNivel[lv] = [];
+                  porNivel[lv].push(nome);
+                }
+                const niveisOrdenados = Object.keys(porNivel)
+                  .map(Number)
+                  .sort((a, b) => a - b);
+
+                return (
+                  <div className="mt-2 space-y-2">
+                    {niveisOrdenados.map(lv => {
+                      const slotNivel = spellSlots[lv];
+                      return (
+                        <div key={lv}>
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="text-[10px] font-semibold text-zinc-500">
+                              {lv === 0 ? "Truques" : `Nível ${lv}`}
+                            </span>
+                            {/* Indicador de slots para magias com nível > 0 */}
+                            {lv > 0 && slotNivel && (
+                              <div className="flex gap-0.5">
+                                {Array.from({ length: slotNivel.max }).map((_, i) => (
+                                  <span
+                                    key={i}
+                                    className={`inline-block h-2 w-2 rounded-full border ${
+                                      i < slotNivel.current
+                                        ? "border-violet-400 bg-violet-500"
+                                        : "border-zinc-600 bg-zinc-800"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {porNivel[lv].map(nome => {
+                              const semSlot = lv > 0 && slotNivel && slotNivel.current === 0;
+                              return (
+                                <span
+                                  key={nome}
+                                  className={`inline-block rounded-full border px-2 py-0.5 text-[10px] transition ${
+                                    semSlot
+                                      ? "border-zinc-700 text-zinc-600"
+                                      : lv === 0
+                                        ? "border-zinc-600 text-zinc-400"
+                                        : "border-violet-700/50 text-violet-300"
+                                  }`}
+                                  title={nome}
+                                >
+                                  {nome}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {semNivel.length > 0 && (
+                      <div>
+                        <span className="text-[10px] text-zinc-600">Outras:</span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {semNivel.map(nome => (
+                            <span key={nome} className="inline-block rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500">{nome}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -291,3 +291,33 @@ async def test_valores_padrao(store: CharacterStore) -> None:
     assert s.spell_slots == {}
     assert s.inventory == []
     assert s.conditions == []
+
+
+# ── spells_conhecidas (lista JSON) ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_spells_conhecidas_vazio_roundtrip(store: CharacterStore) -> None:
+    """Lista vazia de magias persiste e carrega como lista vazia."""
+    await store.salvar(_estado(spells_conhecidas=[]))
+    s = await store.carregar("sess-teste-01")
+    assert s.spells_conhecidas == []
+
+
+@pytest.mark.asyncio
+async def test_spells_conhecidas_com_multiplas_magias(store: CharacterStore) -> None:
+    """Múltiplas magias devem sobreviver ao roundtrip."""
+    magias = ["Bola de Fogo", "Míssil Mágico", "Raio de Gelo", "Curar Ferimentos"]
+    await store.salvar(_estado(spells_conhecidas=magias))
+    s = await store.carregar("sess-teste-01")
+    assert s.spells_conhecidas == magias
+
+
+@pytest.mark.asyncio
+async def test_spells_conhecidas_ordem_preservada(store: CharacterStore) -> None:
+    """A ordem das magias deve ser preservada após persistência."""
+    magias = ["Explosão Eldritch", "Armadura de Agathys", "Hex"]
+    await store.salvar(_estado(spells_conhecidas=magias))
+    s = await store.carregar("sess-teste-01")
+    assert s.spells_conhecidas == magias
+    assert s.spells_conhecidas[0] == "Explosão Eldritch"
+    assert s.spells_conhecidas[2] == "Hex"
