@@ -37,9 +37,13 @@ _RE_Q = re.compile(
 )
 
 # Marcadores de Mestre Veterano (features Fase 4.6 DM) — removidos do TTS
-# mas mantidos na resposta completa para extração pelo turn_pipeline
+# mas mantidos na resposta completa para extração pelo turn_pipeline.
+# Inclui "Rolagem visível" (Fase 5.7) — o número é narrado pelo LLM,
+# o marcador é capturado pelo websocket e enviado como "dado_rolado".
 _RE_MESTRE_VET = re.compile(
-    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO):[^\]]*\]",
+    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO)(?::[^\]]*)?\]"
+    r"|"
+    r"\[Rolagem\s+visível:[^\]]*\]",
     re.IGNORECASE,
 )
 
@@ -151,11 +155,13 @@ def strip_marcadores(texto: str) -> str:
     """Remove marcadores de sistema do texto antes de enviar para TTS.
 
     Remove:
-        [Q:quest_id:stage_id]   — progressão de quest
-        [FIO: ...]              — fio narrativo em aberto
-        [CLIFFHANGER: ...]      — encerramento dramático
-        [AGENDA: npc → plano]   — agenda paralela de NPC
-        [LAMPEJO: ...]          — flash de perspectiva (sintetizado à parte)
+        [Q:quest_id:stage_id]         — progressão de quest
+        [FIO: ...]                    — fio narrativo em aberto
+        [CLIFFHANGER: ...]            — encerramento dramático
+        [AGENDA: npc → plano]         — agenda paralela de NPC
+        [LAMPEJO: ...]                — flash de perspectiva (sintetizado à parte)
+        [Rolagem visível: dX = Y]     — rolagem do mestre (Fase 5.7); número já foi
+                                        enviado como "dado_rolado" pelo websocket
 
     Não altera WorkingMemory — só higieniza o buffer para TTS.
     """

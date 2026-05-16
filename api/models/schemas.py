@@ -158,7 +158,7 @@ class TokenIniciativaPayload(BaseModel):
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
-    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo"
+    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image"
     conteudo: str = ""
     conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
     sequencia: int = 0       # índice sequencial do chunk de áudio
@@ -199,3 +199,7 @@ class MensagemWS(BaseModel):
     # DM Feat 1: Fios Soltos — threads narrativas abertas para exibição no frontend
     # Atualizado no "fim" sempre que a lista muda. Máx 5 fios simultâneos.
     fios_soltos: list[str] = Field(default_factory=list)
+    # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
+    # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
+    dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"
+    dado_resultado: int = 0   # valor do dado (1-max)

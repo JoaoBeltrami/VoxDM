@@ -97,6 +97,12 @@ interface EstadoSessao {
   rolagens: RolagemLog[];
   // DM Feat 1: Fios Soltos — threads narrativas em aberto (máx 5)
   fiosSoltos: string[];
+  // Fase 5.7: dado do mestre ativo — exibido como animação no frontend.
+  // null = nenhum dado visível. Limpo pelo DadoAnimado via onTerminou.
+  dadoAtivo: { tipo: string; resultado: number; id: number } | null;
+  // Fase 5.8: URL da imagem de fundo gerada pelo Pollinations.ai para a cena atual.
+  // Vazia até o servidor enviar a primeira mensagem "scene_image".
+  sceneImageUrl: string;
 }
 
 const MAX_RECONNECTS = 3;
@@ -134,6 +140,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   questNotificacao: null,
   rolagens: [],
   fiosSoltos: [],
+  dadoAtivo: null,
+  sceneImageUrl: "",
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -179,7 +187,14 @@ function parseSpellSlots(raw: Record<string, SpellSlot> | undefined): Record<num
 }
 
 export function useGameSession() {
-  const { tocarChunk, pararTudo, setVolume } = useAudio();
+  // Fase 5.6: estado de áudio exposto para useSyncTextoVoz (karaokê)
+  const [audioTocando, setAudioTocando] = useState(false);
+  const [audioDuracao, setAudioDuracao] = useState(0);
+
+  const { tocarChunk, pararTudo, setVolume } = useAudio({
+    onDuracao: setAudioDuracao,
+    onTocandoChange: setAudioTocando,
+  });
   const [estado, setEstado] = useState<EstadoSessao>(ESTADO_INICIAL);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -243,6 +258,25 @@ export function useGameSession() {
           .replace(/\[LAMPEJO:[^\]]*\]/gi, "")
           .trimEnd();
         setEstado(s => ({ ...s, respostaAtual: exibicao }));
+      }
+
+      // Fase 5.7: dado do mestre — exibido como DadoAnimado no frontend.
+      // Limpo automaticamente pelo componente via onTerminou após 800ms.
+      if (msg.tipo === "dado_rolado" && msg.dado_tipo && msg.dado_resultado != null) {
+        setEstado(s => ({
+          ...s,
+          dadoAtivo: {
+            tipo: msg.dado_tipo!,
+            resultado: msg.dado_resultado!,
+            id: Date.now(),
+          },
+        }));
+      }
+
+      // Fase 5.8: imagem de fundo da cena — gerada assíncronamente pelo Pollinations.ai.
+      // Chega como URL direta; o componente <main> aplica como backgroundImage com fade.
+      if (msg.tipo === "scene_image" && msg.conteudo) {
+        setEstado(s => ({ ...s, sceneImageUrl: msg.conteudo! }));
       }
 
       if (msg.tipo === "lampejo" && msg.conteudo) {
@@ -525,6 +559,11 @@ export function useGameSession() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Limpa o dado do mestre ativo — chamado pelo DadoAnimado via onTerminou
+  const limparDadoAtivo = useCallback(() => {
+    setEstado(s => ({ ...s, dadoAtivo: null }));
+  }, []);
+
   return {
     ...estado,
     conectar,
@@ -533,9 +572,13 @@ export function useGameSession() {
     sincronizarEstado,
     registrarRolagem,
     dispensarCondicaoDetectada,
+    limparDadoAtivo,
     pararAudio: pararTudo,
     setVolume,
     dispensarQuestNotificacao: () => setEstado(s => ({ ...s, questNotificacao: null })),
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
+    // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)
+    audioTocando,
+    audioDuracao,
   };
 }

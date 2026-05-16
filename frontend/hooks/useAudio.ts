@@ -10,8 +10,21 @@ import { useCallback, useEffect, useRef } from "react";
  *
  * Por que sequencial: o mestre deve soar como uma fala contínua,
  * não múltiplas sobrepostas.
+ *
+ * Fase 5.6: expõe onDuracao callback para sync texto-voz (karaokê).
+ * Quando o AudioBufferSourceNode é criado, chama onDuracao(buffer.duration)
+ * para que o caller possa sincronizar a revelação do texto ao ritmo da fala.
  */
-export function useAudio() {
+
+export interface UseAudioOptions {
+  /** Chamado com a duração (em segundos) de cada chunk de áudio ao iniciar reprodução.
+   *  Fase 5.6: usado por useSyncTextoVoz para calibrar chars/segundo. */
+  onDuracao?: (duracaoSegundos: number) => void;
+  /** Chamado quando o estado de "tocando" muda (true = áudio ativo, false = silêncio). */
+  onTocandoChange?: (tocando: boolean) => void;
+}
+
+export function useAudio(opcoes?: UseAudioOptions) {
   const audioCtxRef    = useRef<AudioContext | null>(null);
   const gainRef        = useRef<GainNode | null>(null);
   const volumeRef      = useRef<number>(0.8);
@@ -20,6 +33,15 @@ export function useAudio() {
   const filaRef = useRef<Promise<void>>(Promise.resolve());
   // Flag de parada — quando true, chunks na fila são descartados
   const parandoRef = useRef(false);
+  // Ref estável para callbacks — evita re-criar tocarChunk quando callbacks mudam
+  const onDuracaoRef = useRef(opcoes?.onDuracao);
+  const onTocandoChangeRef = useRef(opcoes?.onTocandoChange);
+  // Contador de chunks ativos na fila — determina se "está tocando"
+  const chunksAtivosRef = useRef(0);
+
+  // Atualiza refs ao mudar props sem invalidar useCallback
+  onDuracaoRef.current = opcoes?.onDuracao;
+  onTocandoChangeRef.current = opcoes?.onTocandoChange;
 
   const obterCtx = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
@@ -39,9 +61,18 @@ export function useAudio() {
   }, []);
 
   const tocarChunk = useCallback((base64mp3: string) => {
+    chunksAtivosRef.current++;
+    // Primeiro chunk na fila dispara onTocandoChange(true)
+    if (chunksAtivosRef.current === 1) {
+      onTocandoChangeRef.current?.(true);
+    }
+
     filaRef.current = filaRef.current.then(async () => {
       // Descarta chunk se pararTudo() foi chamado
-      if (parandoRef.current) return;
+      if (parandoRef.current) {
+        chunksAtivosRef.current = Math.max(0, chunksAtivosRef.current - 1);
+        return;
+      }
       try {
         const ctx = await obterCtx();
         const binStr = atob(base64mp3);
@@ -49,6 +80,11 @@ export function useAudio() {
         for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
 
         const buffer = await ctx.decodeAudioData(bytes.buffer);
+
+        // Fase 5.6 — notifica duração antes de iniciar reprodução para que
+        // useSyncTextoVoz possa calibrar a velocidade de revelação do texto
+        onDuracaoRef.current?.(buffer.duration);
+
         await new Promise<void>((resolve) => {
           const source = ctx.createBufferSource();
           source.buffer = buffer;
@@ -57,6 +93,11 @@ export function useAudio() {
           sourceAtualRef.current = source;
           source.onended = () => {
             sourceAtualRef.current = null;
+            chunksAtivosRef.current = Math.max(0, chunksAtivosRef.current - 1);
+            // Último chunk terminando — notifica silêncio
+            if (chunksAtivosRef.current === 0) {
+              onTocandoChangeRef.current?.(false);
+            }
             resolve();
           };
           source.start();
@@ -64,6 +105,10 @@ export function useAudio() {
       } catch (err) {
         // Log visível para debugging — texto ainda está na tela
         console.warn("[useAudio] falha ao tocar chunk:", err);
+        chunksAtivosRef.current = Math.max(0, chunksAtivosRef.current - 1);
+        if (chunksAtivosRef.current === 0) {
+          onTocandoChangeRef.current?.(false);
+        }
       }
     });
   }, [obterCtx]);
@@ -93,6 +138,8 @@ export function useAudio() {
       // Ignorar — stop() em source já encerrado lança exceção
     }
     sourceAtualRef.current = null;
+    chunksAtivosRef.current = 0;
+    onTocandoChangeRef.current?.(false);
     // Reseta a fila (chunks pendentes serão descartados via parandoRef)
     filaRef.current = Promise.resolve().then(() => {
       parandoRef.current = false; // libera fila para próxima sessão

@@ -46,7 +46,7 @@ export interface CharacterStateClient {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image";
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
@@ -82,6 +82,9 @@ export interface MensagemWS {
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
   // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
   fios_soltos?: string[];
+  // Dado rolado pelo mestre (Fase 5.7) — enviado em tipo="dado_rolado"
+  dado_tipo?: string;      // "d4", "d6", "d8", "d10", "d12", "d20", "d100"
+  dado_resultado?: number; // valor do dado (1-max)
 }
 
 /** Token na barra de iniciativa — espelha api/models/schemas.TokenIniciativaPayload. */

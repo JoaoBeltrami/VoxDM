@@ -293,3 +293,44 @@ def test_fim_combate_llm_nao_dispara_em_combate_normal():
     from api.websocket import _RE_FIM_COMBATE_LLM
     assert _RE_FIM_COMBATE_LLM.search("O goblin te ataca com fúria!") is None
     assert _RE_FIM_COMBATE_LLM.search("Role iniciativa agora.") is None
+
+
+# ── Testes: _RE_ROLAGEM_VISIVEL — Fase 5.7 ──────────────────────────────────
+
+def test_re_rolagem_visivel_detecta_d20():
+    """Marcador de d20 deve ser capturado com grupo (faces, resultado)."""
+    from api.websocket import _RE_ROLAGEM_VISIVEL
+    m = _RE_ROLAGEM_VISIVEL.search("O goblin ataca [Rolagem visível: d20 = 14].")
+    assert m is not None
+    assert m.group(1) == "20"
+    assert m.group(2) == "14"
+
+
+def test_re_rolagem_visivel_detecta_dano():
+    """Marcador de dado de dano deve ser capturado."""
+    from api.websocket import _RE_ROLAGEM_VISIVEL
+    m = _RE_ROLAGEM_VISIVEL.search("[Rolagem visível: d8 = 6] pontos de dano.")
+    assert m is not None
+    assert m.group(1) == "8"
+    assert m.group(2) == "6"
+
+
+def test_re_rolagem_visivel_case_insensitive():
+    """Marcador em maiúsculas deve ser aceito."""
+    from api.websocket import _RE_ROLAGEM_VISIVEL
+    m = _RE_ROLAGEM_VISIVEL.search("[ROLAGEM VISÍVEL: d12 = 7]")
+    assert m is not None
+
+
+def test_re_rolagem_visivel_multiplos():
+    """Múltiplos marcadores no mesmo texto devem ser encontrados."""
+    from api.websocket import _RE_ROLAGEM_VISIVEL
+    texto = "Ataca [Rolagem visível: d20 = 15] causa [Rolagem visível: d6 = 4]."
+    matches = list(_RE_ROLAGEM_VISIVEL.finditer(texto))
+    assert len(matches) == 2
+
+
+def test_re_rolagem_visivel_nao_captura_rolagem_jogador():
+    """[Rolagem: d20 = X] (sem 'visível') não deve ser capturado."""
+    from api.websocket import _RE_ROLAGEM_VISIVEL
+    assert _RE_ROLAGEM_VISIVEL.search("[Rolagem: d20 = 15]") is None

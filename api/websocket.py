@@ -92,6 +92,14 @@ _RE_ALVO_ATAQUE = re.compile(
     re.IGNORECASE,
 )
 
+# Captura [Rolagem visível: dX = Y] na resposta do LLM.
+# Usado quando roll_visibility="open" ou "result_only" — frontend recebe
+# mensagem "dado_rolado" separada antes do texto chegar ao TTS.
+_RE_ROLAGEM_VISIVEL = re.compile(
+    r"\[Rolagem\s+visível:\s*d(\d+)\s*=\s*(\d+)\]",
+    re.IGNORECASE,
+)
+
 # Detecta estado de saúde dos inimigos no texto do LLM
 _RE_INIMIGO_MORTO = re.compile(
     r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
@@ -470,6 +478,28 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         wm.registrar_fala("mestre", resposta_intro)
         wm.apresentar_npcs_mencionados(resposta_intro)
 
+    # Dispara imagem da cena inicial em background — fire-and-forget.
+    # Não bloqueia a abertura: o frontend receberá a mensagem "scene_image"
+    # quando o Pollinations.ai responder (~5-10s), e aplica como fundo suavemente.
+    try:
+        from engine.image.scene_image import construir_prompt_cena, gerar_e_enviar_imagem
+
+        _prompt_inicial = await construir_prompt_cena(
+            location_nome=wm.location_nome,
+            time_of_day=wm.time_of_day,
+            em_combate=False,
+            weather=getattr(wm, "weather", ""),
+        )
+        asyncio.create_task(
+            gerar_e_enviar_imagem(
+                websocket,
+                _prompt_inicial,
+                f"{wm.location_id}-False",
+            )
+        )
+    except Exception as _e_img:
+        log.debug("scene_image_abertura_skip", erro=str(_e_img)[:80])
+
     log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
 
@@ -671,6 +701,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             sessao.ultima_atividade = time.time()
             sessao.working_mem.registrar_fala("player", texto_jogador)
 
+            # Captura location e estado de combate ANTES do turno para detectar mudanças.
+            # Usado ao final do turno para disparar imagem de cena quando necessário.
+            _location_antes = sessao.working_mem.location_id
+            _combate_antes = sessao.working_mem.em_combate
+
             # Detecta entrada/saída de combate pelo texto do jogador
             if _RE_COMBATE.search(texto_jogador):
                 sessao.working_mem.entrar_combate()
@@ -808,6 +843,27 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 await asyncio.gather(*tts_tasks, return_exceptions=True)
             tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
+            # Rolagens visíveis do mestre — detectadas antes de lampejos/quests para
+            # garantir que o frontend recebe "dado_rolado" assim que o stream termina.
+            # Enviadas uma a uma na ordem de aparição no texto.
+            for _m_dado in _RE_ROLAGEM_VISIVEL.finditer(resposta_completa):
+                try:
+                    await websocket.send_text(
+                        MensagemWS(
+                            tipo="dado_rolado",
+                            dado_tipo=f"d{_m_dado.group(1)}",
+                            dado_resultado=int(_m_dado.group(2)),
+                        ).model_dump_json()
+                    )
+                    log.info(
+                        "dado_rolado_enviado",
+                        session_id=session_id,
+                        dado_tipo=f"d{_m_dado.group(1)}",
+                        resultado=int(_m_dado.group(2)),
+                    )
+                except Exception as _e_dado:
+                    log.warning("dado_rolado_falhou", erro=str(_e_dado)[:120])
+
             # Lampejos — extraímos ANTES de quests pra remover dos markers do texto
             # que vai pro pipeline (registrar_fala, episodic memory). Lampejos
             # vão como mensagem separada com TTS de voz alterada.
@@ -838,6 +894,37 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
+
+            # Dispara imagem de cena se a localização mudou ou se entrou em combate.
+            # Fire-and-forget via asyncio.create_task — não bloqueia o turno.
+            # Falha silenciosa: se Pollinations não responder, o fundo permanece o anterior.
+            _location_depois = sessao.working_mem.location_id
+            _combate_entrou = not _combate_antes and sessao.working_mem.em_combate
+            if _location_depois != _location_antes or _combate_entrou:
+                try:
+                    from engine.image.scene_image import construir_prompt_cena, gerar_e_enviar_imagem
+
+                    _prompt_cena = await construir_prompt_cena(
+                        location_nome=sessao.working_mem.location_nome,
+                        time_of_day=sessao.working_mem.time_of_day,
+                        em_combate=sessao.working_mem.em_combate,
+                        weather=getattr(sessao.working_mem, "weather", ""),
+                    )
+                    asyncio.create_task(
+                        gerar_e_enviar_imagem(
+                            websocket,
+                            _prompt_cena,
+                            f"{_location_depois}-{sessao.working_mem.em_combate}",
+                        )
+                    )
+                    log.info(
+                        "scene_image_task_criada",
+                        session_id=session_id,
+                        location=_location_depois,
+                        em_combate=sessao.working_mem.em_combate,
+                    )
+                except Exception as _e_img:
+                    log.debug("scene_image_turno_skip", erro=str(_e_img)[:80])
 
             sessao.iteracoes += 1
             latencia_ms = int((time.perf_counter() - t0) * 1000)

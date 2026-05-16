@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useSceneMood } from "@/hooks/useSceneMood";
+import { DadoAnimado } from "@/components/DadoAnimado";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
@@ -16,6 +17,7 @@ import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
+import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
 import { trocarLlmBackend, obterIdentidade } from "@/lib/api";
@@ -70,6 +72,10 @@ function lerLlmBackendStorage(): LlmBackendPref {
 // Persistido em localStorage. Toggle via botão canto inferior direito ou Ctrl+Shift+C.
 const LS_CINEMA_KEY = "voxdm_cinema_mode";
 
+// Fase 5.6 — sync texto-voz (karaokê). Revela texto no ritmo do áudio TTS.
+// Default ON — a experiência é melhor com sync, jogador pode desligar nas Opções.
+const LS_SYNC_TEXTO_VOZ_KEY = "voxdm_sync_texto_voz";
+
 // Volume da voz do mestre — persistido em localStorage, controla GainNode em useAudio.
 const LS_VOLUME_KEY = "voxdm_volume";
 const VOLUME_PADRAO = 0.8;
@@ -78,6 +84,23 @@ function lerVolumeStorage(): number {
   if (typeof window === "undefined") return VOLUME_PADRAO;
   const v = parseFloat(localStorage.getItem(LS_VOLUME_KEY) ?? "");
   return isNaN(v) ? VOLUME_PADRAO : Math.max(0, Math.min(1, v));
+}
+
+// Fase 5.7 — visibilidade das rolagens do mestre
+// "open"        → mostra animação + número (como rolar na frente do jogador)
+// "result_only" → mostra só o número sem animação (padrão)
+// "narrated"    → mestre narra sem marker, sem número visível (roll behind the screen)
+type RollVisibility = "open" | "result_only" | "narrated";
+const LS_ROLL_VIS_KEY = "voxdm_roll_visibility";
+const ROLL_VIS_OPTIONS: { id: RollVisibility; label: string; descricao: string }[] = [
+  { id: "open",        label: "🎲 Aberto",      descricao: "Animação + número — total transparência." },
+  { id: "result_only", label: "📋 Só resultado", descricao: "Mostra o número, sem animação. Padrão." },
+  { id: "narrated",    label: "🎭 Narrado",      descricao: "Mestre narra sem número — como rolar atrás do escudo." },
+];
+function lerRollVisStorage(): RollVisibility {
+  if (typeof window === "undefined") return "result_only";
+  const v = localStorage.getItem(LS_ROLL_VIS_KEY);
+  return ROLL_VIS_OPTIONS.find(o => o.id === v)?.id ?? "result_only";
 }
 
 // Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
@@ -214,12 +237,31 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
-    iniciativaOrdem, fiosSoltos,
+    iniciativaOrdem, fiosSoltos, sceneImageUrl,
+    dadoAtivo, limparDadoAtivo,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
     rolagens, registrarRolagem,
+    audioTocando, audioDuracao,
   } = useGameSession();
+
+  // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
+  const [syncAtivo, setSyncAtivo] = useState(true);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSyncAtivo(localStorage.getItem(LS_SYNC_TEXTO_VOZ_KEY) !== "false");
+    }
+  }, []);
+
+  // Revela o texto do mestre em sincronia com o áudio (karaokê reverso).
+  // textoSincronizado é usado onde antes exibiríamos respostaAtual diretamente.
+  const textoSincronizado = useSyncTextoVoz({
+    textoCompleto: respostaAtual,
+    audioTocando,
+    audioDuracao,
+    ativo: syncAtivo,
+  });
 
   const [tela, setTela] = useState<Tela>("menu");
 
@@ -342,6 +384,18 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handler);
   }, [toggleCinema]);
 
+  // Fase 5.7 — visibilidade das rolagens do mestre (persistida em localStorage)
+  const [rollVisibility, setRollVisibility] = useState<RollVisibility>("result_only");
+  useEffect(() => { setRollVisibility(lerRollVisStorage()); }, []);
+  const handleSalvarRollVisibility = useCallback((v: RollVisibility) => {
+    setRollVisibility(v);
+    try { localStorage.setItem(LS_ROLL_VIS_KEY, v); } catch { /* SSR-safe */ }
+  }, []);
+
+  // Fase 5.7 — dado do jogador em animação (mostra antes de enviar o comando)
+  // Apenas quando roll_visibility != "narrated" (para simetria visual)
+  const [dadoJogadorAtivo, setDadoJogadorAtivo] = useState<{ tipo: string; resultado: number; id: number } | null>(null);
+
   // Toggle de som de crítico — hydrate do localStorage
   const [somCritico, setSomCritico] = useState(true);
   useEffect(() => { setSomCritico(lerSomCriticoAtivo()); }, []);
@@ -363,6 +417,15 @@ export default function Home() {
     }
     if (!emCombate) emCombateAnterior.current = false;
   }, [emCombate]);
+
+  // Auto-limpa o dado do mestre em modo "result_only" após 2s.
+  // No modo "open", DadoAnimado chama limparDadoAtivo via onTerminou.
+  // No modo "narrated", dadoAtivo nunca é exibido (não precisa limpar).
+  useEffect(() => {
+    if (!dadoAtivo || rollVisibility !== "result_only") return;
+    const t = setTimeout(limparDadoAtivo, 2000);
+    return () => clearTimeout(t);
+  }, [dadoAtivo, rollVisibility, limparDadoAtivo]);
 
   // Auto-limpa a notificação de quest após 4s
   useEffect(() => {
@@ -399,6 +462,8 @@ export default function Home() {
     if (r === 20) dispararCritFlash("crit");
     else if (r === 1) dispararCritFlash("falha");
     registrarRolagem("d20", total, roll.label !== "d20" ? roll.label : undefined);
+    // Animação do dado do jogador — sempre mostra (Fase 5.7)
+    setDadoJogadorAtivo({ tipo: "d20", resultado: r, id: Date.now() });
     enviarComando(`[Rolagem: ${label}d20${modStr} = ${total}${vsCD}${critico}]`);
     setRolamentosPendentes(prev => prev.filter(p => p.id !== roll.id));
   }, [enviarComando, dispararCritFlash, registrarRolagem]);
@@ -459,6 +524,22 @@ export default function Home() {
         }}
         data-tone={sceneMood.ambientTone}
       >
+        {/* Fase 5.8: fundo de imagem gerado pelo Pollinations.ai — very sutil (opacity 8%).
+            Troca com fade de 1s quando a URL muda (nova cena ou entrada em combate).
+            Não bloqueia o jogo: chega via mensagem WS fire-and-forget após ~5-10s. */}
+        {sceneImageUrl && (
+          <div
+            className="pointer-events-none absolute inset-0 -z-10 transition-opacity duration-1000"
+            style={{
+              backgroundImage: `url(${sceneImageUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              opacity: 0.08,
+              filter: "blur(2px) saturate(0.7)",
+            }}
+          />
+        )}
+
         {/* Barra de iniciativa horizontal — só aparece em combate. Bloco 2. */}
         <InitiativeBar ordem={iniciativaOrdem} emCombate={emCombate} />
 
@@ -507,6 +588,46 @@ export default function Home() {
             </div>
           </div>
         )}
+        {/* Fase 5.7 — Dado do mestre rolando (canto inferior direito).
+            Visível somente quando roll_visibility="open" ou "result_only".
+            roll_visibility="open" → animação completa antes do resultado.
+            roll_visibility="result_only" → só o número (visivel=false → sem animação).
+            Nota: dadoAtivo chega via WS "dado_rolado"; limparDadoAtivo é o onTerminou. */}
+        {dadoAtivo && rollVisibility !== "narrated" && (
+          <div className="fixed bottom-24 right-6 z-50">
+            <DadoAnimado
+              tipo={dadoAtivo.tipo}
+              resultado={dadoAtivo.resultado}
+              visivel={rollVisibility === "open"}
+              onTerminou={limparDadoAtivo}
+            />
+            {rollVisibility === "result_only" && (
+              // Modo "só resultado" — dado estático sem animação, some após 1.5s
+              <div className="inline-flex flex-col items-center gap-1 select-none animate-fade-in">
+                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-widest">
+                  {dadoAtivo.tipo}
+                </span>
+                <div className="w-16 h-16 rounded-xl flex items-center justify-center font-bold font-mono text-2xl border-2 bg-zinc-900 border-zinc-600 text-zinc-100">
+                  {dadoAtivo.resultado}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fase 5.7 — Dado do jogador rolando (canto inferior esquerdo).
+            Sempre mostra animação — o jogador sempre vê o dado antes do mestre narrar. */}
+        {dadoJogadorAtivo && (
+          <div className="fixed bottom-24 left-6 z-50">
+            <DadoAnimado
+              tipo={dadoJogadorAtivo.tipo}
+              resultado={dadoJogadorAtivo.resultado}
+              visivel
+              onTerminou={() => setDadoJogadorAtivo(null)}
+            />
+          </div>
+        )}
+
         <header className={`flex items-center justify-between border-b px-4 py-3 transition-colors duration-500 ${
           emCombate ? "border-red-900/40 bg-red-950/10" : "border-zinc-800/60"
         }`}>
@@ -656,7 +777,7 @@ export default function Home() {
           )}
           <MasterResponse
             historico={historico}
-            respostaAtual={respostaAtual}
+            respostaAtual={textoSincronizado}
             playerName={playerName}
             mestrePensando={carregando}
           />
@@ -696,12 +817,16 @@ export default function Home() {
               if (val === 20) dispararCritFlash("crit");
               else if (val === 1) dispararCritFlash("falha");
               registrarRolagem(tipoLog, val);
+              // Animação do dado do jogador — sempre mostra (Fase 5.7)
+              setDadoJogadorAtivo({ tipo: "d20", resultado: val, id: Date.now() });
               enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
             };
 
             const rolarDano = (faces: number) => {
               const val = Math.floor(Math.random() * faces) + 1;
               registrarRolagem(`d${faces}`, val, "Dano");
+              // Animação do dado do jogador — sempre mostra (Fase 5.7)
+              setDadoJogadorAtivo({ tipo: `d${faces}`, resultado: val, id: Date.now() });
               enviarComando(`[Rolagem: d${faces} = ${val}]`);
             };
 
@@ -1170,6 +1295,33 @@ export default function Home() {
           </p>
         </div>
 
+        {/* Fase 5.7 — Visibilidade das rolagens do mestre */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Rolagens do Mestre</p>
+          <div className="space-y-2">
+            {ROLL_VIS_OPTIONS.map(o => (
+              <button
+                key={o.id}
+                onClick={() => handleSalvarRollVisibility(o.id)}
+                className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                  rollVisibility === o.id
+                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                }`}
+              >
+                <span className="flex items-center justify-between">
+                  <span className="font-semibold">{o.label}</span>
+                  {rollVisibility === o.id && <span className="text-violet-400">✓</span>}
+                </span>
+                <span className="text-[11px] text-zinc-500">{o.descricao}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600">
+            Controla o que você vê quando o mestre rola dados internamente.
+          </p>
+        </div>
+
         {/* Toggle de som em natural 20 / natural 1 */}
         <div className="space-y-2 border-t border-zinc-800 pt-4">
           <p className="text-xs font-semibold text-zinc-400">Sons de Combate</p>
@@ -1191,6 +1343,35 @@ export default function Home() {
           </button>
           <p className="text-[10px] text-zinc-600">
             Sintético, sem download. Default ligado — desligue se for atrapalhar o vídeo.
+          </p>
+        </div>
+
+        {/* Fase 5.6 — Sync texto-voz (karaokê reverso) */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Sincronização Texto-Voz</p>
+          <button
+            onClick={() => {
+              const novo = !syncAtivo;
+              setSyncAtivo(novo);
+              try { localStorage.setItem(LS_SYNC_TEXTO_VOZ_KEY, String(novo)); } catch { /* SSR-safe */ }
+            }}
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+              syncAtivo
+                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+            }`}
+          >
+            <span>
+              🎤 Karaokê reverso
+              <span className="ml-2 text-[10px] text-zinc-500">texto acompanha o áudio</span>
+            </span>
+            <span className={`text-xs font-semibold ${syncAtivo ? "text-violet-400" : "text-zinc-600"}`}>
+              {syncAtivo ? "ON" : "OFF"}
+            </span>
+          </button>
+          <p className="text-[10px] text-zinc-600">
+            Revela o texto do mestre no ritmo da fala (~300ms à frente do áudio).
+            Desligue se preferir ver o texto completo antes de ouvir.
           </p>
         </div>
       </div>

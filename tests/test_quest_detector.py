@@ -427,3 +427,56 @@ def test_multiples_avancos_acumulam():
     assert wm.xp == 800  # 300 + 500
     assert wm.gold == 25
     assert len(r) == 2
+
+
+# ── Fase 5.7 — strip de [Rolagem visível: ...] ──────────────────────────────
+
+def test_strip_remove_rolagem_visivel_simples():
+    """[Rolagem visível: d20 = 14] deve ser removido do texto para TTS."""
+    texto = "O goblin ataca — [Rolagem visível: d20 = 14]. A lâmina passa raspando."
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "O goblin ataca" in resultado
+    assert "A lâmina passa raspando." in resultado
+
+
+def test_strip_remove_rolagem_visivel_dano():
+    """[Rolagem visível: d8 = 6] deve ser removido de narração de dano."""
+    texto = "O ogro inflige [Rolagem visível: d8 = 6] pontos de dano."
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "O ogro inflige" in resultado
+    assert "pontos de dano." in resultado
+
+
+def test_strip_remove_rolagem_visivel_case_insensitive():
+    """Marcador com capitalização variada deve ser removido."""
+    texto = "Ataque: [ROLAGEM VISÍVEL: d20 = 8]. Errou por pouco."
+    resultado = strip_marcadores(texto)
+    assert "[ROLAGEM" not in resultado
+    assert "Errou por pouco." in resultado
+
+
+def test_strip_remove_rolagem_visivel_multiplas():
+    """Múltiplos marcadores de rolagem devem ser todos removidos."""
+    texto = (
+        "O goblin ataca [Rolagem visível: d20 = 12] e causa "
+        "[Rolagem visível: d6 = 4] de dano."
+    )
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "O goblin ataca" in resultado
+    assert "e causa" in resultado
+    assert "de dano." in resultado
+
+
+def test_strip_combinado_fio_e_rolagem_visivel():
+    """[FIO] e [Rolagem visível] no mesmo texto — ambos removidos."""
+    texto = (
+        "O orc luta com fúria [Rolagem visível: d20 = 17]. "
+        "[FIO: O orc carrega amuleto de Valdrek]"
+    )
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "[FIO:" not in resultado
+    assert "O orc luta com fúria" in resultado
