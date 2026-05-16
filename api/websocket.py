@@ -745,33 +745,52 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 if _RE_CASTING.search(texto_jogador):
                     nome_magia = extrair_nome_magia(texto_jogador)
                     if nome_magia:
-                        dados_magia = await buscar_dados_magia(nome_magia)
-                        if dados_magia:
-                            bloco = formatar_bloco_magia(dados_magia)
-                            # Insere no topo de chunks_regras para ter prioridade no prompt
-                            if contexto is not None:
-                                contexto.chunks_regras.insert(
-                                    0,
-                                    {"text": bloco, "source_id": "spell-detector", "_score": 1.0},
-                                )
+                        # Bug #5: valida ANTES de decrementar slot. Se o jogador grita
+                        # "lanço bola de fogo" sem ter selecionado essa magia na criação,
+                        # o LLM nega ("você não conhece") mas o slot já tinha sumido.
+                        # Política: se o personagem é conjurador (tem spells_conhecidas
+                        # cadastradas) e a magia NÃO está na lista, pula tudo — busca,
+                        # injeção e decremento. O LLM ainda recebe a fala via contexto
+                        # geral e nega narrativamente.
+                        spells_lower = {s.lower() for s in sessao.spells_conhecidas}
+                        magia_conhecida = (
+                            not spells_lower  # personagem não-conjurador / sem lista
+                            or nome_magia.lower() in spells_lower
+                        )
+                        if not magia_conhecida:
                             log.info(
-                                "spell_detectada",
+                                "spell_nao_conhecida",
                                 nome=nome_magia,
-                                nivel=dados_magia.get("nivel"),
                                 session_id=session_id,
                             )
-                            # Decrementa o slot correspondente (se o nível for confirmado pelo SRD)
-                            nivel_magia = dados_magia.get("nivel")
-                            if isinstance(nivel_magia, int) and nivel_magia > 0:
-                                from engine.magic.slot_tracker import decrementar_slot
-                                slot_ok = decrementar_slot(sessao.working_mem, nivel_magia)
-                                if not slot_ok:
-                                    log.info(
-                                        "spell_sem_slot",
-                                        nome=nome_magia,
-                                        nivel=nivel_magia,
-                                        session_id=session_id,
+                        else:
+                            dados_magia = await buscar_dados_magia(nome_magia)
+                            if dados_magia:
+                                bloco = formatar_bloco_magia(dados_magia)
+                                # Insere no topo de chunks_regras para ter prioridade no prompt
+                                if contexto is not None:
+                                    contexto.chunks_regras.insert(
+                                        0,
+                                        {"text": bloco, "source_id": "spell-detector", "_score": 1.0},
                                     )
+                                log.info(
+                                    "spell_detectada",
+                                    nome=nome_magia,
+                                    nivel=dados_magia.get("nivel"),
+                                    session_id=session_id,
+                                )
+                                # Decrementa o slot correspondente (se o nível for confirmado pelo SRD)
+                                nivel_magia = dados_magia.get("nivel")
+                                if isinstance(nivel_magia, int) and nivel_magia > 0:
+                                    from engine.magic.slot_tracker import decrementar_slot
+                                    slot_ok = decrementar_slot(sessao.working_mem, nivel_magia)
+                                    if not slot_ok:
+                                        log.info(
+                                            "spell_sem_slot",
+                                            nome=nome_magia,
+                                            nivel=nivel_magia,
+                                            session_id=session_id,
+                                        )
 
                 # Injeta magias conhecidas no contexto antes de montar o prompt
                 contexto.spells_conhecidas = sessao.spells_conhecidas

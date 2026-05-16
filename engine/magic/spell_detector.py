@@ -43,6 +43,17 @@ _RE_NOME_MAGIA = re.compile(
     re.IGNORECASE,
 )
 
+# Bug #15: stopwords que cortam o nome da magia.
+# "lanço bola de fogo no grupo" → quebra em "no" → "Bola de Fogo".
+# CUIDADO: nomes reais de magia contêm "de/do/da" (Bola de Fogo, Mão de Mago),
+# então essas preposições NÃO podem entrar. Pegamos só palavras que claramente
+# indicam um alvo/contexto fora do nome.
+_STOPWORDS_NOME_MAGIA: frozenset[str] = frozenset({
+    "para", "em", "contra", "no", "na", "nos", "nas",
+    "sobre", "perto", "longe", "rumo", "direção",
+    "minha", "meu", "meus", "minhas", "nossa", "nosso",
+})
+
 
 def extrair_nome_magia(texto: str) -> str | None:
     """Extrai o nome da magia declarada pelo jogador.
@@ -56,11 +67,21 @@ def extrair_nome_magia(texto: str) -> str | None:
         Nome da magia com capitalização original, ou None se não detectado.
     """
     m = _RE_NOME_MAGIA.search(texto)
-    if m:
-        nome = m.group(1).strip().rstrip(".,!? ")
-        # Filtra matches muito curtos (artigos isolados como "o", "a")
-        if len(nome) >= 3:
-            return nome
+    if not m:
+        return None
+    nome = m.group(1).strip().rstrip(".,!? ")
+    # Corta no primeiro stopword — "lanço meu olhar para o orc" → "meu olhar"
+    # (que é filtrado depois por ser curto e/ou não bater no SRD).
+    palavras = nome.split()
+    nome_palavras: list[str] = []
+    for p in palavras:
+        if p.lower() in _STOPWORDS_NOME_MAGIA:
+            break
+        nome_palavras.append(p)
+    nome = " ".join(nome_palavras).strip()
+    # Filtra matches muito curtos (artigos isolados como "o", "a")
+    if len(nome) >= 3:
+        return nome
     return None
 
 

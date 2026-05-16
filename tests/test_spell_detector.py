@@ -11,6 +11,27 @@ from engine.magic.spell_detector import (
 
 # ── Testes do regex _RE_CASTING ───────────────────────────────────────────────
 
+def test_extrair_nome_corta_stopwords_alvo():
+    """Bug #15: 'lanço meu olhar para o orc' não vira nome de magia."""
+    nome = extrair_nome_magia("Lanço meu olhar para o orc")
+    # "meu" é stopword → nome resulta vazio (<3 chars) → None
+    assert nome is None
+
+
+def test_extrair_nome_corta_em_preposicao():
+    """Bug #15: 'lanço bola de fogo no grupo' → 'Bola de Fogo'."""
+    nome = extrair_nome_magia("Lanço Bola de Fogo no grupo")
+    assert nome is not None
+    assert nome.lower() == "bola de fogo"
+
+
+def test_extrair_nome_preserva_de_no_meio():
+    """'Bola de Fogo' precisa preservar 'de' — não pode ser stopword."""
+    nome = extrair_nome_magia("Conjuro Bola de Fogo")
+    assert nome is not None
+    assert "de" in nome.lower()
+
+
 def test_re_casting_detecta_lanco():
     assert _RE_CASTING.search("Lanço Bola de Fogo!")
 
