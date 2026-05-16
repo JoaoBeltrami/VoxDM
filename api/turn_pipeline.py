@@ -29,6 +29,7 @@ from typing import Any
 
 import structlog
 
+from engine.magic.slot_tracker import detectar_descanso, restaurar_slots
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
 
@@ -175,14 +176,22 @@ def aplicar_pos_turno(
         if working_mem.rodada_combate >= 1:
             working_mem.avancar_turno_iniciativa()
 
-    # 4. Trust com base em ações do jogador
+    # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
+    # Ordem: antes do trust, pois o descanso é uma ação completa do jogador.
+    tipo_descanso = detectar_descanso(texto_jogador)
+    if tipo_descanso:
+        restaurados = restaurar_slots(working_mem, tipo_descanso)
+        if restaurados > 0:
+            log.info("slots_restaurados", tipo=tipo_descanso, quantidade=restaurados)
+
+    # 5. Trust com base em ações do jogador
     mudancas_trust = detectar_mudancas_trust(texto_jogador, working_mem.npcs_presentes)
     for npc_id, delta in mudancas_trust:
         working_mem.atualizar_trust(npc_id, delta)
         log.info("trust_atualizado", npc_id=npc_id, delta=delta,
                  novo_valor=working_mem.trust_levels.get(npc_id))
 
-    # 5. Auto-registra consequências: mortos neste turno + mudanças de trust
+    # 6. Auto-registra consequências: mortos neste turno + mudanças de trust
     for dados in working_mem.inimigos_combate.values():
         if dados.get("estado") == "morto":
             c = f"{dados['nome']} foi abatido"

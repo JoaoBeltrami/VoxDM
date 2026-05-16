@@ -68,6 +68,8 @@ class SessaoConfig(BaseModel):
     int_score: int = Field(default=10, ge=3, le=20)
     wis_score: int = Field(default=10, ge=3, le=20)
     cha_score: int = Field(default=10, ge=3, le=20)
+    # Subclasse D&D 5e — determina features especiais (Action Surge, Rage, Sneak Attack, etc.)
+    player_subclass: str = Field(default="", description="Ex: 'Campeão', 'Ladrão', 'Escola da Evocação'")
     # Proficiências derivadas de classe + background
     skill_profs: list[str] = Field(default_factory=list)
     save_profs: list[str] = Field(default_factory=list)
@@ -199,6 +201,9 @@ class MensagemWS(BaseModel):
     # DM Feat 1: Fios Soltos — threads narrativas abertas para exibição no frontend
     # Atualizado no "fim" sempre que a lista muda. Máx 5 fios simultâneos.
     fios_soltos: list[str] = Field(default_factory=list)
+    # Class features — enviadas no "fim" para sincronizar os chips na ficha.
+    # Mapa feature_id → {nome, disponivel, usos_max, usos_atual, restaura}.
+    class_features: dict[str, dict[str, Any]] = Field(default_factory=dict)
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

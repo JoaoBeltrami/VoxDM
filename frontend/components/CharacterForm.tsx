@@ -8,6 +8,22 @@ const CLASSES_DND = [
   "Monge", "Paladino", "Ranger", "Ladino", "Feiticeiro", "Bruxo", "Mago",
 ];
 
+// Subclasses disponíveis por classe (nível 3, SRD 5e)
+const SUBCLASSES: Record<string, string[]> = {
+  "Bárbaro":     ["Caminho do Berserker", "Caminho do Totem do Guerreiro"],
+  "Bardo":       ["Colégio do Saber", "Colégio da Valentia"],
+  "Clérigo":     ["Domínio da Vida", "Domínio da Luz", "Domínio da Guerra", "Domínio do Conhecimento", "Domínio do Truque"],
+  "Druida":      ["Círculo da Terra", "Círculo da Lua"],
+  "Feiticeiro":  ["Linhagem Dracônica", "Alma Selvagem"],
+  "Guerreiro":   ["Campeão", "Mestre de Batalha", "Cavaleiro Místico"],
+  "Ladino":      ["Ladrão", "Assassino", "Arquétipo Arcano"],
+  "Mago":        ["Escola da Abjuração", "Escola da Conjuração", "Escola da Evocação", "Escola da Ilusão", "Escola da Necromancia", "Escola da Transmutação"],
+  "Monge":       ["Caminho da Mão Aberta", "Caminho da Sombra"],
+  "Paladino":    ["Juramento da Devoção", "Juramento dos Anciões", "Juramento da Vingança"],
+  "Ranger":      ["Caçador", "Mestre das Bestas"],
+  "Bruxo":       ["O Arquifada", "O Imundo", "O Grande Antigo"],
+};
+
 const RACAS_DND = [
   "Humano", "Elfo", "Anão", "Halfling", "Gnomo",
   "Meio-Elfo", "Meio-Orc", "Tiefling", "Draconato",
@@ -162,6 +178,7 @@ export function CharacterForm({ onChange }: Props) {
   const [nome, setNome] = useState("");
   const [raca, setRaca] = useState("");
   const [classe, setClasse] = useState("");
+  const [subclasse, setSubclasse] = useState("");
   const [background, setBackground] = useState("");
   // Descrição livre do personagem — opcional. Quando preenchida, o Mestre
   // usa pra moldar a abertura narrativa (motivação, segredos, aparência).
@@ -249,8 +266,12 @@ export function CharacterForm({ onChange }: Props) {
   const personagemAleatorio = () => {
     const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
     const novaClasse = pick(CLASSES_DND);
+    // Sorteia subclasse aleatória se a classe tiver opções
+    const subclasseOpcoes = SUBCLASSES[novaClasse] ?? [];
+    const novaSubclasse = subclasseOpcoes.length > 0 ? pick(subclasseOpcoes) : "";
     setRaca(pick(RACAS_DND));
     setClasse(novaClasse);
+    setSubclasse(novaSubclasse);
     setBackground(pick(BACKGROUNDS_DND));
     if (!nome.trim()) setNome(pick(NOMES_FANTASIA));
     if (!localId) setLocalId(pick(LOCAIS_INICIO).id);
@@ -292,6 +313,7 @@ export function CharacterForm({ onChange }: Props) {
       player_name:       nome.trim(),
       player_race:       raca,
       player_class:      classe,
+      player_subclass:   subclasse,
       player_background: background,
       player_description: descricao.trim(),
       player_level:      nivel,
@@ -308,7 +330,7 @@ export function CharacterForm({ onChange }: Props) {
       skill_profs: allSkills,
       save_profs:  CLASS_SAVES[classe] ?? [],
     });
-  }, [nome, raca, classe, background, descricao, nivel, localId, scores]);
+  }, [nome, raca, classe, subclasse, background, descricao, nivel, localId, scores]);
 
   return (
     <div className="w-full space-y-4 text-left">
@@ -363,7 +385,7 @@ export function CharacterForm({ onChange }: Props) {
           </label>
           <select
             value={classe}
-            onChange={e => setClasse(e.target.value)}
+            onChange={e => { setClasse(e.target.value); setSubclasse(""); }}
             className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
           >
             <option value="">— Escolher —</option>
@@ -371,6 +393,26 @@ export function CharacterForm({ onChange }: Props) {
           </select>
         </div>
       </div>
+
+      {/* Subclasse — aparece somente quando a classe tem subclasses mapeadas */}
+      {classe && (SUBCLASSES[classe]?.length ?? 0) > 0 && (
+        <div>
+          <label className="mb-1 block text-xs text-zinc-400">
+            Subclasse
+            <span className="ml-1 text-[10px] text-zinc-600">(opcional)</span>
+          </label>
+          <select
+            value={subclasse}
+            onChange={e => setSubclasse(e.target.value)}
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+          >
+            <option value="">— Sem subclasse —</option>
+            {(SUBCLASSES[classe] ?? []).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Background — obrigatório: afeta perícias */}
       <div>

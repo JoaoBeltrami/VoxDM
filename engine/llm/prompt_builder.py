@@ -274,8 +274,18 @@ def montar_mensagens(
         secoes.append(overlay)
         log.info("dm_profile_aplicado", profile=dm_profile_attr)
 
-    # Working memory sem diálogo — histórico vai como pares de mensagem abaixo
-    secoes.append(contexto.working_memory.para_texto(incluir_dialogo=False))
+    # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
+    # Subclasse injetada separadamente para não inflar para_texto() com campo raro.
+    wm_texto = contexto.working_memory.para_texto(incluir_dialogo=False)
+    player_subclass = getattr(contexto.working_memory, "player_subclass", "")
+    if player_subclass:
+        # Insere "Subclasse: X" logo após a linha "Personagem: ..." no para_texto()
+        wm_texto = wm_texto.replace(
+            "\nLocal:",
+            f"\nSubclasse: {player_subclass}\nLocal:",
+            1,
+        )
+    secoes.append(wm_texto)
 
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:

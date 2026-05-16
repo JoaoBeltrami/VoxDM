@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 16 de maio de 2026 — Fase 4.6 Auth + 5 DM Veteran Features
+> Atualizado: 16 de maio de 2026 — Fase 6 completa (Spell Detector + Slot Tracker + Subclass + Class Features)
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Fase 6 completa (spell detector + slot tracker + subclass picker + class features). Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -635,6 +635,29 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `tests/test_websocket.py` | WS tests usam `_criar_sessao_ws()` com UUID gerado pelo servidor. 6 novos testes de DM features markers | ✅ Atualizado |
 | `tests/test_quest_detector.py` | +6 testes para `strip_marcadores` com `[FIO]`, `[CLIFFHANGER]`, `[AGENDA]`, `[LAMPEJO]`, combinados | ✅ Atualizado |
 | **Total testes** | | **356/356 passed**; `tsc --noEmit` clean |
+
+### Fase 6 — Mecânicas D&D 5e completas (Sessão 16/05)
+
+> Sub-itens 1–4: spell detector, slot tracker, subclass picker, class features. Sub-item 5 (multiclass) adiado.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/magic/__init__.py` | Package magic | ✅ Criado |
+| `engine/magic/spell_detector.py` | Detecta casting no texto do jogador via `_RE_CASTING`. `extrair_nome_magia()` captura o nome após o verbo. `buscar_dados_magia()` busca em `voxdm_rules` (Qdrant, score_threshold=0.35). `formatar_bloco_magia()` produz string de 1-2 linhas com campos mecânicos para o prompt. Falha silenciosa em exception — jogo segue sem dados de magia | ✅ Criado |
+| `engine/magic/slot_tracker.py` | `decrementar_slot(wm, nivel)` reduz `spell_slots[nivel]["current"]` se disponível. `detectar_descanso(texto)` detecta "curto"/"longo"/None via regex PT-BR. `restaurar_slots(wm, tipo)` restaura todos (longo) ou ceil(gastos/2) por nível (curto). Retorna total restaurado para log | ✅ Criado |
+| `api/turn_pipeline.py` | Step 4 novo: `detectar_descanso()` + `restaurar_slots()` aplicados a cada turno antes do trust | ✅ Atualizado |
+| `api/websocket.py` | Bloco spell detector DENTRO do try de context_builder: `_RE_CASTING` → `extrair_nome_magia` → `buscar_dados_magia` → injeta `bloco` no topo de `contexto.chunks_regras`. Se nível confirmado pelo SRD, chama `decrementar_slot()`. Falha silenciosa — exception cai no except já existente | ✅ Atualizado |
+| `engine/memory/working_memory.py` | `player_subclass: str` + `class_features: dict[str, dict]` + `inicializar_features_classe(player_class, player_subclass)` (popula features por classe/subclasse) + `restaurar_features(tipo_descanso)` (short/long rest por tipo de recurso) | ✅ Atualizado |
+| `api/models/schemas.py` | `player_subclass: str` em `SessaoConfig`. `class_features: dict` em `MensagemWS` | ✅ Atualizado |
+| `api/routes/session.py` | Passa `player_subclass` ao criar WorkingMemory. `inicializar_features_classe()` chamado em `nova_sessao()` | ✅ Atualizado |
+| `frontend/components/CharacterForm.tsx` | `SUBCLASSES` mapping por classe. Dropdown de subclasse quando classe selecionada. `player_subclass` em `PersonagemConfig` gerado | ✅ Atualizado |
+| `frontend/components/CharacterSheet.tsx` | Seção "Features de Classe" com chips violeta (disponível) / cinza+riscado (gasto). Badge com `usos_atual/usos_max`. Prop `classFeatures` desestruturada | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `classFeatures: Record<string, ...>` em estado + ESTADO_INICIAL. Sincronizado do payload `fim` | ✅ Atualizado |
+| `frontend/lib/api.ts` | `class_features?: Record<string, unknown>` em `MensagemWS` | ✅ Atualizado |
+| `tests/test_spell_detector.py` | 20 testes — regex casting, extrair_nome (PT-BR), formatar_bloco (todos os campos, campos ausentes, ícone, truque) | ✅ Criado |
+| `tests/test_slot_tracker.py` | 19 testes — decrementar (existente/zerado/inexistente), detectar_descanso (curto/longo/nenhum), restaurar_slots (longo/curto/arredondamento/já cheio/múltiplos níveis) | ✅ Criado |
+| `tests/test_class_features.py` | 22 testes — features por classe base e subclasse, restauração por tipo de descanso, classe vazia/desconhecida | ✅ Criado |
+| **Total testes** | | **444/444 passed**; `tsc --noEmit` clean |
 
 ---
 

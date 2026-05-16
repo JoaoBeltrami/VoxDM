@@ -97,6 +97,8 @@ interface EstadoSessao {
   rolagens: RolagemLog[];
   // DM Feat 1: Fios Soltos — threads narrativas em aberto (máx 5)
   fiosSoltos: string[];
+  // Class features — chips interativos de recursos de classe (Fase 6)
+  classFeatures: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
   // Fase 5.7: dado do mestre ativo — exibido como animação no frontend.
   // null = nenhum dado visível. Limpo pelo DadoAnimado via onTerminou.
   dadoAtivo: { tipo: string; resultado: number; id: number } | null;
@@ -140,6 +142,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   questNotificacao: null,
   rolagens: [],
   fiosSoltos: [],
+  classFeatures: {},
   dadoAtivo: null,
   sceneImageUrl: "",
 };
@@ -327,6 +330,7 @@ export function useGameSession() {
           consequencias: msg.log_consequencias ?? [],
           iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
           fiosSoltos: msg.fios_soltos ?? [],
+          classFeatures: (msg.class_features ?? {}) as Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>,
         };
 
         const novoTurnoBase = {
@@ -376,6 +380,7 @@ export function useGameSession() {
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
+            classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,
@@ -416,6 +421,7 @@ export function useGameSession() {
             consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
+            classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
             condicoesDetectadas: novasCondicoes.length
               ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
               : s.condicoesDetectadas,

@@ -33,6 +33,8 @@ interface Props {
   initDeathSavesStable?: boolean;
   // Histórico das últimas rolagens do jogador (passado pelo useGameSession)
   rolagens?: RolagemLog[];
+  // Class features — chips de recursos de classe (Fase 6), sincronizados via WS
+  classFeatures?: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -143,6 +145,7 @@ export function CharacterSheet({
   initInspiration = false,
   initDeathSavesSuccesses = 0, initDeathSavesFailures = 0, initDeathSavesStable = false,
   rolagens = [],
+  classFeatures = {},
 }: Props) {
   const [aberto, setAberto] = useState(false);
   const [atributosAberto, setAtributosAberto] = useState(false);
@@ -900,6 +903,41 @@ export function CharacterSheet({
               </div>
             )}
           </div>
+
+          {/* Class Features — chips de recursos de classe (Fase 6) */}
+          {classFeatures && Object.keys(classFeatures).length > 0 && (
+            <div className="mb-3 border-b border-zinc-800 pb-3">
+              <p className="mb-2 text-xs text-zinc-500">
+                Features de Classe
+                <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                  {Object.keys(classFeatures).length}
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(classFeatures).map(([fid, feat]) => (
+                  <div
+                    key={fid}
+                    title={feat.restaura ? `Restaura: descanso ${feat.restaura}` : undefined}
+                    className={`
+                      flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium
+                      transition-all
+                      ${feat.disponivel
+                        ? "border-violet-700/50 bg-violet-900/30 text-violet-200"
+                        : "border-zinc-700/30 bg-zinc-800/50 text-zinc-500 line-through opacity-60"
+                      }
+                    `}
+                  >
+                    <span>{feat.nome}</span>
+                    {feat.usos_max > 0 && (
+                      <span className="text-[10px] opacity-70">
+                        {feat.usos_atual}/{feat.usos_max}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Histórico de rolagens — últimas 5 ações com d20/dano/etc */}
           {rolagens.length > 0 && (

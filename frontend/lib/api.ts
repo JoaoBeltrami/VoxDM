@@ -82,6 +82,14 @@ export interface MensagemWS {
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
   // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
   fios_soltos?: string[];
+  // Class features — sincronizadas no "fim" para atualizar chips na ficha
+  class_features?: Record<string, {
+    nome: string;
+    disponivel: boolean;
+    usos_max: number;
+    usos_atual: number;
+    restaura?: string;
+  }>;
   // Dado rolado pelo mestre (Fase 5.7) — enviado em tipo="dado_rolado"
   dado_tipo?: string;      // "d4", "d6", "d8", "d10", "d12", "d20", "d100"
   dado_resultado?: number; // valor do dado (1-max)
@@ -125,6 +133,8 @@ export interface PersonagemConfig {
   cha_score?: number;
   skill_profs?: string[];
   save_profs?: string[];
+  // Subclasse D&D 5e escolhida no CharacterForm
+  player_subclass?: string;
 }
 
 export async function criarSessao(

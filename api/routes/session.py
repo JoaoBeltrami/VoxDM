@@ -153,6 +153,7 @@ async def iniciar_sessao(
         player_name=config.player_name,
         player_race=config.player_race,
         player_class=config.player_class,
+        player_subclass=config.player_subclass,
         player_background=config.player_background,
         player_description=config.player_description,
         player_level=config.player_level,

@@ -17,6 +17,7 @@ Exemplo:
 
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 
 MAX_DIALOGOS = 6  # últimas N trocas mantidas em RAM. Reduzido de 8 → 6 em
@@ -78,6 +79,7 @@ class WorkingMemory:
     player_name: str
     player_race: str
     player_class: str
+    player_subclass: str  # Ex: "Campeão", "Mestre de Batalha", "Assassino"
     player_background: str
     # Descrição livre opcional escrita pelo jogador na criação (até ~600 chars).
     # Inclui personalidade, motivação, aparência, segredos. Usado em
@@ -192,6 +194,13 @@ class WorkingMemory:
     # O prompt_builder varia densidade narrativa de acordo.
     pacing_nivel: float = 3.0
 
+    # ── Class Features — Fase 6 ───────────────────────────────────────────────
+    # Features de classe/subclasse rastreadas individualmente com contagem de usos.
+    # Estrutura: feature_id → {nome, disponivel, usos_max, usos_atual, restaura}
+    # usos_max == -1 indica recurso ilimitado (ex: Ataque Furtivo, 1× por turno).
+    # restaura: "turno" | "curto" | "longo"
+    class_features: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     @classmethod
     def nova_sessao(
         cls,
@@ -205,6 +214,7 @@ class WorkingMemory:
         player_name: str = "",
         player_race: str = "",
         player_class: str = "",
+        player_subclass: str = "",
         player_background: str = "",
         player_description: str = "",
         player_level: int = 1,
@@ -235,7 +245,7 @@ class WorkingMemory:
         hd_tipo = hit_dice_type if hit_dice_type is not None else _HIT_DICE_TIPO.get(player_class, 8)
         hd_atual = hit_dice_current if hit_dice_current is not None else player_level
 
-        return cls(
+        wm = cls(
             location_id=location_id,
             location_nome=location_nome,
             time_of_day=time_of_day,
@@ -248,6 +258,7 @@ class WorkingMemory:
             player_name=player_name,
             player_race=player_race,
             player_class=player_class,
+            player_subclass=player_subclass,
             player_background=player_background,
             player_description=player_description,
             player_level=player_level,
@@ -280,6 +291,102 @@ class WorkingMemory:
             xp=xp,
             inspiration=inspiration,
         )
+        # Inicializa class features a partir de classe + subclasse (quando definidas)
+        if player_class:
+            wm.inicializar_features_classe(player_class, player_subclass)
+        return wm
+
+    def inicializar_features_classe(self, player_class: str, player_subclass: str = "") -> None:
+        """Popula class_features com as features da classe/subclasse do jogador.
+
+        Chamado em nova_sessao() e também diretamente quando subclasse é definida
+        após a criação (ex: via escolha no CharacterForm). Sobrescreve completamente
+        o dict — use restaurar_features() pra repor usos gastos, não este método.
+
+        Args:
+            player_class: Nome da classe em PT-BR (ex: "Guerreiro", "Bárbaro").
+            player_subclass: Nome da subclasse opcional (ex: "Mestre de Batalha").
+        """
+        features: dict[str, dict[str, Any]] = {}
+        classe = player_class.lower()
+        sub = player_subclass.lower()
+
+        if "guerreiro" in classe or "fighter" in classe:
+            features["action-surge"] = {
+                "nome": "Action Surge", "disponivel": True,
+                "usos_max": 1, "usos_atual": 1, "restaura": "curto",
+            }
+            features["second-wind"] = {
+                "nome": "Second Wind", "disponivel": True,
+                "usos_max": 1, "usos_atual": 1, "restaura": "curto",
+            }
+            if "mestre de batalha" in sub:
+                features["superiority-dice"] = {
+                    "nome": "Dados de Superioridade", "disponivel": True,
+                    "usos_max": 4, "usos_atual": 4, "restaura": "curto",
+                }
+
+        if "barbaro" in classe or "bárbaro" in classe:
+            features["rage"] = {
+                "nome": "Fúria", "disponivel": True,
+                "usos_max": 3, "usos_atual": 3, "restaura": "longo",
+            }
+            # Ilimitado por turno (usos_max == -1 indica recurso sem limite fixo)
+            features["reckless-attack"] = {
+                "nome": "Ataque Imprudente", "disponivel": True,
+                "usos_max": -1, "usos_atual": -1, "restaura": "turno",
+            }
+
+        if "ladino" in classe or "rogue" in classe:
+            features["sneak-attack"] = {
+                "nome": "Ataque Furtivo", "disponivel": True,
+                "usos_max": -1, "usos_atual": -1, "restaura": "turno",
+            }
+            features["cunning-action"] = {
+                "nome": "Ação Ardilosa", "disponivel": True,
+                "usos_max": -1, "usos_atual": -1, "restaura": "turno",
+            }
+
+        if "paladino" in classe:
+            features["divine-smite"] = {
+                "nome": "Investida Divina", "disponivel": True,
+                "usos_max": -1, "usos_atual": -1, "restaura": "turno",
+            }
+            features["lay-on-hands"] = {
+                "nome": "Imposição de Mãos", "disponivel": True,
+                "usos_max": 15, "usos_atual": 15, "restaura": "longo",
+            }
+
+        if "monge" in classe:
+            features["ki"] = {
+                "nome": "Ki", "disponivel": True,
+                "usos_max": 3, "usos_atual": 3, "restaura": "curto",
+            }
+
+        if "mago" in classe or "feiticeiro" in classe:
+            features["arcane-recovery"] = {
+                "nome": "Recuperação Arcana", "disponivel": True,
+                "usos_max": 1, "usos_atual": 1, "restaura": "longo",
+            }
+
+        self.class_features = features
+
+    def restaurar_features(self, tipo_descanso: str) -> None:
+        """Restaura class_features que se renovam no tipo de descanso dado.
+
+        Args:
+            tipo_descanso: "longo" restaura tudo; "curto" restaura features
+                com restaura="curto" ou "turno". Descanso longo cobre tudo.
+        """
+        for _fid, dados in self.class_features.items():
+            restaura = dados.get("restaura", "longo")
+            # Descanso longo restaura tudo; curto restaura "curto" e "turno"
+            if tipo_descanso == "longo" or (
+                tipo_descanso == "curto" and restaura in ("curto", "turno")
+            ):
+                dados["disponivel"] = True
+                if dados.get("usos_max", -1) > 0:
+                    dados["usos_atual"] = dados["usos_max"]
 
     def aplicar_character_state(self, state: "object") -> None:
         """Aplica estado carregado do SQLite sobre esta WorkingMemory.

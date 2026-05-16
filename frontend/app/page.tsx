@@ -237,7 +237,7 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
-    iniciativaOrdem, fiosSoltos, sceneImageUrl,
+    iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
@@ -759,6 +759,7 @@ export default function Home() {
           initDeathSavesFailures={deathSavesFailures}
           initDeathSavesStable={deathSavesStable}
           rolagens={rolagens}
+          classFeatures={classFeatures}
         />
 
         <CombatTracker

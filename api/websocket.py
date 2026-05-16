@@ -720,6 +720,47 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 t_ctx = time.perf_counter()
                 contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
                 context_ms = int((time.perf_counter() - t_ctx) * 1000)
+
+                # Spell detector — injeta dados mecânicos de magia no contexto antes do LLM.
+                # Falha silenciosa: se Qdrant estiver fora ou a magia não for encontrada,
+                # o jogo segue com narração pura (sem dados mecânicos).
+                from engine.magic.spell_detector import (
+                    _RE_CASTING,
+                    extrair_nome_magia,
+                    buscar_dados_magia,
+                    formatar_bloco_magia,
+                )
+                if _RE_CASTING.search(texto_jogador):
+                    nome_magia = extrair_nome_magia(texto_jogador)
+                    if nome_magia:
+                        dados_magia = await buscar_dados_magia(nome_magia)
+                        if dados_magia:
+                            bloco = formatar_bloco_magia(dados_magia)
+                            # Insere no topo de chunks_regras para ter prioridade no prompt
+                            if contexto is not None:
+                                contexto.chunks_regras.insert(
+                                    0,
+                                    {"text": bloco, "source_id": "spell-detector", "_score": 1.0},
+                                )
+                            log.info(
+                                "spell_detectada",
+                                nome=nome_magia,
+                                nivel=dados_magia.get("nivel"),
+                                session_id=session_id,
+                            )
+                            # Decrementa o slot correspondente (se o nível for confirmado pelo SRD)
+                            nivel_magia = dados_magia.get("nivel")
+                            if isinstance(nivel_magia, int) and nivel_magia > 0:
+                                from engine.magic.slot_tracker import decrementar_slot
+                                slot_ok = decrementar_slot(sessao.working_mem, nivel_magia)
+                                if not slot_ok:
+                                    log.info(
+                                        "spell_sem_slot",
+                                        nome=nome_magia,
+                                        nivel=nivel_magia,
+                                        session_id=session_id,
+                                    )
+
                 mensagens = montar_mensagens(contexto)
             except Exception as e:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
@@ -1010,6 +1051,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         for qid, sid in avanco_quests
                     ],
                     fios_soltos=list(sessao.working_mem.fios_soltos),
+                    class_features=dict(sessao.working_mem.class_features),
                 ).model_dump_json()
             )
 
