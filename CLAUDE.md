@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 16 de maio de 2026 — Fase 6 completa (Spell Detector + Slot Tracker + Subclass + Class Features)
+> Atualizado: 16 de maio de 2026 — Fase 6 + Lista de Magias com seleção na criação e ficha
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -658,6 +658,29 @@ NÃO começar tarefa que estoure janela de contexto → fracionar em commits men
 | `tests/test_slot_tracker.py` | 19 testes — decrementar (existente/zerado/inexistente), detectar_descanso (curto/longo/nenhum), restaurar_slots (longo/curto/arredondamento/já cheio/múltiplos níveis) | ✅ Criado |
 | `tests/test_class_features.py` | 22 testes — features por classe base e subclasse, restauração por tipo de descanso, classe vazia/desconhecida | ✅ Criado |
 | **Total testes** | | **444/444 passed**; `tsc --noEmit` clean |
+
+### Fase 6.5 — Lista de magias + seleção na criação + ficha (Sessão 16/05)
+
+> 246 magias SRD free em PT-BR/EN para 8 classes spellcaster. Separação de responsabilidades: spells_conhecidas no CharacterState (SQLite), não na WorkingMemory.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/magic/spell_list.py` | 246 magias SRD 5e (Mago:49, Clérigo:36, Druida:36, Bardo:31, Feiticeiro:29, Bruxo:26, Paladino:21, Ranger:18). `SpellEntry` com nome PT-BR + EN + escola + desc_curta. Tabelas `PROGRESSAO_MAGIAS` para níveis 1-10 por classe. Funções: `spells_da_classe()`, `spells_por_nivel()`, `limite_progressao()`, `nivel_da_spell()` | ✅ Criado |
+| `engine/persistence/character_store.py` | Coluna `spells_conhecidas TEXT DEFAULT '[]'` com migração idempotente (try/except). `CharacterState.spells_conhecidas: list[str]`. Serialização JSON na `salvar()` / desserialização na `carregar()` | ✅ Atualizado |
+| `engine/llm/types.py` | `spells_conhecidas: list[str] = field(default_factory=list)` em `ContextoMontado` | ✅ Atualizado |
+| `api/state.py` | `spells_conhecidas: list[str]` em `SessaoAtiva` como cache de sessão (não na WorkingMemory) | ✅ Atualizado |
+| `api/models/schemas.py` | `player_spells: list[str]` em `SessaoConfig` | ✅ Atualizado |
+| `api/routes/session.py` | Salva `player_spells` no CharacterState na criação da sessão; restaura de SQLite em sessão continuada | ✅ Atualizado |
+| `engine/llm/prompt_builder.py` | Injeta `=== MAGIAS CONHECIDAS DO PERSONAGEM ===` (agrupadas: Truques / Nível 1 / Nível 2...) quando `spells_conhecidas` não vazio, com instrução de restrição ao casting | ✅ Atualizado |
+| `api/websocket.py` | Copia `sessao.spells_conhecidas` em `contexto.spells_conhecidas` a cada turno | ✅ Atualizado |
+| `frontend/lib/spells.ts` | Mirror TypeScript com as 246 magias + `PROGRESSAO_MAGIAS` + `ehConjuradorDaClasse()`, `spellsDaClasse()`, `limiteProgressao()`, `nivelDaSpell()` | ✅ Criado |
+| `frontend/lib/api.ts` | `player_spells?: string[]` em `PersonagemConfig` | ✅ Atualizado |
+| `frontend/components/CharacterForm.tsx` | Seção "Magias" só para classes conjuradoras. Tabs por nível (Truques / Nível 1... até `nivel_max`). Checkboxes com disable ao atingir limite. Badge "X/Y selecionadas". `player_spells` no `PersonagemConfig` gerado | ✅ Atualizado |
+| `frontend/components/CharacterSheet.tsx` | Seção "Magias (N)" colapsável. Magias agrupadas por nível com circles de slot `● ● ○`. Chips violet com slots / cinza sem slots. Prop `knownSpells?: string[]` | ✅ Atualizado |
+| `frontend/app/page.tsx` | `knownSpells={personagem.player_spells ?? []}` passado ao `<CharacterSheet>` | ✅ Atualizado |
+| `tests/test_spell_list.py` | 48 testes — queries por classe/nível, tabela de progressão, fallback para classe desconhecida, integração com prompt builder | ✅ Criado |
+| `tests/test_character_store.py` | +3 testes roundtrip de `spells_conhecidas` (lista vazia, múltiplas magias, preservação de ordem) | ✅ Atualizado |
+| **Total testes** | | **492/492 passed**; `tsc --noEmit` clean |
 
 ---
 
