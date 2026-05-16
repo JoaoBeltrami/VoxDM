@@ -108,6 +108,19 @@ interface EstadoSessao {
   // Recap da sessão anterior — exibido em destaque antes das bolhas principais.
   // Some após 30s ou quando o jogador enviar o primeiro comando.
   textoRecap: string;
+  // Nível atual do personagem (Feature progressão). Atualizado via msg.player_level
+  // ou inferido do resumo de level up (pulse de "subiu pra X").
+  playerLevel: number;
+  // Resumo do último level up — null fora de level up. Modal exibe enquanto setado.
+  // Limpo pelo botão "Continuar" do modal ou após auto-dismiss de 12s.
+  levelUp: {
+    nivel_antigo: number;
+    nivel_novo: number;
+    hp_ganho: number;
+    hp_max_novo: number;
+    slots_novos: string[];
+    features_novas: string[];
+  } | null;
 }
 
 const MAX_RECONNECTS = 3;
@@ -149,6 +162,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   dadoAtivo: null,
   sceneImageUrl: "",
   textoRecap: "",
+  playerLevel: 3,
+  levelUp: null,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -236,6 +251,15 @@ export function useGameSession() {
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
         tocarChunk(msg.conteudo_b64);
+      }
+
+      if (msg.tipo === "level_up" && msg.level_up) {
+        // Modal de level up — page.tsx renderiza enquanto setado.
+        setEstado(s => ({
+          ...s,
+          levelUp: msg.level_up as EstadoSessao["levelUp"],
+          playerLevel: (msg.level_up as { nivel_novo?: number })?.nivel_novo ?? s.playerLevel,
+        }));
       }
 
       if (msg.tipo === "recap" && msg.conteudo) {
@@ -596,6 +620,10 @@ export function useGameSession() {
   }, []);
 
   // Limpa o recap da sessão anterior — chamado após 30s ou no primeiro envio do jogador
+  const dismissLevelUp = useCallback(() => {
+    setEstado(s => ({ ...s, levelUp: null }));
+  }, []);
+
   const limparRecap = useCallback(() => {
     setEstado(s => ({ ...s, textoRecap: "" }));
   }, []);
@@ -613,6 +641,7 @@ export function useGameSession() {
     setVolume,
     dispensarQuestNotificacao: () => setEstado(s => ({ ...s, questNotificacao: null })),
     limparRecap,
+    dismissLevelUp,
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
     // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)
     audioTocando,

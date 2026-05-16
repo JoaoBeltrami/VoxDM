@@ -426,6 +426,10 @@ class WorkingMemory:
         self.player_hp_max = getattr(state, "hp_max", self.player_hp_max)
         self.player_inventory = list(getattr(state, "inventory", self.player_inventory))
         self.player_conditions = list(getattr(state, "conditions", self.player_conditions))
+        # Nível persistido — restaura para refletir progressão acumulada
+        persisted_level = getattr(state, "player_level", self.player_level)
+        if persisted_level and persisted_level > self.player_level:
+            self.player_level = persisted_level
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona uma fala ao diálogo recente, mantendo a janela deslizante."""

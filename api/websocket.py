@@ -979,10 +979,33 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # iniciativa, trust, consequências, avanço de rodada, fim de combate
             # e contador de tensão — todos na ORDEM crítica (sync antes do
             # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
-            from api.turn_pipeline import aplicar_pos_turno
+            from api.turn_pipeline import aplicar_pos_turno, aplicar_xp_e_detectar_level_up
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
+
+            # XP e progressão — extrai [XP: +N motivo] e aplica level up se cruzou
+            # o threshold da tabela SRD. Envia mensagem WS "level_up" antes do
+            # payload `fim` pra que o frontend renderize o modal sobre a bolha.
+            try:
+                level_up_resumo = aplicar_xp_e_detectar_level_up(
+                    sessao.working_mem, resposta_limpa
+                )
+                if level_up_resumo:
+                    await websocket.send_text(
+                        MensagemWS(
+                            tipo="level_up",
+                            level_up=level_up_resumo,  # dict completo do resumo
+                        ).model_dump_json()
+                    )
+                    log.info(
+                        "level_up_emitido",
+                        session_id=session_id,
+                        nivel_antigo=level_up_resumo.get("nivel_antigo"),
+                        nivel_novo=level_up_resumo.get("nivel_novo"),
+                    )
+            except Exception as e:
+                log.warning("level_up_falhou", session_id=session_id, erro=str(e)[:200])
 
             # Dispara imagem de cena se a localização mudou ou se entrou em combate.
             # Fire-and-forget via asyncio.create_task — não bloqueia o turno.

@@ -54,6 +54,11 @@ _RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]",
 # Efeitos válidos: NPC morto, aliança formada, local destruído, reputação alterada.
 _RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Feature progressão: LLM emite [XP: +N motivo] em vitórias, descobertas, quests.
+# Ex: "[XP: +50 derrotou goblin patrulheiro]", "[XP: +200 quest concluída]"
+# Backend acumula em wm.xp e detecta level up via tabela SRD.
+_RE_XP = re.compile(r"\[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
@@ -320,3 +325,39 @@ def aplicar_pos_turno(
             log.info("consequencia_registrada_llm", texto=consequencia[:80])
 
     return mudancas_trust
+
+
+def aplicar_xp_e_detectar_level_up(
+    working_mem: WorkingMemory, resposta_completa: str
+) -> dict[str, int | list[str]] | None:
+    """Extrai [XP: +N motivo] da resposta do LLM e aplica progressão.
+
+    Separado de `aplicar_pos_turno` porque o caller precisa do resumo do level
+    up pra emitir como mensagem WebSocket dedicada (modal no frontend).
+
+    Returns:
+        Dict resumo do level up se o jogador subiu de nível, ou None se só
+        acumulou XP sem progredir. O resumo vem direto de `aplicar_level_up`.
+    """
+    from engine.progression import calcular_novo_nivel, aplicar_level_up
+
+    ganhos: list[tuple[int, str]] = []
+    for m in _RE_XP.finditer(resposta_completa):
+        try:
+            qtd = int(m.group(1))
+        except ValueError:
+            continue
+        motivo = m.group(2).strip() or "ganho de experiência"
+        ganhos.append((qtd, motivo))
+
+    if not ganhos:
+        return None
+
+    total = sum(q for q, _ in ganhos)
+    working_mem.xp += total
+    log.info("xp_ganho", total=total, ganhos=ganhos, xp_novo=working_mem.xp)
+
+    novo_nivel = calcular_novo_nivel(working_mem.xp, working_mem.player_level)
+    if novo_nivel > working_mem.player_level:
+        return aplicar_level_up(working_mem, novo_nivel)
+    return None

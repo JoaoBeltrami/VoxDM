@@ -41,7 +41,7 @@ _RE_Q = re.compile(
 # Inclui "Rolagem visível" (Fase 5.7) — o número é narrado pelo LLM,
 # o marcador é capturado pelo websocket e enviado como "dado_rolado".
 _RE_MESTRE_VET = re.compile(
-    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO|CONSEQUÊNCIA)(?::[^\]]*)?\]"
+    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO|CONSEQUÊNCIA|XP)(?::[^\]]*)?\]"
     r"|"
     r"\[Rolagem\s+visível:[^\]]*\]",
     re.IGNORECASE,

@@ -297,6 +297,7 @@ async def iniciar_sessao(
             char_state = await store.carregar(config.session_id) or CharacterState(session_id=config.session_id)
             char_state.owner_email = owner.email
             char_state.spells_conhecidas = sessao.spells_conhecidas
+            char_state.player_level = sessao.working_mem.player_level
             await store.salvar(char_state)
         except Exception as e:
             log.warning("spells_conhecidas_save_falhou", session_id=config.session_id, erro=str(e))
@@ -520,6 +521,7 @@ async def salvar_character_state(
         inventory=list(wm.player_inventory),
         conditions=list(wm.player_conditions),
         spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no PUT
+        player_level=wm.player_level,  # preserva progressão
     ))
     log.info("character_state_salvo_via_put", session_id=session_id)
 
@@ -554,6 +556,7 @@ async def encerrar_sessao(
             inventory=list(wm.player_inventory),
             conditions=list(wm.player_conditions),
             spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no encerramento
+            player_level=wm.player_level,  # preserva progressão
         ))
         log.info("character_state_salvo_no_encerramento", session_id=session_id)
     except Exception as e:

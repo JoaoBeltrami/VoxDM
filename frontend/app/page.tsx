@@ -240,6 +240,7 @@ export default function Home() {
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap,
+    levelUp, dismissLevelUp,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
@@ -442,6 +443,13 @@ export default function Home() {
     const t = setTimeout(limparRecap, 30_000);
     return () => clearTimeout(t);
   }, [textoRecap, limparRecap]);
+
+  // Modal de level up — auto-dismiss em 12s se o jogador não fechar antes.
+  useEffect(() => {
+    if (!levelUp) return;
+    const t = setTimeout(dismissLevelUp, 12_000);
+    return () => clearTimeout(t);
+  }, [levelUp, dismissLevelUp]);
 
   // Parseia a última fala do mestre para extrair rolagens pedidas
   useEffect(() => {
@@ -803,6 +811,74 @@ export default function Home() {
               >
                 {textoRecap}
               </p>
+            </div>
+          )}
+
+          {/* Modal de level up — overlay full-screen com resumo dos ganhos.
+              Aparece quando o backend emite tipo="level_up" e fica até auto-dismiss
+              de 12s ou clique no botão. Pulso visual de progressão. */}
+          {levelUp && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-[fade-in_300ms_ease-out]"
+              onClick={dismissLevelUp}
+            >
+              <div
+                className="relative max-w-md mx-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/95 to-zinc-950/95 px-8 py-10 shadow-2xl animate-[crit-pop_700ms_cubic-bezier(0.16,1,0.3,1)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-400/80">
+                  Marco
+                </p>
+                <h2
+                  className="mt-2 text-center text-3xl font-bold text-amber-100"
+                  style={{ fontFamily: '"Cinzel", serif' }}
+                >
+                  Nível {levelUp.nivel_novo}
+                </h2>
+                <p className="mt-1 text-center text-sm text-amber-300/70">
+                  era nível {levelUp.nivel_antigo}
+                </p>
+
+                <div className="mt-6 space-y-3 text-sm">
+                  <div className="flex items-center justify-between rounded-lg bg-zinc-900/50 px-4 py-2">
+                    <span className="text-zinc-300">❤️ HP máximo</span>
+                    <span className="font-mono text-emerald-300">
+                      +{levelUp.hp_ganho} <span className="text-zinc-500">(→ {levelUp.hp_max_novo})</span>
+                    </span>
+                  </div>
+                  {levelUp.slots_novos.length > 0 && (
+                    <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
+                      <p className="text-zinc-300">✨ Spell slots</p>
+                      <ul className="mt-1 ml-4 text-violet-300 text-xs list-disc">
+                        {levelUp.slots_novos.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {levelUp.features_novas.length > 0 && (
+                    <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
+                      <p className="text-zinc-300">⚔️ Novas features</p>
+                      <ul className="mt-1 ml-4 text-amber-300 text-xs list-disc">
+                        {levelUp.features_novas.map((f, i) => (
+                          <li key={i}>{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <p className="text-center text-xs text-zinc-500 italic">
+                    Features renovadas. Dado de vida restaurado.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={dismissLevelUp}
+                  className="mt-6 w-full rounded-lg bg-amber-700/80 hover:bg-amber-600/80 px-4 py-2 text-sm font-medium text-amber-50 transition-colors"
+                >
+                  Continuar a jornada
+                </button>
+              </div>
             </div>
           )}
 

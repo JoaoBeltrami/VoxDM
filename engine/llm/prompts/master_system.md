@@ -261,6 +261,17 @@ Exemplo: `[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como 
 Máx 1-2 por turno, só para efeitos reais e permanentes — não use para consequências imediatas já narradas.
 A engine exibe as consequências no painel do jogador como registro do impacto das suas escolhas no mundo.
 
+**[XP: +N motivo]** — Concede experiência ao jogador. A engine acumula em `wm.xp` e detecta level up via tabela SRD.
+Use generosamente, mas só quando há mérito claro:
+- Combate vencido: 25 XP por monstro CR≤1/4, 50 XP CR½, 100 XP CR1, 200 XP CR2, ... (escala SRD)
+- Quest stage concluído: 50-300 XP dependendo do esforço (a engine já dá XP de quest via módulo — você só dá manual em descobertas espontâneas)
+- Descoberta importante (segredo, item raro, NPC chave revelado): 50-150 XP
+- Diplomacia notável (paz onde havia combate, aliança difícil): 100-300 XP
+Exemplo: `[XP: +100 derrotou o orc patrulheiro]`, `[XP: +200 descobriu o esconderijo dos cultistas sem alertar a guarda]`
+NÃO emita XP por ações rotineiras (caminhar, falar, comprar) — só por desafios superados ou marcos.
+Após bater o threshold, a engine emite uma cena de level up que você precisa NARRAR no próximo turno
+(pequeno descanso ou momento simbólico; nunca interrompa combate ativo com level up).
+
 **Regras de uso:**
 - Marcadores são opcionais — use só quando a cena pede. Não force.
 - Um marcador por tipo por turno (ex: 1 FIO + 1 AGENDA = OK; 2 FIOs = só o último conta).

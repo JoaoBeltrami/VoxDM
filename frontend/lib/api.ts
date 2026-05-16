@@ -46,7 +46,7 @@ export interface CharacterStateClient {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up";
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
@@ -95,6 +95,15 @@ export interface MensagemWS {
   // Dado rolado pelo mestre (Fase 5.7) — enviado em tipo="dado_rolado"
   dado_tipo?: string;      // "d4", "d6", "d8", "d10", "d12", "d20", "d100"
   dado_resultado?: number; // valor do dado (1-max)
+  // Feature progressão — enviado em tipo="level_up" com o resumo do level up.
+  level_up?: {
+    nivel_antigo: number;
+    nivel_novo: number;
+    hp_ganho: number;
+    hp_max_novo: number;
+    slots_novos: string[];
+    features_novas: string[];
+  };
 }
 
 /** Token na barra de iniciativa — espelha api/models/schemas.TokenIniciativaPayload. */

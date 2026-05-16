@@ -210,6 +210,9 @@ class MensagemWS(BaseModel):
     # Class features — enviadas no "fim" para sincronizar os chips na ficha.
     # Mapa feature_id → {nome, disponivel, usos_max, usos_atual, restaura}.
     class_features: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Progressão: payload do tipo="level_up" carrega o resumo do level up
+    # ({nivel_antigo, nivel_novo, hp_ganho, hp_max_novo, slots_novos, features_novas}).
+    level_up: dict[str, Any] | None = None
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"
