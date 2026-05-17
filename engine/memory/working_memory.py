@@ -458,6 +458,20 @@ class WorkingMemory:
         persisted_level = getattr(state, "player_level", self.player_level)
         if persisted_level and persisted_level > self.player_level:
             self.player_level = persisted_level
+        # Class features — restaura usos_atual do SQLite sobre a estrutura inicializada
+        # pela inicializar_features_classe(). Só sobrescreve features que já existem
+        # na WM (evita fantasmas de feature se a classe mudou entre sessões).
+        persisted_features: dict[str, dict] = getattr(state, "class_features", {})
+        for fid, saved in persisted_features.items():
+            if fid in self.class_features:
+                wm_feat = self.class_features[fid]
+                wm_feat["usos_atual"] = min(
+                    saved.get("usos_atual", wm_feat.get("usos_atual", 0)),
+                    wm_feat.get("usos_max", 1),
+                )
+                # disponivel = True sse usos_atual > 0 (ou feature sem usos discretos)
+                if wm_feat.get("usos_max", 0) > 0:
+                    wm_feat["disponivel"] = wm_feat["usos_atual"] > 0
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona uma fala ao diálogo recente, mantendo a janela deslizante."""

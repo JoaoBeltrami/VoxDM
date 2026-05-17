@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS character_state (
     conditions             TEXT    NOT NULL DEFAULT '[]',
     spells_conhecidas      TEXT    NOT NULL DEFAULT '[]',
     player_level           INTEGER NOT NULL DEFAULT 3,
+    class_features         TEXT    NOT NULL DEFAULT '{}',
     updated_at             REAL    NOT NULL DEFAULT (unixepoch())
 )
 """
@@ -81,6 +82,9 @@ _MIGRATE_SPELLS = "ALTER TABLE character_state ADD COLUMN spells_conhecidas TEXT
 
 # Migração idempotente — adiciona coluna player_level (Feature progressão).
 _MIGRATE_PLAYER_LEVEL = "ALTER TABLE character_state ADD COLUMN player_level INTEGER NOT NULL DEFAULT 3"
+
+# Migração idempotente — adiciona coluna class_features (Fase 6 + persistência).
+_MIGRATE_CLASS_FEATURES = "ALTER TABLE character_state ADD COLUMN class_features TEXT NOT NULL DEFAULT '{}'"
 
 
 @dataclass
@@ -109,6 +113,11 @@ class CharacterState:
     # Nível do personagem — começa em 3 (decisão de projeto), sobe via [XP: +N]
     # detectado em api/turn_pipeline e processado por engine/progression.
     player_level: int = 3
+    # Features de classe (Action Surge, Rage, Sneak Attack, etc.) com usos_atual.
+    # Persistimos para que o estado de recursos seja restaurado entre sessões.
+    # Formato: {"action-surge": {"nome": "Action Surge", "disponivel": true,
+    #            "usos_max": 1, "usos_atual": 1, "restaura": "curto"}}
+    class_features: dict[str, dict] = field(default_factory=dict)
 
 
 class CharacterStore:
@@ -127,6 +136,7 @@ class CharacterStore:
             await _aplicar_migracao_idempotente(conn, _MIGRATE_OWNER_EMAIL, "owner_email")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_SPELLS, "spells_conhecidas")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_PLAYER_LEVEL, "player_level")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_CLASS_FEATURES, "class_features")
             await conn.commit()
             yield conn
 
@@ -141,8 +151,9 @@ class CharacterStore:
                     (session_id, owner_email, spell_slots, hit_dice_current, hit_dice_max,
                      hit_dice_type, death_saves_successes, death_saves_failures,
                      death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
-                     inventory, conditions, spells_conhecidas, player_level, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                     inventory, conditions, spells_conhecidas, player_level,
+                     class_features, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
                     owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
@@ -161,6 +172,7 @@ class CharacterStore:
                     conditions=excluded.conditions,
                     spells_conhecidas=excluded.spells_conhecidas,
                     player_level=excluded.player_level,
+                    class_features=excluded.class_features,
                     updated_at=unixepoch()
                 """,
                 (
@@ -182,6 +194,7 @@ class CharacterStore:
                     json.dumps(state.conditions),
                     json.dumps(state.spells_conhecidas),
                     state.player_level,
+                    json.dumps(state.class_features),
                 ),
             )
             await conn.commit()
@@ -221,6 +234,7 @@ class CharacterStore:
             conditions=json.loads(row["conditions"]),
             spells_conhecidas=json.loads(row["spells_conhecidas"] or "[]"),
             player_level=int(row["player_level"] or 3),
+            class_features=json.loads(row["class_features"] or "{}"),
         )
 
     async def deletar(self, session_id: str) -> None:
