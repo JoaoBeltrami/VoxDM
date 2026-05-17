@@ -888,14 +888,24 @@ class WorkingMemory:
             linhas.append(f"COMBATE ATIVO — {rodada_str} — {ini_str}")
             if self.inimigos_combate:
                 partes_ini = []
-                for dados in self.inimigos_combate.values():
+                for npc_id, dados in self.inimigos_combate.items():
                     desc = dados["nome"]
                     if dados.get("estado") and dados["estado"] != "intacto":
                         desc += f" ({dados['estado']})"
                     if dados.get("hp_rel"):
                         desc += f" [{dados['hp_rel']}]"
+                    # Injeta distância tática se disponível — LLM usa pra decidir
+                    # se ataque corpo-a-corpo é possível vs. deve narrar movimento.
+                    pos = self.posicoes_combate.get(npc_id)
+                    if pos:
+                        cob = " cobertura" if pos.get("cobertura") else ""
+                        desc += f" {pos['distancia_ft']}ft{cob}"
                     partes_ini.append(desc)
                 linhas.append(f"Inimigos: {', '.join(partes_ini)}")
+            if self.movimento_restante_ft < self.movimento_total_ft:
+                linhas.append(
+                    f"Movimento restante: {self.movimento_restante_ft}/{self.movimento_total_ft}ft"
+                )
         if self.save_profs:
             _save_mods = {
                 "FOR": self.mod_for, "DES": self.mod_des, "CON": self.mod_con,
@@ -935,6 +945,20 @@ class WorkingMemory:
 
         if self.log_consequencias:
             linhas.append(f"\nCONSEQUÊNCIAS: {'; '.join(self.log_consequencias)}")
+
+        # Aliados ativos — LLM precisa saber que existem para narrá-los agindo,
+        # sofrendo dano e comunicando com o jogador. Sem esta linha o mestre
+        # "esquece" o companion entre turnos.
+        if self.companions:
+            partes_comp = []
+            for c in self.companions.values():
+                morto = c.get("hp", 1) <= 0
+                status = "morto" if morto else f"HP {c.get('hp')}/{c.get('hp_max')}"
+                partes_comp.append(
+                    f"{c['nome']} ({c['tipo']}, {status}, CA {c.get('ca')}, "
+                    f"atq {c.get('atq')}, {c.get('dano')})"
+                )
+            linhas.append(f"\nAliados: {'; '.join(partes_comp)}")
 
         if not self.em_combate and self.turnos_sem_tensao >= 5:
             linhas.append(
