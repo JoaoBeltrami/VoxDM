@@ -372,6 +372,16 @@ export function useGameSession() {
         const inimigosNoPayload =
           msg.inimigos_combate !== undefined && msg.inimigos_combate !== null;
         const emCombateAtual = msg.em_combate ?? false;
+        // Bug UX #5: ao re-entrar em combate, o primeiro turno emite
+        // inimigos_combate={} (ainda vazio, orc não foi registrado). A lógica
+        // anterior substituía por {} → CombatTracker apagava e reconstruía.
+        // Fix: só substituímos por dict não-vazio OU quando combate terminou.
+        // Se em combate mas payload chegou vazio, preservamos snapshot anterior.
+        const deveAtualizarInimigos =
+          inimigosNoPayload && (
+            !emCombateAtual ||                                         // combate acabou → limpar
+            Object.keys(msg.inimigos_combate ?? {}).length > 0        // tem inimigos → atualizar
+          );
 
         const rpgUpdate = {
           spellSlots: Object.keys(spellSlotsAtual).length > 0 ? spellSlotsAtual : undefined,
@@ -384,7 +394,7 @@ export function useGameSession() {
           deathSavesStable: msg.death_saves_stable,
           emCombate: emCombateAtual,
           inimigos: (
-            inimigosNoPayload
+            deveAtualizarInimigos
               ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)
               : null  // null = "preserve estado anterior"
           ) as Record<string, { nome: string; estado: string; hp_rel?: string }> | null,
@@ -410,7 +420,13 @@ export function useGameSession() {
           ? (msg.posicoes_combate as Record<string, { distancia_ft: number; cobertura: boolean }>)
           : null;
 
-        // Detectar condições mencionadas no texto do mestre
+        // Detectar condições mencionadas no texto do mestre.
+        // Bug UX #2: acumulávamos condições de todos os turnos sem expirar —
+        // "Envenenado" ficava na ficha mesmo após o mestre narrar a cura.
+        // Fix: substituímos por only-this-turn detection. Condições confirmadas
+        // (via sync_conditions) estão em player_conditions no backend e voltam
+        // pelo payload; condicoesDetectadas são apenas "aguardando confirmação"
+        // e devem refletir só o turno atual.
         const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
 
         // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx
@@ -456,9 +472,9 @@ export function useGameSession() {
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
-            condicoesDetectadas: novasCondicoes.length
-              ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
-              : s.condicoesDetectadas,
+            // Substituir (não acumular) — condições do turno anterior são stale.
+            // Se o mestre não menciona mais "envenenado", a detecção some sozinha.
+            condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
             historico: [
               ...s.historico,
@@ -504,9 +520,9 @@ export function useGameSession() {
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
-            condicoesDetectadas: novasCondicoes.length
-              ? Array.from(new Set([...s.condicoesDetectadas, ...novasCondicoes]))
-              : s.condicoesDetectadas,
+            // Substituir (não acumular) — condições do turno anterior são stale.
+            // Se o mestre não menciona mais "envenenado", a detecção some sozinha.
+            condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
             historico: [
               ...s.historico,

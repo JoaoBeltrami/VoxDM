@@ -890,11 +890,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         # colchetes de marcador estão FECHADOS. O último guard impede
                         # que `[FIO: drevamor descobriu` chegue ao TTS por ainda estar
                         # streamando — o `]` pode vir nos próximos tokens.
-                        if (
+                        # Flush normal: pontuação final + colchetes balanceados + ≥4 palavras.
+                        # Flush forçado (bug UX #3): buffer > 450 chars sem pontuação —
+                        # Edge TTS pode timeout ou engolir silenciosamente sentenças longas.
+                        # Só força quando colchetes estão balanceados (marcador não aberto).
+                        _balanceado = buffer_sentenca.count("[") == buffer_sentenca.count("]")
+                        _flush_normal = (
                             buffer_sentenca.rstrip()[-1:] in ".!?"
                             and len(buffer_sentenca.split()) >= 4
-                            and buffer_sentenca.count("[") == buffer_sentenca.count("]")
-                        ):
+                            and _balanceado
+                        )
+                        _flush_forcado = len(buffer_sentenca) > 450 and _balanceado
+                        if _flush_normal or _flush_forcado:
                             # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
                             # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
                             texto_tts = strip_marcadores(buffer_sentenca).strip()

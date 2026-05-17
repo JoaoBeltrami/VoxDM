@@ -129,7 +129,13 @@ def aplicar_level_up(wm: WorkingMemory, novo_nivel: int) -> dict[str, int | list
 
     nivel_antigo = wm.player_level
     if novo_nivel <= nivel_antigo:
-        return {"nivel_antigo": nivel_antigo, "nivel_novo": nivel_antigo, "hp_ganho": 0}
+        # Inclui todos os campos esperados pelo frontend para evitar .map() em undefined
+        # (bug UX #1 defensivo — este caminho só é atingido se chamado diretamente).
+        return {
+            "nivel_antigo": nivel_antigo, "nivel_novo": nivel_antigo,
+            "hp_ganho": 0, "hp_max_novo": wm.player_hp_max,
+            "slots_novos": [], "features_novas": [],
+        }
 
     niveis_ganhos = novo_nivel - nivel_antigo
 

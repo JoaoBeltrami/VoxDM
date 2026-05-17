@@ -819,10 +819,19 @@ export default function Home() {
               não foi limpo — não duplica o item já gravado no histórico. */}
           {textoRecap && (
             <div className="mb-4 rounded-xl border border-amber-800/30 bg-amber-950/20 px-5 py-4 animate-[fade-in_600ms_ease-out]">
-              <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600/80">
-                <span>📜</span>
-                <span>Anteriormente…</span>
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600/80">
+                  <span>📜</span>
+                  <span>Anteriormente…</span>
+                </p>
+                {/* Bug UX #4: sem botão de fechar, recap bloqueava a leitura e
+                    não podia ser dispensado antes dos 30s automáticos. */}
+                <button
+                  onClick={limparRecap}
+                  title="Dispensar recap"
+                  className="text-amber-700/60 hover:text-amber-400 transition text-base leading-none"
+                >×</button>
+              </div>
               <p
                 className="text-sm leading-relaxed italic text-amber-200/80"
                 style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}
