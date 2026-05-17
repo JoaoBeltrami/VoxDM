@@ -780,6 +780,9 @@ export default function Home() {
           initDeathSavesStable={deathSavesStable}
           rolagens={rolagens}
           classFeatures={classFeatures}
+          onUsarFeature={(fid, usos) =>
+            sincronizarEstado("sync_class_feature", { feature_id: fid, usos_atual: usos })
+          }
           knownSpells={personagem.player_spells ?? []}
           emMercado={emMercado}
           onVenderItem={(item) => enviarComando(`Vendo ${item}.`)}

@@ -36,6 +36,9 @@ interface Props {
   rolagens?: RolagemLog[];
   // Class features — chips de recursos de classe (Fase 6), sincronizados via WS
   classFeatures?: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
+  // Callback ao clicar em "usar" feature — sincroniza usos_atual com o backend.
+  // Recebe o feature_id e o novo usos_atual (já decrementado).
+  onUsarFeature?: (featureId: string, novosUsos: number) => void;
   // Magias conhecidas pelo personagem (nomes PT-BR) — exibidas agrupadas por nível
   knownSpells?: string[];
   // Feature economia: true quando jogador está em loja/mercado/taverna-vendedor.
@@ -154,6 +157,7 @@ export function CharacterSheet({
   initDeathSavesSuccesses = 0, initDeathSavesFailures = 0, initDeathSavesStable = false,
   rolagens = [],
   classFeatures = {},
+  onUsarFeature,
   knownSpells = [],
   emMercado = false,
   onVenderItem,
@@ -1015,27 +1019,46 @@ export function CharacterSheet({
                 </span>
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {Object.entries(classFeatures).map(([fid, feat]) => (
-                  <div
-                    key={fid}
-                    title={feat.restaura ? `Restaura: descanso ${feat.restaura}` : undefined}
-                    className={`
-                      flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium
-                      transition-all
-                      ${feat.disponivel
-                        ? "border-violet-700/50 bg-violet-900/30 text-violet-200"
-                        : "border-zinc-700/30 bg-zinc-800/50 text-zinc-500 line-through opacity-60"
-                      }
-                    `}
-                  >
-                    <span>{feat.nome}</span>
-                    {feat.usos_max > 0 && (
-                      <span className="text-[10px] opacity-70">
-                        {feat.usos_atual}/{feat.usos_max}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(classFeatures).map(([fid, feat]) => {
+                  const podeCustar = onUsarFeature && feat.disponivel && feat.usos_max > 0;
+                  const podeRestaurar = onUsarFeature && !feat.disponivel && feat.usos_max > 0;
+                  return (
+                    <div
+                      key={fid}
+                      title={feat.restaura ? `Restaura: descanso ${feat.restaura}` : undefined}
+                      className={`
+                        flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium
+                        transition-all
+                        ${feat.disponivel
+                          ? "border-violet-700/50 bg-violet-900/30 text-violet-200"
+                          : "border-zinc-700/30 bg-zinc-800/50 text-zinc-500 line-through opacity-60"
+                        }
+                      `}
+                    >
+                      <span>{feat.nome}</span>
+                      {feat.usos_max > 0 && (
+                        <span className="text-[10px] opacity-70">
+                          {feat.usos_atual}/{feat.usos_max}
+                        </span>
+                      )}
+                      {/* Botão "–" gasta 1 uso; "+" restaura 1 uso manualmente */}
+                      {podeCustar && (
+                        <button
+                          onClick={() => onUsarFeature!(fid, feat.usos_atual - 1)}
+                          title="Gastar 1 uso"
+                          className="ml-0.5 rounded bg-violet-800/40 px-1 text-[10px] hover:bg-violet-600/60 transition"
+                        >–</button>
+                      )}
+                      {podeRestaurar && (
+                        <button
+                          onClick={() => onUsarFeature!(fid, feat.usos_atual + 1)}
+                          title="Restaurar 1 uso"
+                          className="ml-0.5 rounded bg-zinc-700/50 px-1 text-[10px] hover:bg-zinc-600/60 transition"
+                        >+</button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -597,7 +597,7 @@ export function useGameSession() {
   const sincronizarEstado = useCallback((
     tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
           "sync_spell_slots" | "sync_hit_dice" | "sync_death_saves" |
-          "sync_gold" | "sync_xp" | "sync_inspiration",
+          "sync_gold" | "sync_xp" | "sync_inspiration" | "sync_class_feature",
     payload: Record<string, unknown>
   ) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;

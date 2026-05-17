@@ -702,6 +702,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 sessao.working_mem.inspiration = bool(dados.get("inspiration", False))
                 continue
 
+            # Sync de class features — frontend edita usos_atual manualmente
+            # (ex: clicar "gastar Action Surge" fora de turno de LLM).
+            # Payload: {feature_id: str, usos_atual: int}
+            # Validação: feature deve existir, usos_atual clampado [0, usos_max].
+            if tipo_msg == "sync_class_feature":
+                fid = dados.get("feature_id")
+                usos = dados.get("usos_atual")
+                if isinstance(fid, str) and isinstance(usos, int):
+                    feat = sessao.working_mem.class_features.get(fid)
+                    if feat is not None:
+                        usos_max = feat.get("usos_max", 1)
+                        feat["usos_atual"] = max(0, min(usos_max, usos))
+                        feat["disponivel"] = feat["usos_atual"] > 0
+                        log.info("class_feature_sincronizada", session_id=session_id,
+                                 feature=fid, usos_atual=feat["usos_atual"])
+                continue
+
             if not texto_jogador:
                 continue
 
