@@ -1,6 +1,12 @@
 "use client";
 
-export type OrbState = "idle" | "ouvindo" | "falando";
+/** Estados do Orb:
+ *  idle       — esperando input do jogador
+ *  ouvindo    — MediaRecorder ativo (gravando voz)
+ *  processando — texto enviado, aguardando resposta do LLM (gap silencioso)
+ *  falando    — TTS ativo (mestre narrando)
+ */
+export type OrbState = "idle" | "ouvindo" | "processando" | "falando";
 
 interface Props {
   estado: OrbState;
@@ -18,12 +24,16 @@ export function VoxOrb({ estado, tamanho = 96 }: Props) {
       className="relative flex items-center justify-center"
       style={{ width: tamanho * 2.2, height: tamanho * 2.2 }}
     >
-      {/* Anéis de ripple — ouvindo: violeta-claro mais rápido / falando: violeta forte expansivo */}
+      {/* Anéis de ripple — ouvindo: violeta-claro / processando: âmbar lento / falando: violeta expansivo */}
       {estado === "ouvindo" && (
         <>
           <span className="absolute inset-0 rounded-full border border-violet-400/40 animate-ripple" />
           <span className="absolute inset-0 rounded-full border border-violet-400/25 animate-ripple-delay" />
         </>
+      )}
+      {estado === "processando" && (
+        /* Anel âmbar pulsante lento — "mestre pensando" */
+        <span className="absolute inset-0 rounded-full border border-amber-400/35 animate-ripple-delay" />
       )}
       {estado === "falando" && (
         <>
@@ -36,16 +46,20 @@ export function VoxOrb({ estado, tamanho = 96 }: Props) {
       <div
         className="absolute rounded-full transition-all duration-700"
         style={{
-          width:  estado === "idle"    ? tamanho * 1.1
-                : estado === "ouvindo" ? tamanho * 1.4
+          width:  estado === "idle"         ? tamanho * 1.1
+                : estado === "ouvindo"      ? tamanho * 1.4
+                : estado === "processando"  ? tamanho * 1.25
                 : tamanho * 1.6,
-          height: estado === "idle"    ? tamanho * 1.1
-                : estado === "ouvindo" ? tamanho * 1.4
+          height: estado === "idle"         ? tamanho * 1.1
+                : estado === "ouvindo"      ? tamanho * 1.4
+                : estado === "processando"  ? tamanho * 1.25
                 : tamanho * 1.6,
           background: estado === "idle"
             ? "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)"
             : estado === "ouvindo"
             ? "radial-gradient(circle, rgba(167,139,250,0.28) 0%, transparent 70%)"
+            : estado === "processando"
+            ? "radial-gradient(circle, rgba(251,191,36,0.15) 0%, transparent 70%)"
             : "radial-gradient(circle, rgba(196,181,253,0.22) 0%, transparent 70%)",
           filter: "blur(8px)",
         }}
@@ -57,8 +71,9 @@ export function VoxOrb({ estado, tamanho = 96 }: Props) {
         height={tamanho}
         viewBox={`${-half} ${-half} ${tamanho} ${tamanho}`}
         className={`relative z-10 transition-colors duration-500 ${
-          estado === "idle"    ? "animate-breathe text-violet-400" :
-          estado === "ouvindo" ? "animate-listen  text-violet-300" :
+          estado === "idle"        ? "animate-breathe text-violet-400" :
+          estado === "ouvindo"     ? "animate-listen  text-violet-300" :
+          estado === "processando" ? "animate-breathe text-amber-400"  :
           "animate-speak  text-violet-200"
         }`}
       >

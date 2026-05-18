@@ -249,6 +249,7 @@ export default function Home() {
     questNotificacao, dispensarQuestNotificacao,
     rolagens, registrarRolagem,
     audioTocando, audioDuracao,
+    isProcessing, isSpeaking,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -492,9 +493,12 @@ export default function Home() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [historico, respostaAtual]);
 
+  // Ordem de prioridade: falando > ouvindo > processando > idle
+  // "processando" = texto enviado, LLM ainda não respondeu (gap ~1-6s)
   const orbEstado: OrbState =
-    respostaAtual ? "falando" :
-    ouvindo       ? "ouvindo" :
+    isSpeaking    ? "falando"     :
+    ouvindo       ? "ouvindo"     :
+    isProcessing  ? "processando" :
     "idle";
 
   const handleSalvarVoz = useCallback((voz: string) => {
@@ -913,7 +917,7 @@ export default function Home() {
             historico={historico}
             respostaAtual={textoSincronizado}
             playerName={playerName}
-            mestrePensando={carregando}
+            mestrePensando={isProcessing}
           />
           <div ref={bottomRef} />
         </div>

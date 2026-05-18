@@ -230,6 +230,9 @@ export function useGameSession() {
   // Fase 5.6: estado de áudio exposto para useSyncTextoVoz (karaokê)
   const [audioTocando, setAudioTocando] = useState(false);
   const [audioDuracao, setAudioDuracao] = useState(0);
+  // Item 1: isProcessing = texto enviado mas tipo="fim" ainda não chegou.
+  // Representa o gap "LLM pensando" antes do primeiro token.
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const { tocarChunk, pararTudo, setVolume } = useAudio({
     onDuracao: setAudioDuracao,
@@ -352,6 +355,7 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "fim") {
+        setIsProcessing(false);
         const turno = turnoAtualRef.current;
         const textoFinal = textoAtualRef.current;
         textoAtualRef.current = "";
@@ -605,6 +609,7 @@ export function useGameSession() {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     turnoAtualRef.current = { jogador: texto, id: Date.now() };
     textoAtualRef.current = "";
+    setIsProcessing(true);
     // Limpa o recap quando o jogador fala pela primeira vez — imersão não quebra
     setEstado(s => s.textoRecap ? { ...s, textoRecap: "" } : s);
     wsRef.current.send(JSON.stringify({ texto }));
@@ -697,5 +702,8 @@ export function useGameSession() {
     // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)
     audioTocando,
     audioDuracao,
+    // Item 1 — indicadores de estado do sistema
+    isProcessing,
+    isSpeaking: audioTocando,
   };
 }
