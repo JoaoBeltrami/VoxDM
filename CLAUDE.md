@@ -85,6 +85,17 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
 
 > Identificados em teste manual (18/05). Nenhum quebra o jogo, todos degradam UX. Prioridade decrescente.
 
+**DESIGN — Personagem está atrelado à sessão (comportamento esperado)**
+- Um personagem por sessão — não é possível trocar personagem mid-session.
+- Para usar outro personagem: encerrar sessão atual (DELETE) e criar nova com novo PersonagemConfig.
+- Não é bug. Comportamento intencional. Documentar no onboarding futuro.
+
+**FEAT — Cantrips de classe não estão na lista de seleção de magias**
+- `engine/magic/spell_list.py` tem as 246 magias mas cantrips das classes ficaram de fora.
+- Workaround atual: player pode mencionar a cantrip na fala e o LLM resolve por contexto.
+- Fix: adicionar cantrips por classe em `spell_list.py` + `frontend/lib/spells.ts`.
+- Prioridade: baixa. Implementar após singleplayer estar polido.
+
 **COMBAT-1 — Initiative bar não atualiza quando morte narrada fora do vocab do regex**
 - **Sintoma:** Inimigo "vivo" na barra de iniciativa após morte narrada com palavras fora de `_RE_INIMIGO_MORTO` (sucumbe, perece, se dissolve, cai sem vida, etc.)
 - **Arquivo:** `api/turn_pipeline.py` — `_RE_INIMIGO_MORTO` linha ~108
