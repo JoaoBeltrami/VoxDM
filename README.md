@@ -145,7 +145,7 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | 5.7 | Dados visuais com roll behind the screen | 🟡 planejado |
 | 5.8 | Imagem de cena gerada por IA (Pollinations.ai) | 🟡 planejado |
 
-**Cobertura de testes:** 599/599 passam.
+**Cobertura de testes:** 609/609 passam.
 
 ---
 
@@ -260,7 +260,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  599 testes (pytest)
+└── tests/                  609 testes (pytest)
 ```
 
 ---
@@ -268,7 +268,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 599 testes
+uv run pytest tests/ -q   # 609 testes
 make ingest
 make run-api
 make debug

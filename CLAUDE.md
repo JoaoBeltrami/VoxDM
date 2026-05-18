@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + docs atualizados
+> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + cobertura de testes companions/posições
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 599/599 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 609/609 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -76,6 +76,8 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **UX #3 — Buffer TTS sem teto**: sentenças longas (>450 chars) sem pontuação travavam indefinidamente no buffer. Fix: `_flush_forcado` quando buffer excede limite com colchetes balanceados.
   - **UX #1 — early-return de `aplicar_level_up` incompleto**: caminho sem level up real retornava dict sem `slots_novos`/`features_novas` → `.map()` quebraria no modal. Fix: todos os campos incluídos no early-return defensivo.
   - **599/599 testes passam, tsc clean.**
+
+- **Cobertura de testes para companions/posições em para_texto() (18/05)**: ✅ CONCLUÍDO. `test_working_memory.py` ganhou 10 novos testes validando que `companions` e `posicoes_combate` aparecem corretamente no output de `para_texto()` — campos já implementados em `e467ed6` mas sem cobertura de teste. Total: 609/609 testes passam, tsc clean.
 
 ### Fases planejadas (não implementadas)
 
@@ -830,7 +832,7 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 | UX #3 buffer TTS sem teto | `websocket.py` | `_flush_forcado` quando `len(buffer) > 450` e colchetes balanceados |
 | UX #1 level_up early-return | `progression.py` | Early-return inclui `hp_max_novo`, `slots_novos`, `features_novas` |
 
-**Total: 10 bugs. 599/599 testes. tsc clean.**
+**Total: 10 bugs. 609/609 testes. tsc clean.**
 
 ---
 
