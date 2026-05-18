@@ -168,6 +168,23 @@ class SessionWriter:
             )
             log.info("colecao_episodic_criada", dim=dim)
 
+        # Garantir índice de payload em session_id — sem ele, filtros retornam
+        # 400 "Index required but not found for session_id".
+        # Idempotente: Qdrant retorna erro se já existe, ignoramos silenciosamente.
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            await loop.run_in_executor(
+                None,
+                lambda: client.create_payload_index(
+                    collection_name=_COLECAO,
+                    field_name="session_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                ),
+            )
+            log.info("episodic_index_session_id_criado")
+        except Exception:
+            pass  # índice já existe — comportamento esperado em boots subsequentes
+
         # ID determinístico por session_id
         ponto_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"voxdm-episodic-{payload['session_id']}"))
 

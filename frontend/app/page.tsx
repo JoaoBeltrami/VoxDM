@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
@@ -206,19 +206,35 @@ function parseRolagens(
   });
 }
 
-// Extrai a frase mais recente do texto do mestre que pede a rolagem.
-// Mostra ao jogador o "porquê" sem precisar olhar pra cima — útil em combate
-// quando o histórico já rolou. Limita a 140 chars pra caber numa linha.
-function extrairMotivoRolagem(texto: string): string {
-  if (!texto) return "";
-  const sentencas = texto.match(/[^.!?…]+[.!?…]+/g) ?? [texto];
+// Atributos/perícias D&D reconhecidos em PT-BR — usados para destacar o chip de check.
+const _ATRIBUTOS_CHECK = [
+  "Percepção", "Investigação", "Furtividade", "Atletismo", "Acrobacia",
+  "Enganação", "Persuasão", "Intimidação", "Intuição", "Arcanismo",
+  "História", "Natureza", "Religião", "Medicina", "Sobrevivência",
+  "Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma",
+];
+const _RE_ATRIBUTO_CHECK = new RegExp(
+  `\\b(${_ATRIBUTOS_CHECK.join("|")})\\b`, "i"
+);
+
+// Extrai da última frase de check: { motivo, atributo }.
+// atributo é o nome do dado (ex: "Percepção") se o LLM o nomeou — senão "".
+function extrairMotivoRolagem(texto: string): { motivo: string; atributo: string } {
+  if (!texto) return { motivo: "", atributo: "" };
+  const sentencas = texto.match(/[^.!?…()]+[.!?…)]+/g) ?? [texto];
   for (let i = sentencas.length - 1; i >= 0; i--) {
     const s = sentencas[i].trim();
-    if (/\b(rol[ae]|jogue?|teste|salvaguarda|iniciativa|d20|perícia|habilidade)\b/i.test(s)) {
-      return s.length > 140 ? s.slice(0, 137).trim() + "…" : s;
+    if (/\b(rol[ae]|jogue?|teste|salvaguarda|iniciativa|d20|perícia|habilidade)\b/i.test(s)
+        || _RE_ATRIBUTO_CHECK.test(s)) {
+      const atributoMatch = s.match(_RE_ATRIBUTO_CHECK);
+      const atributo = atributoMatch ? atributoMatch[1] : "";
+      const motivo = s.length > 120 ? s.slice(0, 117).trim() + "…" : s;
+      return { motivo, atributo };
     }
   }
-  return "";
+  // Fallback: última sentença do texto se não achou padrão explícito
+  const ultima = sentencas[sentencas.length - 1]?.trim() ?? "";
+  return { motivo: ultima.length > 120 ? ultima.slice(0, 117) + "…" : ultima, atributo: "" };
 }
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
@@ -936,11 +952,11 @@ export default function Home() {
             const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
             if (!turnoJogador) return null;
 
-            // Task 2: motivo do check — frase do mestre que pediu a rolagem.
-            // Aparece como linha discreta abaixo dos chips de dados.
-            const motivoCheck = (rolamentosPendentes.length > 0 || esperandoRolagem)
-              ? extrairMotivoRolagem(ultimaFala)
-              : "";
+            // Motivo do check — frase + atributo extraídos da última fala do mestre.
+            const { motivo: motivoCheck, atributo: atributoCheck } =
+              (rolamentosPendentes.length > 0 || esperandoRolagem)
+                ? extrairMotivoRolagem(ultimaFala)
+                : { motivo: "", atributo: "" };
 
             const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
               const r1 = Math.floor(Math.random() * 20) + 1;
@@ -1033,11 +1049,20 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                {/* Task 2: motivo do check — frase recente do mestre que disparou o pedido */}
-                {motivoCheck && (
-                  <p className="max-w-md px-2 text-center text-[11px] italic leading-snug text-zinc-500">
-                    “{motivoCheck}”
-                  </p>
+                {/* Contexto do check: atributo em chip + frase do mestre */}
+                {(atributoCheck || motivoCheck) && (
+                  <div className="flex flex-col items-center gap-1">
+                    {atributoCheck && (
+                      <span className="rounded-full border border-violet-500/50 bg-violet-900/30 px-3 py-0.5 text-xs font-bold tracking-wide text-violet-300">
+                        d20 {atributoCheck.toUpperCase()}
+                      </span>
+                    )}
+                    {motivoCheck && (
+                      <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-zinc-400">
+                        {motivoCheck}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             );

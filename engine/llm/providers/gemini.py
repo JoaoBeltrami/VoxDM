@@ -108,17 +108,6 @@ class GeminiProvider(BaseLLMProvider):
             "Content-Type": "application/json",
         }
 
-    # safety_settings desabilitadas para VoxDM — RPG de fantasia com combate
-    # e violência narrativa. Sem isso, Gemini recusa ações padrão de D&D como
-    # "matar o goblin", "torturar o prisioneiro" ou "decapitar o inimigo".
-    # Ref: https://ai.google.dev/gemini-api/docs/safety-settings
-    _SAFETY_SETTINGS = [
-        {"category": "HARM_CATEGORY_HARASSMENT",        "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH",       "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-    ]
-
     @staticmethod
     def _payload(
         modelo: str,
@@ -127,15 +116,17 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int,
         stream: bool,
     ) -> dict:
+        # ARMADILHA: o endpoint OpenAI-compat do Google (/v1beta/openai) NÃO aceita
+        # o campo `safety_settings` — retorna 400 imediatamente. Esse campo só funciona
+        # na API nativa (/v1beta/models/{model}:generateContent). Por padrão o Gemini
+        # via compat é menos restritivo que a API nativa para conteúdo de developer,
+        # e o prompt master_system.md instrui o modelo a narrar sem filtro.
         return {
             "model": modelo,
             "messages": mensagens,
             "temperature": temperatura,
             "max_tokens": max_tokens,
             "stream": stream,
-            # Desabilita filtros de conteúdo do Gemini — VoxDM é RPG adulto de fantasia.
-            # O endpoint OpenAI-compat do Google aceita safety_settings como campo extra.
-            "safety_settings": GeminiProvider._SAFETY_SETTINGS,
         }
 
     # ── Tentativa única (uma chave + um modelo) — não cascateia ─────────────
