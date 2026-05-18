@@ -79,6 +79,42 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
 
 - **Cobertura de testes para companions/posições em para_texto() (18/05)**: ✅ CONCLUÍDO. `test_working_memory.py` ganhou 10 novos testes validando que `companions` e `posicoes_combate` aparecem corretamente no output de `para_texto()` — campos já implementados em `e467ed6` mas sem cobertura de teste. Total: 609/609 testes passam, tsc clean.
 
+- **Estabilidade 15-20min + LLM sem filtro (18/05)**: ✅ CONCLUÍDO. Sessão de hardening pós-auditoria: (1) `_PREFIXOS_RECUSA` reescrito — removidos falsos positivos PT-BR ("não posso", "lamento", "desculpe") que causavam cascata falsa em diálogo de NPC; só detecta quebra real de personagem. (2) Gemini `safety_settings` com `BLOCK_NONE` em todas as categorias — ações D&D padrão (matar, esfaquear, decapitar) não causam mais recusa. (3) `master_system.md` + `intro_system.md` com instrução explícita: narrador não é filtro moral, combate/violência de fantasia são ações de jogo. (4) `_BUFFER_RECUSA` aumentado 120→150 chars. **612/612 testes, tsc clean.**
+
+### Bugs conhecidos — próxima sessão de fixes
+
+> Identificados em teste manual (18/05). Nenhum quebra o jogo, todos degradam UX. Prioridade decrescente.
+
+**COMBAT-1 — Initiative bar não atualiza quando morte narrada fora do vocab do regex**
+- **Sintoma:** Inimigo "vivo" na barra de iniciativa após morte narrada com palavras fora de `_RE_INIMIGO_MORTO` (sucumbe, perece, se dissolve, cai sem vida, etc.)
+- **Arquivo:** `api/turn_pipeline.py` — `_RE_INIMIGO_MORTO` linha ~108
+- **Fix sugerido:** Ampliar o alternating group com mais verbos de morte PT-BR: `sucumbe|perece|se dissolve|cai sem vida|entra em colapso|desaba`. Alternativa melhor: Fase 5 (classificação LLM) substitui regex inteiramente.
+
+**COMBAT-2 — Initiative drift em combate longo (5+ rodadas)**
+- **Sintoma:** `turno_atual_idx` pode desincronizar com estado real se um turno é processado com erro parcial (ex: TTS falha após pipeline). InitiativeBar fica destacando o token errado.
+- **Arquivo:** `api/websocket.py` + `engine/memory/working_memory.py:avancar_turno_iniciativa()`
+- **Fix sugerido:** Adicionar campo `rodada_esperada` no payload `fim` e frontend checar consistência. Ou reset do idx ao fim de combate (já existe via `sair_combate()`).
+
+**TTS-1 — Pausa perceptível em resposta longa com muitos marcadores**
+- **Sintoma:** LLM resposta com 3+ marcadores inline ([FIO], [CONSEQUÊNCIA], [XP]) causa buffer lento — `strip_marcadores` roda por flush, mas tokens de marcador acumulam no buffer sem avançar a frase de TTS visível.
+- **Arquivo:** `api/websocket.py` — loop de streaming, lógica de flush ~linha 950
+- **Fix sugerido:** Flush imediato quando encontrar `[` no buffer e colchete já fechado antes dele. Ou pré-strip de marcadores por token antes de acumular no buffer_sentenca.
+
+**UX-1 — Companion "comandar" envia mensagem genérica**
+- **Sintoma:** Botão "⚔ comandar" em `CompanionsPanel` envia `${nome}, ataque o inimigo mais próximo.` — sempre igual, sem variedade.
+- **Arquivo:** `frontend/components/CompanionsPanel.tsx`
+- **Fix sugerido:** Array de variações de comando por tipo de companion (hireling, familiar, animal, summon). Ou campo de texto inline antes de enviar.
+
+**UX-2 — Sem feedback quando Groq TPM cai pra Gemini**
+- **Sintoma:** Durante cascata LLM, usuário vê simplesmente demora de 2-4s sem indicação visual. VoxOrb entra em "processando" mas não diferencia "pensando" de "esperando rate limit".
+- **Arquivo:** `api/websocket.py` — eventos de cascade não chegam ao frontend
+- **Fix sugerido:** Novo tipo WS `tipo="cascade"` emitido quando router troca de provider. Frontend exibe toast discreto "conexão lenta — tentando backup…" por 3s.
+
+**UX-3 — Recap sem leitura automática em continuação de sessão**
+- **Sintoma:** Recap oral toca via TTS, mas se o usuário der play em outra aba durante o recap, o áudio é cancelado e o texto âmbar fica parado sem retry.
+- **Arquivo:** `frontend/hooks/useGameSession.ts` + `frontend/app/page.tsx`
+- **Fix sugerido:** `tipo="recap"` salva o `audio_chunk` do recap em ref separada; se pararTudo() for chamado antes do recap terminar, re-enfileira o chunk do recap.
+
 ### Fases planejadas (não implementadas)
 
 **Fase 4.6 — Auth & Multi-tenant** ✅ CONCLUÍDA (16/05/26) — ver histórico acima.
