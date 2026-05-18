@@ -36,17 +36,36 @@ from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 log = structlog.get_logger(__name__)
 
 # Prefixos de recusa do safety layer Groq — retorna 200 + texto refusal.
-# Lista herdada do groq_client.py original — comportamento testado.
+#
+# ARMADILHA: expressões como "lamento", "não posso", "não consigo", "não é
+# possível" são falas válidas de NPCs e narrador em D&D. Um guarda diz "não
+# posso deixá-lo passar", um personagem diz "lamento sua perda", o mestre diz
+# "não é possível atravessar sem a chave". Detectar isso como recusa causava
+# cascata falsa e degradava a resposta para modelos menores.
+#
+# Regra de ouro: refusal real é quando o LLM quebra o personagem para referenciar
+# sua própria natureza como modelo ou para recusar "ajudar" como assistente.
+# Frases de ficção (NPCs, narrador, jogador) NUNCA são refusal.
 _PREFIXOS_RECUSA = (
-    "não posso", "não é possível", "lamento", "desculpe-me",
-    "não consigo", "não devo", "não é apropriado", "não é adequado",
-    "i cannot", "i'm unable", "i'm sorry", "i can't", "i must decline",
-    "i won't", "i'm not able", "as an ai", "como ia ", "como modelo",
-    "como assistente", "preciso esclarecer", "devo informar",
+    # O LLM se identifica como IA/assistente — sempre quebra de personagem
+    "como ia,", "como ia ", "como modelo", "como assistente de ia",
+    "como assistente virtual", "como um modelo",
+    # O LLM recusa explicitamente a TAREFA (não um NPC recusando uma ação)
+    "não posso ajudar", "não consigo ajudar", "não posso gerar esse",
+    "não posso criar esse", "não posso produzir", "não posso escrever esse",
+    "sou incapaz de ajudar", "é contra as minhas",
+    # Meta-commentary de IA
+    "preciso esclarecer que", "devo informar que", "devo esclarecer que",
+    "é importante notar que", "como uma ia,", "como uma inteligência",
+    # Inglês — VoxDM é PT-BR; saída em inglês no início = modelo em modo safety
+    "i cannot", "i'm unable to", "i can't help", "i must decline",
+    "i won't be able", "i'm not able to help", "as an ai", "as a language model",
+    "i'm sorry, but i", "i apologize, but i",
 )
 
 # Chars a coletar antes de checar recusa no stream Groq.
-_BUFFER_RECUSA = 120
+# 150 chars cobre a frase de recusa típica sem atrasar respostas normais.
+_BUFFER_RECUSA = 150
 
 
 def _e_recusa(texto: str) -> bool:
