@@ -523,6 +523,7 @@ async def salvar_character_state(
         spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no PUT
         player_level=wm.player_level,  # preserva progressão
         class_features=dict(wm.class_features),  # preserva usos de features
+        companions=dict(wm.companions),  # preserva aliados ativos
     ))
     log.info("character_state_salvo_via_put", session_id=session_id)
 
@@ -559,6 +560,7 @@ async def encerrar_sessao(
             spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no encerramento
             player_level=wm.player_level,  # preserva progressão
             class_features=dict(wm.class_features),  # preserva usos de features no encerramento
+            companions=dict(wm.companions),  # preserva aliados ativos no encerramento
         ))
         log.info("character_state_salvo_no_encerramento", session_id=session_id)
     except Exception as e:

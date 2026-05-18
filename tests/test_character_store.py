@@ -321,3 +321,43 @@ async def test_spells_conhecidas_ordem_preservada(store: CharacterStore) -> None
     assert s.spells_conhecidas == magias
     assert s.spells_conhecidas[0] == "Explosão Eldritch"
     assert s.spells_conhecidas[2] == "Hex"
+
+
+# ── Companions (Fase 5.2) ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_companions_roundtrip(store: CharacterStore) -> None:
+    """Companions devem sobreviver ao roundtrip SQLite completo."""
+    companions = {
+        "lyssa": {
+            "nome": "Lyssa", "tipo": "hireling",
+            "hp": 17, "hp_max": 25, "ca": 15, "atq": "+4", "dano": "1d8",
+        }
+    }
+    await store.salvar(_estado(companions=companions))
+    s = await store.carregar("sess-teste-01")
+    assert s.companions == companions
+    assert s.companions["lyssa"]["nome"] == "Lyssa"
+    assert s.companions["lyssa"]["hp"] == 17
+
+
+@pytest.mark.asyncio
+async def test_companions_vazio_retorna_dict_vazio(store: CharacterStore) -> None:
+    """companions={} (padrão) deve ser persistido e restaurado como dict vazio."""
+    await store.salvar(_estado())
+    s = await store.carregar("sess-teste-01")
+    assert s.companions == {}
+
+
+@pytest.mark.asyncio
+async def test_companions_multiplos(store: CharacterStore) -> None:
+    """Dois companions devem ser recuperados corretamente com IDs distintos."""
+    companions = {
+        "lyssa": {"nome": "Lyssa", "tipo": "hireling", "hp": 20, "hp_max": 25, "ca": 15, "atq": "+4", "dano": "1d8"},
+        "corvo":  {"nome": "Corvo", "tipo": "familiar", "hp": 1,  "hp_max": 1,  "ca": 11, "atq": "+3", "dano": "1"},
+    }
+    await store.salvar(_estado(companions=companions))
+    s = await store.carregar("sess-teste-01")
+    assert len(s.companions) == 2
+    assert "lyssa" in s.companions
+    assert "corvo" in s.companions

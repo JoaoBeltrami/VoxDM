@@ -472,6 +472,12 @@ class WorkingMemory:
                 # disponivel = True sse usos_atual > 0 (ou feature sem usos discretos)
                 if wm_feat.get("usos_max", 0) > 0:
                     wm_feat["disponivel"] = wm_feat["usos_atual"] > 0
+        # Companions — restore só se a WM estiver vazia (sessão nova / reconexão).
+        # Se já houver companions ativos (sessão continuada no mesmo processo),
+        # não sobrescreve — o estado em memória é mais fresco que o SQLite.
+        persisted_companions: dict[str, dict] = getattr(state, "companions", {})
+        if persisted_companions and not self.companions:
+            self.companions = {k: dict(v) for k, v in persisted_companions.items()}
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona uma fala ao diálogo recente, mantendo a janela deslizante."""
