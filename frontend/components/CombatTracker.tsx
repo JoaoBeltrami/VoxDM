@@ -75,21 +75,24 @@ export function CombatTracker({
     estadosAnt.current = Object.fromEntries(
       Object.entries(inimigos).map(([id, ini]) => [id, ini.estado])
     );
+    // Sempre retorna cleanup — evita timer "fantasma" se o componente desmontar
+    // com pulso pendente (bug: setPulsando chamava state de componente já desmontado).
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     if (novosPulsos.length > 0) {
       setPulsando(prev => {
         const next = { ...prev };
         novosPulsos.forEach(id => { next[id] = true; });
         return next;
       });
-      const t = setTimeout(() => {
+      timerId = setTimeout(() => {
         setPulsando(prev => {
           const next = { ...prev };
           novosPulsos.forEach(id => { delete next[id]; });
           return next;
         });
       }, 1500);
-      return () => clearTimeout(t);
     }
+    return () => { if (timerId !== undefined) clearTimeout(timerId); };
   }, [inimigos]);
 
   if (!emCombate) return null;

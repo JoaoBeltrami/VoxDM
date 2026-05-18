@@ -351,8 +351,11 @@ class EdgeTTSEngine:
             except Exception as exc:
                 ultimo_erro = exc
                 if tentativa < 3:
-                    await asyncio.sleep(0.4 * tentativa)
+                    # Sleep FORA do semáforo: enquanto aguarda retry, outras
+                    # sínteses paralelas podem usar os 2 slots disponíveis.
+                    # Dentro do sem, o slot ficaria bloqueado por 0.4-0.8s à toa.
                     log.debug("edge_tts_retry", tentativa=tentativa, erro=str(exc)[:80])
+                    await asyncio.sleep(0.4 * tentativa)
 
         if ultimo_erro:
             raise ultimo_erro

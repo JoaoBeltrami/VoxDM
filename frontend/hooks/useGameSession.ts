@@ -563,6 +563,13 @@ export function useGameSession() {
     };
 
     ws.onclose = () => {
+      // Limpa estado de turno em andamento — evita histórico corrompido se o
+      // WS caiu no meio de um stream. Sem isso, textoAtualRef acumula texto
+      // parcial e o próximo tipo="fim" concatena lixo ao textoFinal.
+      textoAtualRef.current = "";
+      turnoAtualRef.current = null;
+      setIsProcessing(false);
+
       setEstado(s => ({ ...s, conectado: false }));
 
       if (
@@ -570,10 +577,17 @@ export function useGameSession() {
         sessionIdRef.current &&
         reconnectCountRef.current < MAX_RECONNECTS
       ) {
+        // Cancela timer anterior antes de criar novo — evita múltiplos timers
+        // simultâneos se o WS cair e reconectar muito rapidamente.
+        if (reconnectTimerRef.current !== null) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
         reconnectCountRef.current++;
         const delay = RECONNECT_BASE_MS * Math.pow(2, reconnectCountRef.current - 1);
         setEstado(s => ({ ...s, reconectando: true }));
         reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
           if (sessionIdRef.current) {
             _conectarWS(sessionIdRef.current, personagemRef.current?.player_name?.trim() || null);
           }
@@ -647,7 +661,13 @@ export function useGameSession() {
 
   const desconectar = useCallback(async () => {
     intentionalCloseRef.current = true;
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    textoAtualRef.current = "";
+    turnoAtualRef.current = null;
+    setIsProcessing(false);
     pararTudo();
     wsRef.current?.close();
     const sid = sessionIdRef.current;

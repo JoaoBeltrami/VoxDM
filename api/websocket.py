@@ -46,6 +46,22 @@ from engine.voice.language import detectar_idioma
 
 log = structlog.get_logger()
 
+# Set de referências a tasks fire-and-forget (scene_image, etc.) — módulo-level.
+# Sem isso, o GC pode coletar tasks "floating" antes de terminarem.
+# O discard callback remove a referência quando a task completa.
+# Referências não aparecem em memory profilers como leak pois o set é limitado
+# pelo tempo de vida das tasks (~5-15s cada).
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _criar_background_task(coro) -> asyncio.Task:
+    """Cria task fire-and-forget e guarda referência até conclusão."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
 # Limites de validação para sync_* — protegem contra payloads malformados ou
 # manipulação direta do WebSocket (campo numérico gigante poluindo a UI).
 _MAX_GOLD     = 1_000_000          # 1 milhão de PO já é roleplay
@@ -507,7 +523,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             em_combate=False,
             weather=getattr(wm, "weather", ""),
         )
-        asyncio.create_task(
+        _criar_background_task(
             gerar_e_enviar_imagem(
                 websocket,
                 _prompt_inicial,
@@ -599,9 +615,50 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
                 continue
 
-            # Mensagem de inicialização: frontend conectou, mestre abre a cena
+            # Mensagem de inicialização: frontend conectou, mestre abre a cena.
+            # Bug reconexão: quando iteracoes > 0 a sessão já foi iniciada e o
+            # jogador está reconectando (WS caiu e voltou). Reenviar a abertura
+            # completa (LLM + TTS) causa "Bem-vindo" no meio de uma batalha.
+            # Fix: para reconexões, apenas reenvia o estado atual como `fim`.
             if tipo_msg == "init":
-                await _enviar_abertura(websocket, sessao)
+                if sessao.iteracoes == 0:
+                    await _enviar_abertura(websocket, sessao)
+                else:
+                    # Reconexão rápida — reenvia estado sem LLM nem TTS
+                    wm = sessao.working_mem
+                    await websocket.send_text(
+                        MensagemWS(
+                            tipo="fim",
+                            latencia_ms=0,
+                            quest_stages=wm.quest_stages,
+                            active_quest_hooks=wm.active_quest_hooks,
+                            inventory=wm.player_inventory,
+                            location_nome=wm.location_nome,
+                            time_of_day=wm.time_of_day,
+                            npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
+                            spell_slots=wm.spell_slots,
+                            hit_dice_current=wm.hit_dice_current,
+                            gold=wm.gold,
+                            xp=wm.xp,
+                            inspiration=wm.inspiration,
+                            death_saves_successes=wm.death_saves_successes,
+                            death_saves_failures=wm.death_saves_failures,
+                            death_saves_stable=wm.death_saves_stable,
+                            em_combate=wm.em_combate,
+                            inimigos_combate=dict(wm.inimigos_combate),
+                            rodada_combate=wm.rodada_combate,
+                            class_features=wm.class_features,
+                            fios_soltos=wm.fios_soltos,
+                            consequencias=list(wm.log_consequencias),
+                            posicoes_combate=dict(wm.posicoes_combate),
+                            movimento_restante_ft=wm.movimento_restante_ft,
+                            movimento_total_ft=wm.movimento_total_ft,
+                            em_mercado=wm.em_mercado,
+                            companions=dict(wm.companions),
+                        ).model_dump_json()
+                    )
+                    log.info("ws_reconectado_estado_reenviado", session_id=session_id,
+                             iteracoes=sessao.iteracoes)
                 continue
 
             # Sync de HP do jogador — CharacterSheet envia quando usuário ajusta
@@ -1051,7 +1108,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         em_combate=sessao.working_mem.em_combate,
                         weather=getattr(sessao.working_mem, "weather", ""),
                     )
-                    asyncio.create_task(
+                    _criar_background_task(
                         gerar_e_enviar_imagem(
                             websocket,
                             _prompt_cena,
