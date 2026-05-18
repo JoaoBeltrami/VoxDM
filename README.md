@@ -8,9 +8,9 @@ Um Mestre de RPG de mesa controlado 100% por voz, construído do zero com custo 
 
 ## O que é
 
-VoxDM é uma engine de narração para RPG de mesa que responde por voz, lembra de sessões anteriores e mantém os NPCs com personalidade consistente entre sessões. Sem digitar nada. Sem pagar por nada.
+VoxDM é uma engine de narração para RPG de mesa que responde por voz, lembra de sessões anteriores e aplica regras de D&D 5e em tempo real. Sem digitar nada. Sem pagar por nada.
 
-Você fala no microfone, o Mestre fala de volta — narração rica, regras de D&D 5e aplicadas em segundo plano, combate cinematográfico, NPCs com vozes diferentes, memória episódica entre sessões.
+Você fala no microfone, o Mestre fala de volta — narração rica em pt-BR, regras D&D 5e aplicadas em segundo plano (spell slots, combate, saves, progressão XP), NPCs com vozes distintas, memória episódica entre sessões, companions com HP/CA próprios, economia de itens e ouro, combate tático com posicionamento em pés.
 
 ---
 
@@ -21,11 +21,11 @@ Você fala no microfone, o Mestre fala de volta — narração rica, regras de D
           ↓
 🌐  POST /transcribe → Faster-Whisper small (GPU, ~300ms)
           ↓
-📚  RAG 3 camadas (Qdrant lore + Qdrant regras + Neo4j relações)
+📚  RAG 3 camadas (Qdrant lore + Qdrant regras SRD + Neo4j relações)
           ↓
 🧠  Multi-provider LLM (cascata: Groq 70B → 8B → Gemini → Ollama)
           ↓
-🔊  Edge TTS Microsoft (voz natural pt-BR por NPC)
+🔊  Edge TTS Microsoft (voz natural pt-BR, perfil por NPC)
           ↓
 🎧  Web Audio API → fala do Mestre no browser
 ```
@@ -34,46 +34,94 @@ Latência alvo: **<2s ponta a ponta**. Atual: ~3-6s no Groq, ~7-9s no Gemini.
 
 ---
 
+## Features implementadas
+
+### Narração e memória
+- **RAG 3 camadas**: lore do módulo (Qdrant), regras SRD 5e (Qdrant), relações entre entidades (Neo4j)
+- **Memória episódica**: resumo de sessões anteriores via Groq + upsert em Qdrant `voxdm_episodic`
+- **Recap oral**: ao continuar sessão, LLM sintetiza resumo em voz grave/lenta cinematográfica
+- **Prompt de mestre v4**: passive perception proativa, conseqüências persistentes, lampejo narrativo em momentos dramáticos, múltiplos perfis de DM (rigoroso/equilibrado/tranquilo/rule_of_cool)
+
+### Mecânicas D&D 5e
+- **Spell detector**: detecta casting no texto → busca mecânica no Qdrant → injeta CD/dano/área no prompt
+- **Spell slot tracker**: decrementa ao usar, restaura em descanso curto/longo, protege contra casts sem slots
+- **Class features**: Action Surge, Rage, Sneak Attack e mais — chips interativos com botões –/+ para gastar/restaurar, persistidos entre sessões no SQLite
+- **Progressão XP/Level Up**: LLM concede `[XP: +N motivo]` → engine aplica tabela SRD → HP máximo sobe, slots recalculados, modal celebra
+- **Subclass picker**: seleção de subclasse no CharacterForm (Campeão/Mestre de Batalha/Cavaleiro Místico para Guerreiro, etc.)
+- **Lista de 246 magias SRD**: seleção na criação com tabs por nível, limite por classe/nível
+
+### Combate
+- **Iniciativa visual horizontal**: tokens circulares com anel violeta no turno ativo, 💀 mortos em grayscale, seta ▼
+- **Combate tático**: posicionamento em pés (`[POSICAO: id = N ft cobertura]`), movimento por rodada (`[MOV: -N ft]`), barra de movimento no CombatTracker, chips de distância por inimigo
+- **Sync de inimigos**: LLM atualiza estado (intacto/ferido/grave/morto) via regex, barra de vitalidade pulsante
+- **Dados cinematográficos**: overlay full-screen "20"/"1" em crít/falha, splash "COMBATE" na transição, vinheta vermelha, som sintético de crítico/falha via Web Audio API
+
+### Companions/Party
+- **Tipos**: hireling (🛡), familiar (🦉), animal (🐺), summon (✨)
+- **Marcadores**: `[COMPANION_ADD]`, `[COMPANION_HP]`, `[COMPANION_REMOVE]`
+- **UI**: painel emerald com HP bar colorida por %, CA/atq/dano inline, botão "⚔ comandar"
+- **LLM-aware**: estado de cada companion injetado em `para_texto()` — mestre narra consistentemente
+
+### Economia e inventário
+- **Ouro**: `[OURO: ±N motivo]` soma/subtrai, clampado em 0
+- **Loot/Perda**: `[LOOT: item]` dedupa por nome, `[PERDEU: item]` case-insensitive
+- **Modo mercado**: `[MERCADO]`/`[FIM_MERCADO]` habilita botão "vender" por item no inventário
+
+### Features de DM veterano
+- **Fios soltos**: `[FIO: texto]` → lista circular de threads abertas → injetadas no prompt
+- **Cliffhanger**: `[CLIFFHANGER: texto]` → guardado e injetado na próxima cena com instrução de resolver
+- **Agenda NPC**: `[AGENDA: npc-id → plano]` → planos de fundo injetados no prompt
+- **Cartas de improviso**: 15 cartas temáticas, 3 sorteadas por sessão, sem LLM call
+- **Pacing meter**: nível float 0–10 por turno → instrução `[PACING: CLÍMAX/ALTO/BAIXO]` no prompt
+
+### Auth & Multi-tenant
+- **JWT RS256** do Cloudflare Access + cache de certs 1h
+- **UUID v4 server-side**: frontend nunca decide session_id
+- **Isolamento por owner_email**: SQLite + Qdrant filtram por dono
+- **Rate limit por email** (não por IP — todos são mesma IP atrás do Tunnel)
+- **`/debug/*` exige admin** mesmo em DEBUG=True
+
+### UX
+- **Áudio de pensamento**: 20 frases pré-sintetizadas disparam se LLM demorar >1.2s (mascarar latência)
+- **Ducking de áudio ambiente**: música baixa para 0.1 quando mestre fala, volta para 0.6
+- **Recap dispensável**: bolha âmbar com botão × para fechar antes dos 30s
+- **Condições D&D detectadas**: 14 regex em pt-BR, chips aguardam confirmação (substituídos por turno, sem acumulação)
+- **Cinema mode**: Ctrl+Shift+C esconde UI técnica, deixa só narração
+- **Toggle LLM ao vivo**: menu Opções → Auto/Groq 70B/Groq 8B/Gemini/Ollama sem reiniciar
+
+---
+
 ## Stack
 
 | Camada | Tecnologia |
 |---|---|
 | **LLM principal** | Groq — `llama-3.3-70b-versatile` |
-| **Fallback 1** | Groq — `llama-3.1-8b-instant` (quota TPD separada) |
-| **Fallback 2** | Google Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key cycling) |
-| **Fallback 3** | Ollama local — `llama3.1:8b` |
-| STT | RealtimeSTT + Faster-Whisper `small` (GPU CUDA, float16) |
-| TTS principal | Edge TTS Microsoft (voz por NPC com perfil de gênero/raça) |
-| TTS fallback | Kokoro-82M local |
-| Memória vetorial | Qdrant Cloud (free tier) — lore + regras SRD + memória episódica |
-| Grafo de relações | Neo4j AuraDB (free tier) — NPCs, locais, facções, secrets |
-| Banco estruturado | SQLite via aiosqlite (personagens, sessões) |
+| **Fallback 1** | Groq — `llama-3.1-8b-instant` |
+| **Fallback 2** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
+| **Fallback 3** | Ollama local |
+| STT | RealtimeSTT + Faster-Whisper `small` (GPU CUDA) |
+| TTS | Edge TTS Microsoft (voz por NPC) + Kokoro-82M fallback |
+| Memória vetorial | Qdrant Cloud free tier |
+| Grafo de relações | Neo4j AuraDB free tier |
+| Banco estruturado | SQLite via aiosqlite |
 | Embeddings | sentence-transformers `paraphrase-multilingual-MiniLM-L12-v2` |
 | Backend | FastAPI + WebSocket streaming |
-| Frontend | Next.js 14 + Tailwind |
+| Frontend | Next.js 14 + Tailwind CSS |
 | Exposição | Cloudflare Tunnel |
-| Config | pydantic-settings |
-| Logs | structlog |
 
 ---
 
 ## Cascata de LLM
 
-A engine é **agnóstica de provedor**. Cada chamada ao LLM percorre a cascata até alguém responder:
-
 ```
-TaskType.NARRATIVE   : Groq 70B → Groq 8B → Gemini (6 combos) → Ollama
-TaskType.SUMMARIZATION : Gemini → Groq 70B → Groq 8B → Ollama
-TaskType.CLASSIFICATION : Groq 8B → Gemini → Ollama
+NARRATIVE    : Groq 70B → Groq 8B → Gemini (6 combos) → Ollama
+SUMMARIZATION: Gemini → Groq 70B → Groq 8B → Ollama
+CLASSIFICATION: Groq 8B → Gemini → Ollama
 ```
 
-**Erros que disparam fallback:** 429 (incl. TPD/TPM), 413 payload too large com `code: rate_limit_exceeded`, timeout, connection error, 5xx, refusal do safety layer.
+**Gemini multi-key:** cada chave de um projeto Google Cloud distinto tem 1500 RPD próprios. 3 chaves × 2 modelos = **6 combos internos** antes de cascatear.
 
-**Erros que NÃO disparam:** 400 prompt malformado, erro de código interno, cliente desconectou.
-
-**Gemini multi-key:** cada chave gerada num projeto Google Cloud distinto tem 1500 RPD próprios. 3 chaves de 3 projetos = 4500 RPD. Mais 2 modelos com cota separada por projeto = **6 combos internos por turno** antes de cascatear pra Groq/Ollama.
-
-**Toggle ao vivo:** menu Opções → 🤖 Auto / 🌩 Groq 70B / ⚡ Groq 8B / 🌟 Gemini / 🏠 Ollama. Override por sessão, sem reiniciar nada.
+**Toggle ao vivo:** menu Opções → 🤖 Auto / 🌩 Groq 70B / ⚡ Groq 8B / 🌟 Gemini / 🏠 Ollama.
 
 ---
 
@@ -82,17 +130,22 @@ TaskType.CLASSIFICATION : Groq 8B → Gemini → Ollama
 | Fase | Conteúdo | Estado |
 |---|---|---|
 | 0 | Setup local + GPU + API keys | ✅ |
-| 1 | Pipeline de ingestão (PDF→schema v1.2→Qdrant+Neo4j) | ✅ |
-| 2 | Voz (STT+TTS+VAD, loop fechado MediaRecorder→GPU→Edge) | ✅ |
+| 1 | Pipeline de ingestão (PDF → schema v1.2 → Qdrant + Neo4j) | ✅ |
+| 2 | Voz (STT + TTS + VAD, loop fechado GPU → Edge TTS) | ✅ |
 | 3 | Memória + LLM (RAG 3 camadas, working memory, episódica) | ✅ |
-| 4 | API + Frontend (3 telas, ficha, dados, sessões salvas) | ✅ |
-| 4.5 | Persistência personagem SQLite + menu | ✅ |
-| Combat | Combat sync, iniciativa visual, splash COMBATE, vinheta | ✅ |
-| UX | Bolhas múltiplas, indicador de check com atributo, atribuição manual 4d6 | ✅ |
-| LLM | Multi-provider router (Groq + Gemini + Ollama) com cascata e cycling | ✅ |
-| 5 | Próxima: enriquecer task routing (trust, condições, entidades via LLM) | 🟡 |
+| 4 | API + Frontend (3 telas, ficha completa, sessões, dados) | ✅ |
+| 4.5 | Persistência SQLite + seletor de voz | ✅ |
+| 4.6 | Auth & Multi-tenant + 5 DM Veteran Features | ✅ |
+| 5.5 | Áudio de pensamento (mascarar latência) | ✅ |
+| 6 | Mecânicas D&D 5e (spell slots, class features, subclass, spells, XP) | ✅ |
+| 6+ | 4 features de game design (XP/LvUp, combate tático, economia, companions) | ✅ |
+| Bug audit | 10 bugs críticos corrigidos (5 FUNC + 5 UX) | ✅ |
+| 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
+| 5.6 | Sincronização texto-voz (karaokê reverso) | 🟡 planejado |
+| 5.7 | Dados visuais com roll behind the screen | 🟡 planejado |
+| 5.8 | Imagem de cena gerada por IA (Pollinations.ai) | 🟡 planejado |
 
-**Cobertura de testes:** 334/334 passam.
+**Cobertura de testes:** 599/599 passam.
 
 ---
 
@@ -101,11 +154,11 @@ TaskType.CLASSIFICATION : Groq 8B → Gemini → Ollama
 ### 1. Dependências do sistema
 
 - **Python 3.12.x** (NÃO 3.14 — falta wheels CTranslate2)
-- **Node.js 20+** pro frontend
-- **uv** ([install](https://docs.astral.sh/uv/)) — gerenciador de pacotes Python
-- **GPU NVIDIA com CUDA** recomendado (RTX 2060+); roda em CPU mas STT fica lento
+- **Node.js 20+**
+- **uv** ([install](https://docs.astral.sh/uv/))
+- **GPU NVIDIA com CUDA** recomendada (RTX 2060+); funciona em CPU mas STT fica ~5x mais lento
 
-### 2. Setup do projeto
+### 2. Setup
 
 ```bash
 git clone https://github.com/JoaoBeltrami/VoxDM.git
@@ -117,7 +170,7 @@ uv pip install -r requirements.txt
 cd frontend && npm install && cd ..
 
 cp .env.example .env
-# edite .env com suas chaves (ver seção abaixo)
+# edite .env com suas chaves
 ```
 
 ### 3. Chaves obrigatórias (`.env`)
@@ -125,20 +178,19 @@ cp .env.example .env
 | Variável | Onde pegar |
 |---|---|
 | `GROQ_API_KEY` | https://console.groq.com/keys (free) |
-| `QDRANT_URL` / `QDRANT_API_KEY` | https://cloud.qdrant.io (free 1GB) |
-| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | https://console.neo4j.io (AuraDB Free) |
+| `QDRANT_URL` + `QDRANT_API_KEY` | https://cloud.qdrant.io (free 1GB) |
+| `NEO4J_URI` + `NEO4J_USER` + `NEO4J_PASSWORD` | https://console.neo4j.io (AuraDB Free) |
 
-> No AuraDB Free o `NEO4J_USER` **não é "neo4j"** — é o ID da instância (ex: `<auradb-instance-id>`). Confira em Connection Details.
+> No AuraDB Free o `NEO4J_USER` **não é "neo4j"** — é o ID da instância (ex: `<auradb-instance-id>`).
 
-### 4. Chaves opcionais (recomendadas) (`.env`)
+### 4. Chaves opcionais (`.env`)
 
 ```env
-# Gemini multi-key — uma chave por PROJETO Google Cloud distinto (cota separada)
-# Gere em https://aistudio.google.com/apikey clicando "Create project [nome]"
+# Gemini multi-key — projeto Google Cloud distinto por chave (cota separada)
 GEMINI_API_KEYS=AIzaSy-chave1,AIzaSy-chave2,AIzaSy-chave3
 GEMINI_MODELS=gemini-2.5-flash-lite,gemini-3.1-flash-lite
 
-# Ollama (último fallback) — `ollama pull llama3.1:8b` e `ollama serve` em paralelo
+# Ollama (último fallback local)
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
 ```
@@ -146,58 +198,28 @@ OLLAMA_MODEL=llama3.1:8b
 ### 5. Ingestão do módulo (uma vez)
 
 ```bash
-make ingest          # carrega "Os Filhos de Valdrek" no Qdrant + Neo4j
-make ingest-rules    # carrega SRD 5e (spells, conditions, equipment) — opcional
+make ingest        # carrega "Os Filhos de Valdrek" no Qdrant + Neo4j (~4s GPU)
+make ingest-rules  # carrega SRD 5e (246 magias, condições, equipamentos)
 ```
 
 ### 6. Subir
 
 ```bash
-start.bat            # Windows — sobe API + frontend + abre browser
+start.bat          # Windows — sobe API + frontend + abre browser automaticamente
 # OU
-make run-api &       # API só
-cd frontend && npm run dev   # frontend só
+make run-api &
+cd frontend && npm run dev
 ```
 
-Acesse: http://localhost:3000
+Acesse: **http://localhost:3000**
 
-### 7. Dashboard de debug (opcional)
+### 7. Debug (opcional)
 
 ```bash
-make debug           # Streamlit em http://localhost:8501
+make debug   # Streamlit em http://localhost:8501
 ```
 
-Aba "Último Turno" mostra prompt enviado ao LLM, chunks RAG selecionados (com scores 🟢🟡🔴), latências, erros.
-
----
-
-## Decisões travadas
-
-- **LLM primário:** Groq `llama-3.3-70b-versatile` (qualidade narrativa máxima sob free tier)
-- **STT:** Faster-Whisper `small` na GPU (WER ~8% PT-BR, latência 200-400ms)
-- **TTS:** Edge TTS Microsoft (voz `pt-BR-FranciscaNeural` default, perfis por NPC)
-- **Banco vetorial:** Qdrant Cloud (free 1GB, latência ~100ms cloud)
-- **Banco de grafos:** Neo4j AuraDB (free 200k nós, suficiente pra D&D)
-- **Schema:** VoxDM v1.2 — companions/entities separados de npcs, top-level edges[]
-- **Módulo de trabalho:** "Os Filhos de Valdrek" (original, sem copyright)
-- **Sem Curse of Strahd** até a engine estar 100% validada (copyright)
-
----
-
-## Armadilhas conhecidas
-
-```
-NÃO use Python 3.14         → falta wheels CTranslate2
-NÃO use pip diretamente     → uv pip
-NÃO use os.getenv()         → from config import settings
-NÃO use camelCase em IDs    → kebab-case sempre
-NÃO use Gemini 2.5-flash "full" → thinking budget consome max_tokens
-                                   antes do output visível. Use -lite ou 3.1-lite
-NÃO use gemini-flash-latest → alias do 2.5-flash full (mesmo bug)
-NÃO commit .env             → chaves vazariam pro GitHub
-```
-
-Veja [`CLAUDE.md`](./CLAUDE.md) pra lista completa de "não fazer".
+Mostra prompt enviado ao LLM, chunks RAG com scores 🟢🟡🔴, latências, erros, histórico de turno.
 
 ---
 
@@ -205,32 +227,40 @@ Veja [`CLAUDE.md`](./CLAUDE.md) pra lista completa de "não fazer".
 
 ```
 voxdm/
-├── api/                    FastAPI + WebSocket streaming
-│   ├── main.py             lifespan + warmup paralelo (embedder + whisper + tts)
+├── api/
+│   ├── main.py             lifespan + warmup paralelo (embedder+whisper+tts+thinking)
 │   ├── websocket.py        loop de turno: STT → RAG → LLM stream → TTS
-│   └── routes/             /session/start, /turn, /character, /llm-backend
+│   ├── turn_pipeline.py    parser de 16 marcadores do LLM (quests, DM features,
+│   │                       economia, companions, combate, XP)
+│   ├── auth.py             Depends(get_owner) REST + WS, exige_admin
+│   └── routes/             session, debug, llm-backend
 ├── engine/
+│   ├── auth/               jwt_validator.py, identity.py
 │   ├── llm/
 │   │   ├── router.py       LLMRouter — cascata + override por sessão
-│   │   ├── providers/      Groq, Gemini (multi-key+model), Ollama
-│   │   ├── tasks.py        TaskType enum + cascatas default
-│   │   ├── groq_client.py  Fachada legada — delega ao router
-│   │   └── prompts/        master_system.md, dice.md, combat.md, saves.md...
-│   ├── memory/             working_memory, context_builder, qdrant_client,
-│   │                       neo4j_client, episodic_memory, session_writer,
-│   │                       trust_detector
-│   ├── voice/              stt.py (Faster-Whisper), tts.py (Edge+Kokoro),
-│   │                       vad.py, voice_manager.py
-│   └── pronunciation/      dictionary.json (~120 termos D&D com IPA)
-├── ingestor/               pipeline: PDF → schema v1.2 → Qdrant + Neo4j
-├── frontend/               Next.js 14 — 3 telas (menu/nova/carregar/opções)
-│   ├── app/page.tsx        loop principal, combat UI, dice toolbar
-│   ├── components/         CharacterForm (4d6 manual), CombatTracker,
+│   │   ├── providers/      groq.py, gemini.py (multi-key+model), ollama.py
+│   │   ├── tasks.py        TaskType enum + cascatas por tipo
+│   │   └── prompts/        master_system.md, dice.md, combat.md, saves.md,
+│   │                       social.md, intro_system.md, session_eval.md
+│   ├── magic/              spell_detector.py, slot_tracker.py, spell_list.py (246 spells)
+│   ├── memory/             working_memory.py (estado autoritativo), context_builder.py,
+│   │                       episodic_memory.py, session_writer.py, trust_detector.py,
+│   │                       qdrant_client.py, neo4j_client.py, quest_detector.py
+│   ├── persistence/        character_store.py (SQLite: HP, slots, gold, XP, features)
+│   ├── progression.py      tabela XP SRD, aplicar_level_up (HP, slots, features)
+│   └── voice/              stt.py, tts.py, thinking_cache.py (20 frases warmup)
+├── frontend/
+│   ├── app/page.tsx        loop principal, modais, combat UI, dice toolbar
+│   ├── components/         CharacterForm (4d6 manual, subclass, spell picker)
+│   │                       CharacterSheet (HP, spells, features –/+, conditions)
+│   │                       CombatTracker (barras, distância, movimento)
+│   │                       CompanionsPanel (HP bar, comandar)
 │   │                       InitiativeBar, SceneHeader, NpcsPresentes
-│   └── hooks/              useGameSession, useAudio, useAmbientAudio,
+│   └── hooks/              useGameSession, useAudio (epoch counter), useAmbientAudio,
 │                           useCombatSounds, useSceneMood
-├── modulo_teste/           módulo "Os Filhos de Valdrek" (schema v1.2)
-└── tests/                  334 testes (pytest)
+├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
+├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
+└── tests/                  599 testes (pytest)
 ```
 
 ---
@@ -238,56 +268,54 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-make test         # 334 testes (pytest)
-make ingest       # pipeline de ingestão
-make run-api      # API standalone (sem frontend)
-make debug        # dashboard Streamlit
+uv run pytest tests/ -q   # 599 testes
+make ingest
+make run-api
+make debug
+cd frontend && npx tsc --noEmit  # type check
 ```
 
-Frontend type-check:
-```bash
-cd frontend && npx tsc --noEmit
+---
+
+## Decisões travadas
+
+- **LLM primário:** Groq `llama-3.3-70b-versatile`
+- **STT:** Faster-Whisper `small` GPU (WER ~8% pt-BR, ~300ms)
+- **TTS:** Edge TTS Microsoft (`pt-BR-FranciscaNeural` default)
+- **Schema:** VoxDM v1.2 — companions/entities separados de npcs, top-level edges[]
+- **Módulo:** "Os Filhos de Valdrek" (original, sem copyright) até engine validada
+- **Sem Curse of Strahd** — copyright; retomar quando engine estiver 100% validada
+
+## Armadilhas conhecidas
+
 ```
+NÃO use Python 3.14          → falta wheels CTranslate2
+NÃO use pip diretamente      → uv pip
+NÃO use Gemini 2.5-flash full → thinking budget consome max_tokens, retorna ~40 chars
+NÃO use gemini-flash-latest  → alias do 2.5-flash full (mesmo bug)
+NÃO use llama-3.1-70b        → depreciado pelo Groq
+NÃO commit .env              → chaves vazariam
+```
+
+Veja [`CLAUDE.md`](./CLAUDE.md) para lista completa.
 
 ---
 
 ## Roadmap
 
-### Próximo
+**Próximo imediato:**
+- **Fase 4.7** — Cloudflare Tunnel + Access (expor a amigos via Zero Trust)
+- **Fase 5.6** — Sincronização texto-voz (texto 300ms à frente do áudio, karaokê reverso)
 
-**Fase 5 — Task routing real via LLM**
-Trust changes, condições D&D auto-detectadas e extração de entidades hoje rodam via regex em pt-BR. A fundação (`TaskType` enum + cascata por tarefa) já está pronta — falta plugar Groq 8B/Gemini nos lugares onde regex erra (sintaxe não óbvia, contexto sutil).
+**Médio prazo:**
+- **Fase 5.7** — Dados visuais com *roll behind the screen* (3 modos: aberto/resultado/narrado)
+- **Fase 5.8** — Imagem de cena por Pollinations.ai (fire-and-forget, fundo difuso)
+- **Fase 6.5** — Refactor WorkingMemory (Deus-Objeto → `combat_state.py` + `character_state.py`)
 
-**Fase 5.5 — Áudio de "pensamento" (zero-silêncio)**
-Cache de ~25 frases curtas pré-sintetizadas (`"Hmm…"`, `"Um momento."`, `"Vejamos."`) em RAM no servidor. Quando o primeiro token do LLM não chega em 1.2s, dispara áudio random de thinking — mascarando 100% da latência percebida. Mestres humanos fazem isso na mesa; soa natural. Variantes por contexto (pós-rolagem / pós-pergunta-NPC / combate) e voz do NPC ativo na v2.
-
-**Fase 5.6 — Sincronização texto-voz (karaokê reverso)**
-Hoje o texto streama instantâneo e o áudio Edge TTS atrasa 800ms-1.5s. Buffer de tokens + revelação progressiva no ritmo da fala, mantendo o texto **300ms à frente** do áudio. Ilusão de que a voz está digitando, não o contrário. Implementação via `AudioBufferSourceNode.duration` e `requestAnimationFrame`.
-
-**Fase 5.7 — Dados visuais com escolha de visibilidade**
-Espelha duas ferramentas reais de mestre de mesa. Jogador sempre vê dado rolando na UI antes do resultado (construção de tensão). Mestre escolhe entre 3 modos: **aberto** (animação + número), **resultado apenas** (só o valor), **narrado sem número** (só descreve consequência). É o equivalente do *roll behind the screen* — controle dramático que mestres reais usam. Toggle global ou parte do `dm_profile`.
-
-**Fase 5.8 — Imagem ambiente gerada por IA**
-Quando troca de local ou entra combate, o LLM gera uma prompt curta de imagem (ex: *"Vila Drevamor, noite fria de inverno, taverna iluminada, fantasy art, atmosfera tensa"*) e dispara pro provider. Imagem aparece como fundo difuso em `<main>` ou em painel lateral, trocando com fade quando muda a cena. Preserva o DNA "100% voz" — não vira simulador de tabuleiro. Provedores: **Pollinations.ai** primário (free sem cadastro, ~5-10s, backend SDXL), **HuggingFace Inference** secundário, **SDXL local** opcional pra quem quiser controle total. Cascata análoga à do LLM. Não bloqueia o jogo se falhar.
-
-### Médio prazo
-
-**Fase 6 — Mecânicas D&D 5e completas**
-Hoje a engine **narra** magias mas não **aplica mecânica**. SRD 5e já ingestado em `voxdm_rules` (Qdrant) — usado só como contexto narrativo. Próximo passo:
-- Spell detector: "lanço Bola de Fogo" → busca mecânica no Qdrant → injeta no prompt como bloco obrigatório (CD save, dados de dano, área, slot consumido)
-- Subclass picker no `CharacterForm`: Guerreiro → Campeão/Mestre de Batalha/Cavaleiro Místico
-- Spell slot tracker ativo (já existe na `WorkingMemory`, falta detector que decrementa)
-- Class features: Action Surge, Rage, Sneak Attack com chips visíveis na ficha
-- Multiclass: stretch goal
-
-**Múltiplos perfis de DM** (rigoroso/equilibrado/tranquilo/rule_of_cool) — fundação `dm_profile` já existe, falta calibrar overlays.
-
-### Longo prazo
-
-- **Fase 8 — Mini-tactical grid próprio**: Canvas 8×8 ou 12×12 só em combate. Tokens automáticos baseados em `inimigos_combate` + jogador, posições estimadas pelo LLM. Mostra movimentação, área de magias (Bola de Fogo em 20 pés visualizada). Só faz sentido depois da Fase 6 (mecânicas D&D) — aí o grid tem valor mecânico real, não só estético.
-- App mobile (React Native ou Flutter) após engine validada e canal monetizado
-- Múltiplos jogadores na mesma sessão via WebRTC
-- Curse of Strahd (adiado — copyright; só depois da engine validada com módulo original "Os Filhos de Valdrek")
+**Longo prazo:**
+- Mini-tactical grid próprio (Canvas 8×8, depois da Fase 6.5)
+- App mobile (React Native / Flutter) após canal monetizado
+- Múltiplos jogadores via WebRTC
 
 ---
 

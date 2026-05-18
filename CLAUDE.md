@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 16 de maio de 2026 — Auditoria de bugs + 4 features de game design (XP/level up, combate tático, economia, companions)
+> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + docs atualizados
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 4.6 concluída. Auth & Multi-tenant + 5 DM Veteran Features implementados. Fase 6 completa (spell detector + slot tracker + subclass picker + class features + spell list). Recap oral + Consequências visíveis implementados. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 599/599 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -65,6 +65,17 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
   - **356/356 testes passam, tsc clean.**
 
 Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou Fase 5.6 (sincronização texto-voz). Roteiro de combate em `.internal/ROTEIRO_COMBATE.md` (não rastreado) segue válido.
+
+- **Auditoria de 10 bugs críticos (17/05)**: ✅ CONCLUÍDA. 5 FUNC + 5 UX identificados por agente de auditoria e corrigidos em 4 commits.
+  - **FUNC #1+#2+#4 — Companions/posições fora do prompt**: `para_texto()` não serializava `companions` nem `posicoes_combate` → LLM "esquecia" Lyssa entre turnos e narrava ataques impossíveis por distância. Fix: bloco `Aliados:` após consequências + distância inline em cada inimigo no COMBATE ATIVO.
+  - **FUNC #3 — Class features se perdiam entre sessões**: Action Surge/Rage/Sneak Attack voltavam com usos cheios mesmo gastos. Fix: nova coluna `class_features TEXT` no SQLite + migração idempotente + `aplicar_character_state()` restaura `usos_atual` respeitando `usos_max` atual.
+  - **FUNC #5 — Sem canal para editar features manualmente**: chips de feature eram read-only — jogador não conseguia gastar Action Surge sem o LLM detectar no texto. Fix: `sync_class_feature` no websocket.py + botões **–/+** inline nos chips do CharacterSheet.
+  - **UX #2 — Condições acumulavam indefinidamente**: "Envenenado" ficava na ficha para sempre. Fix: `condicoesDetectadas` substituído por turno (não acumulado) — condições confirmadas vivem em `player_conditions` no backend.
+  - **UX #5 — CombatTracker piscava ao re-entrar em combate**: primeiro turno manda `inimigos_combate={}` → frontend apagava e reconstruía o tracker. Fix: `deveAtualizarInimigos` — só substitui quando há dados OU combate terminou.
+  - **UX #4 — Recap sem botão de fechar**: nenhum dismiss antes dos 30s automáticos. Fix: botão × no header chama `limparRecap()`.
+  - **UX #3 — Buffer TTS sem teto**: sentenças longas (>450 chars) sem pontuação travavam indefinidamente no buffer. Fix: `_flush_forcado` quando buffer excede limite com colchetes balanceados.
+  - **UX #1 — early-return de `aplicar_level_up` incompleto**: caminho sem level up real retornava dict sem `slots_novos`/`features_novas` → `.map()` quebraria no modal. Fix: todos os campos incluídos no early-return defensivo.
+  - **599/599 testes passam, tsc clean.**
 
 ### Fases planejadas (não implementadas)
 
@@ -781,6 +792,45 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 **Strip de marcadores** — `_RE_MESTRE_VET` em `engine/memory/quest_detector.py` agora cobre: FIO, CLIFFHANGER, AGENDA, LAMPEJO, CONSEQUÊNCIA, XP, POSICAO, MOV, OURO, LOOT, PERDEU, MERCADO, FIM_MERCADO, COMPANION_ADD, COMPANION_HP, COMPANION_REMOVE.
 
 **Total: 12 bugs fixed + 4 features novas. 599/599 testes passam, tsc clean. Toda a sessão em commits granulares pra rollback fácil.**
+
+### Auditoria de 10 Bugs Críticos (Sessão 17/05)
+
+> Auditoria profunda por agente especializado → 4 commits.
+
+**FUNC #1+#2+#4 — Companions e posições não chegavam ao LLM** (commit `e467ed6`)
+
+| Arquivo | O que foi feito |
+|---|---|
+| `engine/memory/working_memory.py` | `para_texto()`: bloco `Aliados:` com HP/CA/atq/dano de cada companion; distância tática inline nos inimigos (`goblin 30ft cobertura`); movimento restante quando parcialmente consumido |
+
+**FUNC #3 — Class features não persistiam entre sessões** (commit `18436e0`)
+
+| Arquivo | O que foi feito |
+|---|---|
+| `engine/persistence/character_store.py` | Campo `class_features: dict` + coluna SQLite `class_features TEXT DEFAULT '{}'` + migração idempotente `_MIGRATE_CLASS_FEATURES`. `salvar`/`carregar` com JSON |
+| `engine/memory/working_memory.py` | `aplicar_character_state()` restaura `usos_atual` sobre estrutura existente da WM; recalcula `disponivel` |
+| `api/routes/session.py` | PUT /character e DELETE /{id} passam `wm.class_features` |
+
+**FUNC #5 — Sem sync_class_feature** (commit `38f1d29`)
+
+| Arquivo | O que foi feito |
+|---|---|
+| `api/websocket.py` | Handler `sync_class_feature`: valida `feature_id` + clamp `usos_atual [0, usos_max]` + recalcula `disponivel` |
+| `frontend/hooks/useGameSession.ts` | `sync_class_feature` adicionado ao union type de `sincronizarEstado` |
+| `frontend/components/CharacterSheet.tsx` | Prop `onUsarFeature` + botões **–** (gastar) e **+** (restaurar) inline nos chips, visíveis só quando ação é válida |
+| `frontend/app/page.tsx` | `onUsarFeature` → `sincronizarEstado("sync_class_feature", ...)` |
+
+**5 UX bugs** (commit `f4eba3b`)
+
+| Bug | Arquivo | Fix |
+|---|---|---|
+| UX #2 condições acumulando | `useGameSession.ts` | `condicoesDetectadas: novasCondicoes` (substitui por turno, não acumula) |
+| UX #5 CombatTracker pisca | `useGameSession.ts` | `deveAtualizarInimigos`: só atualiza quando dict não-vazio OU combate terminou |
+| UX #4 recap sem fechar | `page.tsx` | Botão × no header do recap chama `limparRecap()` |
+| UX #3 buffer TTS sem teto | `websocket.py` | `_flush_forcado` quando `len(buffer) > 450` e colchetes balanceados |
+| UX #1 level_up early-return | `progression.py` | Early-return inclui `hp_max_novo`, `slots_novos`, `features_novas` |
+
+**Total: 10 bugs. 599/599 testes. tsc clean.**
 
 ---
 
