@@ -639,3 +639,116 @@ def test_apresentar_npcs_idempotente():
     wm.apresentar_npcs_mencionados("Bjorn ri.")
     wm.apresentar_npcs_mencionados("Bjorn ri novamente.")
     assert len(wm.npcs_apresentados) == 1
+
+
+# ── para_texto() — companions e posições de combate ───────────────────────
+
+def test_para_texto_companions_vivo():
+    """Companion vivo aparece em 'Aliados:' com todos os campos."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
+    # registrar_companion seta hp_max=hp; ajustar para 25 para testar "HP 17/25"
+    wm.companions["lyssa"]["hp_max"] = 25
+    texto = wm.para_texto()
+    assert "Aliados:" in texto
+    assert "Lyssa" in texto
+    assert "hireling" in texto
+    assert "HP 17/25" in texto
+    assert "CA 15" in texto
+    assert "atq +4" in texto
+    assert "1d8" in texto
+
+
+def test_para_texto_companion_morto():
+    """Companion com HP 0 aparece como 'morto' em vez de HP N/M."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=25, ca=15, atq="+4", dano="1d8")
+    wm.companions["lyssa"]["hp"] = 0  # simula dano letal após criação
+    texto = wm.para_texto()
+    assert "Aliados:" in texto
+    assert "morto" in texto
+    assert "HP 0/" not in texto
+
+
+def test_para_texto_sem_companions_omite_aliados():
+    """Sem companions, a linha 'Aliados:' não aparece."""
+    wm = _wm()
+    texto = wm.para_texto()
+    assert "Aliados:" not in texto
+
+
+def test_para_texto_multiplos_companions():
+    """Dois companions aparecem separados por ponto-e-vírgula."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
+    wm.registrar_companion("wolf", "Lobo", "animal", hp=11, ca=13, atq="+3", dano="1d6")
+    texto = wm.para_texto()
+    assert "Lyssa" in texto
+    assert "Lobo" in texto
+    # separador ponto-e-vírgula entre os dois
+    assert ";" in texto
+
+
+def test_para_texto_posicao_inimigo_em_combate():
+    """Inimigo com posição registrada mostra distância em ft no bloco de combate."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.registrar_posicao("goblin-1", distancia_ft=60)
+    texto = wm.para_texto()
+    assert "60ft" in texto
+    assert "Goblin" in texto
+
+
+def test_para_texto_posicao_com_cobertura():
+    """Inimigo com cobertura aparece com sufixo ' cobertura' após ft."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc-chefe", "Orc Chefe", "intacto")
+    wm.registrar_posicao("orc-chefe", distancia_ft=15, cobertura=True)
+    texto = wm.para_texto()
+    assert "15ft cobertura" in texto
+
+
+def test_para_texto_posicao_sem_cobertura_sem_sufixo():
+    """Inimigo sem cobertura NÃO adiciona a palavra 'cobertura'."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.registrar_posicao("goblin-1", distancia_ft=30, cobertura=False)
+    texto = wm.para_texto()
+    assert "30ft" in texto
+    assert "cobertura" not in texto
+
+
+def test_para_texto_posicao_fora_de_combate_nao_aparece():
+    """Posições não aparecem quando fora de combate (bloco COMBATE ATIVO não existe)."""
+    wm = _wm()
+    wm.registrar_posicao("goblin-1", distancia_ft=60)
+    texto = wm.para_texto()
+    assert "60ft" not in texto
+    assert "COMBATE ATIVO" not in texto
+
+
+def test_para_texto_inimigo_sem_posicao_nao_adiciona_ft():
+    """Inimigo sem posição registrada não mostra 'ft' no texto."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    texto = wm.para_texto()
+    assert "Goblin" in texto
+    assert "ft" not in texto
+
+
+def test_para_texto_companions_e_posicoes_juntos():
+    """Companion + inimigo com posição coexistem corretamente no mesmo para_texto."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=20, ca=15, atq="+4", dano="1d8")
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc-1", "Orc", "intacto")
+    wm.registrar_posicao("orc-1", distancia_ft=10, cobertura=False)
+    texto = wm.para_texto()
+    assert "Aliados:" in texto
+    assert "Lyssa" in texto
+    assert "10ft" in texto
+    assert "Orc" in texto
