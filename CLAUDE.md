@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + cobertura de testes companions/posições
+> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + companions persistidos + VoxOrb 4 estados
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 609/609 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 612/612 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -301,6 +301,17 @@ NÃO usar allow_origins=["*"] → CORS_ORIGINS no .env, parse por vírgula em ap
 # Git
 NÃO commitar MDs de planejamento → apenas código funcional e docs técnicas
 NÃO começar tarefa que estoure janela de contexto → fracionar em commits menores
+
+# Companions / Persistência
+NÃO assumir que companions estão persistidos em bancos antigos → migração idempotente necessária.
+  Bancos criados antes da sessão 18/05 não têm a coluna companions; _MIGRATE_COMPANIONS adiciona.
+NÃO sobrescrever companions ativos com dados stale do SQLite → merge só se wm.companions estiver vazio.
+
+# VoxOrb / estados visuais
+NÃO wired mestrePensando para "carregando" → "carregando" é o spinner de setup de sessão.
+  O gap visual entre envio do texto e primeiro token chega via isProcessing (estado "processando").
+NÃO adicionar mais estados ao VoxOrb sem atualizar o tipo OrbState no componente — TypeScript não
+  detecta strings fora do union em JSX sem explicit typing.
 ```
 
 ---
@@ -834,6 +845,33 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 
 **Total: 10 bugs. 609/609 testes. tsc clean.**
 
+### Companions persistidos + VoxOrb 4 estados (Sessão 18/05)
+
+> Dois itens da lista Implementacaocode1805.txt implementados + roadmap salvo em docs/.
+
+**ITEM 1 — VoxOrb estado "processando"**
+
+| Arquivo | O que foi feito |
+|---|---|
+| `frontend/hooks/useGameSession.ts` | `isProcessing: true` em `enviarComando`, `false` no handler `tipo="fim"`. `isSpeaking = audioTocando` exposto. |
+| `frontend/components/VoxOrb.tsx` | 4º estado `"processando"` — ring âmbar + `animate-breathe text-amber-400`. Glow âmbar `tamanho * 1.25`. |
+| `frontend/app/page.tsx` | `orbEstado` prioriza `isSpeaking → ouvindo → isProcessing → idle`. `mestrePensando={isProcessing}` (era `carregando`). |
+
+**ITEM 2 — Companions sobrevivem entre sessões**
+
+| Arquivo | O que foi feito |
+|---|---|
+| `engine/persistence/character_store.py` | Coluna `companions TEXT DEFAULT '{}'` + migração idempotente `_MIGRATE_COMPANIONS`. Serialização JSON em `salvar`/`carregar`. |
+| `engine/memory/working_memory.py` | `aplicar_character_state()`: merge seguro — só restaura do SQLite se `self.companions` estiver vazio. |
+| `api/routes/session.py` | `companions=dict(wm.companions)` nos dois pontos de persistência (PUT /character e DELETE). |
+| `tests/test_character_store.py` | +3 testes roundtrip: único, vazio, múltiplos companions. |
+
+**docs/ROADMAP.md salvo** com fases 5–8 do projeto (VOXDM_ROADMAP_v1_0.md → repositório).
+
+**ITEM 3 (scene_image)** e **ITEM 4 (DadoAnimado.tsx)** já estavam implementados em sessões anteriores — verificados e sem trabalho pendente.
+
+**612/612 testes, tsc clean.**
+
 ---
 
 ## Documentos de Referência
@@ -846,6 +884,7 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 | `.internal/ROTEIRO_COMBATE.md` | Roteiro de gravação do vídeo de combate — 6 cenas + features a mostrar + ideias futuras (não sobe pro GitHub) |
 | `.internal/VOXDM_LOG.md` | O que já foi feito, armadilhas encontradas, sessões |
 | `.internal/VOXDM_PONTE.md` | Ponte técnico↔conteúdo, condições de secrets, ganchos YouTube |
+| `docs/ROADMAP.md` | Roadmap de fases 5–8 — contexto de planejamento de médio/longo prazo |
 
 ---
 
