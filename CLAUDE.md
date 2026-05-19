@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 19 de maio de 2026 — Token flow control (combat.md -69%, saves.md -52%, lembrete -77%). 629/629 testes. tsc clean.
+> Atualizado: 19 de maio de 2026 — Token flow control fase 2: master_system.md -16% (-1 875 chars / -536 tokens/turno). 630/630 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---

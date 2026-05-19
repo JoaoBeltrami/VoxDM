@@ -506,12 +506,26 @@ def test_saves_md_dentro_do_budget():
     )
 
 
+def test_master_system_dentro_do_budget():
+    """master_system.md comprimido: máx 10 500 chars (~3 000 tokens).
+
+    Após compressão de marcadores + remoção de seções redundantes, o arquivo
+    ficou em ~9 915 chars. Teto de 10 500 dá margem para edições futuras sem
+    ultrapassar o budget de turno de combate.
+    """
+    conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) <= 10_500, (
+        f"master_system.md com {len(conteudo)} chars excede teto de 10 500 chars — "
+        "injeta ~3 000 tokens em todo turno; revisar o que foi adicionado"
+    )
+
+
 def test_prompt_combate_dentro_do_budget_de_tokens():
-    """Prompt de combate completo deve ficar abaixo de 22 000 chars (~6 286 tokens).
+    """Prompt de combate completo deve ficar abaixo de 18 000 chars (~5 143 tokens).
 
     Budget alvo: turno de combate (system + user) ≤ 6 000 TPM @ 1 turn/min
-    no Groq 70B. Teto aqui é um pouco mais alto (22 000 chars) para cobrir
-    variações de DM features e para_texto sem quebrar em testes unitários.
+    no Groq 70B. Teto aqui é 18 000 chars (master ~9 900 + combat ~3 700 +
+    saves ~1 400 + para_texto ~500 + DM features ~400 + lembrete ~180).
     O guard de runtime em prompt_builder.py alerta em > 20 000 chars.
     """
     invalidar_cache()
@@ -541,7 +555,7 @@ def test_prompt_combate_dentro_do_budget_de_tokens():
     )
     mensagens = montar_mensagens(contexto)
     system = mensagens[0]["content"]
-    assert len(system) <= 22_000, (
-        f"System prompt de combate com {len(system)} chars excede teto de 22 000 — "
+    assert len(system) <= 18_000, (
+        f"System prompt de combate com {len(system)} chars excede teto de 18 000 — "
         f"turn total estimado: ~{(len(system)/3.5 + 400):.0f} tokens"
     )
