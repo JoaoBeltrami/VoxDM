@@ -761,3 +761,99 @@ def test_stab5_quest_hooks_exibidos_com_cap_no_para_texto():
     assert "quest-7" in texto   # mais recente deve aparecer
     assert "quest-3" in texto   # 5ª mais recente deve aparecer
     assert "quest-2" not in texto  # 6ª mais antiga não deve aparecer
+
+
+# ── COMBAT-1: vocabulário de morte expandido ─────────────────────────────────
+
+def test_combat1_morto_verbo_presente():
+    """COMBAT-1: 'morre' (presente) deve ser detectado como morte."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O orc morre instantaneamente.")
+    assert m is not None
+    assert "orc" in m.group(1).lower()
+
+
+def test_combat1_cai_morto():
+    """COMBAT-1: 'cai morto' deve ser detectado como morte."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O goblin cai morto aos seus pés.")
+    assert m is not None
+
+
+def test_combat1_se_dissipa():
+    """COMBAT-1: 'se dissipa' cobre espectros e fantasmas."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O espectro se dissipa no ar.")
+    assert m is not None
+
+
+def test_combat1_expira():
+    """COMBAT-1: 'expira' é frase literária de morte comum no LLM."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O lobo expira em silêncio.")
+    assert m is not None
+
+
+def test_combat1_foi_destruido():
+    """COMBAT-1: 'foi destruído' cobre constructs e undead."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O golem foi destruído pelo seu golpe.")
+    assert m is not None
+
+
+def test_combat1_se_fragmenta():
+    """COMBAT-1: 'se fragmenta' cobre esqueletos e constructs."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O esqueleto se fragmenta em pedaços.")
+    assert m is not None
+
+
+def test_combat1_sem_falso_positivo_desmaia():
+    """COMBAT-1: 'desmaia' (inconsciente) NÃO deve ser detectado como morte."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O bandido desmaia no chão.")
+    assert m is None
+
+
+def test_combat1_sem_falso_positivo_recua():
+    """COMBAT-1: 'recua' (fuga) NÃO deve ser detectado como morte."""
+    from api.turn_pipeline import _RE_INIMIGO_MORTO
+    m = _RE_INIMIGO_MORTO.search("O orc recua assustado.")
+    assert m is None
+
+
+# ── TTS-1: descarte antecipado de buffer só com marcadores ───────────────────
+
+def test_tts1_buffer_so_marcadores_sera_descartado():
+    """TTS-1: buffer com apenas marcadores [FIO:...][XP:...] deve ser descartável.
+
+    O early discard no loop de streaming verifica:
+      _balanceado AND buffer.strip() AND not strip_marcadores(buffer).strip()
+    Este teste valida a CONDIÇÃO — a lógica de websocket ativa o reset quando True.
+    """
+    from engine.memory.quest_detector import strip_marcadores
+
+    buffer = "[FIO: algo importante] [XP: +100] [CONSEQUÊNCIA: algo]"
+    balanceado = buffer.count("[") == buffer.count("]")
+    stripped = strip_marcadores(buffer).strip()
+
+    assert balanceado, "colchetes balanceados"
+    assert not stripped, "strip deve remover tudo, sinalizando descarte"
+
+
+def test_tts1_buffer_misto_nao_descartado():
+    """TTS-1: buffer com marcador + narrativa real NÃO deve ser descartado."""
+    from engine.memory.quest_detector import strip_marcadores
+
+    buffer = "[FIO: algo] O goblin avança em direção ao jogador."
+    stripped = strip_marcadores(buffer).strip()
+
+    assert stripped, f"narrativa deve ser preservada após strip: {stripped!r}"
+
+
+def test_tts1_buffer_marcador_incompleto_nao_descartado():
+    """TTS-1: marcador parcial (colchete aberto) NÃO aciona o descarte."""
+    buffer = "[FIO: texto ainda chegando"
+    balanceado = buffer.count("[") == buffer.count("]")
+    # Colchetes não balanceados → descarte não deve ocorrer
+    assert not balanceado, "colchete aberto = não balanceado = sem descarte"

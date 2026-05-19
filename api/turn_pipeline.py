@@ -112,10 +112,17 @@ _RE_ALVO_ATAQUE = re.compile(
 )
 _RE_INIMIGO_MORTO = re.compile(
     r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
-    r"(?:caiu|morreu|está morto|está morta|foi abatido|foi abatida|jaz|tombou|desmorona|"
-    r"sucumbe|sucumbiu|pereceu|perece|se dissolve|dissolveu|cai sem vida|caiu sem vida|"
-    r"entra em colapso|entrou em colapso|desaba|desabou|não se levanta|não se move mais|"
-    r"exala o último|foi eliminado|foi eliminada|não respira|deixou de respirar)\b",
+    r"(?:caiu|morreu|morre|está morto|está morta|foi abatido|foi abatida|jaz|tombou|"
+    r"desmorona|sucumbe|sucumbiu|pereceu|perece|fenece|feneceu|"
+    r"se dissolve|dissolveu|se dissipa|dissipou|"
+    r"cai sem vida|caiu sem vida|cai morto|caiu morto|cai inerte|caiu inerte|"
+    r"entra em colapso|entrou em colapso|desaba|desabou|"
+    r"não se levanta|não se move mais|exala o último|"
+    r"foi eliminado|foi eliminada|é eliminado|é eliminada|"
+    r"foi destruído|foi destruída|é destruído|é destruída|"
+    r"se fragmenta|fragmentou|"
+    r"expira|expirou|"
+    r"não respira|deixou de respirar)\b",
     re.IGNORECASE,
 )
 _RE_INIMIGO_GRAVE = re.compile(

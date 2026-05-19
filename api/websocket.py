@@ -1005,22 +1005,28 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         # Edge TTS pode timeout ou engolir silenciosamente sentenças longas.
                         # Só força quando colchetes estão balanceados (marcador não aberto).
                         _balanceado = buffer_sentenca.count("[") == buffer_sentenca.count("]")
-                        _flush_normal = (
-                            buffer_sentenca.rstrip()[-1:] in ".!?"
-                            and len(buffer_sentenca.split()) >= 4
-                            and _balanceado
-                        )
-                        _flush_forcado = len(buffer_sentenca) > 450 and _balanceado
-                        if _flush_normal or _flush_forcado:
-                            # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
-                            # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
-                            texto_tts = strip_marcadores(buffer_sentenca).strip()
-                            if texto_tts:
-                                tts_tasks.append(asyncio.create_task(
-                                    _tts_sentenca(tts_seq_prox, texto_tts)
-                                ))
-                                tts_seq_prox += 1
+                        # Descarte antecipado: buffer só contém marcadores sem narrativa real.
+                        # Sem isso, "[FIO:...][XP:...]" entre duas frases narrativas atrasa o
+                        # flush da segunda frase — cria gap de silêncio perceptível no áudio.
+                        if _balanceado and buffer_sentenca.strip() and not strip_marcadores(buffer_sentenca).strip():
                             buffer_sentenca = ""
+                        else:
+                            _flush_normal = (
+                                buffer_sentenca.rstrip()[-1:] in ".!?"
+                                and len(buffer_sentenca.split()) >= 4
+                                and _balanceado
+                            )
+                            _flush_forcado = len(buffer_sentenca) > 450 and _balanceado
+                            if _flush_normal or _flush_forcado:
+                                # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
+                                # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
+                                texto_tts = strip_marcadores(buffer_sentenca).strip()
+                                if texto_tts:
+                                    tts_tasks.append(asyncio.create_task(
+                                        _tts_sentenca(tts_seq_prox, texto_tts)
+                                    ))
+                                    tts_seq_prox += 1
+                                buffer_sentenca = ""
 
             except Exception as e:
                 for task in tts_tasks:
