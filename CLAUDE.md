@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 18 de maio de 2026 — Auditoria de 10 bugs críticos (5 FUNC + 5 UX) + companions persistidos + VoxOrb 4 estados
+> Atualizado: 19 de maio de 2026 — Token flow control (combat.md -69%, saves.md -52%, lembrete -77%). 629/629 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -13,7 +13,7 @@ Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo p
 
 ## Fase Atual
 
-**Fase 6 concluída (mecânicas D&D 5e completas). 10 bugs críticos corrigidos (sessão 17/05). 612/612 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**Fase 6 concluída. 5 rounds de auditoria de imersão (25 bugs). Auditoria de robustez (5 bugs). 621/621 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -80,6 +80,37 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
 - **Cobertura de testes para companions/posições em para_texto() (18/05)**: ✅ CONCLUÍDO. `test_working_memory.py` ganhou 10 novos testes validando que `companions` e `posicoes_combate` aparecem corretamente no output de `para_texto()` — campos já implementados em `e467ed6` mas sem cobertura de teste. Total: 609/609 testes passam, tsc clean.
 
 - **Estabilidade 15-20min + LLM sem filtro (18/05)**: ✅ CONCLUÍDO. Sessão de hardening pós-auditoria: (1) `_PREFIXOS_RECUSA` reescrito — removidos falsos positivos PT-BR ("não posso", "lamento", "desculpe") que causavam cascata falsa em diálogo de NPC; só detecta quebra real de personagem. (2) Gemini `safety_settings` com `BLOCK_NONE` em todas as categorias — ações D&D padrão (matar, esfaquear, decapitar) não causam mais recusa. (3) `master_system.md` + `intro_system.md` com instrução explícita: narrador não é filtro moral, combate/violência de fantasia são ações de jogo. (4) `_BUFFER_RECUSA` aumentado 120→150 chars. **612/612 testes, tsc clean.**
+
+- **5 rounds de auditoria de imersão (18/05)**: ✅ CONCLUÍDO. 25 bugs críticos corrigidos em 5 rondas de auditoria focada em imersão.
+  - **Round 1** — `_RE_INIMIGO_MORTO` ampliado (sucumbe/perece/dissolve/desmorona/fenece); fuga de combate com `[FUGIU]`; `RE_COMBATE` Nível 1/2 (desce/tira/remove só com alvo explícito); fallback de HP stale corrigido em `aplicar_character_state`; `wm.player_hp` lido de `char_state.hp_current` (não `player_hp`).
+  - **Round 2** — `personagem_restaurado` populado com `player_spells` correto; timeout de 30s no `_enviar_recap_sessao_anterior`; `_RE_LAMPEJO` strip antes do TTS garantido; `strip_marcadores` remove `[FUGIU]`; buffer TTS nunca excede 500 chars sem flush.
+  - **Round 3** — `sair_combate()` chamado quando `[FUGIU]` detectado; `_RE_FIO` não captura texto de quest em colchetes duplos; XP deduplica por turno; `condicoesDetectadas` limitada a 5 itens max; `MensagemWS.player_hp/player_hp_max` populados no `fim` da abertura.
+  - **Round 4** — `turno_atual_idx` encontra posição real do jogador (não zero fixo); `RE_COMBATE` exige alvo explícito para "lanço"; prompt ampliado de "2-3 frases" para "2-4 frases" em combate; `char_state.hp_current` usado corretamente (não `player_hp`); `aplicar_pos_turno` processado ANTES do `fim` na abertura.
+  - **Round 5** — `lanço` removido de `_RE_ALVO_ATAQUE` (magias não são inimigos); `player_level` adicionado ao schema `MensagemWS` e populado nos dois `fim`; checkpoint `/checkpoint` agora salva `dm_state` (fios_soltos/agenda/cliffhanger não se perdem); `avancar_rodada` guarded com `texto_jogador.strip()` (sem avançar em intro); `setPersonagem` atualiza `player_level` no `levelUp` event.
+  - **616/616 testes passam, tsc clean.**
+
+- **Auditoria de robustez (19/05)**: ✅ CONCLUÍDA. 5 bugs que podiam quebrar features existentes em condições adversas.
+  - **ROB-1** — Reconexão WS (`tipo="init"`, `iteracoes>0`) não enviava `player_level` no `fim` → CharacterSheet mostrava nível 3 após refresh do browser. Fix: `player_level=wm.player_level` adicionado ao payload de reconexão.
+  - **ROB-2** — Reconexão não enviava `iniciativa_ordem` → InitiativeBar desaparecia ao reconectar mid-combat. Fix: bloco `iniciativa_ordem` (idêntico ao `fim` normal) adicionado ao reconect payload.
+  - **ROB-3** — `sync_class_feature` com `usos_max=-1` (Sneak Attack, Reckless Attack, Reckless Attack): `min(-1, N)=-1 → max(0,-1)=0 → disponivel=False` — feature ficava permanentemente desativada. Fix: guard `if usos_max < 0: continue` pula features ilimitadas.
+  - **ROB-4** — `[LOOT: item]` no pipeline não tinha teto de `_MAX_INVENT` → LLM alucinando muitos itens podia inflar o inventário e o prompt indefinidamente. Fix: `_MAX_INVENTARIO=50` + truncamento de item a 80 chars com log de aviso.
+  - **ROB-5** — `sync_conditions` sem teto → cliente mal-formado podia enviar milhares de condições e inflar o contexto. Fix: `[:_MAX_CONDS]` + truncamento a 60 chars por condição aplicados.
+  - 5 novos testes de robustez em `tests/test_websocket.py`. **621/621 testes, tsc clean.**
+
+- **Auditoria de estabilidade 30min + Token Flow Control (19/05)**: ✅ CONCLUÍDA. 5 fixes de sessão longa + compressão de prompts de combate.
+  - **STAB-1** — `[FUGIU]` não estava em `_RE_MESTRE_VET` → TTS lia "[FUGIU]" em voz alta após fuga bem-sucedida. Fix: adicionado à regex em `quest_detector.py`.
+  - **STAB-2** — `agenda_npcs` sem teto: 30 turnos com NPCs distintos acumulavam agendas indefinidamente (+30-50 tokens por entrada extra). Fix: cap de 8 entradas com eviction oldest-first em `turn_pipeline.py` step 12.
+  - **STAB-3** — Combate não encerrava automaticamente quando todos os inimigos morriam com frases fora do vocab de `_RE_FIM_COMBATE_LLM`. Fix: step 7b em `aplicar_pos_turno` auto-chama `sair_combate()` quando todos são "morto".
+  - **STAB-4** — `para_texto()` exibia todos os 50 itens do inventário inline no prompt. Fix: cap de 20 itens exibidos com sufixo "… e N mais".
+  - **STAB-5** — `para_texto()` exibia todas as quests já iniciadas (acumuladas ao longo da sessão). Fix: cap de 5 mais recentes.
+  - **Token Flow Control** — turno de combate estava em ~9 000 tok/turn (152% do TPM Groq 70B free de 6 000). Causa: `combat.md` (12 018 chars/3 434 tok) + `saves.md` (2 873 chars/821 tok) injetados todo turno de combate. Fix: reescrita cirúrgica de ambos preservando todo o protocolo mecânico e as garantias de teste existentes.
+    - `combat.md`: 12 018 → 3 691 chars (-69%). Protocolo de 3 camadas, lente de classe, teatro da mente, initiativa authority — tudo preservado. Exemplos verbosos e seções duplicadas removidas.
+    - `saves.md`: 2 873 → 1 375 chars (-52%). 6 atributos, sequência de 4 passos, calibração de intensidade — tudo preservado.
+    - `_LEMBRETE_SAIDA` em `prompt_builder.py`: 796 → 180 chars (-77%). Mantidas apenas as instruções únicas não presentes no `master_system.md`.
+    - Adicionado budget guard em `montar_mensagens()`: log warning quando system_content > 20 000 chars.
+    - Adicionados 3 testes de budget em `test_master_prompt.py`: teto de 5 000 chars para combat.md, 2 000 para saves.md, 22 000 para system prompt de combate completo.
+    - Turno de combate: **~9 000 → ~6 100 tok/turn** (-33%). A 1 turn/min está dentro do TPM 70B. A ritmo de voz real (1 turn/90s): ~4 k TPM → confortável no 70B durante sessões de 30-60min.
+  - **629/629 testes, tsc clean.**
 
 ### Bugs conhecidos — próxima sessão de fixes
 

@@ -60,6 +60,11 @@ class SessaoAtiva:
     # Inicializado em api/routes/session.py no POST /start e imutável por turno.
     # Injetado em ContextoMontado.spells_conhecidas antes de montar_mensagens().
     spells_conhecidas: list[str] = field(default_factory=list)
+    # Identidade restaurada de sessão anterior — preenchido por iniciar_sessao()
+    # quando session_anterior_id é fornecido e CharacterState tem personagem_config.
+    # Retornado ao frontend via SessaoInfo.personagem_restaurado para que a tela
+    # de "Carregar Sessão" não exija re-preenchimento do CharacterForm.
+    personagem_restaurado: dict | None = None
 
 
 # Store global — keyed by session_id (kebab-case)

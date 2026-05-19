@@ -319,7 +319,13 @@ def test_hot_reload_retorna_none_quando_arquivo_some(tmp_path):
     # ── Nível 1: sempre combate ────────────────────────────────────────────────
     ("ataco o inimigo com minha espada", True),
     ("golpeio o guarda na cabeça", True),
-    ("lanço um feitiço de fogo", True),
+    # Bug R4-2: "lanço" sem alvo NÃO é combate (ritual, corda, etc. são falsos positivos)
+    # "lanço" COM alvo explícito (no/na/contra/sobre) É combate
+    ("lanço um feitiço de fogo", False),          # sem alvo → não combate
+    ("lanço bola de fogo no goblin", True),       # com alvo → combate
+    ("lanço raio contra o guardião", True),       # com alvo → combate
+    ("lancei veneno sobre o guarda", True),       # com alvo → combate
+    ("lanço um ritual de identificação", False),  # sem alvo → não combate
     ("ativo minha espada mágica", True),
     ("luto contra os dois ao mesmo tempo", True),
     ("disparo uma flecha", True),
@@ -469,3 +475,73 @@ def test_montar_mensagens_fora_combate_nao_injeta_saves():
     system = mensagens[0]["content"]
     # saves.md não deve aparecer em contexto puramente social
     assert "salvaguarda" not in system.lower()
+
+
+# ── Testes de budget de tokens ────────────────────────────────────────────────
+# Garante que os prompts comprimidos não excedam os tetos de tamanho.
+# Qualquer editor que inflar os .md além do teto vai ver esses testes quebrarem.
+
+def test_combat_md_dentro_do_budget():
+    """combat.md comprimido: máx 5 000 chars (~1 430 tokens).
+
+    O budget é: turno de combate ≤ 6 000 TPM no Groq 70B free tier.
+    combat.md estava em 12 018 chars (3 434 tok) — estava consumindo 57% do TPM
+    sozinho. Após compressão ficou em ~3 700 chars (~1 055 tok).
+    Teto aqui é 5 000 chars para dar margem a edições futuras sem travar sessão.
+    """
+    conteudo = _COMBAT_PATH.read_text(encoding="utf-8")
+    assert len(conteudo) <= 5_000, (
+        f"combat.md com {len(conteudo)} chars excede teto de 5 000 chars — "
+        "o turno de combate vai cascatear para 8B toda vez"
+    )
+
+
+def test_saves_md_dentro_do_budget():
+    """saves.md comprimido: máx 2 000 chars (~571 tokens)."""
+    from pathlib import Path
+    saves_path = _COMBAT_PATH.parent / "saves.md"
+    conteudo = saves_path.read_text(encoding="utf-8")
+    assert len(conteudo) <= 2_000, (
+        f"saves.md com {len(conteudo)} chars excede teto de 2 000 chars"
+    )
+
+
+def test_prompt_combate_dentro_do_budget_de_tokens():
+    """Prompt de combate completo deve ficar abaixo de 22 000 chars (~6 286 tokens).
+
+    Budget alvo: turno de combate (system + user) ≤ 6 000 TPM @ 1 turn/min
+    no Groq 70B. Teto aqui é um pouco mais alto (22 000 chars) para cobrir
+    variações de DM features e para_texto sem quebrar em testes unitários.
+    O guard de runtime em prompt_builder.py alerta em > 20 000 chars.
+    """
+    invalidar_cache()
+    wm = WorkingMemory.nova_sessao(
+        location_id="dungeon",
+        location_nome="Dungeon",
+        session_id="test-budget",
+        player_class="Guerreiro",
+    )
+    wm.entrar_combate()
+    # Adiciona 3 inimigos para simular combate real
+    wm.registrar_inimigo("goblin-1", "Goblin", "ferido")
+    wm.registrar_inimigo("goblin-2", "Goblin Arqueiro", "intacto")
+    wm.registrar_inimigo("orc-lider", "Orc Líder", "intacto")
+    # DM features populadas
+    wm.fios_soltos = ["O ferreiro sabe algo sobre Valdrek", "A guarda suspeita do jogador"]
+    wm.agenda_npcs = {"orc-lider": "planeja recuar se perder mais de metade dos guerreiros"}
+
+    contexto = ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[],
+        chunks_episodicos=[],
+        chunks_regras=[],
+        relacoes_grafo=[],
+        secrets_visiveis=[],
+        transcricao_atual="ataco o orc líder com minha espada",
+    )
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    assert len(system) <= 22_000, (
+        f"System prompt de combate com {len(system)} chars excede teto de 22 000 — "
+        f"turn total estimado: ~{(len(system)/3.5 + 400):.0f} tokens"
+    )

@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS character_state (
     player_level           INTEGER NOT NULL DEFAULT 3,
     class_features         TEXT    NOT NULL DEFAULT '{}',
     companions             TEXT    NOT NULL DEFAULT '{}',
+    personagem_config      TEXT    NOT NULL DEFAULT '{}',
+    dm_state               TEXT    NOT NULL DEFAULT '{}',
     updated_at             REAL    NOT NULL DEFAULT (unixepoch())
 )
 """
@@ -90,6 +92,23 @@ _MIGRATE_CLASS_FEATURES = "ALTER TABLE character_state ADD COLUMN class_features
 # Migração idempotente — adiciona coluna companions (Fase 5.2).
 # Bug narrativo grave: companion some entre sessões sem persistência.
 _MIGRATE_COMPANIONS = "ALTER TABLE character_state ADD COLUMN companions TEXT NOT NULL DEFAULT '{}'"
+
+# Migração idempotente — identidade completa do personagem.
+# Salva numa única coluna JSON para não precisar de ~18 ALTER TABLE separados.
+# Campos: player_name, player_class, player_race, player_background, player_subclass,
+# player_description, tts_voice, dm_profile, str/dex/con/int/wis/cha scores,
+# skill_profs, save_profs, location_id, location_nome, player_hp_max.
+# Sem isso, continuar uma sessão exigia re-preencher o CharacterForm inteiro.
+_MIGRATE_PERSONAGEM_CONFIG = (
+    "ALTER TABLE character_state ADD COLUMN personagem_config TEXT NOT NULL DEFAULT '{}'"
+)
+
+# Migração idempotente — estado narrativo do mestre veterano.
+# Persiste fios_soltos, agenda_npcs e cliffhanger_pendente entre sessões/crashes.
+# Sem isso o DM "esquece" os fios narrativos a cada reconexão, rompendo a continuidade.
+_MIGRATE_DM_STATE = (
+    "ALTER TABLE character_state ADD COLUMN dm_state TEXT NOT NULL DEFAULT '{}'"
+)
 
 
 @dataclass
@@ -128,6 +147,18 @@ class CharacterState:
     # Formato: {"lyssa": {"nome": "Lyssa", "tipo": "hireling", "hp": 17,
     #            "hp_max": 25, "ca": 15, "atq": "+4", "dano": "1d8"}}
     companions: dict[str, dict] = field(default_factory=dict)
+    # Identidade completa do personagem — salva numa única coluna JSON.
+    # Campos cobertos: player_name, player_class, player_race, player_background,
+    # player_subclass, player_description, tts_voice, dm_profile,
+    # str/dex/con/int/wis/cha scores, skill_profs, save_profs,
+    # location_id, location_nome, player_hp_max.
+    # Restaurado em iniciar_sessao() quando session_anterior_id é fornecido,
+    # eliminando a necessidade de re-preencher o CharacterForm.
+    personagem_config: dict = field(default_factory=dict)
+    # Estado narrativo do mestre veterano — persiste entre sessões/crashes.
+    # Formato: {"fios_soltos": [...], "agenda_npcs": {...}, "cliffhanger": ""}
+    # Sem isso o mestre "esquece" os fios narrativos em reconexões.
+    dm_state: dict = field(default_factory=dict)
 
 
 class CharacterStore:
@@ -148,6 +179,8 @@ class CharacterStore:
             await _aplicar_migracao_idempotente(conn, _MIGRATE_PLAYER_LEVEL, "player_level")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_CLASS_FEATURES, "class_features")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_COMPANIONS, "companions")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_PERSONAGEM_CONFIG, "personagem_config")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_DM_STATE, "dm_state")
             await conn.commit()
             yield conn
 
@@ -163,8 +196,8 @@ class CharacterStore:
                      hit_dice_type, death_saves_successes, death_saves_failures,
                      death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
                      inventory, conditions, spells_conhecidas, player_level,
-                     class_features, companions, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                     class_features, companions, personagem_config, dm_state, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
                     owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
@@ -185,6 +218,8 @@ class CharacterStore:
                     player_level=excluded.player_level,
                     class_features=excluded.class_features,
                     companions=excluded.companions,
+                    personagem_config=excluded.personagem_config,
+                    dm_state=excluded.dm_state,
                     updated_at=unixepoch()
                 """,
                 (
@@ -208,6 +243,8 @@ class CharacterStore:
                     state.player_level,
                     json.dumps(state.class_features),
                     json.dumps(state.companions),
+                    json.dumps(state.personagem_config),
+                    json.dumps(state.dm_state),
                 ),
             )
             await conn.commit()
@@ -249,6 +286,8 @@ class CharacterStore:
             player_level=int(row["player_level"] or 3),
             class_features=json.loads(row["class_features"] or "{}"),
             companions=json.loads(row["companions"] or "{}"),
+            personagem_config=json.loads(row["personagem_config"] or "{}"),
+            dm_state=json.loads(row["dm_state"] or "{}"),
         )
 
     async def deletar(self, session_id: str) -> None:

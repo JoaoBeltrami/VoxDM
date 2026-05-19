@@ -478,6 +478,20 @@ class WorkingMemory:
         persisted_companions: dict[str, dict] = getattr(state, "companions", {})
         if persisted_companions and not self.companions:
             self.companions = {k: dict(v) for k, v in persisted_companions.items()}
+        # Estado narrativo do mestre — restaura fios_soltos, agenda_npcs e
+        # cliffhanger_pendente. Sem isso o mestre "esquece" os threads narrativos
+        # ao reconectar ou ao server restart, quebrando a continuidade da história.
+        dm_state: dict = getattr(state, "dm_state", {})
+        if dm_state:
+            fios = dm_state.get("fios_soltos", [])
+            if fios and not self.fios_soltos:
+                self.fios_soltos = list(fios)
+            agenda = dm_state.get("agenda_npcs", {})
+            if agenda and not self.agenda_npcs:
+                self.agenda_npcs = dict(agenda)
+            cliff = dm_state.get("cliffhanger_pendente", "")
+            if cliff and not self.cliffhanger_pendente:
+                self.cliffhanger_pendente = cliff
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona uma fala ao diálogo recente, mantendo a janela deslizante."""
@@ -944,7 +958,11 @@ class WorkingMemory:
         if self.player_conditions:
             linhas.append(f"Condições: {', '.join(self.player_conditions)}")
         if self.player_inventory:
-            linhas.append(f"Inventário: {', '.join(self.player_inventory)}")
+            # Exibe no máx 20 itens — evita prompt inflation em sessões longas
+            # onde o inventário acumulou 50 itens. O TTS/LLM não precisa da lista completa.
+            inv_exibido = self.player_inventory[:20]
+            sufixo = f" … e {len(self.player_inventory) - 20} mais" if len(self.player_inventory) > 20 else ""
+            linhas.append(f"Inventário: {', '.join(inv_exibido)}{sufixo}")
 
         if self.npcs_presentes:
             linhas.append(f"\nNPCs presentes: {', '.join(self.npcs_presentes)}")
@@ -956,9 +974,14 @@ class WorkingMemory:
                 linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/3)")
 
         if self.active_quest_hooks:
-            linhas.append(f"\nQuests ativas: {', '.join(self.active_quest_hooks)}")
-            for qid, stage in self.quest_stages.items():
-                linhas.append(f"  {qid} → estágio: {stage}")
+            # Exibe apenas as 5 quests mais recentes — quests antigas completadas
+            # não precisam poluir o prompt; o mestre já narrou seus efeitos.
+            hooks_exibidos = self.active_quest_hooks[-5:]
+            linhas.append(f"\nQuests ativas: {', '.join(hooks_exibidos)}")
+            for qid in hooks_exibidos:
+                stage = self.quest_stages.get(qid)
+                if stage:
+                    linhas.append(f"  {qid} → estágio: {stage}")
 
         if self.quests_modulo:
             linhas.append(f"\n{self.quests_modulo}")

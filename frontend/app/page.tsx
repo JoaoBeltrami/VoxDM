@@ -266,6 +266,8 @@ export default function Home() {
     rolagens, registrarRolagem,
     audioTocando, audioDuracao,
     isProcessing, isSpeaking,
+    personagemRestaurado,
+    serverHp, serverHpMax,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -300,6 +302,35 @@ export default function Home() {
   // para compat com handleConectar que ainda passa sessionInput ao conectar().
   const [sessionInput, setSessionInput] = useState("");
   const [personagem, setPersonagem] = useState<PersonagemConfig>({});
+
+  // Quando o servidor restaura a identidade de uma sessão anterior, aplica no estado
+  // local para que CharacterSheet, magias e nome no header apareçam corretamente
+  // sem o jogador precisar re-preencher o CharacterForm.
+  useEffect(() => {
+    if (personagemRestaurado) {
+      setPersonagem(prev => ({ ...prev, ...personagemRestaurado }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personagemRestaurado]);
+
+  // Propaga HP máximo do servidor para o personagem local.
+  // Caso de uso principal: level up — hp_max_novo chega via fim→serverHpMax e
+  // CharacterSheet precisa do novo valor na prop player_hp_max para exibir
+  // a barra corretamente e calcular o ganho de HP no efeito local.
+  useEffect(() => {
+    if (serverHpMax !== null && serverHpMax > 0) {
+      setPersonagem(prev => ({
+        ...prev,
+        player_hp_max: serverHpMax,
+        // Só atualiza player_hp se o servidor enviou (não-null) E se o valor
+        // local ainda é o máximo anterior (player não ajustou manualmente).
+        // Evita sobrescrever HP que o jogador editou na ficha.
+        ...(serverHp !== null ? { player_hp: serverHp } : {}),
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverHpMax]);
+
   const [ouvindo, setOuvindo] = useState(false);
 
   // Voz TTS — carregada do localStorage na hidratação
@@ -464,9 +495,12 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [textoRecap, limparRecap]);
 
-  // Modal de level up — auto-dismiss em 12s se o jogador não fechar antes.
+  // Modal de level up — auto-dismiss em 12s + sincroniza player_level no personagem local.
   useEffect(() => {
     if (!levelUp) return;
+    // R5-2: atualiza player_level no personagem para que CharacterSheet e CharacterForm
+    // reflitam o nível correto imediatamente (sem precisar criar nova sessão).
+    setPersonagem(p => ({ ...p, player_level: levelUp.nivel_novo }));
     const t = setTimeout(dismissLevelUp, 12_000);
     return () => clearTimeout(t);
   }, [levelUp, dismissLevelUp]);

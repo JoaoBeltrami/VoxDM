@@ -39,8 +39,13 @@ RE_COMBATE = re.compile(
     r"atir[ao]|atirei|atirar|"
     r"fir[ao]|firei|"
     # ── Nível 1: magia ofensiva ────────────────────────────────────────────────
-    r"lanç[ao]|lancei|lançar|"
     r"conjur[ao]|conjurei|conjurar|"
+    # ── Nível 2: lançar spell — exige alvo explícito (no/na/contra/sobre) ──────
+    # Bug R4-2: "lanço" sem alvo causava falso positivo em contexto não-combate:
+    # "lanço um ritual de identificação", "lanço a corda", etc.
+    # Com alvo: "lanço bola de fogo no goblin", "lanço raio contra o guarda" → OK.
+    r"lanç[ao]\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
+    r"lancei\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
     # ── Nível 1: defesa ativa ─────────────────────────────────────────────────
     r"esquiv[ao]|esquivei|esquivar|"
     r"par[ao] o (?:ataque|golpe)|"

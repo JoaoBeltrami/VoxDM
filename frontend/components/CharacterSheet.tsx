@@ -189,6 +189,34 @@ export function CharacterSheet({
   const [hpAtual, setHpAtual] = useState<number>(personagem.player_hp ?? hpMax);
   const [hpInput, setHpInput] = useState("");
 
+  // Sincroniza hpAtual quando a prop player_hp muda por autoridade do servidor.
+  // Isso cobre dois casos: (1) personagemRestaurado chega depois do mount inicial
+  // (sessão continuada) e (2) server envia player_hp via fim → page.tsx atualiza
+  // personagem.player_hp → CharacterSheet re-renderiza mas hpAtual local não
+  // mudaria sem este effect. Só dispara quando o valor da prop muda — não cria
+  // loop porque setHpAtual não altera a prop player_hp.
+  const prevPlayerHpRef = useRef<number | undefined>(personagem.player_hp);
+  useEffect(() => {
+    const hp = personagem.player_hp;
+    if (hp !== undefined && hp !== prevPlayerHpRef.current) {
+      setHpAtual(hp);
+      prevPlayerHpRef.current = hp;
+    }
+  }, [personagem.player_hp]);
+
+  // Quando hpMax sobe (ex: level up via prop player_hp_max atualizada pelo servidor),
+  // auto-adiciona o ganho ao HP atual. Espelha o que um mestre de mesa faria:
+  // "você subiu de nível, seu HP máximo foi +6, tome esses 6 PVs".
+  // Guard: só reage a AUMENTOS — restrição/drain de HP máximo não existe no 5e básico.
+  const hpMaxAnteriorRef = useRef(hpMax);
+  useEffect(() => {
+    if (hpMax > hpMaxAnteriorRef.current && hpMaxAnteriorRef.current > 0) {
+      const ganho = hpMax - hpMaxAnteriorRef.current;
+      setHpAtual(prev => Math.min(hpMax, prev + ganho));
+    }
+    hpMaxAnteriorRef.current = hpMax;
+  }, [hpMax]);
+
   // Flash visceral em mudança de HP — "dano" (vermelho) ou "cura" (verde)
   // Dura 700ms, suficiente pro olho registrar sem virar ruído.
   const [hpFlash, setHpFlash] = useState<"dano" | "cura" | null>(null);

@@ -302,19 +302,23 @@ def test_sincronizar_inimigos_ignora_pronome_no_estado():
 
 
 def test_pipeline_reseta_turno_para_jogador():
-    """Bug #8: após pipeline, turno_atual_idx volta a 0 (jogador) — não cicla."""
+    """Bug R4-1: após pipeline, turno_atual_idx aponta para o JOGADOR,
+    que pode não ser o índice 0 quando inimigos têm maior iniciativa."""
     from api.turn_pipeline import aplicar_pos_turno
     from engine.memory.working_memory import WorkingMemory
 
     wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-init")
     wm.entrar_combate()
     wm.registrar_inimigo("orc", "Orc", "intacto")
+    # Orc com iniciativa 15 > jogador 10 → jogador estará em índice 1, não 0.
+    # Fix R4-1: turno_atual_idx deve apontar pro jogador independentemente da posição.
     wm.iniciativa_cache = {"jogador": 10, "orc": 15}
     wm.turno_atual_idx = 99  # estado sujo
 
     aplicar_pos_turno(wm, "Ataco o orc.", "O orc rosna.")
 
-    assert wm.turno_atual_idx == 0
+    # Ordem DESC: orc(15) em idx=0, jogador(10) em idx=1 — jogador não é mais sempre 0.
+    assert wm.turno_atual_idx == 1  # jogador está na posição 1 (orc tem maior iniciativa)
 
 
 def test_pipeline_avanca_rodada_em_combate():
@@ -499,3 +503,261 @@ def test_aplicar_pos_turno_nao_duplica_consequencia():
 
     ocorrencias = [c for c in wm.log_consequencias if texto_conseq in c]
     assert len(ocorrencias) == 1
+
+
+# ── Testes: Auditoria de Robustez ─────────────────────────────────────────────
+
+def test_rob1_reconexao_fim_inclui_player_level(client):
+    """ROB-1: reconexão (iteracoes>0) deve incluir player_level no fim.
+
+    Sem isso, CharacterSheet mostra nível 3 após refresh mesmo se o jogador
+    subiu para nível 5 na sessão anterior.
+    """
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+
+    # Faz um turno para que iteracoes > 0
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "inicio"})
+        while True:
+            m = ws.receive_json()
+            if m["tipo"] == "fim":
+                break
+
+    # Simula level up manual na sessão
+    sessions[sid].working_mem.player_level = 7
+
+    # Reconexão: init com iteracoes > 0 → deve enviar fim com player_level correto
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"tipo": "init"})
+        msg = ws.receive_json()
+
+    assert msg["tipo"] == "fim"
+    assert msg["player_level"] == 7
+
+
+def test_rob2_reconexao_fim_inclui_iniciativa_em_combate(client):
+    """ROB-2: reconexão em combate deve incluir iniciativa_ordem populada.
+
+    Sem isso, a InitiativeBar desaparece quando o jogador reconecta
+    no meio de um combate (e.g. queda de conexão no celular).
+    """
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+
+    # Faz um turno para que iteracoes > 0
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "inicio"})
+        while True:
+            m = ws.receive_json()
+            if m["tipo"] == "fim":
+                break
+
+    # Simula estado de combate com um inimigo registrado
+    wm = sessions[sid].working_mem
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc", "Orc", "intacto")
+    wm.popular_iniciativa()
+
+    # Reconexão
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"tipo": "init"})
+        msg = ws.receive_json()
+
+    assert msg["tipo"] == "fim"
+    assert msg["em_combate"] is True
+    assert isinstance(msg["iniciativa_ordem"], list)
+    assert len(msg["iniciativa_ordem"]) >= 2  # jogador + orc
+
+
+def test_rob3_sync_class_feature_ilimitada_nao_desativa(client):
+    """ROB-3: sync_class_feature com usos_max=-1 (Sneak Attack, Reckless Attack)
+    não deve desativar a feature.
+
+    Bug: min(-1, N)=-1 → max(0,-1)=0 → disponivel=False.
+    Fix: ignorar sync para features ilimitadas (usos_max < 0).
+    """
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessions[sid].working_mem.class_features["sneak-attack"] = {
+        "nome": "Ataque Furtivo",
+        "disponivel": True,
+        "usos_max": -1,
+        "usos_atual": -1,
+        "restaura": "turno",
+    }
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        # Tenta sincronizar a feature ilimitada (payload inválido logicamente)
+        ws.send_json({
+            "tipo": "sync_class_feature",
+            "feature_id": "sneak-attack",
+            "usos_atual": 0,
+        })
+        # Envia algo para continuar e confirmar que o WS está vivo
+        ws.send_json({"texto": "olá"})
+        while True:
+            m = ws.receive_json()
+            if m["tipo"] == "fim":
+                break
+
+    # Feature ilimitada deve permanecer disponível e intocada
+    feat = sessions[sid].working_mem.class_features["sneak-attack"]
+    assert feat["disponivel"] is True
+    assert feat["usos_atual"] == -1
+
+
+def test_rob4_loot_respeitada_ao_atingir_limite():
+    """ROB-4: [LOOT: item] não deve adicionar itens quando inventário já tem 50."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("loja", "Loja", "sess-loot")
+    # Enche inventário até o limite
+    wm.player_inventory = [f"item-{i}" for i in range(50)]
+
+    resposta = "[LOOT: Espada Mágica] [LOOT: Escudo Raro]"
+    aplicar_pos_turno(wm, "pego os itens", resposta)
+
+    # Inventário não deve ter crescido além de 50
+    assert len(wm.player_inventory) == 50
+    assert "Espada Mágica" not in wm.player_inventory
+
+
+def test_rob5_sync_conditions_limitado_a_max_conds(client):
+    """ROB-5: sync_conditions com lista gigante deve ser truncada a _MAX_CONDS.
+
+    Sem isso, cliente mal-formado pode enviar milhares de condições e inflar
+    o contexto do LLM com strings inúteis a cada turno.
+    """
+    from api.state import sessions
+    from api.websocket import _MAX_CONDS
+
+    sid = _criar_sessao_ws(client)
+
+    conditions_gigantes = [f"cond-{i}" for i in range(_MAX_CONDS + 100)]
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({
+            "tipo": "sync_conditions",
+            "conditions": conditions_gigantes,
+        })
+        ws.send_json({"texto": "olá"})
+        while True:
+            m = ws.receive_json()
+            if m["tipo"] == "fim":
+                break
+
+    # Condições devem estar limitadas a _MAX_CONDS
+    assert len(sessions[sid].working_mem.player_conditions) <= _MAX_CONDS
+
+
+# ── Testes de estabilidade 30min (auditoria de sessão longa) ──────────────────
+
+
+def test_stab1_fugiu_removido_do_tts():
+    """STAB-1: [FUGIU] deve ser removido do texto antes do TTS.
+
+    Sem isso, strip_marcadores omitia o marcador e o Edge TTS lia literalmente
+    '[FUGIU]' em voz alta ao final de um turno de fuga bem-sucedida.
+    """
+    from engine.memory.quest_detector import strip_marcadores
+
+    texto = "O goblin recua em pânico, desaparecendo na escuridão. [FUGIU]"
+    resultado = strip_marcadores(texto)
+    assert "[FUGIU]" not in resultado
+    assert "goblin" in resultado  # texto narrativo preservado
+
+
+def test_stab2_agenda_npcs_cap_em_8():
+    """STAB-2: agenda_npcs deve ser limitada a 8 entradas.
+
+    Em sessões longas com muitos NPCs o LLM pode emitir [AGENDA:] repetidamente
+    até o dict crescer sem teto — cada entrada adiciona ~30-50 tokens ao prompt.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("salão", "Salão", "sess-agenda")
+    wm.em_combate = False
+
+    # Simula 12 turnos com agendas distintas de NPCs diferentes
+    for i in range(12):
+        resposta = f"[AGENDA: npc-{i:02d} → planeja algo diferente no turno {i}]"
+        aplicar_pos_turno(wm, "olho ao redor", resposta)
+
+    assert len(wm.agenda_npcs) <= 8, (
+        f"agenda_npcs cresceu além do teto: {len(wm.agenda_npcs)} entradas"
+    )
+
+
+def test_stab3_auto_sair_combate_quando_todos_mortos():
+    """STAB-3: combate encerra automaticamente quando todos inimigos estão mortos.
+
+    Sem isso, se o LLM narra a morte do último inimigo sem usar uma frase que
+    bata em _RE_FIM_COMBATE_LLM, `em_combate` fica True para sempre — o
+    CombatTracker não fecha e o modo de combate do prompt persiste.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("floresta", "Floresta", "sess-autocombate")
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.registrar_inimigo("goblin-2", "Goblin Arqueiro", "intacto")
+
+    # Marca ambos como mortos (pipeline detecta pelo _RE_INIMIGO_MORTO).
+    # Usa "caiu" (past tense — está na regex) e "sucumbe" (Round 1 ampliado).
+    # Deliberadamente sem nenhuma das frases de _RE_FIM_COMBATE_LLM para
+    # exercitar o step 7b (auto-sair) em vez do step 7 (frase explícita).
+    resposta = (
+        "O Goblin caiu, abatido pelo seu golpe certeiro. "
+        "O Goblin Arqueiro sucumbe aos ferimentos sofridos."
+    )
+    aplicar_pos_turno(wm, "ataco os goblins", resposta)
+
+    # Engine deve ter saído do combate automaticamente
+    assert not wm.em_combate, "em_combate deveria ser False quando todos mortos"
+    assert len(wm.inimigos_combate) == 0, "inimigos_combate deveria estar vazio"
+
+
+def test_stab4_inventario_exibido_com_cap_no_para_texto():
+    """STAB-4: para_texto() deve mostrar no máx 20 itens do inventário.
+
+    Com inventário cheio (50 itens), o bloco 'Inventário:' ocuparia ~300 chars
+    desnecessários no prompt. O display é limitado a 20 com sufixo 'e N mais'.
+    """
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-inv")
+    wm.player_inventory = [f"item-{i}" for i in range(50)]
+
+    texto = wm.para_texto()
+
+    assert "item-0" in texto          # primeiros itens aparecem
+    assert "item-49" not in texto      # item após o corte não aparece
+    assert "e 30 mais" in texto        # sufixo informa quantos restam
+
+
+def test_stab5_quest_hooks_exibidos_com_cap_no_para_texto():
+    """STAB-5: para_texto() deve mostrar no máx 5 quests ativas.
+
+    Sem esse cap, todas as quests já iniciadas (mesmo as já avançadas e
+    esquecidas narrativamente) continuam no prompt indefinidamente.
+    """
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-quest")
+    # Simula 8 quests distintas adicionadas ao longo da sessão
+    for i in range(8):
+        wm.atualizar_quest_stage(f"quest-{i}", f"stage-{i}")
+
+    texto = wm.para_texto()
+
+    # Só as 5 mais recentes devem aparecer
+    assert "quest-7" in texto   # mais recente deve aparecer
+    assert "quest-3" in texto   # 5ª mais recente deve aparecer
+    assert "quest-2" not in texto  # 6ª mais antiga não deve aparecer

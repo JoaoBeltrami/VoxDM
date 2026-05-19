@@ -30,6 +30,7 @@ from typing import Any
 import structlog
 
 from engine.magic.slot_tracker import detectar_descanso, restaurar_slots
+from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
 
@@ -100,14 +101,21 @@ _RE_COMPANION_REMOVE = re.compile(r"\[COMPANION_REMOVE:\s*([^\]]+?)\s*\]", re.IG
 # ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
 
 _RE_ALVO_ATAQUE = re.compile(
-    r"\b(?:ataco?|atacar|golpei?o|firo|lanço|apunhalo|atinge?|atinjo|acerto)\s+"
+    # Bug R5-1: "lanço" removido — causava falso positivo onde armas/feitiços
+    # eram registrados como inimigos: "lanço a flecha no orc" → "Flecha" virava
+    # inimigo no CombatTracker. "lanço" é detectado separadamente pelo spell_detector
+    # (spell_detector.py:_RE_CASTING) que extrai o nome da magia corretamente.
+    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto)\s+"
     r"(?:o|a|ao?s?|na?s?)\s+"
     r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,30}?)(?=\s+(?:com|de|usando|n[ao])\b|[.!,?]|$)",
     re.IGNORECASE,
 )
 _RE_INIMIGO_MORTO = re.compile(
     r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,25}?)\s+"
-    r"(?:caiu|morreu|está morto|está morta|foi abatido|foi abatida|jaz|tombou|desmorona)\b",
+    r"(?:caiu|morreu|está morto|está morta|foi abatido|foi abatida|jaz|tombou|desmorona|"
+    r"sucumbe|sucumbiu|pereceu|perece|se dissolve|dissolveu|cai sem vida|caiu sem vida|"
+    r"entra em colapso|entrou em colapso|desaba|desabou|não se levanta|não se move mais|"
+    r"exala o último|foi eliminado|foi eliminada|não respira|deixou de respirar)\b",
     re.IGNORECASE,
 )
 _RE_INIMIGO_GRAVE = re.compile(
@@ -122,11 +130,23 @@ _RE_INIMIGO_FERIDO = re.compile(
 )
 _RE_FIM_COMBATE_LLM = re.compile(
     r"\b("
+    # Declarações diretas de fim de combate
     r"o combate termina|a luta termina|combate encerrado|batalha encerrada|"
+    r"a batalha chegou ao fim|o confronto termina|o confronto acabou|"
+    # Estado de ausência de ameaças
     r"não há mais inimigos|sem mais ameaças|ambiente está seguro|"
-    r"silêncio retorna|silêncio toma conta|"
+    r"área está segura|local está seguro|ameaça foi neutralizada|"
+    r"ameaças foram neutralizadas|não resta[m]? inimigos|"
+    # Silêncio pós-combate (muito comum em PT-BR)
+    r"silêncio retorna|silêncio toma conta|silêncio se instala|"
+    r"silêncio cai sobre|o barulho cessa|o caos cessa|"
+    # Todos os inimigos caíram
     r"todos os inimigos ca[íi]ram|inimigos foram derrotados|"
-    r"último inimigo|únic[oa] sobrevivente"
+    r"todos ca[íi]ram|todos foram abatidos|todos pereceram|"
+    # Último inimigo
+    r"último inimigo|únic[oa] sobrevivente|nenhum sobreviveu|"
+    # Recuo dos inimigos (também encerra combate para o jogador)
+    r"inimigos recuaram|fugiram em desbandada|debandam|desbandada"
     r")\b",
     re.IGNORECASE,
 )
@@ -243,8 +263,14 @@ def aplicar_pos_turno(
         Lista de mudanças de trust aplicadas: [(npc_id, delta), ...].
         Útil para o caller emitir eventos / telemetria.
     """
-    # 1. Registra fala do mestre + apresenta NPCs mencionados
-    working_mem.registrar_fala("mestre", resposta_completa)
+    # 1. Registra fala do mestre + apresenta NPCs mencionados.
+    # Strips marcadores internos ([FIO:], [CONSEQUÊNCIA:], [XP:], etc.) ANTES de
+    # armazenar em dialogo_recente — o histórico enviado ao LLM como "assistant"
+    # messages não deve conter marcadores de engine, senão o modelo aprende a
+    # emiti-los desnecessariamente ou a referenciar seu próprio scaffolding interno.
+    # A extração dos marcadores (steps 10-14) ainda usa `resposta_completa` original.
+    fala_limpa = strip_marcadores(resposta_completa)
+    working_mem.registrar_fala("mestre", fala_limpa)
     working_mem.apresentar_npcs_mencionados(resposta_completa)
 
     # 2. Sync de inimigos ANTES de detectar fim de combate (ordem crítica —
@@ -266,8 +292,17 @@ def aplicar_pos_turno(
         if inimigos_sem_ini:
             log.warning("iniciativa_fallback", inimigos=inimigos_sem_ini)
         working_mem.popular_iniciativa()
-        # Volta o cursor visual pro jogador — é a próxima vez que ele vai agir.
-        working_mem.turno_atual_idx = 0
+        # Volta o cursor visual pro JOGADOR — é a próxima vez que ele vai agir.
+        # Bug R4-1: turno_atual_idx=0 sempre apontava para a posição 0 da lista,
+        # que é o inimigo de MAIOR iniciativa (fallback 20,19,18...), não o jogador.
+        # Jogador começa com 10+mod_des ≈ 12 — fica após os inimigos. Solução:
+        # encontrar o índice real do token "jogador" entre os vivos.
+        _ordem_ini = working_mem.calcular_ordem_iniciativa()
+        _vivos = [t for t in _ordem_ini if not t.morto]
+        _idx_jogador = next(
+            (i for i, t in enumerate(_vivos) if t.id == "jogador"), 0
+        )
+        working_mem.turno_atual_idx = _idx_jogador
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
     # Ordem: antes do trust, pois o descanso é uma ação completa do jogador.
@@ -295,14 +330,32 @@ def aplicar_pos_turno(
         direcao = "melhorou" if delta > 0 else "piorou"
         working_mem.registrar_consequencia(f"Relação com {nome} {direcao}")
 
-    # 6. Avanço de rodada (só faz sentido em combate)
-    if working_mem.em_combate:
+    # 6. Avanço de rodada (só faz sentido em combate E com ação real do jogador).
+    # Bug R5-5: `aplicar_pos_turno` é chamado com `texto_jogador=""` na abertura
+    # (_enviar_abertura). Se a sessão era continuada em combate, `em_combate=True`
+    # e `avancar_rodada()` incrementava `rodada_combate` sem rodada real acontecer —
+    # player retomava em "Rodada 2" ao invés de "Rodada 1".
+    if working_mem.em_combate and texto_jogador.strip():
         working_mem.avancar_rodada()
 
     # 7. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync
     if working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
         working_mem.sair_combate()
         log.info("combate_encerrado_por_llm")
+
+    # 7b. Auto-encerrar combate quando TODOS os inimigos estão mortos.
+    # Garante que combates terminam mesmo quando o LLM usa frases de morte fora
+    # do vocabulário de _RE_FIM_COMBATE_LLM (ex: "o último orc respira seu
+    # último fôlego" sem dizer "combate termina"). Executado SÓ se o passo 7
+    # não já chamou sair_combate() — por isso checa em_combate novamente.
+    if working_mem.em_combate and working_mem.inimigos_combate:
+        todos_mortos = all(
+            d.get("estado") == "morto"
+            for d in working_mem.inimigos_combate.values()
+        )
+        if todos_mortos:
+            working_mem.sair_combate()
+            log.info("combate_encerrado_auto_todos_mortos")
 
     # 8. Contador de tensão narrativa fora de combate
     if working_mem.em_combate:
@@ -346,12 +399,22 @@ def aplicar_pos_turno(
             break  # Máx 1 cliffhanger por turno — o último vence
 
     # 12. Agenda NPC (Feat 3) — coleta [AGENDA: npc-id → plano]
+    # Cap: máx 8 agendas ativas. Quando excede, remove a entrada mais antiga
+    # (primeira chave inserida no dict — Python 3.7+ preserva ordem de inserção).
+    # Sem esse teto, sessões longas com muitos NPCs namedropped acumulam agendas
+    # indefinidamente e inflam o prompt em ~30-50 tokens por entrada extra.
+    _MAX_AGENDA = 8
     for m in _RE_AGENDA.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
         plano = m.group(2).strip()
         if npc_id and plano:
             working_mem.agenda_npcs[npc_id] = plano
             log.info("agenda_npc_atualizada", npc_id=npc_id, plano=plano[:60])
+            # Remove a agenda mais antiga se o teto for ultrapassado
+            while len(working_mem.agenda_npcs) > _MAX_AGENDA:
+                oldest = next(iter(working_mem.agenda_npcs))
+                del working_mem.agenda_npcs[oldest]
+                log.debug("agenda_npc_removida_por_limite", npc_id=oldest)
 
     # 13. Consequências visíveis (Feature 3) — coleta [CONSEQUÊNCIA: efeito duradouro]
     # Efeitos que persistem além da cena: NPCs mortos, alianças, locais destruídos,
@@ -378,9 +441,17 @@ def aplicar_pos_turno(
         log.info("ouro_alterado", delta=qtd, novo=working_mem.gold,
                  motivo=m.group(3)[:60])
 
+    # ROB-4: teto de 50 itens e truncamento em 80 chars para evitar prompt inflation.
+    # O sync_inventory do WebSocket já aplica esses limites para edições manuais;
+    # este bloco espelha a mesma política para itens adicionados pelo LLM via [LOOT:].
+    _MAX_INVENTARIO = 50
     for m in _RE_LOOT.finditer(resposta_completa):
-        item = m.group(1).strip()
+        item = m.group(1).strip()[:80]  # trunca nomes extravagantes do LLM
         if item and item.lower() not in (i.lower() for i in working_mem.player_inventory):
+            if len(working_mem.player_inventory) >= _MAX_INVENTARIO:
+                log.warning("loot_ignorado_inventario_cheio", item=item[:60],
+                            total=len(working_mem.player_inventory))
+                continue
             working_mem.player_inventory.append(item)
             log.info("loot_adicionado", item=item[:60])
 

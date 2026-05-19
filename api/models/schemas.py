@@ -93,6 +93,10 @@ class SessaoInfo(BaseModel):
     npcs_presentes: list[str]
     iteracoes: int
     criada_em: float
+    # Identidade restaurada de sessão anterior — preenchido só quando
+    # session_anterior_id foi fornecido E CharacterState.personagem_config existe.
+    # O frontend usa para pular o CharacterForm e restaurar os dados do personagem.
+    personagem_restaurado: dict | None = None
 
 
 class ComandoJogador(BaseModel):
@@ -182,6 +186,15 @@ class MensagemWS(BaseModel):
     # Mecânicas RPG — enviadas no "fim" para manter frontend sincronizado
     spell_slots: dict[int, dict[str, int]] = Field(default_factory=dict)
     hit_dice_current: int = 0
+    # HP atual e máximo do jogador — enviados para manter CharacterSheet em sync
+    # (ex: após level up o hp_max aumenta no backend mas o frontend não saberia).
+    # None = não enviar (mensagens que não são "fim")
+    player_hp: int | None = None
+    player_hp_max: int | None = None
+    # Bug R5-4: player_level ausente do "fim" — frontend não conseguia sincronizar
+    # o nível em tempo real via turns normais (só via mensagem "level_up" separada).
+    # Adicionado aqui para que o CharacterSheet sempre mostre o nível correto.
+    player_level: int = 3
     gold: int = 0
     xp: int = 0
     inspiration: bool = False

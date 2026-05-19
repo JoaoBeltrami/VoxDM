@@ -475,6 +475,29 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     if tts:
         await _sintetizar_e_enviar(websocket, tts, resposta_intro, voice=wm.tts_voice)
 
+    # Bug R4-5: o `fim` era enviado ANTES de aplicar_pos_turno, então quaisquer
+    # [FIO:] / [CONSEQUÊNCIA:] / [XP:] emitidos pelo LLM na abertura não apareciam
+    # no primeiro sync do frontend — só no turno seguinte. Corrigido: processar
+    # marcadores ANTES de montar o payload fim para que fios_soltos, consequencias,
+    # xp e quest stages reflitam o estado pós-pipeline já na primeira mensagem.
+    if resposta_intro:
+        # Processa marcadores de mestre veterano na intro ANTES de registrar_fala,
+        # para que fios_soltos/agenda/cliffhanger capturados pelo LLM na abertura
+        # sejam injetados no contexto desde o primeiro turno real do jogador.
+        # Também aplica quest markers e XP — o LLM da intro pode iniciar uma quest.
+        # registrar_fala recebe texto limpo (strip de marcadores) para não poluir
+        # o histórico de diálogo que é reenviado ao LLM como "assistant" messages.
+        from api.turn_pipeline import aplicar_pos_turno
+        from engine.memory.quest_detector import detectar_e_aplicar_quests, aplicar_recompensas_avancos
+        resposta_intro_limpa, avancos_intro = detectar_e_aplicar_quests(
+            resposta_intro, wm, sessao.quest_catalog
+        )
+        aplicar_recompensas_avancos(avancos_intro, sessao.quest_efeitos, wm)
+        # Registra fala e extrai marcadores (fios, consequências, xp, etc.) via pipeline.
+        # texto_jogador="" porque a abertura não tem input do jogador.
+        aplicar_pos_turno(wm, "", resposta_intro_limpa)
+        wm.apresentar_npcs_mencionados(resposta_intro)
+
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
         MensagemWS(
@@ -488,6 +511,9 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
             spell_slots=wm.spell_slots,
             hit_dice_current=wm.hit_dice_current,
+            player_hp=wm.player_hp,
+            player_hp_max=wm.player_hp_max,
+            player_level=wm.player_level,
             gold=wm.gold,
             xp=wm.xp,
             inspiration=wm.inspiration,
@@ -496,6 +522,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             death_saves_stable=wm.death_saves_stable,
             # Sincroniza class_features, fios_soltos e consequencias já na abertura
             # para que a ficha mostre os recursos corretos antes do primeiro turno.
+            # Agora reflete o estado PÓS-pipeline (fios da intro já incluídos).
             class_features=wm.class_features,
             fios_soltos=wm.fios_soltos,
             consequencias=list(wm.log_consequencias),
@@ -506,10 +533,6 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             companions=dict(wm.companions),
         ).model_dump_json()
     )
-
-    if resposta_intro:
-        wm.registrar_fala("mestre", resposta_intro)
-        wm.apresentar_npcs_mencionados(resposta_intro)
 
     # Dispara imagem da cena inicial em background — fire-and-forget.
     # Não bloqueia a abertura: o frontend receberá a mensagem "scene_image"
@@ -624,7 +647,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 if sessao.iteracoes == 0:
                     await _enviar_abertura(websocket, sessao)
                 else:
-                    # Reconexão rápida — reenvia estado sem LLM nem TTS
+                    # Reconexão rápida — reenvia estado sem LLM nem TTS.
+                    # ROB-1: incluir player_level para que CharacterSheet mostre o nível
+                    # correto após refresh (sem isso defaultava para 3 do schema).
+                    # ROB-2: incluir iniciativa_ordem para que InitiativeBar não desapareça
+                    # quando o jogador reconecta no meio de um combate.
                     wm = sessao.working_mem
                     await websocket.send_text(
                         MensagemWS(
@@ -638,6 +665,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
                             spell_slots=wm.spell_slots,
                             hit_dice_current=wm.hit_dice_current,
+                            player_hp=wm.player_hp,
+                            player_hp_max=wm.player_hp_max,
+                            player_level=wm.player_level,
                             gold=wm.gold,
                             xp=wm.xp,
                             inspiration=wm.inspiration,
@@ -655,6 +685,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             movimento_total_ft=wm.movimento_total_ft,
                             em_mercado=wm.em_mercado,
                             companions=dict(wm.companions),
+                            iniciativa_ordem=(
+                                [
+                                    {
+                                        "id": t.id, "nome": t.nome, "tipo": t.tipo,
+                                        "iniciativa": t.iniciativa,
+                                        "turno_atual": t.turno_atual,
+                                        "morto": t.morto,
+                                        "hp_atual": t.hp_atual, "hp_max": t.hp_max,
+                                    }
+                                    for t in wm.calcular_ordem_iniciativa()
+                                ]
+                                if wm.em_combate else []
+                            ),
                         ).model_dump_json()
                     )
                     log.info("ws_reconectado_estado_reenviado", session_id=session_id,
@@ -669,11 +712,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     log.info("hp_sincronizado", session_id=session_id, hp=sessao.working_mem.player_hp)
                 continue
 
-            # Sync de condições ativas — CharacterSheet envia lista completa atual
+            # Sync de condições ativas — CharacterSheet envia lista completa atual.
+            # ROB-5: limita a _MAX_CONDS para evitar lista enorme que infle o contexto.
+            # D&D 5e tem 14 condições oficiais; o dobro é mais que suficiente.
             if tipo_msg == "sync_conditions":
                 conditions = dados.get("conditions")
                 if isinstance(conditions, list):
-                    sessao.working_mem.player_conditions = [str(c) for c in conditions]
+                    sessao.working_mem.player_conditions = [
+                        str(c)[:60] for c in conditions[:_MAX_CONDS]
+                    ]
                     log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
                 continue
 
@@ -770,6 +817,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     feat = sessao.working_mem.class_features.get(fid)
                     if feat is not None:
                         usos_max = feat.get("usos_max", 1)
+                        # ROB-3: features ilimitadas têm usos_max=-1 (Sneak Attack,
+                        # Reckless Attack, etc.) — min(-1, N)=-1 → max(0,-1)=0 desabilitaria
+                        # a feature permanentemente. Essas features são sempre disponíveis;
+                        # não faz sentido o frontend tentar sincronizá-las manualmente.
+                        if usos_max < 0:
+                            continue
                         feat["usos_atual"] = max(0, min(usos_max, usos))
                         feat["disponivel"] = feat["usos_atual"] > 0
                         log.info("class_feature_sincronizada", session_id=session_id,
@@ -1176,6 +1229,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 1) for npc in sessao.working_mem.npcs_apresentados},
                     spell_slots=sessao.working_mem.spell_slots,
                     hit_dice_current=sessao.working_mem.hit_dice_current,
+                    player_hp=sessao.working_mem.player_hp,
+                    player_hp_max=sessao.working_mem.player_hp_max,
+                    player_level=sessao.working_mem.player_level,
                     gold=sessao.working_mem.gold,
                     xp=sessao.working_mem.xp,
                     inspiration=sessao.working_mem.inspiration,

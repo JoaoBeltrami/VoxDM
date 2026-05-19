@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   criarSessao,
   encerrarSessao,
+  checkpointSessao,
   wsUrl,
   type MensagemWS,
   type PersonagemConfig,
@@ -124,6 +125,15 @@ interface EstadoSessao {
   // Nível atual do personagem (Feature progressão). Atualizado via msg.player_level
   // ou inferido do resumo de level up (pulse de "subiu pra X").
   playerLevel: number;
+  // Identidade restaurada do servidor quando session_anterior_id foi fornecido.
+  // Preenchido logo após criarSessao() retornar — page.tsx usa pra popular `personagem`
+  // sem mostrar o CharacterForm de novo. null = sessão nova (sem restore).
+  personagemRestaurado: PersonagemConfig | null;
+  // HP autoritativo do backend — atualizado a cada "fim" WS.
+  // page.tsx usa para sincronizar CharacterSheet sem quebrar o estado local de HP.
+  // null = ainda não recebeu o primeiro "fim" (sessão nova ou antes do primeiro turno).
+  serverHp: number | null;
+  serverHpMax: number | null;
   // Resumo do último level up — null fora de level up. Modal exibe enquanto setado.
   // Limpo pelo botão "Continuar" do modal ou após auto-dismiss de 12s.
   levelUp: {
@@ -182,6 +192,9 @@ const ESTADO_INICIAL: EstadoSessao = {
   movimentoTotalFt: 30,
   emMercado: false,
   companions: {},
+  personagemRestaurado: null,
+  serverHp: null,
+  serverHpMax: null,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -249,6 +262,14 @@ export function useGameSession() {
   const reconnectCountRef = useRef(0);
   const intentionalCloseRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Timeout de turno: se tipo="fim" não chegar em 45s após enviarComando,
+  // o WS provavelmente está half-open (TCP morto, readyState ainda OPEN).
+  // Reset isProcessing + erro narrativo para o jogador não ficar travado.
+  const turnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TURN_TIMEOUT_MS = 45_000;
+  // Auto-checkpoint a cada 5 turnos — salva estado no SQLite sem encerrar sessão.
+  // Garante que gold/XP/inventário não se percam se o browser fechar abruptamente.
+  const turnosSinceCheckpointRef = useRef(0);
 
   const _conectarWS = useCallback((sessionId: string, nome: string | null) => {
     const ws = new WebSocket(wsUrl(sessionId));
@@ -355,7 +376,20 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "fim") {
+        // Turno chegou normalmente — cancela o guarda de half-open
+        if (turnTimeoutRef.current) {
+          clearTimeout(turnTimeoutRef.current);
+          turnTimeoutRef.current = null;
+        }
         setIsProcessing(false);
+
+        // Auto-checkpoint a cada 5 turnos: salva SQLite sem encerrar sessão.
+        // Protege contra crash/fechamento abrupto do browser entre turnos.
+        turnosSinceCheckpointRef.current += 1;
+        if (turnosSinceCheckpointRef.current >= 5 && sessionIdRef.current) {
+          turnosSinceCheckpointRef.current = 0;
+          checkpointSessao(sessionIdRef.current).catch(() => {/* silencioso */});
+        }
         const turno = turnoAtualRef.current;
         const textoFinal = textoAtualRef.current;
         textoAtualRef.current = "";
@@ -390,6 +424,10 @@ export function useGameSession() {
         const rpgUpdate = {
           spellSlots: Object.keys(spellSlotsAtual).length > 0 ? spellSlotsAtual : undefined,
           hitDiceCurrent: msg.hit_dice_current,
+          // HP autoritativo do backend: atualiza serverHp/serverHpMax no estado global.
+          // page.tsx reage a mudanças e propaga para CharacterSheet (ex: após level up).
+          serverHp: msg.player_hp ?? null,
+          serverHpMax: msg.player_hp_max ?? null,
           gold: msg.gold,
           xp: msg.xp,
           inspiration: msg.inspiration,
@@ -456,6 +494,8 @@ export function useGameSession() {
             npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
             spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
             hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
+            serverHp: rpgUpdate.serverHp,
+            serverHpMax: rpgUpdate.serverHpMax,
             gold: rpgUpdate.gold ?? s.gold,
             xp: rpgUpdate.xp ?? s.xp,
             inspiration: rpgUpdate.inspiration ?? s.inspiration,
@@ -504,6 +544,8 @@ export function useGameSession() {
             npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
             spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
             hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
+            serverHp: rpgUpdate.serverHp,
+            serverHpMax: rpgUpdate.serverHpMax,
             gold: rpgUpdate.gold ?? s.gold,
             xp: rpgUpdate.xp ?? s.xp,
             inspiration: rpgUpdate.inspiration ?? s.inspiration,
@@ -566,6 +608,10 @@ export function useGameSession() {
       // Limpa estado de turno em andamento — evita histórico corrompido se o
       // WS caiu no meio de um stream. Sem isso, textoAtualRef acumula texto
       // parcial e o próximo tipo="fim" concatena lixo ao textoFinal.
+      if (turnTimeoutRef.current) {
+        clearTimeout(turnTimeoutRef.current);
+        turnTimeoutRef.current = null;
+      }
       textoAtualRef.current = "";
       turnoAtualRef.current = null;
       setIsProcessing(false);
@@ -604,16 +650,30 @@ export function useGameSession() {
   ) => {
     intentionalCloseRef.current = false;
     reconnectCountRef.current = 0;
+    turnosSinceCheckpointRef.current = 0;
     personagemRef.current = personagem;
 
-    setEstado(s => ({ ...s, carregando: true, erro: null }));
+    setEstado(s => ({ ...s, carregando: true, erro: null, personagemRestaurado: null }));
     try {
       // Servidor gera o session_id — retornado em SessaoInfo.session_id
       const info = await criarSessao(personagem);
       const sessaoId = info.session_id;
       sessionIdRef.current = sessaoId;
-      const nome = personagem?.player_name?.trim() || null;
-      _conectarWS(sessaoId, nome);
+
+      // Se o servidor restaurou a identidade do personagem (sessão continuada),
+      // usamos o nome dele e guardamos o config completo para page.tsx popular a ficha.
+      const restaurado = info.personagem_restaurado ?? null;
+      const nomeEfetivo = restaurado?.player_name?.trim()
+        || personagem?.player_name?.trim()
+        || null;
+
+      if (restaurado) {
+        // Sobrescreve personagemRef para que reconexões automáticas usem o nome certo
+        personagemRef.current = { ...personagem, ...restaurado };
+        setEstado(s => ({ ...s, personagemRestaurado: restaurado }));
+      }
+
+      _conectarWS(sessaoId, nomeEfetivo);
     } catch (e) {
       setEstado(s => ({ ...s, carregando: false, erro: String(e) }));
     }
@@ -627,7 +687,21 @@ export function useGameSession() {
     // Limpa o recap quando o jogador fala pela primeira vez — imersão não quebra
     setEstado(s => s.textoRecap ? { ...s, textoRecap: "" } : s);
     wsRef.current.send(JSON.stringify({ texto }));
-  }, []);
+
+    // Guarda de conexão half-open: se tipo="fim" não chegar em 45s o WS está morto.
+    // Limpa timeout anterior caso exista (reenvio rápido improvável mas defensivo).
+    if (turnTimeoutRef.current) clearTimeout(turnTimeoutRef.current);
+    turnTimeoutRef.current = setTimeout(() => {
+      turnTimeoutRef.current = null;
+      setIsProcessing(false);
+      setEstado(s => ({
+        ...s,
+        erro: "A conexão com o Mestre caiu no meio do caminho. Reconecte e tente novamente.",
+      }));
+      // Fecha o socket morto para o handler onclose acionar a reconexão automática
+      wsRef.current?.close();
+    }, TURN_TIMEOUT_MS);
+  }, [TURN_TIMEOUT_MS]);
 
   const sincronizarEstado = useCallback((
     tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
@@ -678,7 +752,18 @@ export function useGameSession() {
   }, [pararTudo]);
 
   useEffect(() => {
+    // beforeunload: dispara checkpoint com keepalive=true antes do browser fechar.
+    // keepalive garante que o fetch complete mesmo após navegação/fechamento de aba.
+    // Não usamos sendBeacon porque precisa de cabeçalhos de auth em prod.
+    const handleBeforeUnload = () => {
+      if (sessionIdRef.current) {
+        checkpointSessao(sessionIdRef.current, true).catch(() => {/* silencioso */});
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       intentionalCloseRef.current = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       pararTudo();
@@ -719,6 +804,7 @@ export function useGameSession() {
     limparRecap,
     dismissLevelUp,
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
+    // personagemRestaurado já vem via ...estado
     // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)
     audioTocando,
     audioDuracao,

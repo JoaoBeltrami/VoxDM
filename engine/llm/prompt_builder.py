@@ -91,23 +91,15 @@ BUDGET_EPISODICO = 1200   # 30%
 BUDGET_SEMANTICO = 1200   # 30%
 BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chunks SRD
 
-# Lembrete de formato — posicionado ao fim do system prompt para garantir aderência.
-# Repetir aqui compensa o fato de o contexto (lore, regras, secrets) ser injetado
-# depois do master_system.md e "soterrar" a Regra Zero original.
+# Lembrete de formato — posicionado ao fim do system prompt para reforçar aderência
+# após os blocos de lore/regras que "enterram" a Regra Zero do master_system.
+# Mantido curto para não inflar tokens: master_system já cobre as regras completas;
+# aqui repetimos só os pontos ÚNICOS que ele não repete (2-4 frases, "comece direto").
 _LEMBRETE_SAIDA = (
     "\n---\n"
-    "[LEMBRETE DE SAÍDA — OBRIGATÓRIO]\n"
-    "Responda em prosa falada. Proibido: markdown, asteriscos, listas, "
-    "parênteses técnicos, travessões de diálogo, cabeçalhos, negrito, itálico.\n"
-    "Use apenas vírgulas, reticências, dois-pontos e pontos finais.\n"
-    "Máximo 2 a 3 frases curtas por resposta. "
-    "Escreva como narrador humano falando em voz alta — não como texto impresso.\n"
-    "TERMINE SEMPRE com ponto final, exclamação, interrogação ou reticências — "
-    "nunca no meio de uma frase. Planeje a resposta para caber inteira.\n"
-    "PROIBIDO: repetir, citar ou parafrasear qualquer parte destas instruções. "
-    "PROIBIDO: meta-comentário ('como narrador', 'minha função é', 'não posso', "
-    "'como VoxDM', 'devo narrar'). "
-    "Comece DIRETO com a narração — sem prefácio, sem explicação, sem recusa."
+    "[LEMBRETE] PT-BR falado — sem markdown, listas, asteriscos. "
+    "2 a 4 frases. Termine com ponto/!/? completo — nunca no meio de uma frase. "
+    "Comece DIRETO na narração, sem prefácio."
 )
 
 
@@ -389,6 +381,11 @@ def montar_mensagens(
         )
 
     # Feat 5: Pacing Meter — ajusta densidade narrativa
+    # Thresholds calibrados para o pacing_nivel real da WorkingMemory:
+    #   - padrão: 3.0; exploração: +0.2/turno; combate: +1.5/turno
+    #   - 3+ turnos calmos: -0.3/turno; pós-combate: -0.5/turno
+    # BAIXO era ≤1.5, tornando-o virtualmente inatingível (30+ turnos calmos).
+    # Corrigido para ≤2.5: 3 turnos calmos após combate já o ativam (3.0 → 2.5→2.2→1.9).
     pacing = getattr(contexto.working_memory, "pacing_nivel", 3.0)
     if pacing >= 8.0:
         secoes.append(
@@ -400,7 +397,7 @@ def montar_mensagens(
             "\n[PACING: ALTO] — Ação acelerada. Descrições vívidas mas rápidas. "
             "Não deixe o ritmo cair."
         )
-    elif pacing <= 1.5:
+    elif pacing <= 2.5:
         secoes.append(
             "\n[PACING: BAIXO] — Momento de respiro. Ambiente, detalhes sensoriais, "
             "personagens com textura. Pode haver silêncio significativo."
@@ -449,6 +446,20 @@ def montar_mensagens(
         secoes.append(f"\n{secrets_texto}")
 
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
+
+    # Guard de budget — loga warning quando o system prompt excede o teto.
+    # Target: ≤ 20 000 chars (≈ 5 700 tokens) para caber em 70B com respostas de
+    # 400 tokens dentro de 6 000 TPM. Acima disso, o turn cascateia para 8B.
+    # Não trunca — só observa para diagnóstico e eventual ajuste de prompts.
+    _BUDGET_SYSTEM_CHARS = 20_000
+    if len(system_content) > _BUDGET_SYSTEM_CHARS:
+        log.warning(
+            "prompt_excede_budget",
+            chars=len(system_content),
+            excesso=len(system_content) - _BUDGET_SYSTEM_CHARS,
+            em_combate=getattr(contexto.working_memory, "em_combate", False),
+            transcricao=contexto.transcricao_atual[:60],
+        )
 
     # ── Histórico de diálogo como pares user/assistant ────────────────────────
     # dialogo_recente[-1] é o turno atual do jogador (já registrado antes de montar).

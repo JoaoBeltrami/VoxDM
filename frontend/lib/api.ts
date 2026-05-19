@@ -15,6 +15,9 @@ export interface SessaoInfo {
   npcs_presentes: string[];
   iteracoes: number;
   criada_em: number;
+  // Preenchido quando session_anterior_id foi fornecido e personagem_config existe.
+  // Frontend usa para pular o CharacterForm ao carregar uma sessão anterior.
+  personagem_restaurado?: PersonagemConfig | null;
 }
 
 export interface RespostaMestre {
@@ -64,6 +67,9 @@ export interface MensagemWS {
   // Mecânicas RPG
   spell_slots?: Record<string, SpellSlot>;
   hit_dice_current?: number;
+  // HP do jogador — enviado no "fim" para manter CharacterSheet em sync com backend
+  player_hp?: number;
+  player_hp_max?: number;
   gold?: number;
   xp?: number;
   inspiration?: boolean;
@@ -197,6 +203,23 @@ export async function obterIdentidade(): Promise<IdentidadeUsuario | null> {
 
 export async function encerrarSessao(session_id: string): Promise<void> {
   await fetch(`${API_BASE}/session/${session_id}`, { method: "DELETE" });
+}
+
+/** Salva estado atual sem encerrar a sessão (SQLite apenas, sem Qdrant).
+ *  Usado para auto-save periódico e no beforeunload.
+ *  keepalive=true permite que o fetch complete mesmo após navegação/fechamento. */
+export async function checkpointSessao(
+  session_id: string,
+  keepalive = false,
+): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/session/${session_id}/checkpoint`, {
+      method: "POST",
+      keepalive,
+    });
+  } catch {
+    // Falha silenciosa — checkpoint é best-effort; o jogo continua
+  }
 }
 
 export async function listarSessoes(): Promise<SessaoListaItem[]> {

@@ -275,6 +275,86 @@ async def iniciar_sessao(
                     slots=len(char_state.spell_slots),
                     spells=len(char_state.spells_conhecidas),
                 )
+                # Restaura identidade do personagem (nome, classe, raça, atributos, etc.)
+                # Sem isso, o frontend teria que re-preencher o CharacterForm em cada sessão.
+                pc = char_state.personagem_config
+                if pc and pc.get("player_name"):
+                    # Sobrescreve WorkingMemory com dados salvos
+                    if pc.get("player_name"):   working_mem.player_name        = pc["player_name"]
+                    if pc.get("player_class"):  working_mem.player_class       = pc["player_class"]
+                    if pc.get("player_race"):   working_mem.player_race        = pc["player_race"]
+                    if pc.get("player_background"): working_mem.player_background = pc["player_background"]
+                    if pc.get("player_subclass"):   working_mem.player_subclass   = pc["player_subclass"]
+                    if pc.get("player_description"): working_mem.player_description = pc["player_description"]
+                    if pc.get("tts_voice"):     working_mem.tts_voice          = pc["tts_voice"]
+                    if pc.get("dm_profile"):    working_mem.dm_profile         = pc["dm_profile"]
+                    working_mem.str_score = int(pc.get("str_score", 10))
+                    working_mem.dex_score = int(pc.get("dex_score", 10))
+                    working_mem.con_score = int(pc.get("con_score", 10))
+                    working_mem.int_score = int(pc.get("int_score", 10))
+                    working_mem.wis_score = int(pc.get("wis_score", 10))
+                    working_mem.cha_score = int(pc.get("cha_score", 10))
+                    working_mem.skill_profs = list(pc.get("skill_profs", []))
+                    working_mem.save_profs  = list(pc.get("save_profs", []))
+                    # Restaura localização final da sessão anterior
+                    if pc.get("location_id"):
+                        location_anterior = working_mem.location_id
+                        working_mem.location_id   = pc["location_id"]
+                        working_mem.location_nome = pc.get("location_nome", pc["location_id"])
+                        # Re-fetch NPCs para a localização correta se mudou
+                        if location_anterior != working_mem.location_id:
+                            try:
+                                novos_npcs = await context_builder.inferir_npcs_presentes(
+                                    working_mem.location_id
+                                )
+                                working_mem.npcs_presentes = novos_npcs
+                                log.info(
+                                    "npcs_refetchados_location_restaurada",
+                                    location=working_mem.location_id,
+                                    total=len(novos_npcs),
+                                )
+                            except Exception as e_npc:
+                                log.warning("npc_refetch_falhou", erro=str(e_npc))
+
+                    # Re-inicializa class features com a classe restaurada, depois
+                    # re-aplica os usos_atual salvos. Sem isso, a WM tem class="" →
+                    # inicializar_features_classe nunca populou nada → features vazias.
+                    if pc.get("player_class"):
+                        working_mem.inicializar_features_classe(
+                            pc["player_class"], pc.get("player_subclass", "")
+                        )
+                        for fid, saved in char_state.class_features.items():
+                            if fid in working_mem.class_features:
+                                wm_feat = working_mem.class_features[fid]
+                                usos = min(
+                                    saved.get("usos_atual", wm_feat.get("usos_max", 1)),
+                                    wm_feat.get("usos_max", 1),
+                                )
+                                wm_feat["usos_atual"] = usos
+                                if wm_feat.get("usos_max", 0) > 0:
+                                    wm_feat["disponivel"] = usos > 0
+
+                    # Expõe os dados restaurados para o frontend via SessaoInfo
+                    sessao.personagem_restaurado = dict(pc)
+                    # HP atual vem das colunas hp_current/hp_max (fonte autoritativa)
+                    # — substitui o valor do JSON blob que pode estar stale se o blob
+                    # foi gerado antes deste fix ou se o personagem sofreu dano na sessão
+                    # anterior. Bug R4-4: o código anterior usava char_state.player_hp que
+                    # NÃO EXISTE em CharacterState (o campo correto é hp_current).
+                    # Isso causava AttributeError silencioso: HP ficava stale e
+                    # player_spells (linha seguinte) nunca era adicionado.
+                    sessao.personagem_restaurado["player_hp"]     = char_state.hp_current
+                    sessao.personagem_restaurado["player_hp_max"] = char_state.hp_max
+                    # Adiciona player_spells para o frontend popular a ficha
+                    if sessao.spells_conhecidas:
+                        sessao.personagem_restaurado["player_spells"] = list(sessao.spells_conhecidas)
+                    log.info(
+                        "personagem_identidade_restaurada",
+                        session_id=config.session_id,
+                        nome=working_mem.player_name,
+                        classe=working_mem.player_class,
+                        location=working_mem.location_id,
+                    )
         except Exception as e:
             log.warning("character_state_restauracao_falhou", erro=str(e))
 
@@ -520,12 +600,58 @@ async def salvar_character_state(
         hp_max=wm.player_hp_max,
         inventory=list(wm.player_inventory),
         conditions=list(wm.player_conditions),
-        spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no PUT
-        player_level=wm.player_level,  # preserva progressão
-        class_features=dict(wm.class_features),  # preserva usos de features
-        companions=dict(wm.companions),  # preserva aliados ativos
+        spells_conhecidas=list(sessao.spells_conhecidas),
+        player_level=wm.player_level,
+        class_features=dict(wm.class_features),
+        companions=dict(wm.companions),
+        personagem_config=_wm_para_personagem_config(wm),
+        dm_state=_wm_para_dm_state(wm),
     ))
     log.info("character_state_salvo_via_put", session_id=session_id)
+
+
+@router.post("/{session_id}/checkpoint", status_code=204)
+async def checkpoint_sessao(
+    session_id: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> None:
+    """Salva estado do personagem sem encerrar a sessão (SQLite apenas).
+
+    Mais leve que DELETE — não grava Qdrant episódico nem destrói a sessão.
+    Chamado automaticamente pelo frontend a cada 5 turnos e no beforeunload,
+    garantindo que nenhum progresso se perca mesmo que o browser feche abruptamente.
+    """
+    sessao = _get_sessao(session_id, owner)
+    wm = sessao.working_mem
+    try:
+        store = CharacterStore()
+        await store.salvar(CharacterState(
+            session_id=session_id,
+            owner_email=sessao.owner_email,
+            spell_slots=wm.spell_slots,
+            hit_dice_current=wm.hit_dice_current,
+            hit_dice_max=wm.hit_dice_max,
+            hit_dice_type=wm.hit_dice_type,
+            death_saves_successes=wm.death_saves_successes,
+            death_saves_failures=wm.death_saves_failures,
+            death_saves_stable=wm.death_saves_stable,
+            gold=wm.gold,
+            xp=wm.xp,
+            inspiration=wm.inspiration,
+            hp_current=wm.player_hp,
+            hp_max=wm.player_hp_max,
+            inventory=list(wm.player_inventory),
+            conditions=list(wm.player_conditions),
+            spells_conhecidas=list(sessao.spells_conhecidas),
+            player_level=wm.player_level,
+            class_features=dict(wm.class_features),
+            companions=dict(wm.companions),
+            personagem_config=_wm_para_personagem_config(wm),
+            dm_state=_wm_para_dm_state(wm),
+        ))
+        log.info("checkpoint_salvo", session_id=session_id, iteracoes=sessao.iteracoes)
+    except Exception as e:
+        log.warning("checkpoint_falhou", session_id=session_id, erro=str(e))
 
 
 @router.delete("/{session_id}", status_code=204)
@@ -557,10 +683,11 @@ async def encerrar_sessao(
             hp_max=wm.player_hp_max,
             inventory=list(wm.player_inventory),
             conditions=list(wm.player_conditions),
-            spells_conhecidas=list(sessao.spells_conhecidas),  # preserva magias no encerramento
-            player_level=wm.player_level,  # preserva progressão
-            class_features=dict(wm.class_features),  # preserva usos de features no encerramento
-            companions=dict(wm.companions),  # preserva aliados ativos no encerramento
+            spells_conhecidas=list(sessao.spells_conhecidas),
+            player_level=wm.player_level,
+            class_features=dict(wm.class_features),
+            companions=dict(wm.companions),
+            personagem_config=_wm_para_personagem_config(wm),
         ))
         log.info("character_state_salvo_no_encerramento", session_id=session_id)
     except Exception as e:
@@ -582,6 +709,50 @@ async def encerrar_sessao(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _wm_para_dm_state(wm: WorkingMemory) -> dict:
+    """Serializa estado narrativo do mestre veterano para persistência.
+
+    Persiste fios_soltos, agenda_npcs e cliffhanger_pendente entre sessões e
+    crashes — sem isso o mestre "esquece" os plot threads ao reconectar.
+    """
+    return {
+        "fios_soltos":        list(wm.fios_soltos),
+        "agenda_npcs":        dict(wm.agenda_npcs),
+        "cliffhanger_pendente": wm.cliffhanger_pendente or "",
+    }
+
+
+def _wm_para_personagem_config(wm: WorkingMemory) -> dict:
+    """Serializa identidade do personagem para persistência em CharacterState.
+
+    Captura todos os campos necessários para reconstituir o personagem numa
+    sessão futura sem re-preencher o CharacterForm.
+    """
+    return {
+        "player_name":        wm.player_name,
+        "player_class":       wm.player_class,
+        "player_race":        wm.player_race,
+        "player_background":  wm.player_background,
+        "player_subclass":    wm.player_subclass,
+        "player_description": wm.player_description,
+        "tts_voice":          wm.tts_voice,
+        "dm_profile":         wm.dm_profile,
+        "str_score":          wm.str_score,
+        "dex_score":          wm.dex_score,
+        "con_score":          wm.con_score,
+        "int_score":          wm.int_score,
+        "wis_score":          wm.wis_score,
+        "cha_score":          wm.cha_score,
+        "skill_profs":        list(wm.skill_profs),
+        "save_profs":         list(wm.save_profs),
+        "location_id":        wm.location_id,
+        "location_nome":      wm.location_nome,
+        "player_hp":          wm.player_hp,      # HP atual — restaurado para pular CharacterForm
+        "player_hp_max":      wm.player_hp_max,
+        "player_level":       wm.player_level,
+    }
+
 
 def _get_sessao(session_id: str, owner: Owner | None = None) -> SessaoAtiva:
     """Busca sessão e verifica autorização do owner.
@@ -614,6 +785,7 @@ def _serializar_info(sessao: SessaoAtiva) -> SessaoInfo:
         npcs_presentes=sessao.working_mem.npcs_presentes,
         iteracoes=sessao.iteracoes,
         criada_em=sessao.criada_em,
+        personagem_restaurado=sessao.personagem_restaurado,
     )
 
 
