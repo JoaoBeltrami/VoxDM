@@ -49,34 +49,54 @@ def test_mensagem_ws_tipo_nao_quebra_outros_campos():
 
 
 # ── EpisodicMemory.buscar_por_session_id ─────────────────────────────────────
+# Nota: a implementação usa QdrantClient.scroll() diretamente (não self._qdrant.buscar)
+# para evitar score_threshold=0.45 que bloquearia UUIDs não-semânticos como queries.
+
+def _ponto_fake(payload: dict):
+    """Cria um ponto Qdrant fake com atributos mínimos."""
+    p = MagicMock()
+    p.payload = payload
+    return p
+
 
 @pytest.mark.asyncio
 async def test_buscar_por_session_id_retorna_dict_quando_ha_entrada():
-    """buscar_por_session_id deve retornar o primeiro resultado quando existe."""
-    mem = EpisodicMemory()
+    """buscar_por_session_id deve retornar o payload quando existe entrada."""
     entrada_fake = {
         "text": "Resumo da sessão 1: o grupo derrotou os goblins.",
         "session_id": "sess-abc123",
         "trust_levels": {"fael": 2},
         "quest_stages": {},
-        "resumo_curto": "O grupo derrotou os goblins na floresta.",
+        "timestamp": 1000.0,
+        "dm_state": {"fios_soltos": [], "agenda_npcs": {}, "cliffhanger_pendente": ""},
+        "companions": {},
     }
-    mem.buscar = AsyncMock(return_value=[entrada_fake])
+    ponto = _ponto_fake(entrada_fake)
 
-    resultado = await mem.buscar_por_session_id("sess-abc123")
+    # QdrantClient é importado dentro do método — patchear no módulo qdrant_client
+    with patch("qdrant_client.QdrantClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.scroll.return_value = ([ponto], None)
+
+        mem = EpisodicMemory()
+        resultado = await mem.buscar_por_session_id("sess-abc123")
 
     assert resultado is not None
     assert resultado["session_id"] == "sess-abc123"
-    assert "resumo_curto" in resultado
+    assert resultado["text"].startswith("Resumo")
 
 
 @pytest.mark.asyncio
 async def test_buscar_por_session_id_retorna_none_quando_ausente():
     """buscar_por_session_id deve retornar None se não há memória episódica."""
-    mem = EpisodicMemory()
-    mem.buscar = AsyncMock(return_value=[])
+    with patch("qdrant_client.QdrantClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.scroll.return_value = ([], None)
 
-    resultado = await mem.buscar_por_session_id("sess-inexistente")
+        mem = EpisodicMemory()
+        resultado = await mem.buscar_por_session_id("sess-inexistente")
 
     assert resultado is None
 
@@ -84,12 +104,31 @@ async def test_buscar_por_session_id_retorna_none_quando_ausente():
 @pytest.mark.asyncio
 async def test_buscar_por_session_id_silencioso_em_excecao():
     """buscar_por_session_id deve retornar None em vez de propagar exceção."""
-    mem = EpisodicMemory()
-    mem.buscar = AsyncMock(side_effect=Exception("Qdrant offline"))
+    with patch("qdrant_client.QdrantClient") as mock_cls:
+        mock_cls.side_effect = Exception("Qdrant offline")
 
-    resultado = await mem.buscar_por_session_id("sess-qualquer")
+        mem = EpisodicMemory()
+        resultado = await mem.buscar_por_session_id("sess-qualquer")
 
     assert resultado is None
+
+
+@pytest.mark.asyncio
+async def test_buscar_por_session_id_retorna_ponto_mais_recente():
+    """Quando há múltiplos pontos, retorna o de maior timestamp."""
+    antigo = _ponto_fake({"session_id": "s1", "text": "velho", "timestamp": 100.0})
+    recente = _ponto_fake({"session_id": "s1", "text": "recente", "timestamp": 500.0})
+
+    with patch("qdrant_client.QdrantClient") as mock_cls:
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+        mock_client.scroll.return_value = ([antigo, recente], None)
+
+        mem = EpisodicMemory()
+        resultado = await mem.buscar_por_session_id("s1")
+
+    assert resultado is not None
+    assert resultado["text"] == "recente"
 
 
 # ── _enviar_recap_sessao_anterior — comportamento silencioso ──────────────────
@@ -101,6 +140,8 @@ def _montar_sessao_fake(resumo: str = "Resumo da sessão anterior.") -> MagicMoc
     sessao.resumo_anterior = resumo
     sessao.working_mem = MagicMock()
     sessao.working_mem.tts_voice = "pt-BR-FranciscaNeural"
+    sessao.working_mem.companions = {}
+    sessao.working_mem.fios_soltos = []
     # groq.completar é async — retorna o texto do recap gerado
     sessao.groq = MagicMock()
     sessao.groq.completar = AsyncMock(
@@ -294,4 +335,101 @@ async def test_recap_silencioso_quando_tts_levanta_excecao():
     chamadas = [c.args[0] for c in websocket.send_text.call_args_list]
     assert any('"recap"' in t for t in chamadas), (
         "Texto do recap deve ser enviado mesmo quando TTS falha"
+    )
+
+
+# ── Novos testes — Continuidade entre sessões ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_recap_prompt_menciona_companion_quando_presente():
+    """Quando há companions ativos, o prompt do recap inclui 'Aliados'."""
+    from api.websocket import _enviar_recap_sessao_anterior
+
+    websocket = AsyncMock()
+    sessao = _montar_sessao_fake()
+    sessao.working_mem.companions = {
+        "lyssa": {"nome": "Lyssa", "tipo": "hireling", "hp": 24, "hp_max": 30}
+    }
+
+    capturado: list[str] = []
+    async def groq_capture(**kwargs) -> str:
+        # Captura o conteúdo do prompt para inspecionar
+        for msg in kwargs.get("mensagens", []):
+            capturado.append(msg.get("content", ""))
+        return "Da última vez, Lyssa acompanhou o grupo."
+
+    sessao.groq.completar = groq_capture  # type: ignore
+
+    with patch("api.websocket._obter_tts", return_value=None):
+        await _enviar_recap_sessao_anterior(websocket, sessao)
+
+    # Algum trecho do prompt deve mencionar "Aliados" ou "Lyssa"
+    prompt_completo = " ".join(capturado)
+    assert "Lyssa" in prompt_completo or "Aliados" in prompt_completo
+
+
+@pytest.mark.asyncio
+async def test_recap_prompt_menciona_fios_quando_presentes():
+    """Quando há fios soltos, o prompt do recap os inclui."""
+    from api.websocket import _enviar_recap_sessao_anterior
+
+    websocket = AsyncMock()
+    sessao = _montar_sessao_fake()
+    sessao.working_mem.fios_soltos = ["Valdrek mencionou a chave da torre"]
+
+    capturado: list[str] = []
+    async def groq_capture(**kwargs) -> str:
+        for msg in kwargs.get("mensagens", []):
+            capturado.append(msg.get("content", ""))
+        return "Da última vez, o grupo descobriu algo sobre a torre."
+
+    sessao.groq.completar = groq_capture  # type: ignore
+
+    with patch("api.websocket._obter_tts", return_value=None):
+        await _enviar_recap_sessao_anterior(websocket, sessao)
+
+    prompt_completo = " ".join(capturado)
+    assert "Valdrek" in prompt_completo or "torre" in prompt_completo or "Fios" in prompt_completo
+
+
+def test_session_writer_payload_inclui_campos_continuidade():
+    """Payload do session_writer deve incluir companions, dm_state, level, xp, gold."""
+    # Verifica o prompt de resumo contém os novos placeholders
+    from engine.memory.session_writer import _PROMPT_RESUMO
+    assert "{companions}" in _PROMPT_RESUMO, "Prompt deve ter placeholder {companions}"
+    assert "{fios_soltos}" in _PROMPT_RESUMO, "Prompt deve ter placeholder {fios_soltos}"
+
+
+def test_buscar_por_session_id_nao_usa_buscar_semantico():
+    """buscar_por_session_id NÃO deve chamar self._qdrant.buscar (usa scroll direto)."""
+    import inspect
+    from engine.memory.episodic_memory import EpisodicMemory
+    src = inspect.getsource(EpisodicMemory.buscar_por_session_id)
+    # Método novo usa scroll, não self.buscar
+    assert "self.buscar(" not in src, (
+        "buscar_por_session_id não deve usar self.buscar() — UUID como query "
+        "nunca passa score_threshold=0.45. Usar scroll com filtro exato."
+    )
+    assert "scroll" in src, "buscar_por_session_id deve usar scroll()"
+
+
+def test_iniciar_sessao_le_campo_text_nao_resumo_curto():
+    """iniciar_sessao deve ler 'text' do payload episódico, não 'resumo_curto'."""
+    import inspect
+    from api.routes.session import iniciar_sessao
+    src = inspect.getsource(iniciar_sessao)
+    # Bug #2: campo no Qdrant é "text", não "resumo_curto"
+    assert 'entrada.get("text"' in src or "entrada.get('text'" in src, (
+        "iniciar_sessao deve ler campo 'text' do payload episódico "
+        "(não 'resumo_curto' que não existe no Qdrant payload)"
+    )
+
+
+def test_cliffhanger_limpo_apos_uso_na_abertura():
+    """wm.cliffhanger_pendente deve ser zerado após ser usado como gancho de abertura."""
+    import inspect
+    from api.websocket import _enviar_abertura
+    src = inspect.getsource(_enviar_abertura)
+    assert 'cliffhanger_pendente = ""' in src, (
+        "Cliffhanger deve ser limpo (one-shot) após ser injetado no intro_user"
     )

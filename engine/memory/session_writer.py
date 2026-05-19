@@ -39,11 +39,15 @@ _PROMPT_RESUMO = """\
 Você é um assistente que resume sessões de RPG de mesa de forma compacta.
 Dado o diálogo e estado abaixo, gere um parágrafo de 3-5 frases em português
 brasileiro descrevendo: o que aconteceu, quais NPCs foram encontrados e como
-a relação com eles evoluiu, e que quests avançaram.
+a relação com eles evoluiu, que quests avançaram, e se o personagem ganhou
+aliados ou acumulou recursos notáveis.
 Seja factual e narrativo — sem opiniões, sem listas.
 
 Estado da sessão:
 {estado}
+
+Aliados ativos: {companions}
+Fios narrativos em aberto: {fios_soltos}
 
 Diálogo da sessão:
 {dialogo}
@@ -64,7 +68,21 @@ async def _resumir_via_groq(working_mem: WorkingMemory) -> str:
     dialogo = _montar_dialogo(working_mem)[:_MAX_DIALOGO_CHARS]
     estado = working_mem.para_texto()
 
-    prompt = _PROMPT_RESUMO.format(estado=estado, dialogo=dialogo)
+    # Companions — "Lyssa (hireling, 24/30 HP), Grumpf (animal, 15/15 HP)"
+    companions_txt = ", ".join(
+        f"{c.get('nome', cid)} ({c.get('tipo', 'aliado')}, {c.get('hp', '?')}/{c.get('hp_max', '?')} HP)"
+        for cid, c in working_mem.companions.items()
+    ) or "nenhum"
+
+    # Fios soltos — lista ou "nenhum"
+    fios_txt = "; ".join(working_mem.fios_soltos) if working_mem.fios_soltos else "nenhum"
+
+    prompt = _PROMPT_RESUMO.format(
+        estado=estado,
+        dialogo=dialogo,
+        companions=companions_txt,
+        fios_soltos=fios_txt,
+    )
     mensagens = [{"role": "user", "content": prompt}]
 
     try:
@@ -128,6 +146,16 @@ class SessionWriter:
             "source_type": "episodic",
             "source_id": sid,
             "source_name": f"Sessão {sid}",
+            # Campos novos — restauração de continuidade entre sessões
+            "player_level": working_mem.player_level,
+            "xp": working_mem.xp,
+            "gold": working_mem.gold,
+            "companions": dict(working_mem.companions),
+            "dm_state": {
+                "fios_soltos":          list(working_mem.fios_soltos),
+                "agenda_npcs":          dict(working_mem.agenda_npcs),
+                "cliffhanger_pendente": working_mem.cliffhanger_pendente or "",
+            },
         }
 
         await self._fazer_upsert(payload)
@@ -137,6 +165,8 @@ class SessionWriter:
             session_id=sid,
             trust_levels=working_mem.trust_levels,
             quest_stages=working_mem.quest_stages,
+            companions=len(working_mem.companions),
+            fios_soltos=len(working_mem.fios_soltos),
         )
         return payload
 

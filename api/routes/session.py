@@ -247,13 +247,42 @@ async def iniciar_sessao(
                     k: str(v) for k, v in entrada.get("quest_stages", {}).items()
                 }
                 working_mem.active_quest_hooks = list(working_mem.quest_stages.keys())
-                sessao.resumo_anterior = str(entrada.get("resumo_curto", ""))
+
+                # BUG #2 fix: o campo no payload Qdrant é "text", não "resumo_curto".
+                # "resumo_curto" é construído apenas em listar_com_metadata() para a UI.
+                sessao.resumo_anterior = str(entrada.get("text", ""))
+
+                # Restaura estado narrativo do mestre a partir do episódico.
+                # SQLite é fonte autoritativa (tem dm_state completo via checkpoint);
+                # episódico serve de fallback caso o SQLite não tenha o dado
+                # (ex: sessão encerrada via DELETE sem checkpoint intermediário,
+                # ou banco criado antes da migração de dm_state).
+                dm_state_episodico = entrada.get("dm_state", {}) or {}
+                if dm_state_episodico:
+                    if not working_mem.fios_soltos:
+                        working_mem.fios_soltos = list(dm_state_episodico.get("fios_soltos", []))
+                    if not working_mem.agenda_npcs:
+                        working_mem.agenda_npcs = dict(dm_state_episodico.get("agenda_npcs", {}))
+                    if not working_mem.cliffhanger_pendente:
+                        working_mem.cliffhanger_pendente = dm_state_episodico.get("cliffhanger_pendente", "")
+
+                # Restaura companions do episódico como fallback (SQLite é primário)
+                companions_episodico = entrada.get("companions", {}) or {}
+                if companions_episodico and not working_mem.companions:
+                    working_mem.companions = {
+                        k: dict(v) for k, v in companions_episodico.items()
+                        if isinstance(v, dict)
+                    }
+
                 log.info(
                     "sessao_anterior_restaurada",
                     session_id=config.session_id,
                     session_anterior_id=config.session_anterior_id,
                     trust_restaurado=len(working_mem.trust_levels),
                     quests_restauradas=len(working_mem.quest_stages),
+                    fios_restaurados=len(working_mem.fios_soltos),
+                    companions_restaurados=len(working_mem.companions),
+                    tem_resumo=bool(sessao.resumo_anterior),
                 )
         except Exception as e:
             log.warning("restauracao_sessao_falhou", erro=str(e))

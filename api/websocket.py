@@ -350,13 +350,29 @@ async def _enviar_recap_sessao_anterior(
         # Prompt inline para condensar o resumo bruto em narração de abertura.
         # Sem arquivo externo: o recap é uma feature específica da abertura e não
         # precisa de hot-reload. Max_tokens curto (120) pra manter 2-3 frases.
+        wm = sessao.working_mem
+
+        # Contexto estruturado para enriquecer o recap — companions e fios soltos
+        # aparecem na voz do narrador para que o jogador os lembre ao retornar.
+        _companions_txt = ""
+        if wm.companions:
+            nomes = [c.get("nome", cid) for cid, c in wm.companions.items()]
+            _companions_txt = f"\nAliados: {', '.join(nomes)}."
+
+        _fios_txt = ""
+        if wm.fios_soltos:
+            _fios_txt = f"\nFios narrativos em aberto: {'; '.join(wm.fios_soltos[:3])}."
+
         prompt_recap = (
             "Você é um narrador de RPG. "
-            "A partir do resumo abaixo da sessão anterior, "
+            "A partir do resumo e contexto abaixo da sessão anterior, "
             "crie UMA narração de abertura em 2-3 frases curtas em português falado. "
+            "Se houver aliados, mencione um deles naturalmente. "
+            "Se houver fios abertos, toque brevemente no mais importante. "
             "Comece com \"Da última vez...\" ou \"Na sessão anterior...\". "
             "Não mencione mecânicas. Só prosa narrativa.\n\n"
-            f"RESUMO: {sessao.resumo_anterior[:800]}"
+            f"RESUMO: {sessao.resumo_anterior[:600]}"
+            f"{_companions_txt}{_fios_txt}"
         )
         mensagens_recap = [
             {"role": "system", "content": "Você é um narrador literário conciso."},
@@ -455,6 +471,12 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             partes.append(f"Quests: {', '.join(wm.active_quest_hooks)}.")
         if wm.npcs_presentes:
             partes.append(f"NPCs no local: {', '.join(wm.npcs_presentes)}.")
+        # Cliffhanger — gancho de abertura na retomada (one-shot: limpa após uso).
+        # Garante que a tensão final da sessão anterior abra a nova cena em vez
+        # de apenas existir como instrução passiva no system prompt.
+        if wm.cliffhanger_pendente:
+            partes.append(f"A cena anterior terminou em: {wm.cliffhanger_pendente}")
+            wm.cliffhanger_pendente = ""
         partes.append("continuação." if eh_continuacao else "nova sessão.")
 
     intro_user = " ".join(partes) if partes else "—"

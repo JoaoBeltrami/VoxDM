@@ -157,6 +157,7 @@ class EpisodicMemory:
                 existente = por_sessao.get(sid)
                 if existente is None or ts > existente["timestamp"]:
                     texto = str(p.payload.get("text", ""))
+                    dm_state = p.payload.get("dm_state", {}) or {}
                     por_sessao[sid] = {
                         "session_id": sid,
                         "owner_email": str(p.payload.get("owner_email", "")),
@@ -164,6 +165,12 @@ class EpisodicMemory:
                         "location_final": str(p.payload.get("location_final", "")),
                         "npcs_mencionados": list(p.payload.get("npcs_mencionados", [])),
                         "resumo_curto": texto[:200],
+                        # Campos novos — restauração de continuidade
+                        "player_level": int(p.payload.get("player_level", 1)),
+                        "xp": int(p.payload.get("xp", 0)),
+                        "gold": int(p.payload.get("gold", 0)),
+                        "companions": dict(p.payload.get("companions", {})),
+                        "dm_state": dm_state,
                     }
 
             resultado = sorted(por_sessao.values(), key=lambda x: x["timestamp"], reverse=True)
@@ -177,15 +184,50 @@ class EpisodicMemory:
         """
         Recupera a entrada de memória episódica mais recente de uma sessão específica.
 
-        Usado para restaurar trust_levels e quest_stages ao continuar uma sessão.
-        Retorna None se não houver memória episódica para a sessão.
+        Usado para restaurar trust_levels, quest_stages, dm_state e companions ao
+        continuar uma sessão.
+
+        Armadilha: NÃO usar score_threshold padrão (0.45) aqui — o query é o próprio
+        session_id (UUID-like), que semanticamente não tem similaridade com o texto do
+        resumo. Com threshold padrão a busca sempre retornaria vazio mesmo com filtro
+        exato de session_id. score_threshold=0.0 garante que qualquer ponto que passe
+        pelo filtro seja retornado.
         """
         try:
-            resultados = await self.buscar(
-                query=session_id,
-                top_k=1,
-                session_id_filtro=session_id,
+            import asyncio
+            from config import settings
+            from qdrant_client import QdrantClient
+
+            client = QdrantClient(
+                url=settings.QDRANT_URL,
+                api_key=settings.QDRANT_API_KEY,
+                check_compatibility=False,
             )
-            return resultados[0] if resultados else None
-        except Exception:
+            loop = asyncio.get_running_loop()
+
+            # Usa scroll com filtro exato — sem embedding, sem score_threshold
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            filtro = Filter(must=[
+                FieldCondition(key="session_id", match=MatchValue(value=session_id))
+            ])
+
+            pontos, _ = await loop.run_in_executor(
+                None,
+                lambda: client.scroll(
+                    collection_name=_COLECAO,
+                    scroll_filter=filtro,
+                    limit=10,
+                    with_payload=True,
+                    with_vectors=False,
+                ),
+            )
+
+            if not pontos:
+                return None
+
+            # Retorna o ponto mais recente (maior timestamp)
+            melhor = max(pontos, key=lambda p: float(p.payload.get("timestamp", 0)))
+            return dict(melhor.payload)
+        except Exception as e:
+            log.info("episodic_buscar_por_session_id_falhou", session_id=session_id, motivo=str(e))
             return None
