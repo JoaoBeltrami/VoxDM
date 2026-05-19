@@ -65,6 +65,14 @@ const config: Config = {
           "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
           "50%":      { transform: "scale(1.08)", opacity: "1"    },
         },
+        // CompanionsPanel — glow esmeralda suave ao registrar novo companion.
+        // Só altera box-shadow/opacity — sem movimento, para não distrair da narração.
+        "companion-glow": {
+          "0%":   { boxShadow: "0 0 0 0 rgba(52,211,153,0)",    opacity: "1"   },
+          "25%":  { boxShadow: "0 0 0 3px rgba(52,211,153,0.45), 0 0 18px rgba(52,211,153,0.2)", opacity: "1" },
+          "65%":  { boxShadow: "0 0 0 2px rgba(52,211,153,0.3), 0 0 12px rgba(52,211,153,0.12)", opacity: "1" },
+          "100%": { boxShadow: "0 0 0 0 rgba(52,211,153,0)",    opacity: "1"   },
+        },
       },
       animation: {
         breathe:         "breathe 3.2s ease-in-out infinite",
@@ -76,7 +84,8 @@ const config: Config = {
         "fade-in":       "fade-in 400ms ease-out",
         "slide-in-right":"slide-in-right 200ms ease-out",
         "slide-down":    "slide-down 400ms ease-out",
-        "stream-pulse":  "stream-pulse 1s ease-in-out infinite",
+        "stream-pulse":   "stream-pulse 1s ease-in-out infinite",
+        "companion-glow": "companion-glow 1.5s ease-out forwards",
       },
     },
   },

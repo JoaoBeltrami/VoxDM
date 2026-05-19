@@ -271,9 +271,13 @@ export function useGameSession() {
   // Garante que gold/XP/inventário não se percam se o browser fechar abruptamente.
   const turnosSinceCheckpointRef = useRef(0);
   // Rastreia companions vistos no turno anterior para detectar novos registros.
-  // Dispara flash esmeralda de confirmação visual quando um novo ID aparece.
+  // Turno-aware: abertura (turno===null) trata restore silencioso; turnos normais
+  // disparam o glow esmeralda de confirmação visual quando um novo ID aparece.
   const prevCompanionsRef = useRef<Record<string, unknown>>({});
   const [novoCompanionFlash, setNovoCompanionFlash] = useState<string | null>(null);
+  // Lista de nomes de companions restaurados do episódico — exibe banner de retomada.
+  // Dispensado automaticamente após 5s ou via botão ×.
+  const [partyRestorada, setPartyRestorada] = useState<string[] | null>(null);
 
   const _conectarWS = useCallback((sessionId: string, nome: string | null) => {
     const ws = new WebSocket(wsUrl(sessionId));
@@ -475,19 +479,33 @@ export function useGameSession() {
         // e devem refletir só o turno atual.
         const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
 
-        // Companion flash — detecta novos IDs comparando com turno anterior.
-        // Primeiro ID novo recebe o flash esmeralda de confirmação (1.5s).
-        // Após detecção, prevCompanionsRef é atualizado para que o mesmo companion
-        // não dispare o flash novamente nos turnos seguintes.
+        // Companion detection — turno-aware:
+        // • turno===null → fim da abertura (inicial ou reconnect): companions vêm do
+        //   episódico. Inicializa prevRef silenciosamente e exibe banner "party recuperada"
+        //   se houver companions. Sem flash individual — não é novo registro em sessão ativa.
+        // • turno!==null → fim de turno do jogador: diff normal contra prevRef.
+        //   Novo ID → glow esmeralda no CompanionsPanel por 1.5s.
         const companionsAtual = (msg.companions ?? {}) as Record<string, { nome?: string }>;
-        const idsNovos = Object.keys(companionsAtual).filter(
-          id => !(id in prevCompanionsRef.current)
-        );
-        if (idsNovos.length > 0) {
-          const nomeNovo = companionsAtual[idsNovos[0]]?.nome ?? idsNovos[0];
-          setNovoCompanionFlash(nomeNovo);
+        if (turno === null) {
+          // Abertura — companions restaurados do episódico, não adicionados pelo LLM agora
+          if (Object.keys(companionsAtual).length > 0) {
+            const nomes = Object.values(companionsAtual).map(
+              c => (c as { nome?: string })?.nome ?? "?"
+            );
+            setPartyRestorada(nomes);
+          }
+          prevCompanionsRef.current = companionsAtual;
+        } else {
+          // Turno normal — detecta companions recém-registrados pelo LLM
+          const idsNovos = Object.keys(companionsAtual).filter(
+            id => !(id in prevCompanionsRef.current)
+          );
+          if (idsNovos.length > 0) {
+            const nomeNovo = (companionsAtual[idsNovos[0]] as { nome?: string })?.nome ?? idsNovos[0];
+            setNovoCompanionFlash(nomeNovo);
+          }
+          prevCompanionsRef.current = companionsAtual;
         }
-        prevCompanionsRef.current = companionsAtual;
 
         // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx
         const questNotificacao = (msg.quest_avancos ?? []).length > 0
@@ -829,8 +847,11 @@ export function useGameSession() {
     // Item 1 — indicadores de estado do sistema
     isProcessing,
     isSpeaking: audioTocando,
-    // Companion flash — nome do companion recém-registrado, null fora de evento.
+    // Companion flash — nome do companion recém-registrado em turno ativo, null fora de evento.
     novoCompanionFlash,
     dispensarCompanionFlash: () => setNovoCompanionFlash(null),
+    // Party resume — nomes restaurados do episódico na abertura, null fora de retomada.
+    partyRestorada,
+    dispensarPartyRestorada: () => setPartyRestorada(null),
   };
 }

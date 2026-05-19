@@ -10,6 +10,11 @@
  *
  * Não duplicar com NPCs: companions são aliados sob comando do jogador. NPCs
  * apresentados na cena podem ser amigáveis, mas não lutam pela party.
+ *
+ * novoCompanionId: nome do companion recém-registrado — dispara glow esmeralda
+ *   no painel por 1.5s sem sobreposição full-screen.
+ * partyRestorada: lista de nomes restaurados da sessão anterior — exibe banner
+ *   interno compacto e se auto-fecha após 5s ou clique em ×.
  */
 
 const ICONE_POR_TIPO: Record<string, string> = {
@@ -33,18 +38,55 @@ interface CompanionsPanelProps {
   companions: Record<string, Companion>;
   /** Callback ao clicar "comandar" — abre o microfone com sugestão de fala. */
   onComandar?: (nome: string) => void;
+  /** Nome do companion recém-adicionado em sessão ativa — dispara glow no painel. */
+  novoCompanionId?: string | null;
+  /** Nomes de companions restaurados do episódico — exibe banner de retomada. */
+  partyRestorada?: string[] | null;
+  /** Callback para dispensar o banner de retomada. */
+  onDismissPartyRestorada?: () => void;
 }
 
-export function CompanionsPanel({ companions, onComandar }: CompanionsPanelProps) {
+export function CompanionsPanel({
+  companions,
+  onComandar,
+  novoCompanionId,
+  partyRestorada,
+  onDismissPartyRestorada,
+}: CompanionsPanelProps) {
   const lista = Object.entries(companions);
   if (lista.length === 0) return null;
 
+  // Glow esmeralda suave quando novo companion é registrado em sessão ativa.
+  // A animação dura 1.5s e para sozinha — sem movimento, apenas brilho de borda.
+  const glowClass = novoCompanionId ? "animate-companion-glow" : "";
+
   return (
-    <div className="mx-4 mb-2 rounded-xl border border-emerald-900/40 bg-emerald-950/15 p-3">
+    <div className={`mx-4 mb-2 rounded-xl border border-emerald-900/40 bg-emerald-950/15 p-3 ${glowClass}`}>
       <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
         <span>🤝</span>
         <span>Aliados ({lista.length})</span>
       </p>
+
+      {/* Banner de retomada de sessão — aparece quando companions são restaurados
+          do episódico. Auto-dispensado após 5s via useEffect em page.tsx. */}
+      {partyRestorada && partyRestorada.length > 0 && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2 py-1.5 text-[10px] text-emerald-300">
+          <span>🛡</span>
+          <span className="flex-1">
+            Party recuperada: {partyRestorada.join(", ")}
+          </span>
+          {onDismissPartyRestorada && (
+            <button
+              onClick={onDismissPartyRestorada}
+              className="ml-1 text-emerald-500 transition hover:text-emerald-200"
+              title="Dispensar"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         {lista.map(([id, c]) => {
           const icone = ICONE_POR_TIPO[c.tipo] ?? "👥";

@@ -269,6 +269,7 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     novoCompanionFlash, dispensarCompanionFlash,
+    partyRestorada, dispensarPartyRestorada,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -404,7 +405,7 @@ export default function Home() {
   // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
   const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Auto-dismiss do companion flash após 1.5s — sem interação necessária do jogador.
+  // Auto-dismiss: glow de companion some após 1.5s (coincide com duração da animação).
   const companionFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!novoCompanionFlash) return;
@@ -413,6 +414,16 @@ export default function Home() {
     return () => { if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoCompanionFlash]);
+
+  // Auto-dismiss: banner "party recuperada" some após 5s — tempo suficiente para ler.
+  const partyRestoradaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!partyRestorada) return;
+    if (partyRestoradaTimerRef.current) clearTimeout(partyRestoradaTimerRef.current);
+    partyRestoradaTimerRef.current = setTimeout(() => dispensarPartyRestorada(), 5000);
+    return () => { if (partyRestoradaTimerRef.current) clearTimeout(partyRestoradaTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyRestorada]);
   const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
     if (critTimerRef.current) clearTimeout(critTimerRef.current);
@@ -673,18 +684,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Companion flash — confirmação esmeralda quando novo aliado é registrado, 1.5s */}
-        {novoCompanionFlash && (
-          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-emerald-900/10">
-            <div className="animate-crit-pop text-center font-black tracking-widest text-emerald-300 drop-shadow-[0_0_35px_rgba(52,211,153,0.85)]">
-              <div className="text-6xl">🛡</div>
-              <div className="mt-3 text-3xl font-cinzel">{novoCompanionFlash}</div>
-              <div className="mt-1 text-xs uppercase tracking-widest text-emerald-400/80">
-                aliado registrado
-              </div>
-            </div>
-          </div>
-        )}
         {/* Fase 5.7 — Dado do mestre rolando (canto inferior direito).
             Visível somente quando roll_visibility="open" ou "result_only".
             roll_visibility="open" → animação completa antes do resultado.
@@ -880,6 +879,9 @@ export default function Home() {
           <CompanionsPanel
             companions={companions}
             onComandar={(nome) => enviarComando(`${nome}, ataque o inimigo mais próximo.`)}
+            novoCompanionId={novoCompanionFlash}
+            partyRestorada={partyRestorada}
+            onDismissPartyRestorada={dispensarPartyRestorada}
           />
         )}
 
