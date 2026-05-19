@@ -857,3 +857,57 @@ def test_tts1_buffer_marcador_incompleto_nao_descartado():
     balanceado = buffer.count("[") == buffer.count("]")
     # Colchetes não balanceados → descarte não deve ocorrer
     assert not balanceado, "colchete aberto = não balanceado = sem descarte"
+
+
+# ── COMBAT-2: avancar_turno_iniciativa clamp defensivo ──────────────────────
+
+def _wm_combate(**kwargs):
+    """Helper: WorkingMemory mínima para testes de iniciativa."""
+    from engine.memory.working_memory import WorkingMemory
+    return WorkingMemory.nova_sessao(
+        location_id="arena", location_nome="Arena", session_id="test-c2", **kwargs
+    )
+
+
+def test_combat2_clamp_idx_normal():
+    """COMBAT-2: avancar_turno_iniciativa cicla normalmente sem IndexError."""
+    wm = _wm_combate()
+    wm.entrar_combate()
+    wm.inimigos_combate = {"goblin": {"nome": "Goblin", "estado": "intacto"}}
+    wm.popular_iniciativa()
+    # idx começa em 0 (jogador), avança para 1 (goblin) — n=2
+    wm.avancar_turno_iniciativa()
+    n = 2  # jogador + goblin
+    assert 0 <= wm.turno_atual_idx < n
+
+
+def test_combat2_clamp_idx_fora_de_bounds():
+    """COMBAT-2: turno_atual_idx muito alto não causa IndexError nem trava."""
+    wm = _wm_combate()
+    wm.entrar_combate()
+    wm.inimigos_combate = {"goblin": {"nome": "Goblin", "estado": "intacto"}}
+    wm.popular_iniciativa()
+    # Simula drift: idx ficou em 999 por falha parcial de turno anterior
+    wm.turno_atual_idx = 999
+    wm.avancar_turno_iniciativa()  # não deve lançar exceção
+    n = 2
+    assert 0 <= wm.turno_atual_idx < n
+
+
+# ── AUTO-CHECKPOINT: salvar_checkpoint_sessao exportável ────────────────────
+
+def test_auto_checkpoint_funcao_exportavel():
+    """AUTO-CHECKPOINT: salvar_checkpoint_sessao deve ser importável de routes.session."""
+    from api.routes.session import salvar_checkpoint_sessao
+    import asyncio
+    assert asyncio.iscoroutinefunction(salvar_checkpoint_sessao)
+
+
+# ── THINKING DEDUP: ultima_frase_thinking em SessaoAtiva ────────────────────
+
+def test_thinking_dedup_campo_em_sessao_ativa():
+    """THINKING-DEDUP: SessaoAtiva deve ter campo ultima_frase_thinking."""
+    from api.state import SessaoAtiva
+    import dataclasses
+    campos = {f.name for f in dataclasses.fields(SessaoAtiva)}
+    assert "ultima_frase_thinking" in campos

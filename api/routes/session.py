@@ -610,6 +610,40 @@ async def salvar_character_state(
     log.info("character_state_salvo_via_put", session_id=session_id)
 
 
+async def salvar_checkpoint_sessao(sessao: "SessaoAtiva") -> None:
+    """Persiste estado do personagem no SQLite sem encerrar a sessão.
+
+    Helper compartilhado pelo endpoint REST /checkpoint e pelo auto-save a cada
+    5 turnos no WebSocket. Falha silenciosa — nunca interrompe o jogo.
+    """
+    wm = sessao.working_mem
+    store = CharacterStore()
+    await store.salvar(CharacterState(
+        session_id=sessao.session_id,
+        owner_email=sessao.owner_email,
+        spell_slots=wm.spell_slots,
+        hit_dice_current=wm.hit_dice_current,
+        hit_dice_max=wm.hit_dice_max,
+        hit_dice_type=wm.hit_dice_type,
+        death_saves_successes=wm.death_saves_successes,
+        death_saves_failures=wm.death_saves_failures,
+        death_saves_stable=wm.death_saves_stable,
+        gold=wm.gold,
+        xp=wm.xp,
+        inspiration=wm.inspiration,
+        hp_current=wm.player_hp,
+        hp_max=wm.player_hp_max,
+        inventory=list(wm.player_inventory),
+        conditions=list(wm.player_conditions),
+        spells_conhecidas=list(sessao.spells_conhecidas),
+        player_level=wm.player_level,
+        class_features=dict(wm.class_features),
+        companions=dict(wm.companions),
+        personagem_config=_wm_para_personagem_config(wm),
+        dm_state=_wm_para_dm_state(wm),
+    ))
+
+
 @router.post("/{session_id}/checkpoint", status_code=204)
 async def checkpoint_sessao(
     session_id: str,
@@ -622,33 +656,8 @@ async def checkpoint_sessao(
     garantindo que nenhum progresso se perca mesmo que o browser feche abruptamente.
     """
     sessao = _get_sessao(session_id, owner)
-    wm = sessao.working_mem
     try:
-        store = CharacterStore()
-        await store.salvar(CharacterState(
-            session_id=session_id,
-            owner_email=sessao.owner_email,
-            spell_slots=wm.spell_slots,
-            hit_dice_current=wm.hit_dice_current,
-            hit_dice_max=wm.hit_dice_max,
-            hit_dice_type=wm.hit_dice_type,
-            death_saves_successes=wm.death_saves_successes,
-            death_saves_failures=wm.death_saves_failures,
-            death_saves_stable=wm.death_saves_stable,
-            gold=wm.gold,
-            xp=wm.xp,
-            inspiration=wm.inspiration,
-            hp_current=wm.player_hp,
-            hp_max=wm.player_hp_max,
-            inventory=list(wm.player_inventory),
-            conditions=list(wm.player_conditions),
-            spells_conhecidas=list(sessao.spells_conhecidas),
-            player_level=wm.player_level,
-            class_features=dict(wm.class_features),
-            companions=dict(wm.companions),
-            personagem_config=_wm_para_personagem_config(wm),
-            dm_state=_wm_para_dm_state(wm),
-        ))
+        await salvar_checkpoint_sessao(sessao)
         log.info("checkpoint_salvo", session_id=session_id, iteracoes=sessao.iteracoes)
     except Exception as e:
         log.warning("checkpoint_falhou", session_id=session_id, erro=str(e))

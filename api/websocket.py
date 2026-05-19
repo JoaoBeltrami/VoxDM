@@ -188,14 +188,17 @@ _THINKING_DELAY_S: float = 1.2
 
 
 def _criar_task_thinking(
-    websocket: WebSocket, primeiro_token_evento: asyncio.Event
+    websocket: WebSocket,
+    primeiro_token_evento: asyncio.Event,
+    sessao: "SessaoAtiva | None" = None,
 ) -> asyncio.Task:
     """Agenda envio de áudio de pensamento se o LLM não emitir token em 1.2s.
 
     A task aguarda o evento `primeiro_token_evento` com timeout. Se o token
     chegou antes, retorna silenciosa. Se estourou o timeout, pega uma frase
-    aleatória do cache e envia como `audio_chunk` — a fila sequencial do
-    `useAudio` toca a frase antes do TTS real chegar.
+    aleatória do cache (evitando repetir a do turno anterior via `sessao`) e
+    envia como `audio_chunk` — a fila sequencial do `useAudio` toca a frase
+    antes do TTS real chegar.
 
     Tudo embrulhado em try/except: falha aqui nunca afeta o turno do jogador.
     """
@@ -209,10 +212,14 @@ def _criar_task_thinking(
             except asyncio.TimeoutError:
                 pass
             from engine.voice.thinking_cache import pegar_random
-            resultado = pegar_random()
+            # Dedup: evita repetir a mesma frase de "pensamento" em turnos consecutivos
+            exceto = sessao.ultima_frase_thinking if sessao else None
+            resultado = pegar_random(exceto=exceto)
             if resultado is None:
                 return  # cache vazio (warmup falhou) — silêncio
             frase, audio_bytes = resultado
+            if sessao:
+                sessao.ultima_frase_thinking = frase  # registra para evitar repetição
             await websocket.send_text(
                 MensagemWS(
                     tipo="audio_chunk",
@@ -225,6 +232,25 @@ def _criar_task_thinking(
             log.debug("thinking_audio_falhou", erro=str(e)[:120])
 
     return asyncio.create_task(_executar())
+
+
+async def _auto_checkpoint(sessao: SessaoAtiva) -> None:
+    """Salva checkpoint da sessão no SQLite de forma silenciosa.
+
+    Chamado a cada 5 turnos via asyncio.create_task() — fire-and-forget.
+    Importa salvar_checkpoint_sessao de forma lazy para evitar import circular
+    (websocket → routes.session → state → websocket).
+    """
+    try:
+        from api.routes.session import salvar_checkpoint_sessao
+        await salvar_checkpoint_sessao(sessao)
+        log.debug(
+            "auto_checkpoint_ok",
+            session_id=sessao.session_id,
+            iteracoes=sessao.iteracoes,
+        )
+    except Exception as e:
+        log.warning("auto_checkpoint_falhou", session_id=sessao.session_id, erro=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +470,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     # Thinking audio: dispara "Hmm..." se o LLM demorar > 1.2s pra começar.
     # Especialmente útil na abertura (cold path, sem warmup do contexto RAG).
     primeiro_token_intro = asyncio.Event()
-    task_thinking_intro = _criar_task_thinking(websocket, primeiro_token_intro)
+    task_thinking_intro = _criar_task_thinking(websocket, primeiro_token_intro, sessao)
 
     try:
         async for token in sessao.groq.completar_stream(
@@ -981,7 +1007,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # demorar > 1.2s pro primeiro token. Mascarar latência sem
             # afetar a resposta real — fila do useAudio toca antes do TTS.
             primeiro_token_evento = asyncio.Event()
-            task_thinking = _criar_task_thinking(websocket, primeiro_token_evento)
+            task_thinking = _criar_task_thinking(websocket, primeiro_token_evento, sessao)
 
             try:
                 async for token in sessao.groq.completar_stream(
@@ -1184,6 +1210,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     log.debug("scene_image_turno_skip", erro=str(_e_img)[:80])
 
             sessao.iteracoes += 1
+
+            # AUTO-CHECKPOINT: salva estado no SQLite a cada 5 turnos.
+            # Fire-and-forget — nunca bloqueia o turno. Garante que XP, ouro,
+            # fios narrativos e HP não se percam se o browser fechar abruptamente.
+            if sessao.iteracoes % 5 == 0:
+                asyncio.create_task(_auto_checkpoint(sessao))
+
             latencia_ms = int((time.perf_counter() - t0) * 1000)
 
             sessao.ultimo_turno = {

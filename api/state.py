@@ -65,6 +65,9 @@ class SessaoAtiva:
     # Retornado ao frontend via SessaoInfo.personagem_restaurado para que a tela
     # de "Carregar Sessão" não exija re-preenchimento do CharacterForm.
     personagem_restaurado: dict | None = None
+    # Última frase de "thinking audio" enviada — evita repetição imediata.
+    # Passada como `exceto` ao pegar_random() no próximo turno.
+    ultima_frase_thinking: str = ""
 
 
 # Store global — keyed by session_id (kebab-case)

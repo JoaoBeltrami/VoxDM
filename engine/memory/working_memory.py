@@ -789,7 +789,11 @@ class WorkingMemory:
         vivos = [t for t in ordem if not t.morto]
         if not vivos:
             return
-        self.turno_atual_idx = (self.turno_atual_idx + 1) % len(vivos)
+        n = len(vivos)
+        # COMBAT-2: clamp defensivo — corrige drift se turno_atual_idx ficou fora
+        # de [0, n) por falha parcial de turno anterior (ex: TTS falha após
+        # pipeline mas antes do ack). max(0, ...) protege contra valores negativos.
+        self.turno_atual_idx = (max(0, self.turno_atual_idx) % n + 1) % n
 
     def calcular_ordem_iniciativa(self) -> list["TokenIniciativa"]:
         """Retorna a barra de iniciativa atual ordenada (desc por valor).
