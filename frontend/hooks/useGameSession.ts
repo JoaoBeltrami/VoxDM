@@ -270,6 +270,10 @@ export function useGameSession() {
   // Auto-checkpoint a cada 5 turnos — salva estado no SQLite sem encerrar sessão.
   // Garante que gold/XP/inventário não se percam se o browser fechar abruptamente.
   const turnosSinceCheckpointRef = useRef(0);
+  // Rastreia companions vistos no turno anterior para detectar novos registros.
+  // Dispara flash esmeralda de confirmação visual quando um novo ID aparece.
+  const prevCompanionsRef = useRef<Record<string, unknown>>({});
+  const [novoCompanionFlash, setNovoCompanionFlash] = useState<string | null>(null);
 
   const _conectarWS = useCallback((sessionId: string, nome: string | null) => {
     const ws = new WebSocket(wsUrl(sessionId));
@@ -470,6 +474,20 @@ export function useGameSession() {
         // pelo payload; condicoesDetectadas são apenas "aguardando confirmação"
         // e devem refletir só o turno atual.
         const novasCondicoes = textoFinal ? detectarCondicoes(textoFinal) : [];
+
+        // Companion flash — detecta novos IDs comparando com turno anterior.
+        // Primeiro ID novo recebe o flash esmeralda de confirmação (1.5s).
+        // Após detecção, prevCompanionsRef é atualizado para que o mesmo companion
+        // não dispare o flash novamente nos turnos seguintes.
+        const companionsAtual = (msg.companions ?? {}) as Record<string, { nome?: string }>;
+        const idsNovos = Object.keys(companionsAtual).filter(
+          id => !(id in prevCompanionsRef.current)
+        );
+        if (idsNovos.length > 0) {
+          const nomeNovo = companionsAtual[idsNovos[0]]?.nome ?? idsNovos[0];
+          setNovoCompanionFlash(nomeNovo);
+        }
+        prevCompanionsRef.current = companionsAtual;
 
         // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx
         const questNotificacao = (msg.quest_avancos ?? []).length > 0
@@ -811,5 +829,8 @@ export function useGameSession() {
     // Item 1 — indicadores de estado do sistema
     isProcessing,
     isSpeaking: audioTocando,
+    // Companion flash — nome do companion recém-registrado, null fora de evento.
+    novoCompanionFlash,
+    dispensarCompanionFlash: () => setNovoCompanionFlash(null),
   };
 }

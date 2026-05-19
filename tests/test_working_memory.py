@@ -644,11 +644,27 @@ def test_apresentar_npcs_idempotente():
 # ── para_texto() — companions e posições de combate ───────────────────────
 
 def test_para_texto_companions_vivo():
-    """Companion vivo aparece em 'Aliados:' com todos os campos."""
+    """Fora de combate companion vivo aparece compacto (nome + saudável/ferido/grave)."""
     wm = _wm()
     wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
-    # registrar_companion seta hp_max=hp; ajustar para 25 para testar "HP 17/25"
     wm.companions["lyssa"]["hp_max"] = 25
+    texto = wm.para_texto()
+    assert "Aliados:" in texto
+    assert "Lyssa" in texto
+    # fora de combate: sem stats completos
+    assert "CA 15" not in texto
+    assert "atq +4" not in texto
+    assert "1d8" not in texto
+    # estado de saúde em fração — 17/25 = 68%, acima de 60%, portanto "saudável"
+    assert "saudável" in texto
+
+
+def test_para_texto_companions_vivo_em_combate():
+    """Em combate companion vivo aparece com stats completos."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
+    wm.companions["lyssa"]["hp_max"] = 25
+    wm.entrar_combate()
     texto = wm.para_texto()
     assert "Aliados:" in texto
     assert "Lyssa" in texto
@@ -660,14 +676,23 @@ def test_para_texto_companions_vivo():
 
 
 def test_para_texto_companion_morto():
-    """Companion com HP 0 aparece como 'morto' em vez de HP N/M."""
+    """Companion com HP 0 aparece como 'morto' tanto dentro quanto fora de combate."""
     wm = _wm()
     wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=25, ca=15, atq="+4", dano="1d8")
     wm.companions["lyssa"]["hp"] = 0  # simula dano letal após criação
-    texto = wm.para_texto()
-    assert "Aliados:" in texto
-    assert "morto" in texto
-    assert "HP 0/" not in texto
+
+    # Fora de combate — resumo compacto também exibe "morto"
+    texto_fora = wm.para_texto()
+    assert "Aliados:" in texto_fora
+    assert "morto" in texto_fora
+    assert "HP 0/" not in texto_fora
+
+    # Em combate — bloco completo também exibe "morto"
+    wm.entrar_combate()
+    texto_combate = wm.para_texto()
+    assert "Aliados:" in texto_combate
+    assert "morto" in texto_combate
+    assert "HP 0/" not in texto_combate
 
 
 def test_para_texto_sem_companions_omite_aliados():
@@ -678,15 +703,30 @@ def test_para_texto_sem_companions_omite_aliados():
 
 
 def test_para_texto_multiplos_companions():
-    """Dois companions aparecem separados por ponto-e-vírgula."""
+    """Fora de combate dois companions aparecem separados por vírgula no resumo compacto."""
     wm = _wm()
     wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
     wm.registrar_companion("wolf", "Lobo", "animal", hp=11, ca=13, atq="+3", dano="1d6")
     texto = wm.para_texto()
     assert "Lyssa" in texto
     assert "Lobo" in texto
-    # separador ponto-e-vírgula entre os dois
-    assert ";" in texto
+    # fora de combate usa vírgula (não ponto-e-vírgula) como separador no resumo
+    assert ", " in texto
+
+
+def test_para_texto_multiplos_companions_em_combate():
+    """Em combate dois companions aparecem com stats completos separados por newline."""
+    wm = _wm()
+    wm.registrar_companion("lyssa", "Lyssa", "hireling", hp=17, ca=15, atq="+4", dano="1d8")
+    wm.registrar_companion("wolf", "Lobo", "animal", hp=11, ca=13, atq="+3", dano="1d6")
+    wm.entrar_combate()
+    texto = wm.para_texto()
+    assert "Lyssa" in texto
+    assert "Lobo" in texto
+    assert "CA 15" in texto
+    assert "CA 13" in texto
+    # em combate usa bullet-list por linha
+    assert "- " in texto
 
 
 def test_para_texto_posicao_inimigo_em_combate():

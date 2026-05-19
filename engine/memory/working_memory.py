@@ -993,19 +993,37 @@ class WorkingMemory:
         if self.log_consequencias:
             linhas.append(f"\nCONSEQUÊNCIAS: {'; '.join(self.log_consequencias)}")
 
-        # Aliados ativos — LLM precisa saber que existem para narrá-los agindo,
-        # sofrendo dano e comunicando com o jogador. Sem esta linha o mestre
-        # "esquece" o companion entre turnos.
+        # Aliados ativos — contexto graduado por situação:
+        # - Em combate: stats completos (CA, atq, dano) — LLM precisa para narrar ataques,
+        #   saves de companion e efeitos de área. Sem eles, o mestre "esquece" o companion.
+        # - Fora de combate: resumo compacto (nome + estado de saúde) — economiza ~45 tokens
+        #   por companion por turno sem perder continuidade narrativa.
         if self.companions:
-            partes_comp = []
-            for c in self.companions.values():
-                morto = c.get("hp", 1) <= 0
-                status = "morto" if morto else f"HP {c.get('hp')}/{c.get('hp_max')}"
-                partes_comp.append(
-                    f"{c['nome']} ({c['tipo']}, {status}, CA {c.get('ca')}, "
-                    f"atq {c.get('atq')}, {c.get('dano')})"
-                )
-            linhas.append(f"\nAliados: {'; '.join(partes_comp)}")
+            if self.em_combate:
+                partes_comp = []
+                for cid, c in self.companions.items():
+                    morto = c.get("hp", 1) <= 0
+                    status = "morto" if morto else f"HP {c.get('hp')}/{c.get('hp_max')}"
+                    partes_comp.append(
+                        f"{c.get('nome', cid)} ({c.get('tipo', 'aliado')}, {status}, "
+                        f"CA {c.get('ca')}, atq {c.get('atq')}, {c.get('dano')})"
+                    )
+                linhas.append("\nAliados:\n" + "\n".join(f"- {p}" for p in partes_comp))
+            else:
+                # Fora de combate — só nome e estado de saúde para manter continuidade
+                def _status_hp(c: dict) -> str:
+                    hp = int(c.get("hp", 0))
+                    hp_max = int(c.get("hp_max", 1))
+                    pct = hp / max(hp_max, 1)
+                    if pct <= 0:    return "morto"
+                    if pct <= 0.3:  return "grave"
+                    if pct <= 0.6:  return "ferido"
+                    return "saudável"
+                nomes = [
+                    f"{c.get('nome', cid)} ({_status_hp(c)})"
+                    for cid, c in self.companions.items()
+                ]
+                linhas.append(f"\nAliados: {', '.join(nomes)}")
 
         if not self.em_combate and self.turnos_sem_tensao >= 5:
             linhas.append(

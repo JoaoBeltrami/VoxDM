@@ -268,6 +268,7 @@ export default function Home() {
     isProcessing, isSpeaking,
     personagemRestaurado,
     serverHp, serverHpMax,
+    novoCompanionFlash, dispensarCompanionFlash,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -403,6 +404,15 @@ export default function Home() {
   // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
   const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Auto-dismiss do companion flash após 1.5s — sem interação necessária do jogador.
+  const companionFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!novoCompanionFlash) return;
+    if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current);
+    companionFlashTimerRef.current = setTimeout(() => dispensarCompanionFlash(), 1500);
+    return () => { if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novoCompanionFlash]);
   const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
     if (critTimerRef.current) clearTimeout(critTimerRef.current);
@@ -658,6 +668,19 @@ export default function Home() {
               <div className="text-8xl">{critFlash === "crit" ? "20" : "1"}</div>
               <div className="mt-2 text-sm uppercase">
                 {critFlash === "crit" ? "Crítico!" : "Falha Crítica!"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Companion flash — confirmação esmeralda quando novo aliado é registrado, 1.5s */}
+        {novoCompanionFlash && (
+          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-emerald-900/10">
+            <div className="animate-crit-pop text-center font-black tracking-widest text-emerald-300 drop-shadow-[0_0_35px_rgba(52,211,153,0.85)]">
+              <div className="text-6xl">🛡</div>
+              <div className="mt-3 text-3xl font-cinzel">{novoCompanionFlash}</div>
+              <div className="mt-1 text-xs uppercase tracking-widest text-emerald-400/80">
+                aliado registrado
               </div>
             </div>
           </div>
