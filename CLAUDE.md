@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 19 de maio de 2026 — Token flow control fase 2: master_system.md -16% (-1 875 chars / -536 tokens/turno). 630/630 testes. tsc clean.
+> Atualizado: 20 de maio de 2026 — Sessão 1h+: karaokê pós-stream, timeout de combate, nuances TTS, SSML descartado em definitivo, UX dados. 690/690 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -112,9 +112,46 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
     - Turno de combate: **~9 000 → ~6 100 tok/turn** (-33%). A 1 turn/min está dentro do TPM 70B. A ritmo de voz real (1 turn/90s): ~4 k TPM → confortável no 70B durante sessões de 30-60min.
   - **629/629 testes, tsc clean.**
 
+- **COMBAT-1 fix + TTS-1 gap eliminado (19/05)**: ✅ CONCLUÍDO.
+  - **COMBAT-1** — `_RE_INIMIGO_MORTO` em `api/turn_pipeline.py`: +15 padrões de morte (morre, cai morto/inerte, se dissipa/dissipou, expira/expirou, foi/é destruído, se fragmenta/fragmentou, fenece/feneceu, cai sem vida). 22 padrões totais, 0 falsos positivos. InitiativeBar agora marca mort corretamente em qualquer narrativa PT-BR.
+  - **TTS-1** — Buffer só-marcadores em `api/websocket.py`: após cada token, se buffer está balanceado e `strip_marcadores()` retorna vazio, buffer descartado imediatamente. Gap de silêncio audível entre sentenças quando LLM emite `[FIO:...][XP:...][CONSEQUÊNCIA:...]` eliminado.
+  - **641/641 testes, tsc clean.**
+
+- **Continuidade episódica completa (19/05)**: ✅ CONCLUÍDO. 2 bugs críticos que impediam continuidade de sessão.
+  - **BUG #1 (crítico)** — `buscar_por_session_id` em `engine/memory/episodic_memory.py`: usava `score_threshold=0.45` com UUID como query — string não semântica nunca atingia 0.45, retornava vazio sempre. Fix: substituído por `scroll()` com filtro exato por `session_id`.
+  - **BUG #2 (crítico)** — `iniciar_sessao` em `api/routes/session.py`: lia `entrada.get("resumo_curto")` mas campo Qdrant é `"text"`. `resumo_anterior` era sempre `""` → recap jamais tocava. Fix: campo correto.
+  - **Episódico completo** — `session_writer.py`: payload agora inclui `companions`, `dm_state` (fios_soltos/agenda_npcs/cliffhanger_pendente), `player_level`, `xp`, `gold`. Prompt de resumo menciona aliados e fios.
+  - **Restauração dm_state** — `api/routes/session.py`: ao retomar sessão anterior, `fios_soltos`, `agenda_npcs`, `cliffhanger_pendente` e `companions` restaurados do episódico como fallback (SQLite primário via `aplicar_character_state`).
+  - **Cliffhanger como gancho de abertura** — `api/websocket.py`: se `wm.cliffhanger_pendente` não estiver vazio na abertura, injetado em `intro_user` e limpo (one-shot). Jogador recomeça sessão exatamente no momento de tensão.
+  - **652/652 testes, tsc clean.**
+
+- **Companions — contexto graduado + visual de registro (19/05)**: ✅ CONCLUÍDO.
+  - **para_texto() contexto graduado** — `engine/memory/working_memory.py`: em combate exibe stats completos (CA/atq/dano) necessários para narrar ataques e saves; fora de combate exibe resumo compacto "Nome (saudável/ferido/grave/morto)" — economiza ~45 tokens/companion/turno em exploração/roleplay.
+  - **Overlay de registro de companion** — `frontend/app/page.tsx` + `frontend/hooks/useGameSession.ts`: `prevCompanionsRef` difere IDs entre turnos; novo companion → overlay esmeralda `animate-crit-pop` 1.5s com nome + "aliado registrado". Sem interação, auto-dismiss.
+  - **Companion flash refinado** — `frontend/components/CompanionsPanel.tsx`: overlay full-screen removido (agressivo demais). Novo keyframe `companion-glow` em `tailwind.config.ts`: pulso suave de border-shadow no painel 1.5s forwards — não interrompe a narração.
+  - **Party resume inteligente** — `frontend/hooks/useGameSession.ts`: abertura (`turno===null`) inicializa `prevCompanionsRef` silenciosamente + dispara `partyRestorada` com lista de nomes. `CompanionsPanel` exibe banner interno compacto "🛡 Party recuperada: Lyssa, Lobo" com botão × e auto-dismiss 5s.
+  - **654/654 testes, tsc clean.**
+
+- **Auto-checkpoint + COMBAT-2 clamp + thinking dedup (19/05)**: ✅ CONCLUÍDO.
+  - **Auto-checkpoint** — `api/routes/session.py`: `salvar_checkpoint_sessao()` extraído como helper compartilhado (usado pelo endpoint REST `/checkpoint` e pelo `_auto_checkpoint()` no `api/websocket.py`). Fire-and-forget via `create_task()` a cada 5 turnos — XP, ouro, fios narrativos e HP não se perdem em crash de browser.
+  - **COMBAT-2 parcial** — `engine/memory/working_memory.py`: `avancar_turno_iniciativa()` ganha clamp defensivo antes do incremento — `turno_atual_idx` fora de `[0, n)` por falha parcial de turno (TTS falha após pipeline mas antes do ack) é corrigido automaticamente sem `IndexError`. `rodada_esperada` no payload ainda pendente.
+  - **Thinking dedup** — `api/state.py`: `SessaoAtiva.ultima_frase_thinking` persiste frase enviada entre turnos. `_criar_task_thinking()` passa `exceto=` ao `pegar_random()` — mesma frase de "Hmm..." nunca toca em dois turnos consecutivos.
+  - **645/645 testes, tsc clean.**
+
+- **Sessão 1h+ — naturalidade TTS, timeout combate, karaokê, dados (20/05)**: ✅ CONCLUÍDO.
+  - **Nuances TTS via pontuação** — `engine/voice/tts.py`: `_normalizar_para_tts()` (em-dash→vírgula, `!!!`→`!`, reticências longas→`...`, quebras→espaço) + `_adicionar_nuances_pontuacao()` (vírgula antes de "de repente/mas/subitamente/porém", `...` antes de sussurros/murmuros, vírgula após "Cuidado/Olhe/Veja"). Wired em `sintetizar()` e `sintetizar_stream()`.
+  - **SSML descartado em definitivo (20/05/26)** — `edge_tts.Communicate.__init__` chama `xml.sax.saxutils.escape()` em todo input; Azure Edge TTS endpoint rejeita qualquer SSML no body mesmo após monkey-patch confirmado (tags passam intactas mas servidor retorna `NoAudioReceived`). Documentado em comentário em `tts.py`. Não tentar novamente.
+  - **Timeout de combate** — `engine/memory/working_memory.py` + `api/turn_pipeline.py`: campo `rodadas_sem_acao_inimigo`. Step 7c: se sem inimigos vivos por 2 rodadas → `sair_combate()`. Se inimigos vivos mas não mencionados na resposta por 3 rodadas → `sair_combate()`. Para vinheta vermelha + token waste de combat.md/saves.md em combate fantasma.
+  - **Dados gateados por contexto** — `frontend/app/page.tsx`: `rolarD20` só envia `[Rolagem:]` ao LLM quando `esperandoRolagem || emCombate`. `rolarDano` só quando `emCombate`. Click acidental registra no histórico mas não alucina cena.
+  - **Layout compactado** — toolbar de dados some quando `!toolbarUtil` (fora de combate + sem `esperandoRolagem`). Linha d4-d100 só em `emCombate`. Padding inferior `pb-3 pt-2 gap-1.5`. `rolagensAberto` default `false`.
+  - **Karaokê pós-stream** — `frontend/hooks/useGameSession.ts`: `turnoPendenteRef` + `_flushTurnoPendente` idempotente. Handler `tipo="fim"` guarda `TurnoHistorico` em ref e mantém `respostaAtual` cheio (não limpa). `useEffect` em `audioTocando`: detecta transição `true→false` via `audioTocandoAntRef`, flushes histórico ao silêncio. Karaokê continua revelando texto até voz acabar — antes parava no momento do fim do stream LLM. Fallback 30s de segurança. Flush também em `enviarComando`.
+  - **Companion commands variadas** — `frontend/components/CompanionsPanel.tsx`: pools `COMANDOS_COMBATE` e `COMANDOS_EXPLORACAO`, botão alterna "⚔ atacar"/"💬 ordenar" por contexto.
+  - **22 novos testes de TTS naturalidade** em `tests/test_tts_naturalidade.py`. **36 novos testes de combat timeout + karaokê** em `tests/test_websocket.py` + `tests/test_working_memory.py`.
+  - **690/690 testes, tsc clean.**
+
 ### Bugs conhecidos — próxima sessão de fixes
 
-> Identificados em teste manual (18/05). Nenhum quebra o jogo, todos degradam UX. Prioridade decrescente.
+> Atualizado 20/05. COMBAT-1, TTS-1 e UX-1 resolvidos nesta sessão. Pendentes: COMBAT-2 completo, UX-2, UX-3.
 
 **DESIGN — Personagem está atrelado à sessão (comportamento esperado)**
 - Um personagem por sessão — não é possível trocar personagem mid-session.
@@ -127,25 +164,17 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
 - Fix: adicionar cantrips por classe em `spell_list.py` + `frontend/lib/spells.ts`.
 - Prioridade: baixa. Implementar após singleplayer estar polido.
 
-**COMBAT-1 — Initiative bar não atualiza quando morte narrada fora do vocab do regex**
-- **Sintoma:** Inimigo "vivo" na barra de iniciativa após morte narrada com palavras fora de `_RE_INIMIGO_MORTO` (sucumbe, perece, se dissolve, cai sem vida, etc.)
-- **Arquivo:** `api/turn_pipeline.py` — `_RE_INIMIGO_MORTO` linha ~108
-- **Fix sugerido:** Ampliar o alternating group com mais verbos de morte PT-BR: `sucumbe|perece|se dissolve|cai sem vida|entra em colapso|desaba`. Alternativa melhor: Fase 5 (classificação LLM) substitui regex inteiramente.
+~~**COMBAT-1**~~ ✅ RESOLVIDO (19/05) — `_RE_INIMIGO_MORTO` expandido para 22 padrões em `api/turn_pipeline.py`. Fix definitivo pendente (Fase 5): classificação LLM.
 
 **COMBAT-2 — Initiative drift em combate longo (5+ rodadas)**
 - **Sintoma:** `turno_atual_idx` pode desincronizar com estado real se um turno é processado com erro parcial (ex: TTS falha após pipeline). InitiativeBar fica destacando o token errado.
 - **Arquivo:** `api/websocket.py` + `engine/memory/working_memory.py:avancar_turno_iniciativa()`
-- **Fix sugerido:** Adicionar campo `rodada_esperada` no payload `fim` e frontend checar consistência. Ou reset do idx ao fim de combate (já existe via `sair_combate()`).
+- **Mitigação (19/05):** Clamp defensivo adicionado em `avancar_turno_iniciativa()` — idx fora de `[0, n)` é corrigido automaticamente sem IndexError.
+- **Pendente:** Adicionar campo `rodada_esperada` no payload `fim` para frontend detectar e checar consistência ativa.
 
-**TTS-1 — Pausa perceptível em resposta longa com muitos marcadores**
-- **Sintoma:** LLM resposta com 3+ marcadores inline ([FIO], [CONSEQUÊNCIA], [XP]) causa buffer lento — `strip_marcadores` roda por flush, mas tokens de marcador acumulam no buffer sem avançar a frase de TTS visível.
-- **Arquivo:** `api/websocket.py` — loop de streaming, lógica de flush ~linha 950
-- **Fix sugerido:** Flush imediato quando encontrar `[` no buffer e colchete já fechado antes dele. Ou pré-strip de marcadores por token antes de acumular no buffer_sentenca.
+~~**TTS-1**~~ ✅ RESOLVIDO (19/05) — buffer só-marcadores descartado imediatamente quando `strip_marcadores()` retorna vazio. Em `api/websocket.py` loop de streaming.
 
-**UX-1 — Companion "comandar" envia mensagem genérica**
-- **Sintoma:** Botão "⚔ comandar" em `CompanionsPanel` envia `${nome}, ataque o inimigo mais próximo.` — sempre igual, sem variedade.
-- **Arquivo:** `frontend/components/CompanionsPanel.tsx`
-- **Fix sugerido:** Array de variações de comando por tipo de companion (hireling, familiar, animal, summon). Ou campo de texto inline antes de enviar.
+~~**UX-1**~~ ✅ RESOLVIDO (20/05) — `CompanionsPanel` com pools `COMANDOS_COMBATE`/`COMANDOS_EXPLORACAO`, botão alterna "⚔ atacar"/"💬 ordenar" por contexto. Em `frontend/components/CompanionsPanel.tsx`.
 
 **UX-2 — Sem feedback quando Groq TPM cai pra Gemini**
 - **Sintoma:** Durante cascata LLM, usuário vê simplesmente demora de 2-4s sem indicação visual. VoxOrb entra em "processando" mas não diferencia "pensando" de "esperando rate limit".
