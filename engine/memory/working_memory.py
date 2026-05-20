@@ -104,6 +104,10 @@ class WorkingMemory:
     tts_voice: str = "pt-BR-FranciscaNeural"
     # Perfil de personalidade do Mestre — controla overlay injetado pelo prompt_builder
     dm_profile: str = "equilibrado"
+    # Visibilidade das rolagens do mestre (Fase 5.7) — instrução injetada no prompt.
+    # "open" / "result_only" → LLM inclui [Rolagem visível: dX=Y] antes de narrar.
+    # "narrated" → LLM narra sem marker, sem número visível ao jogador.
+    roll_visibility: str = "result_only"
     # Catálogo compacto das quests do módulo — texto injetado no prompt para o LLM
     # saber os IDs exatos a usar no sinal [Q:id:stage]. Vazio = módulo sem quests.
     # Exemplo: "Quests disponíveis: combate-inicial(encontro-carnicais) | ..."
@@ -182,6 +186,9 @@ class WorkingMemory:
     saiu_combate_recentemente: bool = False
     # Turnos consecutivos sem combate ou drama — escalada automática de tensão após 5
     turnos_sem_tensao: int = 0
+    # Turnos sem [MERCADO] enquanto em_mercado=True. Auto-reset em 3 turnos sem reconfirmação
+    # para evitar que o botão de venda fique aberto para sempre quando o LLM esquece [FIM_MERCADO].
+    turnos_sem_mercado: int = 0
 
     # ── Mecânicas RPG persistíveis ────────────────────────────────────────────
     # Spell slots: nível → {current, max} — vazio para classes não-conjuradoras
@@ -240,6 +247,21 @@ class WorkingMemory:
     # Exemplo: ["Bola de Fogo", "Míssil Mágico", "Raio de Gelo"]
     spells_conhecidas: list[str] = field(default_factory=list)
 
+    # ── Repetition Guard (anti-repetição narrativa) ───────────────────────────
+    # Fatos âncora: descobertas e eventos chave que o mestre JÁ narrou nesta
+    # sessão. Injetado no prompt como "Não repetir narrativa já dita" para evitar
+    # que o LLM re-narre em ~40-50 turnos o que aconteceu no turno 3.
+    # O LLM insere [ANCORA: texto] ao resolver algo significativo.
+    # Lista circular máx 5 — remove o mais antigo quando excede.
+    fatos_ancora: list[str] = field(default_factory=list)
+
+    # ── Assinaturas de Voz dos NPCs — Feat B ─────────────────────────────────
+    # Parâmetros de voz individuais por NPC: pitch e rate para Edge TTS.
+    # O LLM insere [VOZ: npc-id|pitch|rate] ao introduzir um NPC falante
+    # (apenas uma vez por NPC — a engine mantém para o restante da sessão).
+    # Exemplo: {"lyssa": {"pitch": "+5Hz", "rate": "-10%"}}
+    npc_vozes: dict[str, dict[str, str]] = field(default_factory=dict)
+
     @classmethod
     def nova_sessao(
         cls,
@@ -259,6 +281,7 @@ class WorkingMemory:
         player_level: int = 1,
         tts_voice: str = "pt-BR-FranciscaNeural",
         dm_profile: str = "equilibrado",
+        roll_visibility: str = "result_only",
         str_score: int = 10,
         dex_score: int = 10,
         con_score: int = 10,
@@ -317,6 +340,7 @@ class WorkingMemory:
             session_id=session_id,
             tts_voice=tts_voice,
             dm_profile=dm_profile if dm_profile in {"rigoroso", "equilibrado", "tranquilo", "rule_of_cool"} else "equilibrado",
+            roll_visibility=roll_visibility if roll_visibility in {"open", "result_only", "narrated"} else "result_only",
             em_combate=False,
             str_score=str_score,
             dex_score=dex_score,
@@ -419,6 +443,19 @@ class WorkingMemory:
             }
 
         self.class_features = features
+
+    def registrar_ancora(self, texto: str) -> None:
+        """Registra um fato âncora (descoberta já narrada) para evitar repetição.
+
+        Lista circular de máx 5 — remove o mais antigo quando excede.
+        Dedup: não adiciona se texto idêntico já existir.
+        """
+        texto = texto.strip()
+        if not texto or texto in self.fatos_ancora:
+            return
+        self.fatos_ancora.append(texto)
+        if len(self.fatos_ancora) > 5:
+            self.fatos_ancora.pop(0)
 
     def restaurar_features(self, tipo_descanso: str) -> None:
         """Restaura class_features que se renovam no tipo de descanso dado.

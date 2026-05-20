@@ -95,6 +95,20 @@ async def minha_identidade(
     return {"email": owner.email, "is_admin": owner.is_admin}
 
 
+@router.get("/saved-characters")
+async def listar_personagens_salvos(
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> list[dict]:
+    """Lista personagens com estado persistido no SQLite para este owner.
+
+    Diferente de GET /list (que usa Qdrant episódico e exige DELETE explícito),
+    este endpoint usa SQLite diretamente — inclui sessões auto-checkpointadas.
+    Retorna apenas entradas com player_name salvo em personagem_config.
+    """
+    store = CharacterStore()
+    return await store.listar_por_owner(owner.email)
+
+
 @router.get("/list", response_model=list[SessaoListaItem])
 async def listar_sessoes_salvas(
     owner: Annotated[Owner, Depends(get_owner)],
@@ -159,6 +173,7 @@ async def iniciar_sessao(
         player_level=config.player_level,
         tts_voice=config.tts_voice,
         dm_profile=config.dm_profile,
+        roll_visibility=config.roll_visibility,
         str_score=config.str_score,
         dex_score=config.dex_score,
         con_score=config.con_score,

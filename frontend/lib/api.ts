@@ -8,6 +8,16 @@ export interface SessaoListaItem {
   resumo_curto: string;
 }
 
+export interface PersonagemSalvoItem {
+  session_id: string;
+  player_name: string;
+  player_class: string;
+  player_level: number;
+  hp_atual: number;
+  hp_max: number;
+  ultima_sessao: number;
+}
+
 export interface SessaoInfo {
   session_id: string;
   location_id: string;
@@ -49,7 +59,7 @@ export interface CharacterStateClient {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade";
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
@@ -61,6 +71,7 @@ export interface MensagemWS {
   quest_stages?: Record<string, string>;
   active_quest_hooks?: string[];
   inventory?: string[];
+  conditions?: string[];
   location_nome?: string;
   time_of_day?: string;
   npcs_trust?: Record<string, number>;
@@ -80,6 +91,8 @@ export interface MensagemWS {
   em_combate?: boolean;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
+  // Campo de consistência de rodada — permite detectar initiative drift no frontend.
+  rodada_esperada?: number;
   // Consequências narrativas recentes — para "você lembra que..."
   log_consequencias?: string[];
   // Barra de iniciativa — vazia fora de combate
@@ -101,6 +114,8 @@ export interface MensagemWS {
   // Dado rolado pelo mestre (Fase 5.7) — enviado em tipo="dado_rolado"
   dado_tipo?: string;      // "d4", "d6", "d8", "d10", "d12", "d20", "d100"
   dado_resultado?: number; // valor do dado (1-max)
+  // Nível de tensão narrativa (0–10) — usado pelo frontend para ajustar trilha ambiente
+  pacing_nivel?: number;
   // Feature combate tático — posições de inimigos em pés (chips de distância).
   posicoes_combate?: Record<string, { distancia_ft: number; cobertura: boolean }>;
   movimento_restante_ft?: number;
@@ -170,6 +185,8 @@ export interface PersonagemConfig {
   player_subclass?: string;
   // Magias selecionadas na criação — lista de nomes PT-BR (truques + magias)
   player_spells?: string[];
+  // Visibilidade das rolagens do mestre (Fase 5.7)
+  roll_visibility?: "open" | "result_only" | "narrated";
 }
 
 export async function criarSessao(
@@ -226,6 +243,16 @@ export async function listarSessoes(): Promise<SessaoListaItem[]> {
   const resp = await fetch(`${API_BASE}/session/list`);
   if (!resp.ok) return [];
   return resp.json();
+}
+
+export async function listarPersonagensSalvos(): Promise<PersonagemSalvoItem[]> {
+  try {
+    const resp = await fetch(`${API_BASE}/session/saved-characters`);
+    if (!resp.ok) return [];
+    return resp.json();
+  } catch {
+    return [];
+  }
 }
 
 export async function transcrever(session_id: string, audioBlob: Blob): Promise<string> {

@@ -253,11 +253,20 @@ def _normalizar_para_tts(texto: str) -> str:
     return texto.strip()
 
 
-# Gatilhos de drama narrativo — palavras/expressões que ganham pausa antes
-# para criar suspense. Edge TTS responde bem a vírgulas e reticências.
+# Gatilhos de drama narrativo — palavras/expressões que ganham vírgula antes
+# para criar suspense. Edge TTS interpreta vírgula como pausa natural.
 _RE_DRAMA_PRE_PAUSA = re.compile(
     r"(?<=\s)(de repente|subitamente|então|mas|porém|de súbito|num átimo|"
     r"sem aviso|abruptamente|inesperadamente|num instante)\s+",
+    re.IGNORECASE,
+)
+
+# Revelações e viradas dramáticas — ganham "..." antes para pausa mais longa.
+# Distintas dos gatilhos de drama acima: aqui o jogador está prestes a receber
+# informação importante — o silêncio antes de "na verdade" é parte do reveal.
+_RE_REVELACAO = re.compile(
+    r"(?<=[^.!?,])\s+(na verdade|na realidade|mas afinal|mas então|o que não se sabe|"
+    r"o segredo é|a verdade é|o que ninguém sabe|revela-se que|descobre-se que)\s+",
     re.IGNORECASE,
 )
 
@@ -289,6 +298,13 @@ def _adicionar_nuances_pontuacao(texto: str) -> str:
     - Palavras de impacto isoladas ("Cuidado") → vírgula após para
       pausa antes do que vem ("Cuidado, atrás de você!").
     """
+    # Revelações: primeiro — antes do drama comma, para que "mas afinal"
+    # receba "..." e não apenas vírgula (lookbehind bloqueia pós-vírgula).
+    texto = _RE_REVELACAO.sub(
+        lambda m: f"... {m.group(1).lower()} ",
+        texto,
+    )
+
     # Drama: vírgula antes de palavras de viragem narrativa
     texto = _RE_DRAMA_PRE_PAUSA.sub(
         lambda m: f", {m.group(1).lower()} ",

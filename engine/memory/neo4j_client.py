@@ -241,6 +241,71 @@ class Neo4jMemoryClient:
         before_sleep=_logar_tentativa,
         reraise=True,
     )
+    async def atualizar_afeto_npc(
+        self,
+        npc_id: str,
+        campo: str,
+        delta: int,
+    ) -> None:
+        """Incrementa/decrementa um campo afetivo num nó NPC do Neo4j.
+
+        Campos válidos: afeto | medo | respeito | rancor.
+        Valor é clampado em [-10, 10] após o delta.
+        Cria o campo com valor=delta se não existir.
+
+        Armadilha: nunca lança — falha silenciosa para não bloquear o turno.
+        """
+        campos_validos = {"afeto", "medo", "respeito", "rancor"}
+        if campo not in campos_validos:
+            log.warning("afeto_campo_invalido", campo=campo, npc_id=npc_id)
+            return
+        try:
+            driver = await self._get_driver()
+            async with driver.session() as session:
+                await session.run(
+                    f"""
+                    MATCH (n {{id: $npc_id}})
+                    SET n.{campo} = toInteger(
+                        CASE WHEN n.{campo} IS NULL THEN $delta
+                             ELSE n.{campo} + $delta END
+                    )
+                    SET n.{campo} = CASE
+                        WHEN n.{campo} > 10 THEN 10
+                        WHEN n.{campo} < -10 THEN -10
+                        ELSE n.{campo} END
+                    """,
+                    {"npc_id": npc_id, "delta": delta},
+                )
+            log.info("afeto_npc_atualizado", npc_id=npc_id, campo=campo, delta=delta)
+        except Exception as e:
+            log.warning("afeto_npc_falhou", npc_id=npc_id, campo=campo, erro=str(e))
+
+    async def buscar_afeto_npc(self, npc_id: str) -> dict[str, int]:
+        """Retorna o estado afetivo atual de um NPC (campos afeto/medo/respeito/rancor).
+
+        Returns:
+            Dict com campos presentes no nó. Campos ausentes retornam 0.
+        """
+        try:
+            driver = await self._get_driver()
+            async with driver.session() as session:
+                result = await session.run(
+                    """
+                    MATCH (n {id: $npc_id})
+                    RETURN n.afeto AS afeto, n.medo AS medo,
+                           n.respeito AS respeito, n.rancor AS rancor
+                    """,
+                    {"npc_id": npc_id},
+                )
+                registros = await result.data()
+            if not registros:
+                return {}
+            r = registros[0]
+            return {k: int(v) for k, v in r.items() if v is not None}
+        except Exception as e:
+            log.warning("afeto_busca_falhou", npc_id=npc_id, erro=str(e))
+            return {}
+
     async def buscar_npcs_no_local(self, location_id: str) -> list[dict[str, Any]]:
         """
         Retorna todos os NPCs/Companions relacionados a um local.

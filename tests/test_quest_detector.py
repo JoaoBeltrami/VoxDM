@@ -510,3 +510,31 @@ def test_strip_combinado_fio_e_rolagem_visivel():
     assert "[Rolagem" not in resultado
     assert "[FIO:" not in resultado
     assert "O orc luta com fúria" in resultado
+
+
+def test_strip_afeto():
+    """[AFETO] deve ser removido antes do TTS."""
+    texto = "Fael te observa com respeito. [AFETO: fael-valdreksson|respeito|+2]"
+    resultado = strip_marcadores(texto)
+    assert "[AFETO" not in resultado
+    assert "Fael te observa com respeito." in resultado
+
+
+def test_afeto_regex_captura_campos():
+    """_RE_AFETO deve capturar npc-id, campo e delta corretamente."""
+    from api.turn_pipeline import _RE_AFETO
+
+    texto = "Impressionante. [AFETO: lyssa|afeto|+1] Ela sorriu."
+    m = _RE_AFETO.search(texto)
+    assert m is not None
+    assert m.group(1).lower() == "lyssa"
+    assert m.group(2).lower() == "afeto"
+    assert int(m.group(3)) == 1
+
+
+def test_afeto_regex_rejeita_campo_invalido():
+    """_RE_AFETO não deve capturar campos que não sejam afeto/medo/respeito/rancor."""
+    from api.turn_pipeline import _RE_AFETO
+
+    assert _RE_AFETO.search("[AFETO: npc|amizade|+1]") is None
+    assert _RE_AFETO.search("[AFETO: npc|afeto|+1]") is not None

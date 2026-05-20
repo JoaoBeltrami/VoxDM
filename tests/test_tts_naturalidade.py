@@ -97,6 +97,26 @@ class TestNuancesPontuacao:
         # Não pode ter ",," consecutivos no resultado
         assert ",," not in resultado
 
+    def test_na_verdade_ganha_reticencias(self):
+        resultado = _adicionar_nuances_pontuacao("Ele sorriu na verdade nunca esteve aqui.")
+        assert "..." in resultado
+        assert "na verdade" in resultado
+
+    def test_a_verdade_e_ganha_reticencias(self):
+        resultado = _adicionar_nuances_pontuacao("Toda a aldeia sabe a verdade é que ele fugiu.")
+        assert "..." in resultado
+
+    def test_mas_afinal_ganha_reticencias(self):
+        resultado = _adicionar_nuances_pontuacao("Você esperava uma recompensa mas afinal nada.")
+        assert "..." in resultado
+
+    def test_revelacao_apos_pontuacao_nao_duplica(self):
+        # Após ponto/vírgula não deve gerar reticências (lookbehind protege)
+        resultado = _adicionar_nuances_pontuacao("Você sabia. na verdade isso já era esperado.")
+        # Pode ou não ter ... — o lookbehind `(?<=[^.!?,])` bloqueia pós-ponto
+        # Principal garantia: sem duplicação de "..."
+        assert "......" not in resultado
+
     def test_texto_sem_gatilhos_inalterado(self):
         original = "O guerreiro caminhou pela floresta com cautela."
         resultado = _adicionar_nuances_pontuacao(original)

@@ -1029,3 +1029,165 @@ def test_turnos_sem_tensao_logica_reset_com_trust_direto():
         if wm.em_combate or mudancas:
             wm.turnos_sem_tensao = 0
         assert wm.turnos_sem_tensao == 0
+
+
+# ── Fix #5: [FUGIU] → sair_combate() no pipeline ─────────────────────────────
+
+def test_fugiu_encerra_combate():
+    """Bug #5: [FUGIU] deve encerrar combate via sair_combate() no pipeline.
+
+    Antes do fix, o marcador era strip do TTS mas nunca chamava sair_combate().
+    Resultado: combate ficava ativo indefinidamente após fuga bem-sucedida,
+    mantendo vinheta vermelha + tokens combat.md/saves.md desperdiçados.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-fugiu")
+    wm.entrar_combate()
+    wm.inimigos_combate = {"goblin": {"nome": "Goblin", "estado": "intacto"}}
+
+    aplicar_pos_turno(
+        wm,
+        "Fujo pela saída norte!",
+        "Você escapa pelos corredores sombrios. [FUGIU] O goblin rosna atrás de você.",
+    )
+
+    assert not wm.em_combate, "em_combate deve ser False após [FUGIU]"
+
+
+def test_fugiu_sem_combate_nao_quebra():
+    """Bug #5 (edge): [FUGIU] fora de combate não deve gerar erro."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("taverna", "Taverna", "sess-fugiu-nc")
+    wm.em_combate = False  # fora de combate
+
+    # Não deve lançar exceção
+    aplicar_pos_turno(wm, "Saio correndo.", "Você foge da taverna. [FUGIU]")
+    assert not wm.em_combate
+
+
+# ── Fix #6: conditions no MensagemWS ─────────────────────────────────────────
+
+def test_mensagem_ws_tem_campo_conditions():
+    """Bug #6: MensagemWS deve ter campo conditions para sincronizar CharacterSheet."""
+    from api.models.schemas import MensagemWS
+
+    msg = MensagemWS(tipo="fim", conditions=["Envenenado", "Paralisado"])
+    assert msg.conditions == ["Envenenado", "Paralisado"]
+
+
+def test_conditions_default_vazio():
+    """Bug #6: conditions deve ser lista vazia por padrão (não None)."""
+    from api.models.schemas import MensagemWS
+
+    msg = MensagemWS(tipo="fim")
+    assert msg.conditions == []
+
+
+# ── Fix #7: inventário do backend → CharacterSheet ──────────────────────────
+
+def test_working_memory_loot_vai_para_inventory():
+    """Bug #7: [LOOT] deve adicionar ao player_inventory que é enviado no 'fim'."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-loot")
+    assert len(wm.player_inventory) == 0
+
+    aplicar_pos_turno(
+        wm,
+        "Procuro o corpo do goblin.",
+        "Você encontra uma bolsa com moedas. [LOOT: Poção de Cura] [OURO: +15 saque]",
+    )
+
+    assert "Poção de Cura" in wm.player_inventory, "LOOT deve adicionar ao inventário"
+    assert wm.gold == 15, "OURO deve adicionar ao gold"
+
+
+# ── Feature A: Repetition Guard (ANCORA) ─────────────────────────────────────
+
+def test_ancora_registrado_pelo_pipeline():
+    """[ANCORA] emitido pelo LLM deve ser armazenado em wm.fatos_ancora."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("taverna", "Taverna", "sess-ancora")
+    aplicar_pos_turno(
+        wm,
+        "Quem é Valdrek?",
+        "Valdrek revelou que é o assassino. [ANCORA: Valdrek confessou o crime]",
+    )
+    assert "Valdrek confessou o crime" in wm.fatos_ancora
+
+
+def test_ancora_dedup_no_pipeline():
+    """Registrar o mesmo fato âncora duas vezes não duplica."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-ancora-dup")
+    resposta = "Revelado. [ANCORA: O segredo foi revelado]"
+    aplicar_pos_turno(wm, "texto", resposta)
+    aplicar_pos_turno(wm, "texto", resposta)
+    assert wm.fatos_ancora.count("O segredo foi revelado") == 1
+
+
+def test_ancora_stripped_do_tts():
+    """[ANCORA] deve ser removido pelo strip_marcadores antes do TTS."""
+    from engine.memory.quest_detector import strip_marcadores
+
+    texto = "O segredo veio à tona. [ANCORA: Segredo revelado] O jogador sorriu."
+    limpo = strip_marcadores(texto)
+    assert "[ANCORA" not in limpo
+    assert "O segredo veio à tona." in limpo
+
+
+# ── Feature B: Assinaturas de Voz de NPC ─────────────────────────────────────
+
+def test_voz_npc_registrada_pelo_pipeline():
+    """[VOZ: npc-id|pitch|rate] deve popular wm.npc_vozes."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("taverna", "Taverna", "sess-voz")
+    aplicar_pos_turno(
+        wm,
+        "O que Lyssa diz?",
+        'Lyssa sussurra "Cuidado." [VOZ: lyssa|+5Hz|-10%]',
+    )
+    assert "lyssa" in wm.npc_vozes
+    assert wm.npc_vozes["lyssa"]["pitch"] == "+5Hz"
+    assert wm.npc_vozes["lyssa"]["rate"] == "-10%"
+
+
+def test_voz_npc_nao_sobrescreve():
+    """Registrar voz para NPC que já tem assinatura não deve sobrescrever."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("taverna", "Taverna", "sess-voz-nodup")
+    aplicar_pos_turno(wm, "t", 'Lyssa fala. [VOZ: lyssa|+5Hz|-10%]')
+    aplicar_pos_turno(wm, "t", 'Lyssa responde. [VOZ: lyssa|-5Hz|+20%]')
+    assert wm.npc_vozes["lyssa"]["pitch"] == "+5Hz"  # original preservado
+
+
+def test_voz_stripped_do_tts():
+    """[VOZ] deve ser removido pelo strip_marcadores antes do TTS."""
+    from engine.memory.quest_detector import strip_marcadores
+
+    texto = 'Ela sussurra. [VOZ: lyssa|+5Hz|-10%] "Venha aqui."'
+    limpo = strip_marcadores(texto)
+    assert "[VOZ" not in limpo
+    assert "Ela sussurra." in limpo
+
+
+def test_detectar_voz_npc_helper():
+    """_detectar_voz_npc deve encontrar NPC pelo nome na sentença."""
+    from api.websocket import _detectar_voz_npc
+
+    npc_vozes = {"lyssa": {"pitch": "+5Hz", "rate": "-10%"}}
+    assert _detectar_voz_npc("Lyssa sussurrou baixinho.", npc_vozes) == {"pitch": "+5Hz", "rate": "-10%"}
+    assert _detectar_voz_npc("O goblin avançou.", npc_vozes) is None

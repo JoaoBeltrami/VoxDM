@@ -403,6 +403,31 @@ def montar_mensagens(
             "personagens com textura. Pode haver silêncio significativo."
         )
 
+    # Repetition Guard — fatos âncora: o que JÁ foi narrado nesta sessão.
+    # Injetado para evitar que o LLM re-narre descobertas do início da sessão
+    # em ~40-50 turnos (sintoma clássico de janela de contexto curta).
+    fatos_ancora = getattr(contexto.working_memory, "fatos_ancora", [])
+    if fatos_ancora:
+        lista_ancora = "\n".join(f"• {f}" for f in fatos_ancora)
+        secoes.append(
+            f"\n=== FATOS ESTABELECIDOS (não repetir narrativa já dita) ===\n{lista_ancora}\n"
+            "Estes fatos já foram narrados. Não repita — avance a história."
+        )
+
+    # Fase 5.7: instrução de visibilidade de rolagens do mestre.
+    # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
+    #   qualquer rolagem interna (ataque de NPC, teste secreto, evento aleatório).
+    # "narrated" → sem marker, número nunca aparece (roll behind the screen).
+    roll_vis = getattr(contexto.working_memory, "roll_visibility", "result_only")
+    if roll_vis in ("open", "result_only"):
+        secoes.append(
+            "\n[ROLAGENS DO MESTRE] Sempre que o Mestre rolar um dado internamente "
+            "(ataque de NPC, teste secreto, evento aleatório), escreva "
+            "[Rolagem visível: dX=Y] ANTES da narração do resultado, onde X é o "
+            "tipo do dado e Y é o valor (ex: [Rolagem visível: d20=14]). "
+            "Limite: no máximo 1 por turno. Não inventar números — usar o dado sorteado."
+        )
+
     # Magias conhecidas do personagem — restrição de repertório mágico.
     # Injetadas ANTES dos chunks episódicos para ter peso maior no system prompt.
     spells_conhecidas = getattr(contexto, "spells_conhecidas", [])

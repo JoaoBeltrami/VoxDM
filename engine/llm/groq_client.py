@@ -86,6 +86,14 @@ class GroqClient:
         """Hint legível do backend ativo — ``"auto"`` quando sem override."""
         return self._backend_override or "auto"
 
+    @property
+    def ultimo_provider_stream(self) -> str | None:
+        """Nome do provider que emitiu o primeiro token no último stream.
+
+        Usado pelo websocket para detectar cascata silenciosa e emitir toast UX-2.
+        """
+        return self._router.ultimo_provider_stream
+
     # ── API histórica ─────────────────────────────────────────────────────
 
     async def completar(

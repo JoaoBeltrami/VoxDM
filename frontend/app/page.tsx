@@ -21,7 +21,7 @@ import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/u
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
-import { trocarLlmBackend, obterIdentidade } from "@/lib/api";
+import { trocarLlmBackend, obterIdentidade, checkpointSessao } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
 const VOZES_PTBR = [
@@ -240,6 +240,27 @@ function extrairMotivoRolagem(texto: string): { motivo: string; atributo: string
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
 
+/** UX-2: toast discreto quando a cascata LLM cai do Groq pro provider de backup.
+ *  Auto-dismiss após 5s; clicável para fechar imediatamente. */
+function CascadeToast({ provider, onDismiss }: { provider: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  const label = provider.includes("gemini") ? "Gemini" : provider.includes("ollama") ? "Ollama" : provider;
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 top-16 z-40 flex justify-center px-4">
+      <button
+        onClick={onDismiss}
+        className="animate-slide-down rounded-xl border border-blue-800/50 bg-blue-950/80 px-4 py-2 text-center text-xs text-blue-300/90 shadow-lg backdrop-blur-sm hover:bg-blue-900/80 transition"
+      >
+        ⚡ Conexão lenta — usando {label} como backup
+      </button>
+    </div>
+  );
+}
+
 function lerVozStorage(): string {
   if (typeof window === "undefined") return VOZ_PADRAO;
   const salva = localStorage.getItem(LS_VOZ_KEY) ?? VOZ_PADRAO;
@@ -250,7 +271,7 @@ function lerVozStorage(): string {
 export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
-    historico, erro, reconectando, questStages, activeQuests,
+    historico, erro, reconectando, questStages, activeQuests, inventory, playerConditions,
     locationNome, timeOfDay, npcsTrust,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
@@ -259,7 +280,7 @@ export default function Home() {
     emMercado, companions,
     iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
-    textoRecap, limparRecap,
+    textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
     conectar, enviarComando, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
@@ -270,6 +291,9 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     novoCompanionFlash, dispensarCompanionFlash,
+    partyRestorada, dispensarPartyBanner,
+    cascadeAtivo, limparCascade,
+    pacingNivel,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -290,6 +314,77 @@ export default function Home() {
   });
 
   const [tela, setTela] = useState<Tela>("menu");
+
+  // ── Feature 1: Tela de encerramento de sessão ──────────────────────────────
+  // Stats capturados antes de desconectar() limpar o estado. Exibidos por 8s
+  // antes de retornar ao menu. null = não mostrar.
+  interface SessionEndStats {
+    xp: number; gold: number; inventoryCount: number;
+    fiosSoltos: string[]; consequencias: string[]; turnosJogados: number;
+  }
+  const [sessionEndStats, setSessionEndStats] = useState<SessionEndStats | null>(null);
+  const sessionEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleEncerrar = useCallback(() => {
+    if (!conectado) return;
+    setSessionEndStats({ xp, gold, inventoryCount: inventory.length, fiosSoltos: [...fiosSoltos], consequencias: [...consequencias], turnosJogados: historico.length });
+    desconectar();
+    if (sessionEndTimerRef.current) clearTimeout(sessionEndTimerRef.current);
+    sessionEndTimerRef.current = setTimeout(() => setSessionEndStats(null), 8000);
+  }, [conectado, xp, gold, inventory, fiosSoltos, consequencias, historico, desconectar]);
+  useEffect(() => () => { if (sessionEndTimerRef.current) clearTimeout(sessionEndTimerRef.current); }, []);
+
+  // ── Feature 2: Sinal "sua vez" pós-TTS ────────────────────────────────────
+  // Um ping cristalino + glow no microfone quando o mestre termina de falar.
+  const [suaVezGlow, setSuaVezGlow] = useState(false);
+  const suaVezTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioTocandoParaRing = useRef(false);
+  useEffect(() => {
+    if (audioTocandoParaRing.current && !audioTocando && conectado && !isProcessing) {
+      // Mestre acabou de falar → sinaliza turno do jogador
+      setSuaVezGlow(true);
+      if (suaVezTimerRef.current) clearTimeout(suaVezTimerRef.current);
+      suaVezTimerRef.current = setTimeout(() => setSuaVezGlow(false), 800);
+      // Crystal ping via Web Audio API — zero deps de arquivo
+      try {
+        const pingCtx = new AudioContext();
+        const osc = pingCtx.createOscillator();
+        const g = pingCtx.createGain();
+        osc.connect(g); g.connect(pingCtx.destination);
+        osc.frequency.value = 1046.5; // C6 — cristalino
+        osc.type = "sine";
+        g.gain.setValueAtTime(0, pingCtx.currentTime);
+        g.gain.linearRampToValueAtTime(0.12, pingCtx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, pingCtx.currentTime + 0.55);
+        osc.start(); osc.stop(pingCtx.currentTime + 0.6);
+        osc.onended = () => pingCtx.close().catch(() => {});
+      } catch { /* silencioso — WebAudio pode não estar disponível */ }
+    }
+    audioTocandoParaRing.current = audioTocando;
+  }, [audioTocando, conectado, isProcessing]);
+  useEffect(() => () => { if (suaVezTimerRef.current) clearTimeout(suaVezTimerRef.current); }, []);
+
+  // ── Feature 5: Flash de morte de inimigo nomeado ───────────────────────────
+  // Detecta transição de qualquer inimigo para o estado "morto" — exibe nome
+  // em destaque por 1.5s. Análogo ao battleSplash mas focado na morte.
+  const [morteFlash, setMorteFlash] = useState<{ nome: string; id: number } | null>(null);
+  const inimigosAntRef = useRef<Record<string, { nome: string; estado: string }>>({});
+  const morteFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const ant = inimigosAntRef.current;
+    for (const [id, info] of Object.entries(inimigos)) {
+      if (info.estado === "morto" && ant[id]?.estado !== "morto") {
+        // Inimigo acabou de morrer — exibe flash com o nome
+        const nome = info.nome || id;
+        setMorteFlash({ nome, id: Date.now() });
+        if (morteFlashTimerRef.current) clearTimeout(morteFlashTimerRef.current);
+        morteFlashTimerRef.current = setTimeout(() => setMorteFlash(null), 1500);
+        break; // um flash por turno — evita stackar se vários morreram
+      }
+    }
+    inimigosAntRef.current = { ...inimigos };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inimigos]);
+  useEffect(() => () => { if (morteFlashTimerRef.current) clearTimeout(morteFlashTimerRef.current); }, []);
 
   // Identidade do usuário autenticado — carregada do backend na montagem
   const [ownerEmail, setOwnerEmail] = useState<string>("");
@@ -370,6 +465,15 @@ export default function Home() {
     trocarLlmBackend(sessionId, llmBackend).catch(() => {});
   }, [sessionId, conectado, llmBackend]);
 
+  // Auto-save no beforeunload — garante que fechar aba ou navegar não perde estado.
+  // keepalive=true permite que o fetch complete mesmo após a página ser destruída.
+  useEffect(() => {
+    if (!sessionId || !conectado) return;
+    const handle = () => { checkpointSessao(sessionId, true); };
+    window.addEventListener("beforeunload", handle);
+    return () => window.removeEventListener("beforeunload", handle);
+  }, [sessionId, conectado]);
+
   // Volume da voz do mestre — hydratado do localStorage, refletido no GainNode
   const [volume, setVolumeState] = useState<number>(VOLUME_PADRAO);
   useEffect(() => { setVolumeState(lerVolumeStorage()); }, []);
@@ -418,6 +522,15 @@ export default function Home() {
     return () => { if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoCompanionFlash]);
+  // Auto-dismiss: banner "Party recuperada" some após 5s.
+  const partyBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (partyRestorada.length === 0) return;
+    if (partyBannerTimerRef.current) clearTimeout(partyBannerTimerRef.current);
+    partyBannerTimerRef.current = setTimeout(() => dispensarPartyBanner(), 5000);
+    return () => { if (partyBannerTimerRef.current) clearTimeout(partyBannerTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyRestorada]);
 
   const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
@@ -590,12 +703,32 @@ export default function Home() {
   const handleContinuarSessao = useCallback((sessao: SessaoListaItem) => {
     setSessaoSelecionada(sessao);
     setSessionInput(sessao.session_id);
-    setPersonagem(p => ({ ...p, session_anterior_id: sessao.session_id }));
-  }, []);
+    // Fase C: bypass direto do CharacterForm — o servidor restaura o personagem.
+    // criarSessao + WS são iniciados imediatamente. Se personagem_restaurado vier
+    // não-null do servidor, a ficha é populada pelo useEffect abaixo. Se vier null
+    // (sessão muito antiga sem dados), o mestre abre com config mínima e pergunta.
+    conectar("", {
+      session_anterior_id: sessao.session_id,
+      tts_voice: vozSelecionada,
+      dm_profile: dmProfile,
+      roll_visibility: rollVisibility,
+    });
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility]);
+
+  const handleContinuarPersonagem = useCallback((sessionId: string) => {
+    // Bypass total do CharacterForm via SQLite: personagem_config é restaurado
+    // pelo servidor — frontend recebe personagem_restaurado no SessaoInfo.
+    conectar("", {
+      session_anterior_id: sessionId,
+      tts_voice: vozSelecionada,
+      dm_profile: dmProfile,
+      roll_visibility: rollVisibility,
+    });
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility]);
 
   const handleConectar = useCallback(() => {
-    conectar(sessionInput || "sess-01", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile });
-  }, [conectar, sessionInput, personagem, vozSelecionada, dmProfile]);
+    conectar(sessionInput || "sess-01", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility });
+  }, [conectar, sessionInput, personagem, vozSelecionada, dmProfile, rollVisibility]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
     if (!sessaoSelecionada) return;
@@ -604,13 +737,14 @@ export default function Home() {
       session_anterior_id: sessaoSelecionada.session_id,
       tts_voice: vozSelecionada,
       dm_profile: dmProfile,
+      roll_visibility: rollVisibility,
     });
-  }, [conectar, sessaoSelecionada, personagem, vozSelecionada, dmProfile]);
+  }, [conectar, sessaoSelecionada, personagem, vozSelecionada, dmProfile, rollVisibility]);
 
   // 3º arg "mestreFalando" ativa ducking: ambiente abaixa enquanto há resposta
   // sendo lida, volta no silêncio. Replica como uma mesa real soa.
   const { ativo: ambienteAtivo, cena: ambienteCena, toggle: toggleAmbiente } =
-    useAmbientAudio(locationNome ?? "", emCombate, !!respostaAtual);
+    useAmbientAudio(locationNome ?? "", emCombate, !!respostaAtual, pacingNivel);
 
   // Mood visual da cena — overlay sutil + vinheta. Combate sempre sobrescreve.
   const sceneMood = useSceneMood(locationNome, timeOfDay, emCombate);
@@ -655,6 +789,72 @@ export default function Home() {
               {questNotificacao.split("\n").map((linha, i) => (
                 <div key={i}>{linha}</div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* UX-2: toast de cascata LLM — aparece quando Groq cai pro Gemini por rate limit.
+            Auto-dismiss após 5s. Cor azul discreta para não parecer erro. */}
+        {cascadeAtivo && (
+          <CascadeToast provider={cascadeAtivo} onDismiss={limparCascade} />
+        )}
+
+        {/* Feature 5: Flash de morte de inimigo nomeado — nome do abatido em destaque por 1.5s */}
+        {morteFlash && (
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
+            <div className="animate-morte-flash text-center">
+              <div className="text-xs font-light tracking-[0.4em] text-red-500/60 uppercase mb-1">
+                abatido
+              </div>
+              <div className="text-4xl font-black tracking-wide text-red-300 drop-shadow-[0_0_30px_rgba(239,68,68,0.8)] line-through decoration-red-600/70">
+                {morteFlash.nome}
+              </div>
+              <div className="mt-1 text-lg text-red-600/60">☠</div>
+            </div>
+          </div>
+        )}
+
+        {/* Feature 1: Tela de encerramento de sessão — exibida após Encerrar por 8s */}
+        {sessionEndStats && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm cursor-pointer"
+            onClick={() => { setSessionEndStats(null); }}
+          >
+            <div className="flex flex-col items-center gap-6 max-w-sm w-full px-6 text-center">
+              <div className="font-[Cinzel,serif] text-2xl tracking-widest text-violet-300">
+                ✦ Fim de Aventura ✦
+              </div>
+              <div className="grid grid-cols-3 gap-4 w-full">
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-amber-300">{sessionEndStats.xp}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">XP</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-yellow-400">{sessionEndStats.gold}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Ouro</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-violet-300">{sessionEndStats.turnosJogados}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Turnos</span>
+                </div>
+              </div>
+              {sessionEndStats.consequencias.length > 0 && (
+                <div className="w-full text-left">
+                  <div className="text-[10px] text-orange-400/70 uppercase tracking-widest mb-2">Consequências no mundo</div>
+                  {sessionEndStats.consequencias.slice(0, 3).map((c, i) => (
+                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">• {c}</div>
+                  ))}
+                </div>
+              )}
+              {sessionEndStats.fiosSoltos.length > 0 && (
+                <div className="w-full text-left">
+                  <div className="text-[10px] text-violet-400/70 uppercase tracking-widest mb-2">Fios em aberto</div>
+                  {sessionEndStats.fiosSoltos.slice(0, 2).map((f, i) => (
+                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">⋯ {f}</div>
+                  ))}
+                </div>
+              )}
+              <div className="text-[10px] text-zinc-600 mt-2">clique para continuar</div>
             </div>
           </div>
         )}
@@ -799,7 +999,7 @@ export default function Home() {
               ↓
             </button>
             <button
-              onClick={desconectar}
+              onClick={handleEncerrar}
               className="text-xs text-zinc-600 transition hover:text-zinc-400"
             >
               Encerrar
@@ -864,6 +1064,8 @@ export default function Home() {
           initDeathSavesSuccesses={deathSavesSuccesses}
           initDeathSavesFailures={deathSavesFailures}
           initDeathSavesStable={deathSavesStable}
+          initInventory={inventory}
+          initConditions={playerConditions}
           rolagens={rolagens}
           classFeatures={classFeatures}
           onUsarFeature={(fid, usos) =>
@@ -891,6 +1093,8 @@ export default function Home() {
             emCombate={emCombate}
             onComandar={(cmd) => enviarComando(cmd)}
             novoCompanionId={novoCompanionFlash}
+            partyRestorada={partyRestorada}
+            onDispensarParty={dispensarPartyBanner}
           />
         )}
 
@@ -926,6 +1130,13 @@ export default function Home() {
               >
                 {textoRecap}
               </p>
+              {/* UX-3: botão de retry de áudio — aparece quando o recap já foi exibido
+                  mas o áudio pode ter sido cancelado (mudança de aba, autoplay bloqueado). */}
+              <button
+                onClick={retocarRecap}
+                className="mt-2 text-[10px] text-amber-600/60 hover:text-amber-400 transition flex items-center gap-1"
+                title="Ouvir o recap novamente"
+              >▶ Ouvir novamente</button>
             </div>
           )}
 
@@ -1297,13 +1508,19 @@ export default function Home() {
             </div>
           )}
 
-          <VoiceButton
-            onEnviar={enviarComando}
-            onOuvindoChange={setOuvindo}
-            desabilitado={!!respostaAtual}
-            sessionId={sessionId}
-            onIniciarFala={pararAudio}
-          />
+          {/* Anel "sua vez" — glow âmbar no container do mic quando o mestre parou de falar */}
+          <div className={`rounded-full transition-all duration-200 ${
+            suaVezGlow ? "shadow-[0_0_0_3px_rgba(251,191,36,0.45),0_0_18px_rgba(251,191,36,0.2)] animate-sua-vez" : ""
+          }`}>
+            <VoiceButton
+              onEnviar={enviarComando}
+              onOuvindoChange={setOuvindo}
+              desabilitado={!!respostaAtual}
+              sessionId={sessionId}
+              onIniciarFala={pararAudio}
+              mestreAudioTocando={audioTocando && !ouvindo}
+            />
+          </div>
         </div>
 
         {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}
@@ -1433,7 +1650,10 @@ export default function Home() {
             <h2 className="text-lg font-bold text-violet-400">Carregar Sessão</h2>
           </div>
 
-          <SessionPicker onContinuar={handleContinuarSessao} />
+          <SessionPicker
+            onContinuar={handleContinuarSessao}
+            onContinuarPersonagem={handleContinuarPersonagem}
+          />
 
           {sessaoSelecionada && (
             <div className="rounded-xl border border-violet-800/40 bg-violet-900/10 p-3 space-y-2">

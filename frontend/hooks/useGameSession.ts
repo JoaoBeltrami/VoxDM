@@ -70,6 +70,9 @@ interface EstadoSessao {
   questStages: Record<string, string>;
   activeQuests: string[];
   inventory: string[];
+  // Condições confirmadas pelo jogador (via sync_conditions) — persistidas no backend,
+  // reenviadas no "fim" e usadas para inicializar CharacterSheet após reload.
+  playerConditions: string[];
   locationNome: string;
   timeOfDay: string;
   npcsTrust: Record<string, number>;
@@ -134,6 +137,12 @@ interface EstadoSessao {
   // null = ainda não recebeu o primeiro "fim" (sessão nova ou antes do primeiro turno).
   serverHp: number | null;
   serverHpMax: number | null;
+  // UX-2: nome do provider de cascata ativo (ex: "gemini-flash") — null quando Groq normal.
+  // Exibido como toast discreto no frontend, limpo após 5s.
+  cascadeAtivo: string | null;
+  // Nível de pacing narrativo atual (0–10) — espelha WorkingMemory.pacing_nivel.
+  // Passado para useAmbientAudio para ajustar a intensidade da trilha em tempo real.
+  pacingNivel: number;
   // Resumo do último level up — null fora de level up. Modal exibe enquanto setado.
   // Limpo pelo botão "Continuar" do modal ou após auto-dismiss de 12s.
   levelUp: {
@@ -161,6 +170,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   questStages: {},
   activeQuests: [],
   inventory: [],
+  playerConditions: [],
   locationNome: "",
   timeOfDay: "",
   npcsTrust: {},
@@ -195,6 +205,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   personagemRestaurado: null,
   serverHp: null,
   serverHpMax: null,
+  cascadeAtivo: null,
+  pacingNivel: 3,
 };
 
 // Condições D&D 5e detectáveis no texto do mestre
@@ -275,6 +287,13 @@ export function useGameSession() {
   // disparam o glow esmeralda de confirmação visual quando um novo ID aparece.
   const prevCompanionsRef = useRef<Record<string, unknown>>({});
   const [novoCompanionFlash, setNovoCompanionFlash] = useState<string | null>(null);
+  // Nomes de companions restaurados da sessão anterior — exibe banner no CompanionsPanel.
+  // Populado na abertura quando há companions vindos do episódico. Limpo pelo jogador ou 5s auto-dismiss.
+  const [partyRestorada, setPartyRestorada] = useState<string[]>([]);
+
+  // UX-3: salva o último chunk de áudio do recap para re-enfileirar se cancelado.
+  // Preenchido quando audio_chunk chega enquanto textoRecap está visível.
+  const recapChunkRef = useRef<string | null>(null);
 
   // Turno completo aguardando flush para histórico. Quando o tipo:"fim" chega,
   // o áudio ainda está sendo reproduzido (TTS demora mais que stream LLM).
@@ -305,11 +324,16 @@ export function useGameSession() {
     }));
   }, []);
 
+  // Ref vivo que espelha audioTocando — permite leitura síncrona em callbacks WS
+  // sem depender de closure stale. Necessário para o flush imediato no "fim" handler.
+  const audioTocandoRef = useRef(false);
+
   // Detecta transição true→false do áudio. Quando o último chunk terminou e
   // havia um turno aguardando, é a hora de empurrar pro histórico — o karaokê
   // já chegou ao fim natural junto com a voz.
   const audioTocandoAntRef = useRef(false);
   useEffect(() => {
+    audioTocandoRef.current = audioTocando;
     if (audioTocandoAntRef.current && !audioTocando) {
       _flushTurnoPendente();
     }
@@ -338,6 +362,11 @@ export function useGameSession() {
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
         tocarChunk(msg.conteudo_b64);
+        // UX-3: se o recap ainda está visível, guarda o chunk para re-enfileirar
+        // se o usuário mudar de aba e o áudio for cancelado antes de terminar.
+        if (estado.textoRecap) {
+          recapChunkRef.current = msg.conteudo_b64;
+        }
       }
 
       if (msg.tipo === "level_up" && msg.level_up) {
@@ -398,6 +427,12 @@ export function useGameSession() {
       // Chega como URL direta; o componente <main> aplica como backgroundImage com fade.
       if (msg.tipo === "scene_image" && msg.conteudo) {
         setEstado(s => ({ ...s, sceneImageUrl: msg.conteudo! }));
+      }
+
+      // UX-2: cascata LLM detectada (Groq TPM → Gemini). Exibe toast 5s no frontend
+      // para que o jogador entenda a demora sem quebrar a imersão.
+      if (msg.tipo === "cascade" && msg.conteudo) {
+        setEstado(s => ({ ...s, cascadeAtivo: msg.conteudo! }));
       }
 
       if (msg.tipo === "lampejo" && msg.conteudo) {
@@ -527,6 +562,13 @@ export function useGameSession() {
           // Abertura — companions restaurados do episódico, não adicionados pelo LLM.
           // Inicializa prevRef silenciosamente: sem flash individual para companions já conhecidos.
           prevCompanionsRef.current = companionsAtual;
+          // Exibe banner "Party recuperada" se há companions da sessão anterior.
+          const nomesRestaurados = Object.values(companionsAtual)
+            .map((c) => (c as { nome?: string }).nome ?? "")
+            .filter(Boolean);
+          if (nomesRestaurados.length > 0) {
+            setPartyRestorada(nomesRestaurados);
+          }
         } else {
           // Turno normal — detecta companions recém-registrados pelo LLM
           const idsNovos = Object.keys(companionsAtual).filter(
@@ -569,9 +611,16 @@ export function useGameSession() {
           // Cancela timer antigo antes de criar novo
           if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
           turnoPendenteRef.current = turnoFinal;
-          // Fallback de segurança: se áudio nunca terminar (TTS falhou ou
-          // já estava parado), flush forçado após 30s.
-          flushTimerRef.current = setTimeout(() => _flushTurnoPendente(), 30_000);
+          // Flush imediato se o áudio já terminou (resposta curta: TTS acabou
+          // antes do "fim" chegar). Sem isso o turno ficaria preso 30s até o
+          // fallback abaixo ou até o próximo input do jogador.
+          if (!audioTocandoRef.current) {
+            _flushTurnoPendente();
+          } else {
+            // Fallback de segurança: se áudio nunca terminar (TTS falhou ou
+            // já estava parado), flush forçado após 30s.
+            flushTimerRef.current = setTimeout(() => _flushTurnoPendente(), 30_000);
+          }
         }
 
         if (turno || textoFinal) {
@@ -583,6 +632,7 @@ export function useGameSession() {
             questStages: novoTurnoBase.questStages ?? s.questStages,
             activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
             inventory: novoTurnoBase.inventory ?? s.inventory,
+            playerConditions: msg.conditions ?? s.playerConditions,
             locationNome: novoTurnoBase.locationNome ?? s.locationNome,
             timeOfDay: novoTurnoBase.timeOfDay ?? s.timeOfDay,
             npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
@@ -598,7 +648,23 @@ export function useGameSession() {
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
             inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
-            rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
+            rodadaCombate: (() => {
+              const novaRodada = rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0;
+              // COMBAT-2: se rodada_esperada diverge do local, turno foi processado
+              // parcialmente (ex: TTS falhou após pipeline). Re-sync automático.
+              if (
+                rpgUpdate.emCombate &&
+                msg.rodada_esperada != null &&
+                msg.rodada_esperada !== novaRodada
+              ) {
+                console.warn(
+                  "[VoxDM] initiative drift — re-sincronizando rodada:",
+                  novaRodada, "→", msg.rodada_esperada,
+                );
+                return msg.rodada_esperada;
+              }
+              return novaRodada;
+            })(),
             posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
             movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
             movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
@@ -610,6 +676,7 @@ export function useGameSession() {
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
             condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
+            pacingNivel: msg.pacing_nivel ?? s.pacingNivel,
           }));
         }
       }
@@ -825,8 +892,16 @@ export function useGameSession() {
   }, []);
 
   const limparRecap = useCallback(() => {
+    recapChunkRef.current = null;
     setEstado(s => ({ ...s, textoRecap: "" }));
   }, []);
+
+  // UX-3: re-enfileira o áudio do recap se foi cancelado cedo (mudança de aba).
+  const retocarRecap = useCallback(() => {
+    if (recapChunkRef.current) {
+      tocarChunk(recapChunkRef.current);
+    }
+  }, [tocarChunk]);
 
   return {
     ...estado,
@@ -841,6 +916,7 @@ export function useGameSession() {
     setVolume,
     dispensarQuestNotificacao: () => setEstado(s => ({ ...s, questNotificacao: null })),
     limparRecap,
+    retocarRecap,
     dismissLevelUp,
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
     // personagemRestaurado já vem via ...estado
@@ -853,5 +929,10 @@ export function useGameSession() {
     // Companion flash — nome do companion recém-registrado em turno ativo, null fora de evento.
     novoCompanionFlash,
     dispensarCompanionFlash: () => setNovoCompanionFlash(null),
+    // Banner "Party recuperada" — companions da sessão anterior.
+    partyRestorada,
+    dispensarPartyBanner: () => setPartyRestorada([]),
+    // UX-2: cascade toast — limpar após exibição
+    limparCascade: () => setEstado(s => ({ ...s, cascadeAtivo: null })),
   };
 }

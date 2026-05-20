@@ -297,3 +297,36 @@ class CharacterStore:
                 "DELETE FROM character_state WHERE session_id = ?", (session_id,)
             )
             await conn.commit()
+
+    async def listar_por_owner(self, owner_email: str) -> list[dict]:
+        """Lista personagens com identidade salva para o owner, mais recentes primeiro.
+
+        Diferente de EpisodicMemory.listar_com_metadata() (Qdrant, exige DELETE),
+        este método lê do SQLite e inclui sessões apenas auto-checkpointadas.
+        Retorna somente linhas que têm player_name em personagem_config.
+        """
+        async with self._conn() as conn:
+            async with conn.execute(
+                "SELECT session_id, player_level, hp_current, hp_max, "
+                "personagem_config, updated_at "
+                "FROM character_state WHERE owner_email = ? ORDER BY updated_at DESC",
+                (owner_email,),
+            ) as cur:
+                rows = await cur.fetchall()
+
+        resultado: list[dict] = []
+        for row in rows:
+            pc: dict = json.loads(row["personagem_config"] or "{}")
+            nome = pc.get("player_name", "")
+            if not nome:
+                continue  # pula sessões criadas antes de personagem_config existir
+            resultado.append({
+                "session_id": row["session_id"],
+                "player_name": nome,
+                "player_class": pc.get("player_class", ""),
+                "player_level": int(row["player_level"] or 3),
+                "hp_atual": int(row["hp_current"] or 0),
+                "hp_max": int(row["hp_max"] or 1),
+                "ultima_sessao": float(row["updated_at"] or 0),
+            })
+        return resultado

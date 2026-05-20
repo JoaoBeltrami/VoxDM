@@ -13,6 +13,8 @@ interface Props {
   onIniciarFala?:   () => void;
   /** Chamado ao pausar/retomar — hook para otimização de latência em background */
   onPausarFala?:    (pausado: boolean) => void;
+  /** true quando o mestre está falando — exibe botão de interrupção cinematic */
+  mestreAudioTocando?: boolean;
 }
 
 // Comandos de voz reconhecidos e suas transformações para o WS
@@ -51,12 +53,14 @@ function processarComandoVoz(texto: string): string {
   return texto;
 }
 
-export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala, onPausarFala }: Props) {
+export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, sessionId, onIniciarFala, onPausarFala, mestreAudioTocando }: Props) {
   const [texto,        setTexto]        = useState("");
   const [ouvindo,      setOuvindo]      = useState(false);
   const [pausado,      setPausado]      = useState(false);
   const [preview,      setPreview]      = useState("");
   const [transcrevendo, setTranscrevendo] = useState(false);
+  // modoOOC: quando ativo, prefixo [OOC] é adicionado — mestre responde fora da ficção
+  const [modoOOC, setModoOOC] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recRef        = useRef<any>(null);
@@ -95,9 +99,12 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
         setPreview("Transcrevendo…");
         setTranscrevendo(true);
         try {
-          const texto = await transcrever(sessionId, blob);
+          const transcrito = await transcrever(sessionId, blob);
           setPreview("");
-          if (texto.trim()) onEnviar(processarComandoVoz(texto.trim()));
+          if (transcrito.trim()) {
+            const processado = processarComandoVoz(transcrito.trim());
+            onEnviar(modoOOC ? `[OOC] ${processado}` : processado);
+          }
         } catch {
           // Falha na transcrição — fallback silencioso (texto ainda disponível)
           setPreview("");
@@ -161,7 +168,10 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
       if (ev.results[ev.results.length - 1].isFinal) {
         setPreview("");
         _setOuvindo(false);
-        if (transcript.trim()) onEnviar(processarComandoVoz(transcript.trim()));
+        if (transcript.trim()) {
+          const processado = processarComandoVoz(transcript.trim());
+          onEnviar(modoOOC ? `[OOC] ${processado}` : processado);
+        }
       } else {
         setPreview(transcript);
       }
@@ -198,7 +208,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   const enviarTexto = () => {
     const t = texto.trim();
     if (!t || desabilitado) return;
-    onEnviar(t);
+    onEnviar(modoOOC ? `[OOC] ${t}` : t);
     setTexto("");
     inputRef.current?.focus();
   };
@@ -248,12 +258,13 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
             </button>
           )}
 
-          {/* Botão principal: microfone / parar */}
+          {/* Botão principal: microfone / parar / interromper mestre */}
           <button
             onClick={toggleVoz}
             disabled={botaoDesabilitado}
             title={
               transcrevendo ? "Transcrevendo…" :
+              mestreAudioTocando && !ouvindo ? "Interromper e falar" :
               ouvindo ? "Parar de ouvir" : "Falar"
             }
             className={`relative flex items-center justify-center rounded-full transition-all duration-300
@@ -264,6 +275,8 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
                 ? "bg-violet-500 shadow-[0_0_24px_6px_rgba(139,92,246,0.5)] scale-110"
                 : transcrevendo
                 ? "bg-violet-800 animate-pulse"
+                : mestreAudioTocando
+                ? "bg-orange-900/80 border border-orange-700/60 hover:bg-orange-800/80 shadow-[0_0_12px_2px_rgba(234,88,12,0.2)]"
                 : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
               }
               disabled:opacity-30 disabled:cursor-not-allowed`}
@@ -272,6 +285,9 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
               <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-white">
                 <rect x="3" y="3" width="12" height="12" rx="2" />
               </svg>
+            ) : mestreAudioTocando ? (
+              /* ✋ Interromper — mão aberta sinaliza "pode falar" */
+              <span className="text-orange-300 text-xl select-none">✋</span>
             ) : (
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -297,6 +313,22 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           {transcrevendo ? "Transcrevendo via GPU…" : preview}
         </p>
       )}
+
+      {/* Toggle OOC/IC — fora do personagem vs em personagem */}
+      <div className="flex w-full max-w-lg justify-end">
+        <button
+          type="button"
+          onClick={() => setModoOOC(v => !v)}
+          title={modoOOC ? "Modo: Para o Mestre (OOC) — clique para voltar ao personagem" : "Modo: Personagem fala (IC) — clique para falar fora do personagem"}
+          className={`rounded-full px-3 py-0.5 text-[10px] font-medium tracking-wide transition-all border
+            ${modoOOC
+              ? "bg-amber-900/40 border-amber-700/60 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
+              : "bg-zinc-900/60 border-zinc-700 text-zinc-600 hover:text-zinc-400"
+            }`}
+        >
+          {modoOOC ? "🗣 Para o Mestre (OOC)" : "🎭 Personagem (IC)"}
+        </button>
+      </div>
 
       {/* Fallback texto */}
       <div className="flex w-full max-w-lg items-end gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">

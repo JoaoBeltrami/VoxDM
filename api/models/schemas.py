@@ -61,6 +61,11 @@ class SessaoConfig(BaseModel):
     # Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md
     # Valores: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool"
     dm_profile: str = Field(default="equilibrado", pattern=r"^(rigoroso|equilibrado|tranquilo|rule_of_cool)$")
+    # Visibilidade das rolagens do mestre (Fase 5.7):
+    # "open"        → animação + número (transparência total)
+    # "result_only" → só o número sem animação (padrão)
+    # "narrated"    → mestre narra sem marker, sem número visível
+    roll_visibility: str = Field(default="result_only", pattern=r"^(open|result_only|narrated)$")
     # Atributos D&D 5e (Standard Array padrão)
     str_score: int = Field(default=10, ge=3, le=20)
     dex_score: int = Field(default=10, ge=3, le=20)
@@ -167,7 +172,7 @@ class TokenIniciativaPayload(BaseModel):
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
-    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image"
+    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "cascade"
     conteudo: str = ""
     conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
     sequencia: int = 0       # índice sequencial do chunk de áudio
@@ -180,6 +185,9 @@ class MensagemWS(BaseModel):
     quest_stages: dict[str, str] = Field(default_factory=dict)
     active_quest_hooks: list[str] = Field(default_factory=list)
     inventory: list[str] = Field(default_factory=list)
+    # Condições ativas confirmadas pelo jogador (via sync_conditions) — persistidas
+    # no backend e reenviadas no "fim" para que a CharacterSheet sobreviva a reloads.
+    conditions: list[str] = Field(default_factory=list)
     location_nome: str = ""
     time_of_day: str = ""
     npcs_trust: dict[str, int] = Field(default_factory=dict)  # npc_id → trust (0-3)
@@ -207,6 +215,9 @@ class MensagemWS(BaseModel):
     inimigos_combate: dict[str, dict[str, str]] = Field(default_factory=dict)
     # Rodada real de combate (incrementada por avancar_rodada()) — NÃO é o turno da sessão
     rodada_combate: int = 0
+    # Rodada esperada pelo backend no momento do "fim" — permite que o frontend detecte
+    # initiative drift. Se diferir do valor local antes do update, um turno se perdeu.
+    rodada_esperada: int = 0
     # Últimas consequências narrativas — surfaced no frontend fora de combate
     log_consequencias: list[str] = Field(default_factory=list)
     # Barra de iniciativa — vazia fora de combate. Authority de turno = engine.
@@ -243,3 +254,6 @@ class MensagemWS(BaseModel):
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"
     dado_resultado: int = 0   # valor do dado (1-max)
+    # Nível de tensão narrativa atual (0–10) — calculado por pacing_nivel em WorkingMemory.
+    # Frontend usa para ajustar o volume/intensidade da trilha ambiente em tempo real.
+    pacing_nivel: float = 0.0

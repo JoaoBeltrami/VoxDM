@@ -62,6 +62,10 @@ class LLMRouter:
         # Override por sessão — quando setado, esse provider vai pra frente da
         # cascata (sem remover os outros).
         self._override_primario: str | None = None
+        # Nome do provider que emitiu o primeiro token no último completar_stream().
+        # Comparado pelo consumidor com o provider primário da cascata para detectar
+        # cascata silenciosa (Groq TPM → Gemini sem feedback visual ao usuário).
+        self.ultimo_provider_stream: str | None = None
 
     def set_primario(self, nome: str | None) -> None:
         """Coloca um provider como primeiro da cascata desta instância.
@@ -141,6 +145,7 @@ class LLMRouter:
         if not providers:
             raise RuntimeError("nenhum provider LLM disponível — configure GROQ_API_KEY ou GEMINI_API_KEY_V2")
 
+        self.ultimo_provider_stream = None
         ultimo_erro: Exception | None = None
         for p in providers:
             try:
@@ -149,6 +154,7 @@ class LLMRouter:
                 async for token in p.completar_stream(mensagens, temperatura, max_tokens):
                     if not emitiu:
                         log.info("llm_provider_stream_ok", provider=p.nome, task=task.value)
+                        self.ultimo_provider_stream = p.nome
                         emitiu = True
                     yield token
                 # Stream terminou sem exceção — provider venceu, sai do for.

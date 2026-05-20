@@ -59,24 +59,46 @@ const MASTER_DUCKED    = 0.1;
 const DUCK_DOWN_TC     = 0.15;   // tempo pra abaixar (atack rápido)
 const DUCK_UP_TC       = 0.45;   // tempo pra voltar (decay suave)
 
+// Multiplicadores de intensidade por faixa de pacing (0–10).
+// pacingGain senta entre oscillators e o master gain — não conflita com ducking.
+function pacingParaGain(pacing: number): number {
+  if (pacing >= 8) return 1.4;  // CLÍMAX — trilha mais presente
+  if (pacing >= 5) return 1.15; // ALTO
+  if (pacing >= 3) return 1.0;  // normal
+  return 0.75;                  // BAIXO — quase sussurro ambiente
+}
+
 export function useAmbientAudio(
   locationNome: string,
   emCombate?: boolean,
   /** true enquanto o mestre fala — abaixa ambiente automaticamente (ducking) */
   mestreFalando?: boolean,
+  /** Nível de pacing narrativo (0–10) — ajusta intensidade da trilha em tempo real */
+  pacingNivel?: number,
 ) {
   const [ativo, setAtivo] = useState(false);
   const [cena, setCena] = useState<CenaAmbiental>("campo");
 
-  const ctxRef   = useRef<AudioContext | null>(null);
-  const nodesRef = useRef<{ osc: OscillatorNode; gain: GainNode }[]>([]);
-  const masterRef = useRef<GainNode | null>(null);
+  const ctxRef      = useRef<AudioContext | null>(null);
+  const nodesRef    = useRef<{ osc: OscillatorNode; gain: GainNode }[]>([]);
+  const masterRef   = useRef<GainNode | null>(null);
+  // Nó intermediário para pacing — fica entre oscillators e master
+  const pacingRef   = useRef<GainNode | null>(null);
 
   // Atualiza cena quando localização muda
   useEffect(() => {
     const novaCena = emCombate ? "combate" : detectarCena(locationNome);
     setCena(novaCena);
   }, [locationNome, emCombate]);
+
+  // Pacing: ajusta gain intermediário conforme tensão narrativa sobe/desce.
+  // Transição de 3s — imperceptível mas dá textura emocional real à trilha.
+  useEffect(() => {
+    const pg = pacingRef.current;
+    const ctx = ctxRef.current;
+    if (!pg || !ctx || !ativo) return;
+    pg.gain.setTargetAtTime(pacingParaGain(pacingNivel ?? 3), ctx.currentTime, 1.5);
+  }, [pacingNivel, ativo]);
 
   // Ducking: abaixa o master quando o mestre fala, volta quando termina.
   // setTargetAtTime usa curva exponencial — soa orgânico (sem cliques abruptos).
@@ -103,7 +125,8 @@ export function useAmbientAudio(
   const _criarNodos = useCallback((cenaAtual: CenaAmbiental) => {
     if (!ctxRef.current) return;
     const ctx = ctxRef.current;
-    const master = masterRef.current!;
+    // Osciladores roteiam: osc → gainOsc → pacingGain → master → destination
+    const destino = pacingRef.current ?? masterRef.current!;
 
     _destruirNodos();
 
@@ -115,7 +138,7 @@ export function useAmbientAudio(
       if (cfg.detune) osc.detune.value = cfg.detune;
       gain.gain.value = 0;
       osc.connect(gain);
-      gain.connect(master);
+      gain.connect(destino);
       osc.start();
       gain.gain.setTargetAtTime(cfg.gain, ctx.currentTime, 1.5);
       nodesRef.current.push({ osc, gain });
@@ -142,12 +165,22 @@ export function useAmbientAudio(
     master.connect(ctxRef.current.destination);
     masterRef.current = master;
 
+    // Pacing gain — intermediário entre osciladores e master
+    const pacingGain = ctxRef.current.createGain();
+    pacingGain.gain.value = pacingParaGain(pacingNivel ?? 3);
+    pacingGain.connect(master);
+    pacingRef.current = pacingGain;
+
     _criarNodos(cena);
     setAtivo(true);
   }, [cena, _criarNodos, mestreFalando]);
 
   const desligar = useCallback(() => {
     _destruirNodos();
+    if (pacingRef.current) {
+      pacingRef.current.disconnect();
+      pacingRef.current = null;
+    }
     if (masterRef.current) {
       masterRef.current.disconnect();
       masterRef.current = null;

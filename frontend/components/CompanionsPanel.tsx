@@ -63,6 +63,10 @@ interface CompanionsPanelProps {
   novoCompanionId?: string | null;
   /** Contexto de combate — muda quais comandos são sugeridos. */
   emCombate?: boolean;
+  /** Nomes de companions restaurados da sessão anterior — exibe banner compacto. */
+  partyRestorada?: string[];
+  /** Callback para fechar o banner "Party recuperada". */
+  onDispensarParty?: () => void;
 }
 
 export function CompanionsPanel({
@@ -70,6 +74,8 @@ export function CompanionsPanel({
   onComandar,
   novoCompanionId,
   emCombate = false,
+  partyRestorada = [],
+  onDispensarParty,
 }: CompanionsPanelProps) {
   const lista = Object.entries(companions);
   if (lista.length === 0) return null;
@@ -84,6 +90,20 @@ export function CompanionsPanel({
         <span>🤝</span>
         <span>Aliados ({lista.length})</span>
       </p>
+
+      {partyRestorada.length > 0 && (
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-emerald-900/25 border border-emerald-700/30 px-2.5 py-1.5">
+          <span className="text-[10px] text-emerald-300">
+            🛡 Party recuperada: {partyRestorada.join(", ")}
+          </span>
+          <button
+            onClick={onDispensarParty}
+            className="ml-2 text-[10px] text-emerald-500 hover:text-emerald-300 leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
 <div className="space-y-2">
         {lista.map(([id, c]) => {

@@ -68,6 +68,9 @@ class SessaoAtiva:
     # Última frase de "thinking audio" enviada — evita repetição imediata.
     # Passada como `exceto` ao pegar_random() no próximo turno.
     ultima_frase_thinking: str = ""
+    # Chave da última imagem de cena enviada ao frontend — "{location}|{combate}".
+    # Evita reenviar a mesma URL quando o estado de cena não mudou.
+    ultima_imagem_chave: str = ""
 
 
 # Store global — keyed by session_id (kebab-case)

@@ -65,6 +65,20 @@ const config: Config = {
           "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
           "50%":      { transform: "scale(1.08)", opacity: "1"    },
         },
+        // Flash de morte de inimigo nomeado — nome aparece em vermelho e dissolve
+        "morte-flash": {
+          "0%":   { transform: "scale(0.7)",  opacity: "0"   },
+          "15%":  { transform: "scale(1.05)", opacity: "1"   },
+          "60%":  { transform: "scale(1)",    opacity: "0.9" },
+          "100%": { transform: "scale(1.1)",  opacity: "0"   },
+        },
+        // Sinal "sua vez" — ping rápido na área do microfone
+        "sua-vez": {
+          "0%":   { transform: "scale(1)",    opacity: "0"   },
+          "20%":  { transform: "scale(1.18)", opacity: "1"   },
+          "65%":  { transform: "scale(1.08)", opacity: "0.7" },
+          "100%": { transform: "scale(1)",    opacity: "0"   },
+        },
         // CompanionsPanel — glow esmeralda suave ao registrar novo companion.
         // Só altera box-shadow/opacity — sem movimento, para não distrair da narração.
         "companion-glow": {
@@ -86,6 +100,8 @@ const config: Config = {
         "slide-down":    "slide-down 400ms ease-out",
         "stream-pulse":   "stream-pulse 1s ease-in-out infinite",
         "companion-glow": "companion-glow 1.5s ease-out forwards",
+        "morte-flash":    "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "sua-vez":        "sua-vez 0.8s ease-out forwards",
       },
     },
   },

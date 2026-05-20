@@ -240,6 +240,50 @@ async def _auto_checkpoint(sessao: SessaoAtiva) -> None:
         log.warning("auto_checkpoint_falhou", session_id=sessao.session_id, erro=str(e))
 
 
+async def _enviar_imagem_cena(websocket: WebSocket, sessao: SessaoAtiva) -> None:
+    """Gera e envia URL do Pollinations.ai para imagem de fundo da cena.
+
+    Por que existe: Fase 5.8 — imagem ambiente gerada por IA (fire-and-forget).
+        Não bloqueia o jogo: chamada após envio do payload "fim".
+        Frontend aplica como background opacity 8% com fade de 1s.
+
+    Armadilha: nunca lançar exceções — o jogo segue sem imagem se falhar.
+        Pollinations.ai retorna a imagem diretamente via GET; o frontend
+        a carrega como <img> background, sem proxy no backend.
+    """
+    try:
+        from urllib.parse import quote
+
+        wm = sessao.working_mem
+        location = (wm.location_id or "").replace("-", " ").strip()
+        time_of_day = (getattr(wm, "time_of_day", "") or "").strip()
+        em_combate = wm.em_combate
+
+        if not location:
+            return
+
+        # Chave de deduplicação: mesma cena = mesma imagem
+        chave = f"{location}|{int(em_combate)}"
+        if sessao.ultima_imagem_chave == chave:
+            return
+
+        # Monta prompt descritivo para geração de imagem
+        estilo = "dark fantasy RPG tabletop, atmospheric, cinematic, highly detailed, no text, no watermark"
+        if em_combate:
+            prompt = f"{location}, {time_of_day}, epic combat, tense atmosphere, {estilo}"
+        else:
+            prompt = f"{location}, {time_of_day}, {estilo}"
+
+        url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width=1024&height=576&model=flux&nologo=true"
+
+        await websocket.send_json({"tipo": "scene_image", "conteudo": url})
+        sessao.ultima_imagem_chave = chave
+        log.info("scene_image_enviada", location=location, em_combate=em_combate)
+
+    except Exception as e:
+        log.debug("scene_image_ignorada", erro=str(e))
+
+
 # ---------------------------------------------------------------------------
 # TTS — singleton lazy, graceful se edge_tts não estiver instalado
 # ---------------------------------------------------------------------------
@@ -263,19 +307,50 @@ def _obter_tts() -> Any:
     return _tts_engine
 
 
+def _detectar_voz_npc(texto: str, npc_vozes: dict[str, dict[str, str]]) -> dict[str, str] | None:
+    """Retorna parâmetros de voz do NPC que parece estar falando nesta sentença.
+
+    Busca pelo npc_id (convertido de kebab para nome) dentro do texto.
+    Só detecta NPCs que já têm assinatura registrada em wm.npc_vozes.
+    Retorna None se nenhum NPC com assinatura for detectado.
+    """
+    texto_lower = texto.lower()
+    for npc_id, params in npc_vozes.items():
+        # Tenta o id direto e o nome capitalizado (ex: "lyssa" ↔ "Lyssa")
+        nome = " ".join(parte.capitalize() for parte in npc_id.split("-"))
+        if npc_id in texto_lower or nome.lower() in texto_lower:
+            return params
+    return None
+
+
 async def _sintetizar_e_enviar(
-    ws: WebSocket, tts: Any, texto: str, voice: str | None = None
+    ws: WebSocket, tts: Any, texto: str, voice: str | None = None,
+    npc_vozes: dict[str, dict[str, str]] | None = None,
 ) -> None:
     """Sintetiza o texto completo via Edge TTS e envia UM audio_chunk base64.
 
     Uma única chamada TTS por resposta — mais simples, menos fragmentação,
     sem múltiplos chunks na fila do browser.
+
+    npc_vozes: se fornecido, detecta o NPC que fala na sentença e aplica seus
+        parâmetros de pitch/rate — Feature B de assinatura de voz.
     """
     if not texto.strip():
         return
     try:
+        rate_override: str | None = None
+        pitch_override: str | None = None
+        if npc_vozes:
+            voz_npc = _detectar_voz_npc(texto, npc_vozes)
+            if voz_npc:
+                pitch_override = voz_npc.get("pitch")
+                rate_override = voz_npc.get("rate")
+
         log.info("tts_sintetizando", chars=len(texto), preview=texto[:300])
-        audio_bytes: bytes = await tts.sintetizar(texto, voice=voice)
+        audio_bytes: bytes = await tts.sintetizar(
+            texto, voice=voice,
+            rate_override=rate_override, pitch_override=pitch_override,
+        )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             await ws.send_text(
@@ -508,7 +583,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
 
     # Uma única síntese TTS do texto completo — sem fragmentação em sentenças
     if tts:
-        await _sintetizar_e_enviar(websocket, tts, resposta_intro, voice=wm.tts_voice)
+        await _sintetizar_e_enviar(
+            websocket, tts, resposta_intro, voice=wm.tts_voice,
+            npc_vozes=wm.npc_vozes,
+        )
 
     # Bug R4-5: o `fim` era enviado ANTES de aplicar_pos_turno, então quaisquer
     # [FIO:] / [CONSEQUÊNCIA:] / [XP:] emitidos pelo LLM na abertura não apareciam
@@ -541,6 +619,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             quest_stages=wm.quest_stages,
             active_quest_hooks=wm.active_quest_hooks,
             inventory=wm.player_inventory,
+            conditions=list(wm.player_conditions),
             location_nome=wm.location_nome,
             time_of_day=wm.time_of_day,
             npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
@@ -566,30 +645,13 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             movimento_total_ft=wm.movimento_total_ft,
             em_mercado=wm.em_mercado,
             companions=dict(wm.companions),
+            rodada_esperada=wm.rodada_combate,
+            pacing_nivel=wm.pacing_nivel,
         ).model_dump_json()
     )
 
-    # Dispara imagem da cena inicial em background — fire-and-forget.
-    # Não bloqueia a abertura: o frontend receberá a mensagem "scene_image"
-    # quando o Pollinations.ai responder (~5-10s), e aplica como fundo suavemente.
-    try:
-        from engine.image.scene_image import construir_prompt_cena, gerar_e_enviar_imagem
-
-        _prompt_inicial = await construir_prompt_cena(
-            location_nome=wm.location_nome,
-            time_of_day=wm.time_of_day,
-            em_combate=False,
-            weather=getattr(wm, "weather", ""),
-        )
-        _criar_background_task(
-            gerar_e_enviar_imagem(
-                websocket,
-                _prompt_inicial,
-                f"{wm.location_id}-False",
-            )
-        )
-    except Exception as _e_img:
-        log.debug("scene_image_abertura_skip", erro=str(_e_img)[:80])
+    # Fase 5.8 — imagem da cena inicial (fire-and-forget).
+    asyncio.create_task(_enviar_imagem_cena(websocket, sessao))
 
     log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
@@ -695,6 +757,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             quest_stages=wm.quest_stages,
                             active_quest_hooks=wm.active_quest_hooks,
                             inventory=wm.player_inventory,
+                            conditions=list(wm.player_conditions),
                             location_nome=wm.location_nome,
                             time_of_day=wm.time_of_day,
                             npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
@@ -720,6 +783,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             movimento_total_ft=wm.movimento_total_ft,
                             em_mercado=wm.em_mercado,
                             companions=dict(wm.companions),
+                            rodada_esperada=wm.rodada_combate,
+                            pacing_nivel=wm.pacing_nivel,
                             iniciativa_ordem=(
                                 [
                                     {
@@ -988,6 +1053,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 nonlocal tts_enviado_ate
                 try:
                     voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
+                    # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
+                    # Sobrescreve pitch/rate quando o LLM registrou uma assinatura para
+                    # o NPC detectado nesta sentença — granularidade por turno de fala.
+                    if sessao.working_mem.npc_vozes:
+                        voz_npc = _detectar_voz_npc(texto_s, sessao.working_mem.npc_vozes)
+                        if voz_npc:
+                            pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
+                            rate_s = voz_npc.get("rate", rate_s) or rate_s
                     audio = await tts.sintetizar(  # type: ignore[union-attr]
                         texto_s, idioma=idioma,
                         voice=voz_s, rate=rate_s, pitch=pitch_s,
@@ -1159,9 +1232,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # iniciativa, trust, consequências, avanço de rodada, fim de combate
             # e contador de tensão — todos na ORDEM crítica (sync antes do
             # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
-            from api.turn_pipeline import aplicar_pos_turno, aplicar_xp_e_detectar_level_up
+            from api.turn_pipeline import (
+                aplicar_pos_turno,
+                aplicar_xp_e_detectar_level_up,
+                aplicar_afeto_npcs,
+            )
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
+            )
+
+            # Feature F: estado afetivo de NPC — fire-and-forget para Neo4j.
+            # Não bloqueia o turno; Neo4j pode estar offline sem impacto.
+            asyncio.create_task(
+                aplicar_afeto_npcs(resposta_limpa, sessao.context_builder._neo4j)
             )
 
             # XP e progressão — extrai [XP: +N motivo] e aplica level up se cruzou
@@ -1187,36 +1270,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             except Exception as e:
                 log.warning("level_up_falhou", session_id=session_id, erro=str(e)[:200])
 
-            # Dispara imagem de cena se a localização mudou ou se entrou em combate.
-            # Fire-and-forget via asyncio.create_task — não bloqueia o turno.
-            # Falha silenciosa: se Pollinations não responder, o fundo permanece o anterior.
-            _location_depois = sessao.working_mem.location_id
-            _combate_entrou = not _combate_antes and sessao.working_mem.em_combate
-            if _location_depois != _location_antes or _combate_entrou:
-                try:
-                    from engine.image.scene_image import construir_prompt_cena, gerar_e_enviar_imagem
-
-                    _prompt_cena = await construir_prompt_cena(
-                        location_nome=sessao.working_mem.location_nome,
-                        time_of_day=sessao.working_mem.time_of_day,
-                        em_combate=sessao.working_mem.em_combate,
-                        weather=getattr(sessao.working_mem, "weather", ""),
-                    )
-                    _criar_background_task(
-                        gerar_e_enviar_imagem(
-                            websocket,
-                            _prompt_cena,
-                            f"{_location_depois}-{sessao.working_mem.em_combate}",
-                        )
-                    )
-                    log.info(
-                        "scene_image_task_criada",
-                        session_id=session_id,
-                        location=_location_depois,
-                        em_combate=sessao.working_mem.em_combate,
-                    )
-                except Exception as _e_img:
-                    log.debug("scene_image_turno_skip", erro=str(_e_img)[:80])
+            # Fase 5.8 — imagem de cena (deduplicada em _enviar_imagem_cena).
+            asyncio.create_task(_enviar_imagem_cena(websocket, sessao))
 
             sessao.iteracoes += 1
 
@@ -1251,6 +1306,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "erros": erros_turno,
             }
 
+            # UX-2: detecta cascata silenciosa (Groq TPM → Gemini) e notifica o frontend.
+            # Se o provider que emitiu o primeiro token não é o esperado (primeiro da
+            # cascata efetiva para NARRATIVE), envia "cascade" antes do "fim".
+            _ultimo_prov = sessao.groq.ultimo_provider_stream
+            if _ultimo_prov is not None:
+                from engine.llm.tasks import TaskType as _TT
+                _prov_primario_esperado = next(
+                    (p.nome for p in sessao.groq._router._providers_disponiveis(_TT.NARRATIVE)),
+                    None,
+                )
+                if _prov_primario_esperado and _ultimo_prov != _prov_primario_esperado:
+                    try:
+                        await websocket.send_text(
+                            MensagemWS(tipo="cascade", conteudo=_ultimo_prov).model_dump_json()
+                        )
+                        log.info(
+                            "cascade_notificado",
+                            session_id=session_id,
+                            primario=_prov_primario_esperado,
+                            efetivo=_ultimo_prov,
+                        )
+                    except Exception as _e_casc:
+                        log.warning("cascade_notificacao_falhou", erro=str(_e_casc)[:120])
+
             chunks_lore = [
                 c.get("text", "")[:120]
                 for c in (contexto.chunks_semanticos if contexto else [])
@@ -1272,6 +1351,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     quest_stages=sessao.working_mem.quest_stages,
                     active_quest_hooks=sessao.working_mem.active_quest_hooks,
                     inventory=sessao.working_mem.player_inventory,
+                    conditions=list(sessao.working_mem.player_conditions),
                     location_nome=sessao.working_mem.location_nome,
                     time_of_day=sessao.working_mem.time_of_day,
                     npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 1) for npc in sessao.working_mem.npcs_apresentados},
@@ -1319,6 +1399,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     movimento_total_ft=sessao.working_mem.movimento_total_ft,
                     em_mercado=sessao.working_mem.em_mercado,
                     companions=dict(sessao.working_mem.companions),
+                    rodada_esperada=sessao.working_mem.rodada_combate,
+                    pacing_nivel=sessao.working_mem.pacing_nivel,
                 ).model_dump_json()
             )
 

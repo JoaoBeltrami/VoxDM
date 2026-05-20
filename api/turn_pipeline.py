@@ -50,6 +50,27 @@ _RE_CLIFFHANGER = re.compile(r"\[CLIFFHANGER:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 # Ex: "[AGENDA: fael-valdreksson → planeja desertar à meia-noite com a chave do cofre]"
 _RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Repetition Guard: LLM emite [ANCORA: fato já resolvido] após virada narrativa importante.
+# Ex: "[ANCORA: O segredo de Valdrek foi revelado ao jogador]"
+# Backend acumula max 5; prompt_builder injeta como "Não repetir narrativa já dita".
+_RE_ANCORA = re.compile(r"\[ANCORA:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
+# Assinatura de voz de NPC: [VOZ: npc-id|pitch|rate]
+# Ex: "[VOZ: lyssa|+5Hz|-10%]" — armazenado em wm.npc_vozes para o restante da sessão.
+# Pitch: "+NHz" ou "-NHz". Rate: "+N%" ou "-N%".
+_RE_VOZ = re.compile(
+    r"\[VOZ:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*([+\-]?\d+Hz)\s*\|\s*([+\-]?\d+%)\s*\]",
+    re.IGNORECASE,
+)
+
+# Estado afetivo de NPC: [AFETO: npc-id|campo|delta]
+# Ex: "[AFETO: fael-valdreksson|respeito|+2]" — salvo no Neo4j (persistência entre sessões).
+# Campos: afeto | medo | respeito | rancor. Delta: int com sinal (+/-).
+_RE_AFETO = re.compile(
+    r"\[AFETO:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*(afeto|medo|respeito|rancor)\s*\|\s*([+\-]?\d+)\s*\]",
+    re.IGNORECASE,
+)
+
 # Feature 3: Consequências visíveis — LLM emite [CONSEQUÊNCIA: efeito duradouro no mundo]
 # Ex: "[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito]"
 # Efeitos válidos: NPC morto, aliança formada, local destruído, reputação alterada.
@@ -345,6 +366,14 @@ def aplicar_pos_turno(
     if working_mem.em_combate and texto_jogador.strip():
         working_mem.avancar_rodada()
 
+    # 7. [FUGIU] — jogador escapou do combate. Encerra combate imediatamente.
+    # Distinct do _RE_FIM_COMBATE_LLM que detecta resolução da cena: fuga é a
+    # decisão ativa de sair sem derrotar os inimigos. Strip do TTS já feito por
+    # _RE_MESTRE_VET em quest_detector.strip_marcadores().
+    if working_mem.em_combate and re.search(r"\[FUGIU\]", resposta_completa, re.IGNORECASE):
+        working_mem.sair_combate()
+        log.info("combate_encerrado_fuga")
+
     # 7. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync
     if working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
         working_mem.sair_combate()
@@ -505,10 +534,21 @@ def aplicar_pos_turno(
 
     if _RE_MERCADO.search(resposta_completa):
         working_mem.em_mercado = True
+        working_mem.turnos_sem_mercado = 0
         log.info("mercado_aberto")
-    if _RE_FIM_MERCADO.search(resposta_completa):
+    elif _RE_FIM_MERCADO.search(resposta_completa):
         working_mem.em_mercado = False
+        working_mem.turnos_sem_mercado = 0
         log.info("mercado_fechado")
+    elif working_mem.em_mercado:
+        # Sem [MERCADO] nem [FIM_MERCADO] neste turno — incrementa contador de inatividade.
+        # Se o LLM "esqueceu" de emitir [FIM_MERCADO] ao sair da loja, o botão de venda
+        # fecha automaticamente após 3 turnos sem reconfirmação (evita UI travada).
+        working_mem.turnos_sem_mercado += 1
+        if working_mem.turnos_sem_mercado >= 3:
+            working_mem.em_mercado = False
+            working_mem.turnos_sem_mercado = 0
+            log.info("mercado_fechado_auto_timeout")
 
     # 13.6. Companions/party — aliados controlados.
     for m in _RE_COMPANION_ADD.finditer(resposta_completa):
@@ -567,7 +607,47 @@ def aplicar_pos_turno(
             log.info("movimento_consumido", ft=consumido, motivo=motivo,
                      restante=working_mem.movimento_restante_ft)
 
+    # 15. Repetition Guard — coleta [ANCORA: fato] para evitar re-narração em sessões longas.
+    for m in _RE_ANCORA.finditer(resposta_completa):
+        ancora = m.group(1).strip()
+        if ancora:
+            working_mem.registrar_ancora(ancora)
+            log.info("ancora_registrada", texto=ancora[:80])
+
+    # 16. Assinaturas de voz de NPC — [VOZ: npc-id|pitch|rate] define parâmetros TTS por NPC.
+    for m in _RE_VOZ.finditer(resposta_completa):
+        npc_id = m.group(1).strip().lower()
+        pitch = m.group(2).strip()
+        rate = m.group(3).strip()
+        if npc_id and not working_mem.npc_vozes.get(npc_id):
+            working_mem.npc_vozes[npc_id] = {"pitch": pitch, "rate": rate}
+            log.info("voz_npc_registrada", npc_id=npc_id, pitch=pitch, rate=rate)
+
     return mudancas_trust
+
+
+async def aplicar_afeto_npcs(
+    resposta_completa: str,
+    neo4j_client: Any,
+) -> None:
+    """Extrai marcadores [AFETO: npc-id|campo|delta] e persiste no Neo4j.
+
+    Por que existe: estado afetivo de NPC (afeto/medo/respeito/rancor) precisa
+        de persistência entre sessões. Neo4j é a fonte verdadeira; WorkingMemory
+        não armazena — o LLM recebe via semantic_memory quando consulta o NPC.
+
+    Armadilha: NUNCA lançar exceção — Neo4j pode estar offline; o jogo deve continuar.
+        Chamada fire-and-forget em websocket.py via asyncio.create_task.
+    """
+    for m in _RE_AFETO.finditer(resposta_completa):
+        npc_id = m.group(1).strip().lower()
+        campo = m.group(2).strip().lower()
+        try:
+            delta = int(m.group(3).strip())
+        except ValueError:
+            continue
+        if npc_id and campo and delta != 0:
+            await neo4j_client.atualizar_afeto_npc(npc_id, campo, delta)
 
 
 def aplicar_xp_e_detectar_level_up(
@@ -585,12 +665,17 @@ def aplicar_xp_e_detectar_level_up(
     from engine.progression import calcular_novo_nivel, aplicar_level_up
 
     ganhos: list[tuple[int, str]] = []
+    _xp_vistos: set[tuple[int, str]] = set()  # dedup: mesmo marker duplicado na resposta
     for m in _RE_XP.finditer(resposta_completa):
         try:
             qtd = int(m.group(1))
         except ValueError:
             continue
         motivo = m.group(2).strip() or "ganho de experiência"
+        chave = (qtd, motivo.lower())
+        if chave in _xp_vistos:
+            continue
+        _xp_vistos.add(chave)
         ganhos.append((qtd, motivo))
 
     if not ganhos:

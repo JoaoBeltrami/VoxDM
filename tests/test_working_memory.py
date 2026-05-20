@@ -886,3 +886,40 @@ def test_posicao_preservada_quando_inimigo_ferido():
     wm.registrar_posicao("orc-1", distancia_ft=10, cobertura=False)
     wm.atualizar_estado_inimigo("orc-1", "ferido")
     assert "orc-1" in wm.posicoes_combate
+
+
+# ── Repetition Guard (fatos_ancora) ────────────────────────────────────────
+
+def test_registrar_ancora_adiciona():
+    wm = _wm()
+    wm.registrar_ancora("Valdrek foi revelado como traidor")
+    assert "Valdrek foi revelado como traidor" in wm.fatos_ancora
+
+
+def test_registrar_ancora_dedup():
+    wm = _wm()
+    wm.registrar_ancora("Fato A")
+    wm.registrar_ancora("Fato A")
+    assert wm.fatos_ancora.count("Fato A") == 1
+
+
+def test_registrar_ancora_circular_max_5():
+    wm = _wm()
+    for i in range(7):
+        wm.registrar_ancora(f"Fato {i}")
+    assert len(wm.fatos_ancora) == 5
+    # Os mais recentes ficam; os primeiros saem
+    assert "Fato 0" not in wm.fatos_ancora
+    assert "Fato 6" in wm.fatos_ancora
+
+
+def test_registrar_ancora_ignora_vazio():
+    wm = _wm()
+    wm.registrar_ancora("")
+    wm.registrar_ancora("   ")
+    assert wm.fatos_ancora == []
+
+
+def test_fatos_ancora_default_vazio():
+    wm = _wm()
+    assert wm.fatos_ancora == []

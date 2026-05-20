@@ -361,3 +361,63 @@ async def test_companions_multiplos(store: CharacterStore) -> None:
     assert len(s.companions) == 2
     assert "lyssa" in s.companions
     assert "corvo" in s.companions
+
+
+# ── listar_por_owner (Item B — bypass CharacterForm) ─────────────────────────
+
+@pytest.mark.asyncio
+async def test_listar_por_owner_vazio(store: CharacterStore) -> None:
+    """Sem personagens salvos → lista vazia."""
+    result = await store.listar_por_owner("jogador@voxdm.test")
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_listar_por_owner_sem_personagem_config(store: CharacterStore) -> None:
+    """Sessão sem player_name em personagem_config não aparece na lista."""
+    await store.salvar(_estado(owner_email="jogador@voxdm.test", personagem_config={}))
+    result = await store.listar_por_owner("jogador@voxdm.test")
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_listar_por_owner_retorna_personagem(store: CharacterStore) -> None:
+    """Sessão com player_name retorna campos corretos."""
+    pc = {"player_name": "Arindal", "player_class": "Mago"}
+    await store.salvar(_estado(
+        owner_email="jogador@voxdm.test",
+        personagem_config=pc,
+        player_level=5,
+        hp_current=28,
+        hp_max=40,
+    ))
+    result = await store.listar_por_owner("jogador@voxdm.test")
+    assert len(result) == 1
+    assert result[0]["player_name"] == "Arindal"
+    assert result[0]["player_class"] == "Mago"
+    assert result[0]["player_level"] == 5
+    assert result[0]["hp_atual"] == 28
+    assert result[0]["hp_max"] == 40
+    assert result[0]["session_id"] == "sess-teste-01"
+
+
+@pytest.mark.asyncio
+async def test_listar_por_owner_isolamento(store: CharacterStore) -> None:
+    """Owner A não vê personagens do Owner B."""
+    pc = {"player_name": "Arindal", "player_class": "Mago"}
+    await store.salvar(_estado(
+        session_id="sess-a",
+        owner_email="a@voxdm.test",
+        personagem_config=pc,
+    ))
+    await store.salvar(CharacterState(
+        session_id="sess-b",
+        owner_email="b@voxdm.test",
+        personagem_config={"player_name": "Outro", "player_class": "Guerreiro"},
+    ))
+    result_a = await store.listar_por_owner("a@voxdm.test")
+    result_b = await store.listar_por_owner("b@voxdm.test")
+    assert len(result_a) == 1
+    assert result_a[0]["player_name"] == "Arindal"
+    assert len(result_b) == 1
+    assert result_b[0]["player_name"] == "Outro"

@@ -509,14 +509,14 @@ def test_saves_md_dentro_do_budget():
 def test_master_system_dentro_do_budget():
     """master_system.md comprimido: máx 10 500 chars (~3 000 tokens).
 
-    Após compressão de marcadores + remoção de seções redundantes, o arquivo
-    ficou em ~9 915 chars. Teto de 10 500 dá margem para edições futuras sem
-    ultrapassar o budget de turno de combate.
+    Após adição de marcadores ANCORA/VOZ/AFETO o arquivo está em ~10 600 chars.
+    Teto de 11 000 dá margem para edições futuras sem ultrapassar o budget de
+    turno de combate (~3 100 tokens).
     """
     conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
-    assert len(conteudo) <= 10_500, (
-        f"master_system.md com {len(conteudo)} chars excede teto de 10 500 chars — "
-        "injeta ~3 000 tokens em todo turno; revisar o que foi adicionado"
+    assert len(conteudo) <= 11_000, (
+        f"master_system.md com {len(conteudo)} chars excede teto de 11 000 chars — "
+        "injeta >3 100 tokens em todo turno; revisar o que foi adicionado"
     )
 
 

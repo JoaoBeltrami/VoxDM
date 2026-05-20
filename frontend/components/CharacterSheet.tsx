@@ -27,6 +27,8 @@ interface Props {
   initSpellSlots?: Record<number, SpellSlot>;
   initHitDiceCurrent?: number;
   initGold?: number;
+  initInventory?: string[];
+  initConditions?: string[];
   initXP?: number;
   initInspiration?: boolean;
   initDeathSavesSuccesses?: number;
@@ -155,6 +157,7 @@ export function CharacterSheet({
   initSpellSlots, initHitDiceCurrent, initGold = 0, initXP = 0,
   initInspiration = false,
   initDeathSavesSuccesses = 0, initDeathSavesFailures = 0, initDeathSavesStable = false,
+  initInventory, initConditions,
   rolagens = [],
   classFeatures = {},
   onUsarFeature,
@@ -244,7 +247,8 @@ export function CharacterSheet({
   };
 
   // ── Condições ─────────────────────────────────────────────────────────────
-  const [condicoes, setCondicoes] = useState<string[]>([]);
+  const [condicoes, setCondicoes] = useState<string[]>(() => initConditions ?? []);
+  useEffect(() => { if (initConditions) setCondicoes(initConditions); }, [initConditions]);
   const toggleCondicao = (cond: string) => {
     const novas = condicoes.includes(cond) ? condicoes.filter(c => c !== cond) : [...condicoes, cond];
     setCondicoes(novas);
@@ -252,7 +256,10 @@ export function CharacterSheet({
   };
 
   // ── Inventário ────────────────────────────────────────────────────────────
-  const [itens, setItens] = useState<string[]>([]);
+  // Inicializado do backend (itens adicionados via [LOOT] ou sessão anterior).
+  // useEffect re-aplica quando inventory muda no servidor (novo loot por turno).
+  const [itens, setItens] = useState<string[]>(() => initInventory ?? []);
+  useEffect(() => { if (initInventory) setItens(initInventory); }, [initInventory]);
   const [novoItem, setNovoItem] = useState("");
   const adicionarItem = () => {
     const item = novoItem.trim();
