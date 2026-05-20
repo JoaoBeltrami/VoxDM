@@ -18,7 +18,6 @@ Kokoro:
 """
 
 import asyncio
-import html as _html
 import io
 import json
 import re
@@ -49,6 +48,13 @@ def _obter_edge_sem() -> asyncio.Semaphore:
     return _edge_sem
 
 log = structlog.get_logger(__name__)
+
+# NOTA: SSML não funciona com edge-tts. O endpoint Microsoft Edge TTS (gratuito)
+# REJEITA qualquer SSML no body do texto — testado em 20/05/26 com <prosody> e
+# <break> isolados, ambos retornam NoAudioReceived. Apenas os parâmetros globais
+# rate/pitch/volume do construtor Communicate funcionam. Para nuances por
+# sentença, usar _adicionar_nuances_pontuacao (engineering de pontuação).
+# Migrar para Azure Cognitive Services se precisar de SSML real (paga).
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -230,52 +236,88 @@ def _limpar_markdown(texto: str) -> str:
     return texto.strip()
 
 
-def _adicionar_pausas(texto: str) -> str:
-    """Insere <break> entre sentenças para respiração natural entre frases.
+def _normalizar_para_tts(texto: str) -> str:
+    """Passo 1: normalização de pontuação antes de chegar ao TTS.
 
-    O edge-tts injeta o texto dentro de um elemento <prosody> no SSML que monta
-    internamente, então tags <break/> passadas aqui são preservadas e interpretadas
-    pelo serviço Microsoft TTS — não são lidas em voz alta.
+    Converte pontuação tipográfica que o Edge TTS lê de forma estranha
+    (em-dash lido como pausa abrupta, múltiplos pontos de exclamação como
+    staccato, quebras de linha como silêncio total).
     """
-    # Pausa média após ponto/exclamação/interrogação seguidos de espaço
-    texto = re.sub(r'([.!?])\s+', r'\1<break time="450ms"/> ', texto)
-    # Pausa leve após reticências — comum em narração de RPG
-    texto = re.sub(r'(\.\.\.|…)\s*', r'…<break time="600ms"/> ', texto)
-    return texto
+    texto = texto.replace(" — ", ", ")           # em-dash narrativo → vírgula com pausa
+    texto = texto.replace("—", ", ")             # em-dash sem espaço
+    texto = texto.replace("–", ", ")             # en-dash
+    texto = re.sub(r"([!?])\1+", r"\1", texto)  # "!!!" → "!", "??" → "?"
+    texto = re.sub(r"\.{4,}", "...", texto)      # "....." → "..."
+    texto = re.sub(r"\s*\n+\s*", " ", texto)    # quebras de linha → espaço
+    texto = re.sub(r"  +", " ", texto)           # colapsa espaços duplos
+    return texto.strip()
 
 
-def _montar_ssml(texto: str, voz: str, idioma: Idioma) -> str:
+# Gatilhos de drama narrativo — palavras/expressões que ganham pausa antes
+# para criar suspense. Edge TTS responde bem a vírgulas e reticências.
+_RE_DRAMA_PRE_PAUSA = re.compile(
+    r"(?<=\s)(de repente|subitamente|então|mas|porém|de súbito|num átimo|"
+    r"sem aviso|abruptamente|inesperadamente|num instante)\s+",
+    re.IGNORECASE,
+)
+
+# Sussurros e segredos — preceder com "..." cria entrada suave/etérea.
+_RE_SUSSURRO_CTX = re.compile(
+    r"\b(sussurr\w+|murmur\w+|em voz baixa|baixinho|em segredo|discretamente)\b",
+    re.IGNORECASE,
+)
+
+# Início de sentenças com palavra de impacto curta — adicionar vírgula
+# após o verbo dá respiração antes do clímax ("Cuidado, atrás de você!").
+_RE_IMPACTO_FRASE_CURTA = re.compile(
+    r"\b(cuidado|olhe|veja|atenção|alerta|silêncio|escute|ouça)\b\s+",
+    re.IGNORECASE,
+)
+
+
+def _adicionar_nuances_pontuacao(texto: str) -> str:
+    """Passo 2 (sem SSML): engineering de pontuação para drama narrativo.
+
+    Edge TTS lê pontuação como pausa e entonação. Inserindo vírgulas e
+    reticências em pontos dramáticos, ganhamos prosódia sem precisar de SSML
+    (que o edge_tts.Communicate escapa automaticamente).
+
+    Regras:
+    - Gatilhos de drama ("de repente", "então", "mas") → vírgula antes
+      para criar a respiração que um narrador faz na mesa.
+    - Sussurros/segredos → "..." antes do verbo para entrada etérea.
+    - Palavras de impacto isoladas ("Cuidado") → vírgula após para
+      pausa antes do que vem ("Cuidado, atrás de você!").
     """
-    Monta documento SSML completo para Edge TTS.
-
-    Aplica pronúncias do dicionário e ajusta prosódia para tom narrativo.
-
-    Args:
-        texto:  Texto do Mestre (sem tags SSML).
-        voz:    Nome da voz Edge TTS.
-        idioma: Idioma do texto para configurar xml:lang.
-
-    Returns:
-        String SSML pronta para o Edge TTS.
-    """
-    texto_com_pronuncia = _aplicar_pronuncias(_limpar_markdown(texto))
-    # Escapa &, <, > antes de inserir no XML — sem isso qualquer "&" no texto
-    # do mestre produz SSML inválido e o Edge TTS lê o XML literalmente.
-    # Também bloqueia SSML injection se o LLM retornar tags <break/> inventadas.
-    texto_seguro = _html.escape(texto_com_pronuncia)
-
-    return (
-        f"<speak version='1.0' "
-        f"xmlns='http://www.w3.org/2001/10/synthesis' "
-        f"xmlns:mstts='https://www.w3.org/2001/mstts' "
-        f"xml:lang='{idioma.value}'>"
-        f"<voice name='{voz}'>"
-        f"<prosody rate='{EDGE_RATE}' pitch='{EDGE_PITCH}'>"
-        f"{texto_seguro}"
-        f"</prosody>"
-        f"</voice>"
-        f"</speak>"
+    # Drama: vírgula antes de palavras de viragem narrativa
+    texto = _RE_DRAMA_PRE_PAUSA.sub(
+        lambda m: f", {m.group(1).lower()} ",
+        texto,
     )
+
+    # Sussurro: "..." antes do verbo se ainda não há (evita acumular)
+    def _add_suspense(m: re.Match[str]) -> str:
+        antes = texto[max(0, m.start() - 4):m.start()]
+        if "..." in antes:
+            return m.group(0)  # já tem pausa
+        return f"... {m.group(0)}"
+    texto = _RE_SUSSURRO_CTX.sub(_add_suspense, texto)
+
+    # Impacto: "Cuidado!" → "Cuidado!" continua, mas "Cuidado atrás" → "Cuidado, atrás"
+    texto = _RE_IMPACTO_FRASE_CURTA.sub(
+        lambda m: f"{m.group(1)}, ",
+        texto,
+    )
+
+    # Limpa vírgulas duplas/sequenciais que o pipeline pode gerar.
+    # Itera até estabilizar — substituições podem criar novos pares.
+    for _ in range(3):
+        novo = re.sub(r",(\s*,)+", ",", texto)
+        if novo == texto:
+            break
+        texto = novo
+    texto = re.sub(r"\s+,", ",", texto)
+    return texto
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +366,9 @@ class EdgeTTSEngine:
         voz = voice_override or self._selecionar_voz(idioma)
         rate = rate_override or EDGE_RATE
         pitch = pitch_override or EDGE_PITCH
-        texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
+        texto_limpo = _adicionar_nuances_pontuacao(
+            _normalizar_para_tts(_aplicar_pronuncias(_limpar_markdown(texto)))
+        )
 
         if not texto_limpo.strip():
             return b""
@@ -380,7 +424,9 @@ class EdgeTTSEngine:
             Chunks de bytes MP3 prontos para reprodução.
         """
         voz = self._selecionar_voz(idioma)
-        texto_limpo = _aplicar_pronuncias(_limpar_markdown(texto))
+        texto_limpo = _adicionar_nuances_pontuacao(
+            _normalizar_para_tts(_aplicar_pronuncias(_limpar_markdown(texto)))
+        )
 
         log.info("Sintetizando stream (Edge TTS)", voz=voz, chars=len(texto))
 

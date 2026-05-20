@@ -186,8 +186,9 @@ function parseRolagens(
       found.push({ label: sl, attrKey: ak, profKey: sn, isSave: false });
   }
 
-  if (found.length === 0)
-    return [{ id: `rg-${Date.now()}`, label: "Teste", atributo: "", modificador: 0, dc, cor: "violet" }];
+  // Mestre pediu rolagem mas não nomeou perícia — sem chip (jogador usa d20 manual).
+  // Chip "Teste" com mod=0 era enganoso: mandava d20+0 mesmo com personagem FOR+4.
+  if (found.length === 0) return [];
 
   return found.slice(0, 4).map((f, i) => {
     const score = (p[f.attrKey] as number) ?? 10;
@@ -269,7 +270,6 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     novoCompanionFlash, dispensarCompanionFlash,
-    partyRestorada, dispensarPartyRestorada,
   } = useGameSession();
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
@@ -398,9 +398,13 @@ export default function Home() {
   }, [sincronizarEstado, dispensarCondicaoDetectada]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const [rolamentosPendentes, setRolamentosPendentes] = useState<RolagemPendente[]>([]);
   const [actionEconomy, setActionEconomy] = useState({ acao: false, acaoBônus: false, reacao: false });
+  // Flash esmeralda de "ações renovadas" — 700ms ao início de cada nova rodada.
+  const [actionEconomyFlash, setActionEconomyFlash] = useState(false);
+  const actionEconomyFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
@@ -415,15 +419,6 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoCompanionFlash]);
 
-  // Auto-dismiss: banner "party recuperada" some após 5s — tempo suficiente para ler.
-  const partyRestoradaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!partyRestorada) return;
-    if (partyRestoradaTimerRef.current) clearTimeout(partyRestoradaTimerRef.current);
-    partyRestoradaTimerRef.current = setTimeout(() => dispensarPartyRestorada(), 5000);
-    return () => { if (partyRestoradaTimerRef.current) clearTimeout(partyRestoradaTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyRestorada]);
   const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
     if (critTimerRef.current) clearTimeout(critTimerRef.current);
@@ -539,9 +534,17 @@ export default function Home() {
     if (respostaAtual) setRolamentosPendentes([]);
   }, [respostaAtual]);
 
-  // Reseta economia de ação a cada nova rodada de combate
+  // Reseta economia de ação a cada nova rodada de combate + flash visual de renovação
   useEffect(() => {
-    if (emCombate) setActionEconomy({ acao: false, acaoBônus: false, reacao: false });
+    if (!emCombate) return;
+    setActionEconomy({ acao: false, acaoBônus: false, reacao: false });
+    // Só exibe o flash se não é a primeira rodada (rodadaCombate=1 é abertura de combate)
+    if (rodadaCombate > 1) {
+      setActionEconomyFlash(true);
+      if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current);
+      actionEconomyFlashTimerRef.current = setTimeout(() => setActionEconomyFlash(false), 700);
+    }
+    return () => { if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current); };
   }, [rodadaCombate, emCombate]);
 
   const handleRolagemContextual = useCallback((roll: RolagemPendente) => {
@@ -561,7 +564,14 @@ export default function Home() {
   }, [enviarComando, dispararCritFlash, registrarRolagem]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    // Só rola se o jogador já está perto do fim (menos de 150px acima).
+    // Sem isso, cada token de streaming yanks o jogador que está relendo uma fala.
+    const distanciaDoFundo = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanciaDoFundo < 150) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [historico, respostaAtual]);
 
   // Ordem de prioridade: falando > ouvindo > processando > idle
@@ -878,14 +888,13 @@ export default function Home() {
         {!cinemaMode && (
           <CompanionsPanel
             companions={companions}
-            onComandar={(nome) => enviarComando(`${nome}, ataque o inimigo mais próximo.`)}
+            emCombate={emCombate}
+            onComandar={(cmd) => enviarComando(cmd)}
             novoCompanionId={novoCompanionFlash}
-            partyRestorada={partyRestorada}
-            onDismissPartyRestorada={dispensarPartyRestorada}
           />
         )}
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
           {historico.length === 0 && !respostaAtual && (
             <p className="mt-6 text-center text-xs text-zinc-700">
               Sessão iniciada — aguardando o mestre...
@@ -997,7 +1006,7 @@ export default function Home() {
           <div ref={bottomRef} />
         </div>
 
-        <div className="flex flex-col items-center gap-2 border-t border-zinc-800/50 pb-5 pt-4">
+        <div className="flex flex-col items-center gap-1.5 border-t border-zinc-800/50 pb-3 pt-2">
           {/* Toolbar de dados — aparece na vez do jogador.
               Cinema mode preserva o essencial (d20 contextual + manual + motivo)
               e esconde só a linha d4-d12 (uso esporádico fora de combate). */}
@@ -1010,6 +1019,11 @@ export default function Home() {
               (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
             const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
             if (!turnoJogador) return null;
+            // Esconde toda a toolbar quando dado não fará nada útil:
+            // fora de combate, sem rolagem pedida pelo mestre e sem rolamentos
+            // pendentes. Libera espaço vertical pro hub de texto.
+            const toolbarUtil = emCombate || esperandoRolagem || rolamentosPendentes.length > 0;
+            if (!toolbarUtil) return null;
 
             // Motivo do check — frase + atributo extraídos da última fala do mestre.
             const { motivo: motivoCheck, atributo: atributoCheck } =
@@ -1030,17 +1044,24 @@ export default function Home() {
               if (val === 20) dispararCritFlash("crit");
               else if (val === 1) dispararCritFlash("falha");
               registrarRolagem(tipoLog, val);
-              // Animação do dado do jogador — sempre mostra (Fase 5.7)
               setDadoJogadorAtivo({ tipo: "d20", resultado: val, id: Date.now() });
-              enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
+              // Só envia ao LLM se o mestre pediu rolagem (esperandoRolagem) ou em combate ativo.
+              // Sem isso, clique acidental fora de contexto faz o LLM alucinar uma cena
+              // ("Você rolou 15! Você consegue..." mas não tinha ação declarada).
+              if (esperandoRolagem || emCombate) {
+                enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
+              }
             };
 
             const rolarDano = (faces: number) => {
               const val = Math.floor(Math.random() * faces) + 1;
               registrarRolagem(`d${faces}`, val, "Dano");
-              // Animação do dado do jogador — sempre mostra (Fase 5.7)
               setDadoJogadorAtivo({ tipo: `d${faces}`, resultado: val, id: Date.now() });
-              enviarComando(`[Rolagem: d${faces} = ${val}]`);
+              // Dano só faz sentido em combate. Fora dele, registra no log mas não envia
+              // — evita LLM inventar dano gratuito ("Você causa 6 de dano em quê?").
+              if (emCombate) {
+                enviarComando(`[Rolagem: d${faces} = ${val}]`);
+              }
             };
 
             return (
@@ -1093,8 +1114,8 @@ export default function Home() {
                     ▼d20
                   </button>
                 </div>
-                {/* Linha dano — só fora de cinema mode (uso esporádico). */}
-                {!cinemaMode && (
+                {/* Linha dano — só em combate (dano fora dele não faz sentido). */}
+                {!cinemaMode && emCombate && (
                   <div className="flex items-center gap-1.5">
                     {([4, 6, 8, 10, 12, 100] as const).map(f => (
                       <button
@@ -1206,7 +1227,16 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-4 rounded-xl border border-zinc-800/50 bg-zinc-900/40 px-5 py-1.5">
+                <div className={`flex items-center gap-4 rounded-xl border px-5 py-1.5 transition-colors duration-300 ${
+                  actionEconomyFlash
+                    ? "border-emerald-600/60 bg-emerald-950/30 shadow-[0_0_8px_1px_rgba(16,185,129,0.2)]"
+                    : "border-zinc-800/50 bg-zinc-900/40"
+                }`}>
+                  {actionEconomyFlash && (
+                    <span className="text-[9px] font-semibold uppercase tracking-widest text-emerald-500 animate-fade-in">
+                      Nova rodada
+                    </span>
+                  )}
                   {(["acao", "acaoBônus", "reacao"] as const).map(k => {
                     const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
                     return (

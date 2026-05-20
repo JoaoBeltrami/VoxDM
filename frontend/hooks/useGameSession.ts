@@ -275,9 +275,46 @@ export function useGameSession() {
   // disparam o glow esmeralda de confirmação visual quando um novo ID aparece.
   const prevCompanionsRef = useRef<Record<string, unknown>>({});
   const [novoCompanionFlash, setNovoCompanionFlash] = useState<string | null>(null);
-  // Lista de nomes de companions restaurados do episódico — exibe banner de retomada.
-  // Dispensado automaticamente após 5s ou via botão ×.
-  const [partyRestorada, setPartyRestorada] = useState<string[] | null>(null);
+
+  // Turno completo aguardando flush para histórico. Quando o tipo:"fim" chega,
+  // o áudio ainda está sendo reproduzido (TTS demora mais que stream LLM).
+  // Em vez de cortar o karaokê ali, seguramos o turno aqui e mantemos
+  // respostaAtual cheio até audioTocando=false. Só então o histórico recebe
+  // o turno (com divisão em balões via MasterResponse).
+  const turnoPendenteRef = useRef<TurnoHistorico | null>(null);
+  // Timeout de segurança: se o áudio nunca terminar (ex: TTS falhou e
+  // audioTocando ficou false desde o início), flush após 30s independente.
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Flush idempotente do turno pendente: limpa respostaAtual e empurra o
+  // turno guardado pro histórico. Chamado quando o áudio termina (transição
+  // audioTocando true→false), quando o jogador envia novo comando antes do
+  // áudio acabar, ou pelo timeout de segurança.
+  const _flushTurnoPendente = useCallback(() => {
+    const turno = turnoPendenteRef.current;
+    if (!turno) return;
+    turnoPendenteRef.current = null;
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    setEstado(s => ({
+      ...s,
+      respostaAtual: "",
+      historico: [...s.historico, turno],
+    }));
+  }, []);
+
+  // Detecta transição true→false do áudio. Quando o último chunk terminou e
+  // havia um turno aguardando, é a hora de empurrar pro histórico — o karaokê
+  // já chegou ao fim natural junto com a voz.
+  const audioTocandoAntRef = useRef(false);
+  useEffect(() => {
+    if (audioTocandoAntRef.current && !audioTocando) {
+      _flushTurnoPendente();
+    }
+    audioTocandoAntRef.current = audioTocando;
+  }, [audioTocando, _flushTurnoPendente]);
 
   const _conectarWS = useCallback((sessionId: string, nome: string | null) => {
     const ws = new WebSocket(wsUrl(sessionId));
@@ -487,13 +524,8 @@ export function useGameSession() {
         //   Novo ID → glow esmeralda no CompanionsPanel por 1.5s.
         const companionsAtual = (msg.companions ?? {}) as Record<string, { nome?: string }>;
         if (turno === null) {
-          // Abertura — companions restaurados do episódico, não adicionados pelo LLM agora
-          if (Object.keys(companionsAtual).length > 0) {
-            const nomes = Object.values(companionsAtual).map(
-              c => (c as { nome?: string })?.nome ?? "?"
-            );
-            setPartyRestorada(nomes);
-          }
+          // Abertura — companions restaurados do episódico, não adicionados pelo LLM.
+          // Inicializa prevRef silenciosamente: sem flash individual para companions já conhecidos.
           prevCompanionsRef.current = companionsAtual;
         } else {
           // Turno normal — detecta companions recém-registrados pelo LLM
@@ -507,10 +539,14 @@ export function useGameSession() {
           prevCompanionsRef.current = companionsAtual;
         }
 
-        // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx
+        // Notificação de quest — exibida brevemente no frontend, limpa pelo useEffect em page.tsx.
+        // IDs internos (kebab-case) são humanizados: "filhos-valdrek" → "Filhos Valdrek".
+        const _humanizarId = (id: string) =>
+          id.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
         const questNotificacao = (msg.quest_avancos ?? []).length > 0
           ? (msg.quest_avancos ?? []).map(q => {
-              const linhas = [`⚑ Quest: ${q.quest_id} → ${q.stage_id}`];
+              const linhas = [`✦ ${_humanizarId(q.quest_id)} — ${_humanizarId(q.stage_id)}`];
               if (q.recompensas && q.recompensas.length > 0) {
                 linhas.push(q.recompensas.join("  ·  "));
               }
@@ -518,10 +554,32 @@ export function useGameSession() {
             }).join("\n")
           : null;
 
-        if (turno) {
+        // Guarda o turno para flush posterior (quando áudio terminar). Mantém
+        // respostaAtual = textoFinal para o karaokê reverso continuar revelando
+        // até a voz acabar; histórico só recebe depois (com divisão em balões).
+        if (turno || textoFinal) {
+          const turnoFinal: TurnoHistorico = {
+            id: turno?.id ?? Date.now(),
+            jogador: turno?.jogador ?? "",
+            mestre: textoFinal,
+            latencia_ms: msg.latencia_ms ?? 0,
+            chunks_lore: turno ? (msg.chunks_lore ?? []) : [],
+            chunks_regras: turno ? (msg.chunks_regras ?? []) : [],
+          };
+          // Cancela timer antigo antes de criar novo
+          if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+          turnoPendenteRef.current = turnoFinal;
+          // Fallback de segurança: se áudio nunca terminar (TTS falhou ou
+          // já estava parado), flush forçado após 30s.
+          flushTimerRef.current = setTimeout(() => _flushTurnoPendente(), 30_000);
+        }
+
+        if (turno || textoFinal) {
           setEstado(s => ({
             ...s,
-            respostaAtual: "",
+            // respostaAtual preservado = textoFinal: karaokê continua revelando
+            // até audioTocando=false, quando _flushTurnoPendente empurra ao histórico.
+            respostaAtual: textoFinal,
             questStages: novoTurnoBase.questStages ?? s.questStages,
             activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
             inventory: novoTurnoBase.inventory ?? s.inventory,
@@ -539,8 +597,6 @@ export function useGameSession() {
             deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
             deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
             emCombate: rpgUpdate.emCombate,
-            // Se o payload trouxe inimigos (ainda em combate ou primeira mensagem
-            // pós-combate com dict vazio), aplica; senão preserva o anterior.
             inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
             rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
             posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
@@ -552,71 +608,8 @@ export function useGameSession() {
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
-            // Substituir (não acumular) — condições do turno anterior são stale.
-            // Se o mestre não menciona mais "envenenado", a detecção some sozinha.
             condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
-            historico: [
-              ...s.historico,
-              {
-                id: turno.id,
-                jogador: turno.jogador,
-                mestre: textoFinal,
-                latencia_ms: msg.latencia_ms ?? 0,
-                chunks_lore: msg.chunks_lore ?? [],
-                chunks_regras: msg.chunks_regras ?? [],
-              },
-            ],
-          }));
-        } else if (textoFinal) {
-          setEstado(s => ({
-            ...s,
-            respostaAtual: "",
-            questStages: novoTurnoBase.questStages ?? s.questStages,
-            activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
-            inventory: novoTurnoBase.inventory ?? s.inventory,
-            locationNome: novoTurnoBase.locationNome ?? s.locationNome,
-            timeOfDay: novoTurnoBase.timeOfDay ?? s.timeOfDay,
-            npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
-            spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
-            hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
-            serverHp: rpgUpdate.serverHp,
-            serverHpMax: rpgUpdate.serverHpMax,
-            gold: rpgUpdate.gold ?? s.gold,
-            xp: rpgUpdate.xp ?? s.xp,
-            inspiration: rpgUpdate.inspiration ?? s.inspiration,
-            deathSavesSuccesses: rpgUpdate.deathSavesSuccesses ?? s.deathSavesSuccesses,
-            deathSavesFailures: rpgUpdate.deathSavesFailures ?? s.deathSavesFailures,
-            deathSavesStable: rpgUpdate.deathSavesStable ?? s.deathSavesStable,
-            emCombate: rpgUpdate.emCombate,
-            // Se o payload trouxe inimigos (ainda em combate ou primeira mensagem
-            // pós-combate com dict vazio), aplica; senão preserva o anterior.
-            inimigos: rpgUpdate.inimigos !== null ? rpgUpdate.inimigos : s.inimigos,
-            rodadaCombate: rpgUpdate.emCombate ? (msg.rodada_combate ?? s.rodadaCombate) : 0,
-            posicoesCombate: novasPosicoes !== null ? novasPosicoes : s.posicoesCombate,
-            movimentoRestanteFt: msg.movimento_restante_ft ?? s.movimentoRestanteFt,
-            movimentoTotalFt: msg.movimento_total_ft ?? s.movimentoTotalFt,
-            emMercado: msg.em_mercado ?? s.emMercado,
-            companions: (msg.companions ?? s.companions) as EstadoSessao["companions"],
-            consequencias: rpgUpdate.consequencias.length ? rpgUpdate.consequencias : s.consequencias,
-            iniciativaOrdem: rpgUpdate.iniciativaOrdem,
-            fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
-            classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
-            // Substituir (não acumular) — condições do turno anterior são stale.
-            // Se o mestre não menciona mais "envenenado", a detecção some sozinha.
-            condicoesDetectadas: novasCondicoes,
-            questNotificacao: questNotificacao ?? s.questNotificacao,
-            historico: [
-              ...s.historico,
-              {
-                id: Date.now(),
-                jogador: "",
-                mestre: textoFinal,
-                latencia_ms: msg.latencia_ms ?? 0,
-                chunks_lore: [],
-                chunks_regras: [],
-              },
-            ],
           }));
         }
       }
@@ -717,11 +710,14 @@ export function useGameSession() {
 
   const enviarComando = useCallback((texto: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    // Se o jogador agir antes do áudio do turno anterior terminar, força o
+    // flush do turno pendente — evita perda silenciosa no histórico.
+    _flushTurnoPendente();
     turnoAtualRef.current = { jogador: texto, id: Date.now() };
     textoAtualRef.current = "";
     setIsProcessing(true);
-    // Limpa o recap quando o jogador fala pela primeira vez — imersão não quebra
-    setEstado(s => s.textoRecap ? { ...s, textoRecap: "" } : s);
+    // Limpa erro anterior e recap quando o jogador age — tela fica limpa pro próximo turno
+    setEstado(s => ({ ...s, textoRecap: "", erro: null }));
     wsRef.current.send(JSON.stringify({ texto }));
 
     // Guarda de conexão half-open: se tipo="fim" não chegar em 45s o WS está morto.
@@ -737,7 +733,7 @@ export function useGameSession() {
       // Fecha o socket morto para o handler onclose acionar a reconexão automática
       wsRef.current?.close();
     }, TURN_TIMEOUT_MS);
-  }, [TURN_TIMEOUT_MS]);
+  }, [TURN_TIMEOUT_MS, _flushTurnoPendente]);
 
   const sincronizarEstado = useCallback((
     tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
@@ -774,6 +770,13 @@ export function useGameSession() {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+    // Descarta turno pendente sem flush (jogador encerrou — não importa
+    // empurrar pro histórico que vai ser limpo pelo ESTADO_INICIAL abaixo).
+    turnoPendenteRef.current = null;
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
     }
     textoAtualRef.current = "";
     turnoAtualRef.current = null;
@@ -850,8 +853,5 @@ export function useGameSession() {
     // Companion flash — nome do companion recém-registrado em turno ativo, null fora de evento.
     novoCompanionFlash,
     dispensarCompanionFlash: () => setNovoCompanionFlash(null),
-    // Party resume — nomes restaurados do episódico na abertura, null fora de retomada.
-    partyRestorada,
-    dispensarPartyRestorada: () => setPartyRestorada(null),
   };
 }

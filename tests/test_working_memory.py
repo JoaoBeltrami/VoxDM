@@ -687,11 +687,12 @@ def test_para_texto_companion_morto():
     assert "morto" in texto_fora
     assert "HP 0/" not in texto_fora
 
-    # Em combate — bloco completo também exibe "morto"
+    # Em combate — companion morto é OMITIDO do bloco Aliados (já consta em log_consequencias).
+    # O bloco inteiro some quando todos os aliados estão mortos.
     wm.entrar_combate()
     texto_combate = wm.para_texto()
-    assert "Aliados:" in texto_combate
-    assert "morto" in texto_combate
+    # Bloco "Aliados:" não deve aparecer — companion está morto, não há aliados ativos
+    assert "CA 15" not in texto_combate  # stats de aliado morto nunca chegam ao LLM
     assert "HP 0/" not in texto_combate
 
 
@@ -792,3 +793,96 @@ def test_para_texto_companions_e_posicoes_juntos():
     assert "Lyssa" in texto
     assert "10ft" in texto
     assert "Orc" in texto
+
+
+# ── Fix TOKEN-2: inimigos mortos excluídos da linha de combate ──────────────
+
+def test_inimigo_morto_omitido_do_bloco_combate():
+    """Inimigos com estado 'morto' não aparecem na linha 'Inimigos:' do prompt."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.registrar_inimigo("orc-1", "Orc", "intacto")
+    wm.atualizar_estado_inimigo("goblin-1", "morto")
+    texto = wm.para_texto()
+    # Orc vivo aparece
+    assert "Orc" in texto
+    # Goblin morto não aparece na linha de inimigos ativos
+    assert "Goblin" not in texto
+
+
+def test_linha_inimigos_omitida_quando_todos_mortos():
+    """Linha 'Inimigos:' inteira é omitida quando todos os inimigos estão mortos."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.atualizar_estado_inimigo("goblin-1", "morto")
+    texto = wm.para_texto()
+    assert "Inimigos:" not in texto
+
+
+# ── Fix TOKEN-1: quests_modulo omitido sem quests ativas ────────────────────
+
+def test_quests_modulo_omitido_sem_quests_ativas():
+    """quests_modulo não aparece no prompt quando não há quests ativas."""
+    wm = _wm()
+    wm.quests_modulo = "QUESTS DO MÓDULO:\n- Missão Teste"
+    wm.active_quest_hooks = []  # nenhuma quest ativa
+    texto = wm.para_texto()
+    assert "QUESTS DO MÓDULO" not in texto
+    assert "Missão Teste" not in texto
+
+
+def test_quests_modulo_injetado_com_quests_ativas():
+    """quests_modulo aparece no prompt quando há pelo menos uma quest ativa."""
+    wm = _wm()
+    wm.quests_modulo = "QUESTS DO MÓDULO:\n- Missão Teste"
+    wm.active_quest_hooks = ["missao-teste"]
+    texto = wm.para_texto()
+    assert "QUESTS DO MÓDULO" in texto
+
+
+# ── Fix TOKEN-3: npc_estados_emocionais filtrado por npcs_presentes ─────────
+
+def test_npc_estado_emocional_filtrado_por_presenca():
+    """NPCs ausentes da cena não têm estado emocional injetado no prompt."""
+    wm = _wm()
+    wm.npcs_presentes = ["lyssa"]
+    wm.npc_estados_emocionais["lyssa"] = "animada"
+    wm.npc_estados_emocionais["vilao-ausente"] = "furioso"
+    texto = wm.para_texto()
+    assert "animada" in texto
+    assert "furioso" not in texto
+    assert "vilao-ausente" not in texto
+
+
+def test_npc_estados_omitidos_quando_nenhum_presente():
+    """Bloco de estados emocionais é omitido quando nenhum NPC presente tem estado."""
+    wm = _wm()
+    wm.npcs_presentes = ["lyssa"]
+    wm.npc_estados_emocionais["vilao-ausente"] = "furioso"
+    texto = wm.para_texto()
+    assert "Estados emocionais" not in texto
+
+
+# ── Fix MEM-1: posicao limpa quando inimigo morre ───────────────────────────
+
+def test_posicao_limpa_quando_inimigo_morre():
+    """posicoes_combate remove entrada do inimigo ao marcar como morto."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+    wm.registrar_posicao("goblin-1", distancia_ft=30, cobertura=True)
+    assert "goblin-1" in wm.posicoes_combate
+    wm.atualizar_estado_inimigo("goblin-1", "morto")
+    assert "goblin-1" not in wm.posicoes_combate
+
+
+def test_posicao_preservada_quando_inimigo_ferido():
+    """posicoes_combate mantém entrada quando inimigo fica ferido (não morto)."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("orc-1", "Orc", "intacto")
+    wm.registrar_posicao("orc-1", distancia_ft=10, cobertura=False)
+    wm.atualizar_estado_inimigo("orc-1", "ferido")
+    assert "orc-1" in wm.posicoes_combate

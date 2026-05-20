@@ -726,6 +726,7 @@ async def encerrar_sessao(
             class_features=dict(wm.class_features),
             companions=dict(wm.companions),
             personagem_config=_wm_para_personagem_config(wm),
+            dm_state=_wm_para_dm_state(wm),
         ))
         log.info("character_state_salvo_no_encerramento", session_id=session_id)
     except Exception as e:

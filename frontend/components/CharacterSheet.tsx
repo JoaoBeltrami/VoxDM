@@ -170,7 +170,7 @@ export function CharacterSheet({
   const [npcsAberto, setNpcsAberto] = useState(false);
   const [spellsAberto, setSpellsAberto] = useState(false);
   const [magiasAberto, setMagiasAberto] = useState(false); // separado de spellsAberto para poder ver slots e lista ao mesmo tempo
-  const [rolagensAberto, setRolagensAberto] = useState(true);
+  const [rolagensAberto, setRolagensAberto] = useState(false);
 
   const { player_name, player_race, player_class, player_level = 3,
           player_background, player_hp_max,

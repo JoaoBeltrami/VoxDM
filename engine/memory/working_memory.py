@@ -114,6 +114,10 @@ class WorkingMemory:
     iniciativa_jogador: int | None = None
     # Rodada atual dentro do combate (1-based; 0 fora de combate)
     rodada_combate: int = 0
+    # Contador de rodadas em combate SEM ação de inimigo (sem dano/movimento/registro).
+    # Quando LLM esquece de mencionar inimigos por N rodadas, combate provavelmente
+    # acabou silenciosamente. Threshold em api/turn_pipeline.py força sair_combate.
+    rodadas_sem_acao_inimigo: int = 0
 
     # Atributos D&D 5e — Standard Array [15,14,13,12,10,8] atribuído na criação
     str_score: int = 10
@@ -510,6 +514,7 @@ class WorkingMemory:
         """Ativa modo combate — prompt_builder injeta combat.md no próximo turno."""
         self.em_combate = True
         self.rodada_combate = 1
+        self.rodadas_sem_acao_inimigo = 0
         self.iniciativa_jogador = None
         # Reseta cache de iniciativa — será populado quando primeiros inimigos aparecerem
         self.iniciativa_cache = {}
@@ -632,6 +637,10 @@ class WorkingMemory:
             )
             if hp_rel:
                 self.inimigos_combate[inimigo_id]["hp_rel"] = hp_rel
+            # Limpa posição tática quando inimigo morre — dict não deve acumular
+            # fantasmas de entidades que não participam mais do combate.
+            if estado == "morto":
+                self.posicoes_combate.pop(inimigo_id, None)
 
     def remover_inimigo(self, inimigo_id: str) -> None:
         """Remove inimigo do combate (morto ou fugiu)."""
@@ -649,6 +658,7 @@ class WorkingMemory:
         self.em_combate = False
         self.iniciativa_jogador = None
         self.rodada_combate = 0
+        self.rodadas_sem_acao_inimigo = 0
         self.inimigos_combate.clear()
         # Limpa cache de iniciativa — próximo combate rola tudo de novo
         self.iniciativa_cache.clear()
@@ -927,6 +937,10 @@ class WorkingMemory:
             if self.inimigos_combate:
                 partes_ini = []
                 for npc_id, dados in self.inimigos_combate.items():
+                    # Mortos são omitidos — já constam em log_consequencias e
+                    # exibi-los confunde o LLM sobre ameaças reais ainda ativas.
+                    if dados.get("estado") == "morto":
+                        continue
                     desc = dados["nome"]
                     if dados.get("estado") and dados["estado"] != "intacto":
                         desc += f" ({dados['estado']})"
@@ -939,7 +953,8 @@ class WorkingMemory:
                         cob = " cobertura" if pos.get("cobertura") else ""
                         desc += f" {pos['distancia_ft']}ft{cob}"
                     partes_ini.append(desc)
-                linhas.append(f"Inimigos: {', '.join(partes_ini)}")
+                if partes_ini:  # omite linha se só restam mortos
+                    linhas.append(f"Inimigos: {', '.join(partes_ini)}")
             if self.movimento_restante_ft < self.movimento_total_ft:
                 linhas.append(
                     f"Movimento restante: {self.movimento_restante_ft}/{self.movimento_total_ft}ft"
@@ -972,10 +987,19 @@ class WorkingMemory:
             linhas.append(f"\nNPCs presentes: {', '.join(self.npcs_presentes)}")
 
         if self.npc_estados_emocionais:
-            linhas.append("Estados emocionais:")
-            for npc_id, estado in self.npc_estados_emocionais.items():
-                trust = self.trust_levels.get(npc_id, 0)
-                linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/3)")
+            # Filtra apenas NPCs presentes na cena — evita exibir estados de NPCs
+            # de locais anteriores que o jogador já deixou para trás.
+            presentes = set(self.npcs_presentes)
+            estados_em_cena = {
+                npc_id: estado
+                for npc_id, estado in self.npc_estados_emocionais.items()
+                if npc_id in presentes
+            }
+            if estados_em_cena:
+                linhas.append("Estados emocionais:")
+                for npc_id, estado in estados_em_cena.items():
+                    trust = self.trust_levels.get(npc_id, 0)
+                    linhas.append(f"  {_id_para_nome(npc_id)}: {estado} (confiança: {trust}/3)")
 
         if self.active_quest_hooks:
             # Exibe apenas as 5 quests mais recentes — quests antigas completadas
@@ -987,7 +1011,9 @@ class WorkingMemory:
                 if stage:
                     linhas.append(f"  {qid} → estágio: {stage}")
 
-        if self.quests_modulo:
+        # Catálogo de quests só injetado quando há quests ativas — o LLM precisa
+        # dos IDs exatos apenas para emitir [Q:id:stage]. Fora disso é ruído puro.
+        if self.quests_modulo and self.active_quest_hooks:
             linhas.append(f"\n{self.quests_modulo}")
 
         if self.log_consequencias:
@@ -1000,15 +1026,20 @@ class WorkingMemory:
         #   por companion por turno sem perder continuidade narrativa.
         if self.companions:
             if self.em_combate:
+                # Em combate: só aliados VIVOS com stats completos.
+                # Mortos já constam em log_consequencias — exibi-los aqui polui o contexto
+                # e pode levar o LLM a tentar comandar aliados incapacitados.
                 partes_comp = []
                 for cid, c in self.companions.items():
-                    morto = c.get("hp", 1) <= 0
-                    status = "morto" if morto else f"HP {c.get('hp')}/{c.get('hp_max')}"
+                    if c.get("hp", 1) <= 0:
+                        continue  # morto — ignorar no bloco ativo
                     partes_comp.append(
-                        f"{c.get('nome', cid)} ({c.get('tipo', 'aliado')}, {status}, "
+                        f"{c.get('nome', cid)} ({c.get('tipo', 'aliado')}, "
+                        f"HP {c.get('hp')}/{c.get('hp_max')}, "
                         f"CA {c.get('ca')}, atq {c.get('atq')}, {c.get('dano')})"
                     )
-                linhas.append("\nAliados:\n" + "\n".join(f"- {p}" for p in partes_comp))
+                if partes_comp:  # omite bloco inteiro se todos morreram
+                    linhas.append("\nAliados:\n" + "\n".join(f"- {p}" for p in partes_comp))
             else:
                 # Fora de combate — só nome e estado de saúde para manter continuidade
                 def _status_hp(c: dict) -> str:

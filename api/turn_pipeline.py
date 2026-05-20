@@ -364,8 +364,41 @@ def aplicar_pos_turno(
             working_mem.sair_combate()
             log.info("combate_encerrado_auto_todos_mortos")
 
-    # 8. Contador de tensão narrativa fora de combate
-    if working_mem.em_combate:
+    # 7c. Timeout — combate sem nenhum inimigo registrado por 2+ rodadas, ou sem
+    # menção a inimigos vivos por 3+ rodadas. Evita "combate eterno" quando a
+    # cena migra silenciosamente para fora de combate (jogador foge, mestre
+    # esquece de declarar). Sem isso, vinheta vermelha + animação de turno +
+    # combat.md/saves.md injetados desperdiçam tokens indefinidamente.
+    if working_mem.em_combate and texto_jogador.strip():
+        # Inimigos vivos esperados na narração
+        vivos = [
+            d.get("nome", "")
+            for d in working_mem.inimigos_combate.values()
+            if d.get("estado") not in ("morto",)
+        ]
+        if not vivos:
+            # Combate ativo sem inimigos vivos registrados — aguarda 2 rodadas
+            working_mem.rodadas_sem_acao_inimigo += 1
+            if working_mem.rodadas_sem_acao_inimigo >= 2:
+                working_mem.sair_combate()
+                log.info("combate_encerrado_sem_inimigos_vivos")
+        else:
+            # Algum inimigo vivo precisa ser mencionado na narração
+            resp_lower = resposta_completa.lower()
+            mencionado = any(n.lower() in resp_lower for n in vivos if n)
+            if mencionado:
+                working_mem.rodadas_sem_acao_inimigo = 0
+            else:
+                working_mem.rodadas_sem_acao_inimigo += 1
+                if working_mem.rodadas_sem_acao_inimigo >= 3:
+                    working_mem.sair_combate()
+                    log.info("combate_encerrado_timeout_sem_mencao")
+
+    # 8. Contador de tensão narrativa fora de combate.
+    # Zera também quando trust muda neste turno — cenas sociais com consequências
+    # (interrogatório, barganha, confronto) são tensas mesmo sem espadas.
+    # Sem isso, um roleplay dramático de 5 turnos recebe [PACING: BAIXO].
+    if working_mem.em_combate or mudancas_trust:
         working_mem.turnos_sem_tensao = 0
     else:
         working_mem.turnos_sem_tensao += 1

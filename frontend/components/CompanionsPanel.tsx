@@ -24,6 +24,27 @@ const ICONE_POR_TIPO: Record<string, string> = {
   summon:   "✨",
 };
 
+// Comandos variados por contexto — um DM de mesa real não ordena "ataque" numa taverna.
+// Sorteia aleatoriamente para evitar repetição imediata na mesma sessão.
+const COMANDOS_COMBATE = [
+  "ataque o inimigo mais próximo",
+  "cubra-me e defenda",
+  "avance e ataque com tudo",
+  "use sua habilidade especial",
+];
+const COMANDOS_EXPLORACAO = [
+  "fique de guarda",
+  "explore a área à frente e me avise",
+  "venha comigo",
+  "ajude-me com isso",
+  "mantenha-se alerta",
+];
+
+function _sortearComando(emCombate: boolean): string {
+  const lista = emCombate ? COMANDOS_COMBATE : COMANDOS_EXPLORACAO;
+  return lista[Math.floor(Math.random() * lista.length)];
+}
+
 export interface Companion {
   nome: string;
   tipo: string;
@@ -36,22 +57,19 @@ export interface Companion {
 
 interface CompanionsPanelProps {
   companions: Record<string, Companion>;
-  /** Callback ao clicar "comandar" — abre o microfone com sugestão de fala. */
-  onComandar?: (nome: string) => void;
+  /** Callback ao clicar "comandar" — envia o comando completo já formatado. */
+  onComandar?: (comando: string) => void;
   /** Nome do companion recém-adicionado em sessão ativa — dispara glow no painel. */
   novoCompanionId?: string | null;
-  /** Nomes de companions restaurados do episódico — exibe banner de retomada. */
-  partyRestorada?: string[] | null;
-  /** Callback para dispensar o banner de retomada. */
-  onDismissPartyRestorada?: () => void;
+  /** Contexto de combate — muda quais comandos são sugeridos. */
+  emCombate?: boolean;
 }
 
 export function CompanionsPanel({
   companions,
   onComandar,
   novoCompanionId,
-  partyRestorada,
-  onDismissPartyRestorada,
+  emCombate = false,
 }: CompanionsPanelProps) {
   const lista = Object.entries(companions);
   if (lista.length === 0) return null;
@@ -67,27 +85,7 @@ export function CompanionsPanel({
         <span>Aliados ({lista.length})</span>
       </p>
 
-      {/* Banner de retomada de sessão — aparece quando companions são restaurados
-          do episódico. Auto-dispensado após 5s via useEffect em page.tsx. */}
-      {partyRestorada && partyRestorada.length > 0 && (
-        <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2 py-1.5 text-[10px] text-emerald-300">
-          <span>🛡</span>
-          <span className="flex-1">
-            Party recuperada: {partyRestorada.join(", ")}
-          </span>
-          {onDismissPartyRestorada && (
-            <button
-              onClick={onDismissPartyRestorada}
-              className="ml-1 text-emerald-500 transition hover:text-emerald-200"
-              title="Dispensar"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2">
+<div className="space-y-2">
         {lista.map(([id, c]) => {
           const icone = ICONE_POR_TIPO[c.tipo] ?? "👥";
           const hpPct = c.hp_max > 0 ? (c.hp / c.hp_max) * 100 : 0;
@@ -121,11 +119,11 @@ export function CompanionsPanel({
                   </span>
                   {!morto && onComandar && (
                     <button
-                      onClick={() => onComandar(c.nome)}
-                      title={`Comandar ${c.nome}`}
+                      onClick={() => onComandar(`${c.nome}, ${_sortearComando(emCombate)}.`)}
+                      title={`Comandar ${c.nome}${emCombate ? " (combate)" : " (exploração)"}`}
                       className="rounded-md border border-emerald-800/60 bg-emerald-900/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300 transition hover:border-emerald-500 hover:bg-emerald-700/40 hover:text-emerald-100"
                     >
-                      ⚔ comandar
+                      {emCombate ? "⚔ atacar" : "💬 ordenar"}
                     </button>
                   )}
                 </div>

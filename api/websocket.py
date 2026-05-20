@@ -86,19 +86,6 @@ _RE_FIM_COMBATE_JOGADOR = re.compile(
     re.IGNORECASE,
 )
 
-# Detecta fim de combate na RESPOSTA DO LLM — o mestre narra que a luta terminou.
-# Sem isso, em_combate fica True mesmo após o mestre narrar a morte do último inimigo.
-_RE_FIM_COMBATE_LLM = re.compile(
-    r"\b("
-    r"o combate termina|a luta termina|combate encerrado|batalha encerrada|"
-    r"não há mais inimigos|sem mais ameaças|ambiente está seguro|"
-    r"silêncio retorna|silêncio toma conta|"
-    r"todos os inimigos ca[íi]ram|inimigos foram derrotados|"
-    r"último inimigo|únic[oa] sobrevivente"
-    r")\b",
-    re.IGNORECASE,
-)
-
 # Captura [Rolagem visível: dX = Y] na resposta do LLM.
 # Usado quando roll_visibility="open" ou "result_only" — frontend recebe
 # mensagem "dado_rolado" separada antes do texto chegar ao TTS.
@@ -1237,7 +1224,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Fire-and-forget — nunca bloqueia o turno. Garante que XP, ouro,
             # fios narrativos e HP não se percam se o browser fechar abruptamente.
             if sessao.iteracoes % 5 == 0:
-                asyncio.create_task(_auto_checkpoint(sessao))
+                _criar_background_task(_auto_checkpoint(sessao))
 
             latencia_ms = int((time.perf_counter() - t0) * 1000)
 
