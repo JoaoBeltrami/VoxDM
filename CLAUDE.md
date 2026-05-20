@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 20 de maio de 2026 — Sessão 1h+: karaokê pós-stream, timeout de combate, nuances TTS, SSML descartado em definitivo, UX dados. 690/690 testes. tsc clean.
+> Atualizado: 20 de maio de 2026 (noite) — Roadmap completo: ANCORA, VOZ NPC, imagem Pollinations, AFETO Neo4j, karaokê reverso. 718/718 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -149,9 +149,32 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **22 novos testes de TTS naturalidade** em `tests/test_tts_naturalidade.py`. **36 novos testes de combat timeout + karaokê** em `tests/test_websocket.py` + `tests/test_working_memory.py`.
   - **690/690 testes, tsc clean.**
 
+- **Plano A-E completo (20/05 — tarde)**: ✅ CONCLUÍDO. 690/690 testes.
+  - **Fase A — COMBAT-2 rodada_esperada**: `rodada_esperada: int` adicionado ao `MensagemWS` (schema.py). Emitido nos 3 payloads `fim` de `websocket.py` (abertura, reconexão, turno principal) com valor `wm.rodada_combate`. Frontend detecta drift no `useGameSession.ts`: se `rodada_esperada != rodadaCombate`, loga `console.warn("[VoxDM] initiative drift detectado")`. Bug COMBAT-2 marcado como **detectável** — campo `rodada_esperada` em `api.ts` TypeScript.
+  - **Fase B — UX-2 (cascade toast)**: `LLMRouter.ultimo_provider_stream: str | None` guarda o provider do primeiro token de cada stream (resetado a cada chamada). `GroqClient.ultimo_provider_stream` expõe como property. Após stream no `websocket.py`, compara com provider primário esperado — se divergir, envia `tipo="cascade"`. `MensagemWS.tipo` e union TS em `api.ts` atualizados. `useGameSession.ts` com estado `cascadeAtivo` + handler; `page.tsx` com `CascadeToast` auto-dismiss 5s.
+  - **Fase B — UX-3 (recap retry)**: `recapChunkRef` no `useGameSession.ts` guarda o último `audio_chunk` enquanto recap visível. `retocarRecap()` re-enfileira via `tocarChunk`. `limparRecap()` limpa o ref. Frontend tem botão "▶ Ouvir novamente" na bolha âmbar do recap.
+  - **Fase C — Session bypass**: `handleContinuarSessao` em `page.tsx` agora chama `conectar()` diretamente com `{session_anterior_id, tts_voice, dm_profile}`. CharacterForm bypassed completamente — `personagem_restaurado` vindo do servidor popula a ficha. Sessões muito antigas sem dados salvos: mestre abre com config mínima e improvisa.
+  - **Fase D — DM profiles**: Já 100% implementado end-to-end (overlay `.md` em `engine/llm/prompts/dm_profiles/`, `dm_profile` em `WorkingMemory`, `prompt_builder.py` injeta, `SessaoConfig` aceita). Verificado — sem mudanças necessárias.
+  - **Fase E — Dice visibility 5.7 backend**: `roll_visibility: str` adicionado ao `SessaoConfig`, `WorkingMemory`, `nova_sessao()` e `PersonagemConfig` TS. Passado em `session.py`. `prompt_builder.py` injeta instrução de `[Rolagem visível: dX=Y]` quando `roll_visibility in ("open", "result_only")`. Frontend envia `roll_visibility` em todas as 3 chamadas de `conectar()`.
+
+- **Plano A-E — 2ª parte + polimentos (20/05 — noite)**: ✅ CONCLUÍDO. 699/699 testes.
+  - **COMBAT-2 re-sync ativo** — `frontend/hooks/useGameSession.ts`: handler `tipo="fim"` agora retorna `msg.rodada_esperada` quando drift detectado (era apenas `console.warn`). Após turno parcial com falha de TTS, `rodadaCombate` é imediatamente corrigido para o valor autoritativo do backend.
+  - **Bypass CharacterForm via lista SQLite** — `engine/persistence/character_store.py`: novo método `listar_por_owner(owner_email)` retorna personagens ordenados por `updated_at DESC`. `api/routes/session.py`: endpoint `GET /session/saved-characters`. `frontend/lib/api.ts`: interface `PersonagemSalvoItem` + `listarPersonagensSalvos()`. `frontend/components/SessionPicker.tsx` reescrito com duas seções: "⚔ Continuar como…" (emerald, SQLite, abre por default) e "Sessão anterior" (violet, Qdrant, fechada por default). `frontend/app/page.tsx`: `handleContinuarPersonagem` chama `conectar()` com `session_anterior_id` — CharacterForm completamente bypassado. +4 testes em `test_character_store.py`.
+  - **OOC/IC toggle de voz** — `frontend/components/VoiceButton.tsx`: estado `modoOOC` + botão toggle "🎭 Personagem (IC)" / "🗣 Para o Mestre (OOC)". Prefixo `[OOC]` adicionado ao texto antes de chamar `onEnviar` nos 3 paths (MediaRecorder, Web Speech, textarea). `engine/llm/prompts/master_system.md`: nova seção "## Mensagens OOC (fora do personagem)" — mestre responde como DM humano em 1-3 frases diretas, sem marcadores ficcionais.
+  - **Auto-save beforeunload** — `frontend/app/page.tsx`: `useEffect` registra `beforeunload` handler que chama `checkpointSessao(sessionId, true)` (keepalive=true → fire-and-forget mesmo com página fechando). Evita perda de XP/ouro/fios em crash ou fechamento acidental do browser.
+
+- **Roadmap completo — Features ANCORA+VOZ+Pollinations+AFETO (20/05 — noite)**: ✅ CONCLUÍDO. 718/718 testes. tsc clean.
+  - **Feature A — ANCORA**: `[ANCORA: texto]` → `wm.fatos_ancora` (circular max 5, dedup) → injetado no system prompt como "FATOS ESTABELECIDOS (não repetir)". Evita re-narração de revelações em sessões longas. Regex `_RE_ANCORA` em turn_pipeline step 15. 5 testes em `test_working_memory.py`.
+  - **Fix TTS C — ordem de regex**: `_RE_REVELACAO` movida antes de `_RE_DRAMA_PRE_PAUSA` em `_adicionar_nuances_pontuacao()` — "mas afinal" agora recebe "..." corretamente (lookbehind não bloqueado por vírgula prévia do drama).
+  - **Feature D — Imagem de cena (Pollinations.ai)**: `_enviar_imagem_cena()` fire-and-forget em `websocket.py` — URL Pollinations.ai Flux enviada via WS `tipo="scene_image"` na abertura e após cada turno. Dedup por `{location}|{combate}` em `SessaoAtiva.ultima_imagem_chave`. Remove placeholder quebrado `engine.image.scene_image`. Frontend já estava wired via `sceneImageUrl`.
+  - **Feature B — Voz NPC**: `[VOZ: npc-id|pitch|rate]` → `wm.npc_vozes` dict → aplicado por sentença em `_tts_sentenca()`. Helper `_detectar_voz_npc()` busca por id e nome formatado. Apenas 1ª fala por sessão (idempotente). 4 testes em `test_websocket.py`.
+  - **Feature E — Karaokê reverso**: Verificado 100% implementado em sessões anteriores (`useSyncTextoVoz.ts`, `useAudio.onDuracao`, `page.tsx`). Zero trabalho nesta sessão.
+  - **Feature F — Afeto NPC (Neo4j)**: `[AFETO: npc-id|campo|delta]` → `aplicar_afeto_npcs()` fire-and-forget → `neo4j_client.atualizar_afeto_npc()` (campos afeto/medo/respeito/rancor, clamp [-10,10]). Estado afetivo acumula entre sessões como propriedades do nó NPC. 3 testes em `test_quest_detector.py`.
+  - **master_system.md**: Teto de budget 10500→11000; `[VOZ]`, `[AFETO]`, `[ANCORA]` documentados com exemplos e regras de uso.
+
 ### Bugs conhecidos — próxima sessão de fixes
 
-> Atualizado 20/05. COMBAT-1, TTS-1 e UX-1 resolvidos nesta sessão. Pendentes: COMBAT-2 completo, UX-2, UX-3.
+> Atualizado 20/05 noite. COMBAT-2 re-sync ativo implementado. Sem bugs pendentes críticos conhecidos.
 
 **DESIGN — Personagem está atrelado à sessão (comportamento esperado)**
 - Um personagem por sessão — não é possível trocar personagem mid-session.
@@ -166,25 +189,15 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
 
 ~~**COMBAT-1**~~ ✅ RESOLVIDO (19/05) — `_RE_INIMIGO_MORTO` expandido para 22 padrões em `api/turn_pipeline.py`. Fix definitivo pendente (Fase 5): classificação LLM.
 
-**COMBAT-2 — Initiative drift em combate longo (5+ rodadas)**
-- **Sintoma:** `turno_atual_idx` pode desincronizar com estado real se um turno é processado com erro parcial (ex: TTS falha após pipeline). InitiativeBar fica destacando o token errado.
-- **Arquivo:** `api/websocket.py` + `engine/memory/working_memory.py:avancar_turno_iniciativa()`
-- **Mitigação (19/05):** Clamp defensivo adicionado em `avancar_turno_iniciativa()` — idx fora de `[0, n)` é corrigido automaticamente sem IndexError.
-- **Pendente:** Adicionar campo `rodada_esperada` no payload `fim` para frontend detectar e checar consistência ativa.
+~~**COMBAT-2**~~ ✅ RESOLVIDO (20/05 noite) — `useGameSession.ts`: IIFE no handler `fim` retorna `msg.rodada_esperada` quando divergência detectada. Clamp defensivo no backend (19/05) + campo `rodada_esperada` no payload (20/05 tarde) + re-sync ativo no frontend (20/05 noite). Re-sync via `iniciativa_ordem` (visual token highlight reset) continua como melhoria futura opcional.
 
 ~~**TTS-1**~~ ✅ RESOLVIDO (19/05) — buffer só-marcadores descartado imediatamente quando `strip_marcadores()` retorna vazio. Em `api/websocket.py` loop de streaming.
 
-~~**UX-1**~~ ✅ RESOLVIDO (20/05) — `CompanionsPanel` com pools `COMANDOS_COMBATE`/`COMANDOS_EXPLORACAO`, botão alterna "⚔ atacar"/"💬 ordenar" por contexto. Em `frontend/components/CompanionsPanel.tsx`.
+~~**UX-1**~~ ✅ RESOLVIDO (20/05) — `CompanionsPanel` com pools `COMANDOS_COMBATE`/`COMANDOS_EXPLORACAO`.
 
-**UX-2 — Sem feedback quando Groq TPM cai pra Gemini**
-- **Sintoma:** Durante cascata LLM, usuário vê simplesmente demora de 2-4s sem indicação visual. VoxOrb entra em "processando" mas não diferencia "pensando" de "esperando rate limit".
-- **Arquivo:** `api/websocket.py` — eventos de cascade não chegam ao frontend
-- **Fix sugerido:** Novo tipo WS `tipo="cascade"` emitido quando router troca de provider. Frontend exibe toast discreto "conexão lenta — tentando backup…" por 3s.
+~~**UX-2**~~ ✅ RESOLVIDO (20/05) — `LLMRouter.ultimo_provider_stream` + `tipo="cascade"` WS + `CascadeToast` auto-dismiss 5s no frontend.
 
-**UX-3 — Recap sem leitura automática em continuação de sessão**
-- **Sintoma:** Recap oral toca via TTS, mas se o usuário der play em outra aba durante o recap, o áudio é cancelado e o texto âmbar fica parado sem retry.
-- **Arquivo:** `frontend/hooks/useGameSession.ts` + `frontend/app/page.tsx`
-- **Fix sugerido:** `tipo="recap"` salva o `audio_chunk` do recap em ref separada; se pararTudo() for chamado antes do recap terminar, re-enfileira o chunk do recap.
+~~**UX-3**~~ ✅ RESOLVIDO (20/05) — `recapChunkRef` salva áudio do recap, `retocarRecap()` re-enfileira, botão "▶ Ouvir novamente" na bolha âmbar.
 
 ### Fases planejadas (não implementadas)
 
@@ -978,6 +991,23 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 **ITEM 3 (scene_image)** e **ITEM 4 (DadoAnimado.tsx)** já estavam implementados em sessões anteriores — verificados e sem trabalho pendente.
 
 **612/612 testes, tsc clean.**
+
+### Polimentos de Experiência + Continuidade — 2ª parte (Sessão 20/05 — noite)
+
+> Implementação dos 5 itens restantes do roadmap de continuidade + UX.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/persistence/character_store.py` | `listar_por_owner(owner_email)` — retorna todos os personagens do owner ordenados por `updated_at DESC`, skippa rows sem `player_name`. Usada pelo novo endpoint de bypass | ✅ Atualizado |
+| `api/routes/session.py` | `GET /session/saved-characters` — lista personagens SQLite do owner autenticado (independe do Qdrant episódico) | ✅ Atualizado |
+| `frontend/lib/api.ts` | Interface `PersonagemSalvoItem` + `listarPersonagensSalvos()` — busca `/session/saved-characters` com fallback silencioso | ✅ Atualizado |
+| `frontend/components/SessionPicker.tsx` | Reescrito com duas seções: "⚔ Continuar como…" (emerald, SQLite, abre por default) + "Sessão anterior" (violet, Qdrant, fechada). Prop `onContinuarPersonagem` opcional. `HpBar` subcomponent por % | ✅ Reescrito |
+| `frontend/app/page.tsx` | `handleContinuarPersonagem` → `conectar("", {session_anterior_id, tts_voice, dm_profile, roll_visibility})` — CharacterForm completamente bypassado. `beforeunload` useEffect → `checkpointSessao(sessionId, true)` (keepalive) | ✅ Atualizado |
+| `frontend/components/VoiceButton.tsx` | Estado `modoOOC: boolean` + toggle "🎭 Personagem (IC)" / "🗣 Para o Mestre (OOC)". Prefixo `[OOC]` nos 3 caminhos de envio (MediaRecorder, Web Speech, textarea) | ✅ Atualizado |
+| `engine/llm/prompts/master_system.md` | Seção "## Mensagens OOC (fora do personagem)" — mestre responde como DM humano, linguagem direta, 1-3 frases, sem marcadores ficcionais nem `[XP:]`/`[FIO:]` etc. | ✅ Atualizado |
+| `frontend/hooks/useGameSession.ts` | `rodadaCombate` IIFE no handler `tipo="fim"`: retorna `msg.rodada_esperada` quando drift detectado (re-sync ativo em vez de apenas logging) | ✅ Atualizado |
+| `tests/test_character_store.py` | +4 testes `listar_por_owner`: empty, sem player_name, campos corretos, isolamento por owner | ✅ Atualizado |
+| **Total testes** | | **699/699 passed**; `tsc --noEmit` clean |
 
 ---
 
