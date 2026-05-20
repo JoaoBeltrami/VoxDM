@@ -43,10 +43,19 @@ function dividirEmBaloes(texto: string): string[] {
 }
 
 export function MasterResponse({ historico, respostaAtual, playerName, mestrePensando = false }: Props) {
+  // Bolhas mais antigas ficam progressivamente mais apagadas — foco no presente.
+  // As 3 últimas ficam em opacity 1; as anteriores dimem gradualmente até 0.35.
+  const total = historico.length;
+  const getOpacity = (idx: number) => {
+    const dist = total - 1 - idx; // 0 = mais recente
+    if (dist <= 2) return 1;
+    return Math.max(0.35, 1 - dist * 0.1);
+  };
+
   return (
     <div className="flex flex-col gap-4 overflow-y-auto">
-      {historico.map((turno) => (
-        <div key={turno.id} className="flex flex-col gap-2">
+      {historico.map((turno, idx) => (
+        <div key={turno.id} className="flex flex-col gap-2 transition-opacity duration-700" style={{ opacity: getOpacity(idx) }}>
 
           {/* Lampejo — visão dramática, sussurro do passado/futuro.
               Gradient violeta-índigo, Cinzel itálico, fade-in lento.

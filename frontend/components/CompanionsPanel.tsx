@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 /**
  * Painel de companions ativos (Feature party).
  *
@@ -106,57 +108,75 @@ export function CompanionsPanel({
       )}
 
 <div className="space-y-2">
-        {lista.map(([id, c]) => {
-          const icone = ICONE_POR_TIPO[c.tipo] ?? "👥";
-          const hpPct = c.hp_max > 0 ? (c.hp / c.hp_max) * 100 : 0;
-          const corBarra = hpPct > 60 ? "bg-emerald-500"
-                         : hpPct > 25 ? "bg-yellow-500"
-                         : hpPct > 0  ? "bg-orange-500"
-                         : "bg-zinc-600";
-          const morto = c.hp <= 0;
-          return (
-            <div
-              key={id}
-              className={`transition-opacity duration-500 ${morto ? "opacity-40" : "opacity-100"}`}
+        {lista.map(([id, c]) => (
+          <CompanionRow key={id} id={id} companion={c} emCombate={emCombate} onComandar={onComandar} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-componente com HP flash ───────────────────────────────────────────────
+interface RowProps {
+  id: string;
+  companion: Companion;
+  emCombate: boolean;
+  onComandar?: (cmd: string) => void;
+}
+
+function CompanionRow({ id, companion: c, emCombate, onComandar }: RowProps) {
+  const [flashCor, setFlashCor] = useState<"dano" | "cura" | null>(null);
+  const hpAnterior = useRef(c.hp);
+  useEffect(() => {
+    const prev = hpAnterior.current;
+    hpAnterior.current = c.hp;
+    if (c.hp < prev) {
+      setFlashCor("dano");
+      const t = setTimeout(() => setFlashCor(null), 700);
+      return () => clearTimeout(t);
+    } else if (c.hp > prev) {
+      setFlashCor("cura");
+      const t = setTimeout(() => setFlashCor(null), 700);
+      return () => clearTimeout(t);
+    }
+  }, [c.hp]);
+
+  const hpPct = c.hp_max > 0 ? (c.hp / c.hp_max) * 100 : 0;
+  const corBarra = hpPct > 60 ? "bg-emerald-500" : hpPct > 25 ? "bg-yellow-500" : hpPct > 0 ? "bg-orange-500" : "bg-zinc-600";
+  const morto = c.hp <= 0;
+
+  return (
+    <div
+      className={[
+        "rounded-lg transition-all duration-500",
+        morto ? "opacity-40" : "opacity-100",
+        flashCor === "dano" ? "bg-red-900/30 ring-1 ring-red-600/50" : "",
+        flashCor === "cura" ? "bg-emerald-900/30 ring-1 ring-emerald-500/50" : "",
+      ].join(" ")}
+    >
+      <div className="mb-0.5 flex items-center justify-between gap-2">
+        <span className={`flex items-center gap-1.5 text-xs font-medium ${morto ? "line-through text-zinc-600" : "text-emerald-200"}`}>
+          <span>{ICONE_POR_TIPO[c.tipo] ?? "👥"}</span>
+          {c.nome}
+          <span className="ml-1 rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">CA {c.ca}</span>
+          <span className="rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">atq {c.atq}</span>
+          <span className="rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">{c.dano}</span>
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[10px] text-zinc-400">{c.hp}/{c.hp_max} HP</span>
+          {!morto && onComandar && (
+            <button
+              onClick={() => onComandar(`${c.nome}, ${_sortearComando(emCombate)}.`)}
+              title={`Comandar ${c.nome}${emCombate ? " (combate)" : " (exploração)"}`}
+              className="rounded-md border border-emerald-800/60 bg-emerald-900/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300 transition hover:border-emerald-500 hover:bg-emerald-700/40 hover:text-emerald-100"
             >
-              <div className="mb-0.5 flex items-center justify-between gap-2">
-                <span className={`flex items-center gap-1.5 text-xs font-medium ${morto ? "line-through text-zinc-600" : "text-emerald-200"}`}>
-                  <span>{icone}</span>
-                  {c.nome}
-                  <span className="ml-1 rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">
-                    CA {c.ca}
-                  </span>
-                  <span className="rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">
-                    atq {c.atq}
-                  </span>
-                  <span className="rounded bg-zinc-800/60 px-1 py-0.5 text-[9px] font-mono text-zinc-400">
-                    {c.dano}
-                  </span>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] text-zinc-400">
-                    {c.hp}/{c.hp_max} HP
-                  </span>
-                  {!morto && onComandar && (
-                    <button
-                      onClick={() => onComandar(`${c.nome}, ${_sortearComando(emCombate)}.`)}
-                      title={`Comandar ${c.nome}${emCombate ? " (combate)" : " (exploração)"}`}
-                      className="rounded-md border border-emerald-800/60 bg-emerald-900/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300 transition hover:border-emerald-500 hover:bg-emerald-700/40 hover:text-emerald-100"
-                    >
-                      {emCombate ? "⚔ atacar" : "💬 ordenar"}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${corBarra}`}
-                  style={{ width: `${Math.max(0, Math.min(100, hpPct))}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
+              {emCombate ? "⚔ atacar" : "💬 ordenar"}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+        <div className={`h-full rounded-full transition-all duration-700 ${corBarra}`} style={{ width: `${Math.max(0, Math.min(100, hpPct))}%` }} />
       </div>
     </div>
   );

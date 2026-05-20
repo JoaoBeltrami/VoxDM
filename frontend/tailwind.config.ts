@@ -79,6 +79,23 @@ const config: Config = {
           "65%":  { transform: "scale(1.08)", opacity: "0.7" },
           "100%": { transform: "scale(1)",    opacity: "0"   },
         },
+        // Screen shake em crítico/falha — tremor curto de 500ms na <main>
+        "shake-cena": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "15%":       { transform: "translateX(-4px) rotate(-0.3deg)" },
+          "30%":       { transform: "translateX(4px)  rotate(0.3deg)"  },
+          "45%":       { transform: "translateX(-3px) rotate(-0.2deg)" },
+          "60%":       { transform: "translateX(3px)  rotate(0.2deg)"  },
+          "75%":       { transform: "translateX(-2px)" },
+          "90%":       { transform: "translateX(2px)"  },
+        },
+        // Toast de XP/ouro — sobe e dissolve em 2s
+        "ganho-sobe": {
+          "0%":   { transform: "translateY(0)",    opacity: "0"   },
+          "15%":  { transform: "translateY(-6px)",  opacity: "1"   },
+          "70%":  { transform: "translateY(-18px)", opacity: "0.9" },
+          "100%": { transform: "translateY(-30px)", opacity: "0"   },
+        },
         // CompanionsPanel — glow esmeralda suave ao registrar novo companion.
         // Só altera box-shadow/opacity — sem movimento, para não distrair da narração.
         "companion-glow": {
@@ -100,6 +117,8 @@ const config: Config = {
         "slide-down":    "slide-down 400ms ease-out",
         "stream-pulse":   "stream-pulse 1s ease-in-out infinite",
         "companion-glow": "companion-glow 1.5s ease-out forwards",
+        "shake-cena":     "shake-cena 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
+        "ganho-sobe":     "ganho-sobe 2s ease-out forwards",
         "morte-flash":    "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "sua-vez":        "sua-vez 0.8s ease-out forwards",
       },

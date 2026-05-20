@@ -542,6 +542,34 @@ export default function Home() {
   }, [tocarCritico, tocarFalha]);
   useEffect(() => () => { if (critTimerRef.current) clearTimeout(critTimerRef.current); }, []);
 
+  // ── Feature 5: Screen shake em crítico/falha ──────────────────────────────
+  // CSS class injetada na <main> por 500ms — nenhuma lógica de backend.
+  const [shakeCena, setShakeCena] = useState(false);
+  useEffect(() => {
+    if (!critFlash) return;
+    setShakeCena(true);
+    const t = setTimeout(() => setShakeCena(false), 500);
+    return () => clearTimeout(t);
+  }, [critFlash]);
+
+  // ── Feature 6: Toast flutuante de XP/ouro ────────────────────────────────
+  // Detecta delta positivo de xp/gold e exibe "+N XP" / "+N PO" por 2s.
+  interface ToastGanho { id: number; texto: string; cor: string; }
+  const [toastsGanho, setToastsGanho] = useState<ToastGanho[]>([]);
+  const xpAnterior = useRef(xp);
+  const goldAnterior = useRef(gold);
+  useEffect(() => {
+    const novos: ToastGanho[] = [];
+    if (xp > xpAnterior.current) novos.push({ id: Date.now(), texto: `+${xp - xpAnterior.current} XP`, cor: "text-violet-300" });
+    if (gold > goldAnterior.current) novos.push({ id: Date.now() + 1, texto: `+${gold - goldAnterior.current} PO`, cor: "text-yellow-300" });
+    if (novos.length > 0) {
+      setToastsGanho(prev => [...prev, ...novos]);
+      novos.forEach(n => setTimeout(() => setToastsGanho(p => p.filter(t => t.id !== n.id)), 2000));
+    }
+    xpAnterior.current = xp;
+    goldAnterior.current = gold;
+  }, [xp, gold]);
+
   // Cinema mode — esconde dashboard, debug, atalhos. Atalho Ctrl+Shift+C.
   const [cinemaMode, setCinemaMode] = useState(false);
   useEffect(() => {
@@ -749,34 +777,72 @@ export default function Home() {
   // Mood visual da cena — overlay sutil + vinheta. Combate sempre sobrescreve.
   const sceneMood = useSceneMood(locationNome, timeOfDay, emCombate);
 
+  // Turno do inimigo → vinheta vermelha mais intensa (mestre veterano: o jogador sente perigo)
+  const ehTurnoInimigo = emCombate && iniciativaOrdem.some(t => t.turno_atual && t.tipo === "inimigo");
+
+  // Reveal de cena: quando sceneImageUrl troca, imagem sobe pra 55% por 1.8s com blur limpo
+  const [revealCena, setRevealCena] = useState(false);
+  const sceneUrlAnterior = useRef<string | null>(null);
+  useEffect(() => {
+    if (sceneImageUrl && sceneImageUrl !== sceneUrlAnterior.current) {
+      sceneUrlAnterior.current = sceneImageUrl;
+      setRevealCena(true);
+      const t = setTimeout(() => setRevealCena(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [sceneImageUrl]);
+
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
     return (
       <main
-        className="relative flex h-screen flex-col bg-zinc-950 transition-[background,box-shadow] duration-[800ms] ease-in-out"
+        className={[
+          "relative flex h-screen flex-col bg-zinc-950 transition-[background,box-shadow] duration-[800ms] ease-in-out",
+          shakeCena ? "animate-shake-cena" : "",
+          emCombate ? "cursor-crosshair" : "",
+        ].join(" ")}
         style={{
           // Mood ambiental (Bloco 3) — overlay sutil + vinheta interna, transita em 800ms
           backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
-          boxShadow: `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px ${
-            emCombate ? "rgba(127,29,29,0.55)" : "rgba(0,0,0,0.55)"
-          }`,
+          boxShadow: ehTurnoInimigo
+            ? "inset 0 0 60px -5px rgba(200,15,15,0.7), inset 0 0 160px -30px rgba(200,15,15,0.45)"
+            : `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px ${
+                emCombate ? "rgba(127,29,29,0.55)" : "rgba(0,0,0,0.55)"
+              }`,
         }}
         data-tone={sceneMood.ambientTone}
       >
-        {/* Fase 5.8: fundo de imagem gerado pelo Pollinations.ai — very sutil (opacity 8%).
-            Troca com fade de 1s quando a URL muda (nova cena ou entrada em combate).
-            Não bloqueia o jogo: chega via mensagem WS fire-and-forget após ~5-10s. */}
+        {/* Fase 5.8: fundo de imagem Pollinations.ai. Revela em 55% por 1.8s ao trocar de cena,
+            depois volta para 8% sutil. Blur limpo no reveal para máximo impacto visual. */}
         {sceneImageUrl && (
           <div
-            className="pointer-events-none absolute inset-0 -z-10 transition-opacity duration-1000"
+            className="pointer-events-none absolute inset-0 -z-10"
             style={{
               backgroundImage: `url(${sceneImageUrl})`,
               backgroundSize: "cover",
               backgroundPosition: "center",
-              opacity: 0.08,
-              filter: "blur(2px) saturate(0.7)",
+              opacity: revealCena ? 0.55 : 0.08,
+              filter: revealCena ? "blur(0px) saturate(1.1)" : "blur(2px) saturate(0.7)",
+              transition: revealCena
+                ? "opacity 600ms ease-in, filter 600ms ease-in"
+                : "opacity 1200ms ease-out, filter 1200ms ease-out",
             }}
           />
+        )}
+        {/* Overlay escuro durante o reveal — apaga o conteúdo por 1.8s para o jogador absorver a cena */}
+        {revealCena && (
+          <div className="pointer-events-none absolute inset-0 z-10 bg-zinc-950/65 transition-opacity duration-700" />
+        )}
+
+        {/* Feature 6: Toasts flutuantes de XP/ouro — sobem e dissolvem em 2s, canto direito */}
+        {toastsGanho.length > 0 && (
+          <div className="pointer-events-none fixed right-4 top-20 z-50 flex flex-col items-end gap-1">
+            {toastsGanho.map(t => (
+              <div key={t.id} className={`animate-ganho-sobe text-sm font-bold ${t.cor} drop-shadow-lg`}>
+                {t.texto}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Barra de iniciativa horizontal — só aparece em combate. Bloco 2. */}
