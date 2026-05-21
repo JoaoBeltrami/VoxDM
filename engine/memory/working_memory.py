@@ -695,7 +695,7 @@ class WorkingMemory:
         persisted_companions: dict[str, dict] = getattr(state, "companions", {})
         if persisted_companions and not self.party.companions:
             self.party.companions = {k: dict(v) for k, v in persisted_companions.items()}
-        # DM state
+        # DM state — restaura narrativo do mestre persistido em SQLite
         dm_state: dict = getattr(state, "dm_state", {})
         if dm_state:
             fios = dm_state.get("fios_soltos", [])
@@ -707,6 +707,18 @@ class WorkingMemory:
             cliff = dm_state.get("cliffhanger_pendente", "")
             if cliff and not self.narrative.cliffhanger_pendente:
                 self.narrative.cliffhanger_pendente = cliff
+            # Etapa 6: fatos_ancora + pacing_nivel persistidos.
+            # Sem isso, sessão restaurada perde repetition guard (LLM pode re-narrar
+            # revelações antigas) e o pacing volta para 3.0 default mesmo após
+            # combate intenso — quebra continuidade dramática.
+            ancoras = dm_state.get("fatos_ancora", [])
+            if ancoras and not self.narrative.fatos_ancora:
+                self.narrative.fatos_ancora = list(ancoras)
+            pacing = dm_state.get("pacing_nivel")
+            if isinstance(pacing, (int, float)) and pacing != 3.0:
+                # Só restaura se diferente do default — evita sobrescrever valor
+                # válido com persistência "vazia" de sessões antigas.
+                self.narrative.pacing_nivel = float(pacing)
 
     # ── Delegations: PartyState ──────────────────────────────────────────────
 
