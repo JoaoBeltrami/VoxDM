@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 21 de maio de 2026 — Refactor engine/state/ + facade WorkingMemory + markers [INIMIGO_MORTO]/[DESCANSO] + multi-LLM contextual + paralelismo Neo4j + persistência expandida. 718/718 testes. tsc clean.
+> Atualizado: 21 de maio de 2026 (noite) — Refactor engine/state/ + facade + markers + multi-LLM contextual + paralelismo + auditoria de segurança com rewrite completo do histórico (5 branches). 718/718 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -208,6 +208,13 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - `pkgutil.walk_packages`: 63 módulos carregam
   - pytest suite completa: 718/718
 
+- **Auditoria de segurança pre-push + rewrite completo do histórico (21/05 noite)**: ✅ CONCLUÍDA. 718/718 testes.
+  - **Achados**: email pessoal hardcoded em `config.py:96-97` (defaults `DEV_USER_EMAIL` e `ADMIN_EMAILS`) + docstrings de `engine/auth/__init__.py` e `engine/auth/identity.py`. Issue existia no histórico desde Fase 4.6 (pushed em 16/05).
+  - **Fix HEAD**: defaults trocados para `admin@localhost`, docstrings para `admin@example.com`. `.env.example` ganhou seção "Auth (Cloudflare Access Zero Trust)" documentando que `DEV_USER_EMAIL`/`ADMIN_EMAILS` devem ser configurados via `.env`. `.claude/settings.local.json` removido do tracking (já estava no `.gitignore` mas tracked antes da regra).
+  - **Rewrite completo do histórico**: backup local em bundle (1.3MB, preservado fora do repo). `git filter-repo --replace-text` substituiu o padrão em 233 commits across 5 branches. Force-push das 5 branches (`main`, `refactor`, `backup/pre-refactor-state-substates`, `MVP`, `BackupMVP`) com hashes novos.
+  - **Verificação**: `git log --all -S <padrão>` → 0 matches em qualquer branch. `config.py` em cada branch confirmado limpo. 718/718 testes continuam passando.
+  - **Caveat**: GitHub mantém reflog de commits órfãos por ~90 dias. Acesso direto via URL aos hashes antigos pode funcionar nesse período. Auto-resolve com o tempo.
+
 ### Bugs conhecidos — próxima sessão de fixes
 
 > Atualizado 21/05. Pós-refactor + 5 fixes críticos + 2 audit fixes aplicados. Sem bugs pendentes críticos conhecidos.
@@ -405,7 +412,7 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 ```
 # Pacotes errados
 NÃO usar google-generativeai → DEPRECATED. Usar: pip install google-genai
-NÃO assumir NEO4J_USER=neo4j → AuraDB Free usa o ID da instância como username (ex: <auradb-instance-id>)
+NÃO assumir NEO4J_USER=neo4j → AuraDB Free usa o ID da instância como username (string hex de 8 chars no painel Aura)
 NÃO usar kokoro-tts         → usar: pip install kokoro
 NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1
