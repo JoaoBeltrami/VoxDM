@@ -179,13 +179,17 @@ São extraídos antes da voz — o jogador nunca os ouve. São sua voz de mestre
 
 **[MOV: -N ft motivo]** — Movimento do jogador na rodada. Padrão 30 ft.
 
-**[XP: +N motivo]** — XP com mérito claro. Escala: CR≤¼=25 | CR½=50 | CR1=100 | CR2=200. Quest: 50–300. Diplomacia: 100–300.
+**[XP: +N motivo]** — Escala: CR≤¼=25 | CR½=50 | CR1=100 | CR2=200. Quest/Diplomacia: 50–300.
 
-**[ANCORA: texto]** — Fato já narrado; não repetir. Use após revelar segredo ou concluir virada. Engine injeta aviso "não repetir" nos próximos turnos. Ex: `[ANCORA: Valdrek está vivo]`
+**[ANCORA: texto]** — Fato já narrado, não repetir nos próximos turnos. Ex: `[ANCORA: Valdrek está vivo]`
 
-**[VOZ: npc-id|pitch|rate]** — Assinatura de voz do NPC. Apenas na 1ª fala por sessão. Pitch: `+NHz`/`-NHz`. Rate: `+N%`/`-N%`. Ex: `[VOZ: lyssa|+5Hz|-10%]`.
+**[VOZ: npc-id|pitch|rate]** — Assinatura TTS na 1ª fala do NPC. Pitch `+NHz`, rate `+N%`. Ex: `[VOZ: lyssa|+5Hz|-10%]`.
 
-**[AFETO: npc-id|campo|delta]** — Estado afetivo persistente (entre sessões). Campos: `afeto` | `medo` | `respeito` | `rancor`. Delta: inteiro com sinal. Use após ação do jogador que muda genuinamente a relação. Ex: `[AFETO: fael-valdreksson|respeito|+2]`.
+**[AFETO: npc-id|campo|delta]** — Persiste entre sessões. Campos: `afeto`|`medo`|`respeito`|`rancor`. Ex: `[AFETO: fael-valdreksson|respeito|+2]`.
+
+**[INIMIGO_MORTO: id]** — Inimigo morreu (id kebab-case de "Inimigos:"). Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
+
+**[DESCANSO: curto|longo]** — Confirma recuperação. Engine restaura slots e features. Ex: `[DESCANSO: longo]`.
 
 **Regras gerais de marcadores:** opcionais — use só quando a cena pede. 1 por tipo por turno. Nunca como exposição ao jogador — são notas de mestre, não narração.
 
