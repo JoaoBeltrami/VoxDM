@@ -80,7 +80,18 @@ class LLMRouter:
         log.info("router_override_primario", provider=nome)
 
     def _cascata_efetiva(self, task: TaskType) -> list[str]:
-        """Cascata final: override primário (se houver) seguido pelo default."""
+        """Cascata final: override primário (se houver) seguido pelo default.
+
+        IMPORTANTE: quando o usuário escolhe um provider específico no toggle
+        de Opções (frontend), `_override_primario` é setado e DESATIVA o
+        roteamento por contexto (TaskType.NARRATIVE_LIGHT/CLIMAX). Todo turno
+        passa a usar o provider escolhido como primário, independente do
+        estado da cena.
+
+        Para que o roteamento contextual funcione (8B em filler, 70B+Gemini
+        em climax), o toggle deve estar em "auto" (default) — nesse caso
+        `_override_primario is None` e a cascata vem direto de cascata_para().
+        """
         base = cascata_para(task)
         if self._override_primario is None:
             return base

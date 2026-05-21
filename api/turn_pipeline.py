@@ -243,15 +243,26 @@ def _encontrar_id_inimigo(
 
 
 def sincronizar_inimigos_combate(
-    working_mem: WorkingMemory, texto_jogador: str, resposta_llm: str
+    working_mem: WorkingMemory,
+    texto_jogador: str,
+    resposta_llm: str,
+    *,
+    ids_ja_marcados_morte: set[str] | None = None,
 ) -> None:
     """Popula e atualiza inimigos_combate a partir do turno atual.
 
     1. Se jogador declara ataque com alvo nomeado → registrar inimigo (intacto)
     2. Varrer resposta do LLM por descritores de saúde e atualizar estado
+
+    Args:
+        ids_ja_marcados_morte: set de IDs já processados via marker [INIMIGO_MORTO].
+            Esses são pulados na detecção regex de morte para evitar dupla
+            atualização e log spam. Demais estados (ferido, grave) ainda são
+            processados normalmente.
     """
     if not working_mem.em_combate:
         return
+    _ja_mortos = ids_ja_marcados_morte or set()
 
     for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
         nome = m.group(1).strip().rstrip(".,!?")
@@ -279,7 +290,7 @@ def sincronizar_inimigos_combate(
 
     for m in _RE_INIMIGO_MORTO.finditer(resposta_llm):
         iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)
-        if iid:
+        if iid and iid not in _ja_mortos:
             working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
             log.info("combate_inimigo_morto", id=iid)
 
@@ -323,14 +334,21 @@ def aplicar_pos_turno(
     # 2a. Engine-authority: marker [INIMIGO_MORTO: id] tem prioridade sobre regex.
     #     LLM declara explicitamente quem morreu. Resolve COMBAT-1 onde vocab
     #     PT-BR sutil ("o último orc cai ao chão") não casava com regex.
+    # Audit FIX-1: rastreia IDs já marcados via marker para que o regex fallback
+    # não os reprocesse (evita log duplicado + double-set idempotente).
+    ids_via_marker: set[str] = set()
     if working_mem.em_combate:
         for m in _RE_INIMIGO_MORTO_MARKER.finditer(resposta_completa):
             iid = m.group(1).strip().lower()
             if iid in working_mem.inimigos_combate:
                 working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
+                ids_via_marker.add(iid)
                 log.info("combate_inimigo_morto_marker", id=iid)
     # 2b. Fallback de defesa: regex de vocab para casos onde LLM não emitiu marker.
-    sincronizar_inimigos_combate(working_mem, texto_jogador, resposta_completa)
+    sincronizar_inimigos_combate(
+        working_mem, texto_jogador, resposta_completa,
+        ids_ja_marcados_morte=ids_via_marker,
+    )
 
     # 3. Iniciativa — engine é authority
     # Bug #8: cada chamada de pipeline = uma rodada COMPLETA (jogador age,
