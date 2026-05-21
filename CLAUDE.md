@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 20 de maio de 2026 (noite) — Roadmap completo: ANCORA, VOZ NPC, imagem Pollinations, AFETO Neo4j, karaokê reverso. 718/718 testes. tsc clean.
+> Atualizado: 21 de maio de 2026 — Refactor engine/state/ + facade WorkingMemory + markers [INIMIGO_MORTO]/[DESCANSO] + multi-LLM contextual + paralelismo Neo4j + persistência expandida. 718/718 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -172,9 +172,45 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **Feature F — Afeto NPC (Neo4j)**: `[AFETO: npc-id|campo|delta]` → `aplicar_afeto_npcs()` fire-and-forget → `neo4j_client.atualizar_afeto_npc()` (campos afeto/medo/respeito/rancor, clamp [-10,10]). Estado afetivo acumula entre sessões como propriedades do nó NPC. 3 testes em `test_quest_detector.py`.
   - **master_system.md**: Teto de budget 10500→11000; `[VOZ]`, `[AFETO]`, `[ANCORA]` documentados com exemplos e regras de uso.
 
+- **5 fixes críticos pós-auditoria focada (21/05 manhã)**: ✅ CONCLUÍDO. 718/718 testes.
+  - **CRIT-1 (Spell Slot Loss)**: `decrementar_slot` era chamado em `websocket.py:1021` ANTES do stream LLM. Se Groq caísse, jogador perdia o slot sem ver efeito da magia. Migrado para `SessaoAtiva.spell_pending` — decremento só APÓS LLM confirmar narrativa (heurística: nome da magia ou primeira palavra >3 chars aparece na resposta). Limpa pending em path de exception.
+  - **CRIT-2 (Karaokê quebrado por thinking audio)**: `useAudio.tocarChunk` chamava `onDuracao` para TODOS os chunks. Thinking "Hmm..." (1.5s) calibrava `charsPorSegundo` errado, texto real revelava em flash. Fix: schema `MensagemWS.narrativo=False` em thinking + `tocarChunk` só chama `onDuracao` quando narrativo=true.
+  - **CRIT-3 (Double Command Race)**: `enviarComando` não verificava `isProcessing`. Click duplo em chips (atacar/esquivar/companion) criava 2 turnos sobrepostos no backend. Fix: `isProcessingRef` (sync via useEffect) + guard early-return com console.warn.
+  - **CRIT-4 (Pacing Off-by-One na Abertura)**: `aplicar_pos_turno` na abertura/reconexão com `texto_jogador=""` ainda mexia em `turnos_sem_tensao` e `pacing_nivel`. Drift cumulativo + PACING [BAIXO] disparado cedo. Fix: guard `if texto_jogador.strip()` em steps 8 e 9.
+  - **CRIT-5 (Spell Slots Sync Race)**: `sync_spell_slots` fazia REPLACE total do dict, sobrescrevendo decrementos do backend que ainda não tinham chegado ao frontend. Fix: MERGE por nível — só atualiza níveis presentes no payload.
+
+- **Dedup + otimização de tokens (21/05 manhã)**: ✅ CONCLUÍDO. 718/718 testes.
+  - **`_id_para_nome` centralizado** em `engine/memory/working_memory.py`; `voice_manager` re-exporta; `websocket._detectar_voz_npc` usa. Antes existia em 3 lugares.
+  - **Imports lazy redundantes removidos** em `websocket.py` — `aplicar_pos_turno`, `detectar_e_aplicar_quests` etc. agora só no topo (eram re-importados inline 2 vezes).
+  - **Prompts comprimidos** (-50% cada): `dice.md` (1561→798 chars), `quests.md` (372→181 chars). Tabela markdown → linha compacta de bullets. Economia: ~3.3k tokens em sessão de 1h.
+  - **Caps adicionados**: `npc_vozes` cap=20 com eviction oldest (turn_pipeline step 16); decay de `cartas_improviso` gated por `texto_jogador.strip()` para não consumir contador em reconexões.
+
+- **Refactor engine/state/ + facade WorkingMemory (21/05 — sessão arquitetural)**: ✅ CONCLUÍDO. 6 etapas committáveis separadamente. 718/718 testes.
+  - **Etapa 1** (commit `2b65a05`): Criado `engine/state/` com 5 substates puros como dataclasses — `SceneState`, `CombatState`, `PlayerCharacter`, `PartyState`, `NarrativeState`. Cada um dono do seu domínio com `to_prompt()` próprio. Zero impacto em código existente.
+  - **Etapa 2** (commit `3e3b93c`): `WorkingMemory` virou facade thin sobre os 5 substates. ~80 properties (getters + setters) preservam 1135 acessos externos (`wm.player_hp`, `wm.inimigos_combate`, etc.) sem mudança nos call-sites. Arquivo: 1132 → 796 linhas (lógica real ~200 linhas, resto é boilerplate de properties).
+  - **Etapa 3** (commit `57c0e4c`): Engine ganha autoridade explícita sobre detecções narrativas frágeis. Markers `[INIMIGO_MORTO: id]` (resolve COMBAT-1 — vocab PT-BR sutil escapava do regex de 22 padrões) e `[DESCANSO: curto|longo]` (substitui regex frágil). Regex permanece como fallback de defesa em ambos os casos. Bug latente corrigido: descanso agora também restaura class features (Action Surge, Rage), antes só restaurava spell slots.
+  - **Etapa 4** (commit `9543424`): Multi-LLM por contexto. Novos `TaskType.NARRATIVE_CLIMAX` (70B+Gemini, pula 8B em climax) e `NARRATIVE_LIGHT` (8B → Gemini → 70B último recurso). Helper `escolher_task_type_narrativo(em_combate, pacing_nivel, cliffhanger_pendente)` decide no pipeline. Em sessão de 1h: ~15 turnos viram LIGHT (economiza ~25% TPM do 70B), ~5-8 viram CLIMAX (qualidade nos momentos chave).
+  - **Etapa 5** (commit `34bdc57`): Paralelização do Neo4j em `context_builder`. Antes: loop sequencial de até 4 chamadas com timeout 2s cada (pior caso 8s). Agora: `asyncio.gather()` paralelo (pior caso 2s).
+  - **Etapa 6** (commit `8af8b2d`): Persistência expandida no SQLite. `fatos_ancora` (repetition guard) e `pacing_nivel` (drift dramático) agora persistem em `dm_state`. Sem isso, sessão restaurada perdia anti-repetição e voltava ao pacing default 3.0 mesmo após combate denso.
+  - **Merge para main** (commit `6733479`): branch `refactor` integrada após validação. Estado anterior preservado em `backup/pre-refactor-state-substates`.
+
+- **Auditoria pós-refactor (21/05 — tarde)**: ✅ CONCLUÍDA. 2 fixes aplicados (commit `9fc5190`).
+  - **AUDIT FIX-1**: Marker `[INIMIGO_MORTO]` + regex de morte dispararam dois `atualizar_estado_inimigo()` para o mesmo ID (idempotente mas log spam + processamento duplo). Fix: `sincronizar_inimigos_combate()` ganhou kwarg `ids_ja_marcados_morte: set[str]`; loop de regex pula IDs já processados.
+  - **AUDIT FIX-2**: Docstring explícita em `LLMRouter._cascata_efetiva` — quando usuário escolhe provider específico no toggle de Opções, `_override_primario` desativa o roteamento contextual (`NARRATIVE_LIGHT/CLIMAX` param de funcionar). Comportamento intencional (respeita escolha do usuário), mas faltava doc.
+  - **Itens auditados sem fix necessário**: properties retornam mesma referência (intencional, preserva backward compat); `dict()` copies em payloads funcionam; ordem de blocos em `para_texto` mudou (COMBATE depois de Quests, provavelmente melhor pelo recency bias do LLM); marker `[DESCANSO]` funciona end-to-end (slots + features restaurados); `escolher_task_type_narrativo` passa em todos os edge cases.
+
+- **Bateria de validação sem iniciar software (21/05)**: ✅ Todos os 7 testes passaram.
+  - Imports críticos: substates + facade + pipeline + multi-LLM + websocket OK
+  - Roundtrip SQLite: `fatos_ancora` + `pacing_nivel` preservados em salvar/carregar
+  - Connection test: Groq + Qdrant + Neo4j → 3/3 OK
+  - E2E sem WebSocket: 5 turnos simulados (social → combate → marker morte → marker descanso → ANCORA+VOZ), todos os 5 substates atualizam corretamente
+  - `py_compile` + imports com warnings-as-errors: sem warnings
+  - `pkgutil.walk_packages`: 63 módulos carregam
+  - pytest suite completa: 718/718
+
 ### Bugs conhecidos — próxima sessão de fixes
 
-> Atualizado 20/05 noite. COMBAT-2 re-sync ativo implementado. Sem bugs pendentes críticos conhecidos.
+> Atualizado 21/05. Pós-refactor + 5 fixes críticos + 2 audit fixes aplicados. Sem bugs pendentes críticos conhecidos.
 
 **DESIGN — Personagem está atrelado à sessão (comportamento esperado)**
 - Um personagem por sessão — não é possível trocar personagem mid-session.

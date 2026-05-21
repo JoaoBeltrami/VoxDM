@@ -89,12 +89,13 @@ class Settings(BaseSettings):
     #   Validar `aud` claim no JWT EVITA que JWT de outra app sua seja aceito.
     # DEV_USER_EMAIL: email usado em DEBUG=True quando o header CF não chega
     #   (rodando localhost direto, sem Tunnel). NUNCA é fallback em prod.
+    #   SEMPRE configure no .env — o default genérico não dá acesso admin.
     # ADMIN_EMAILS: lista CSV de emails que podem ver tudo + acessar /debug/*.
-    #   Outras pessoas só veem o que possuem.
+    #   Outras pessoas só veem o que possuem. Configure via .env.
     CF_TEAM_DOMAIN: str = ""
     CF_ACCESS_AUD: str = ""
-    DEV_USER_EMAIL: str = "admin@example.com"
-    ADMIN_EMAILS: str = "admin@example.com"
+    DEV_USER_EMAIL: str = "admin@localhost"
+    ADMIN_EMAILS: str = "admin@localhost"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
