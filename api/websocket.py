@@ -212,6 +212,7 @@ def _criar_task_thinking(
                     tipo="audio_chunk",
                     conteudo_b64=base64.b64encode(audio_bytes).decode("ascii"),
                     sequencia=0,
+                    narrativo=False,  # CRIT-2: não calibra o karaokê reverso
                 ).model_dump_json()
             )
             log.info("thinking_audio_disparado", frase=frase)
@@ -841,10 +842,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # Sync de spell slots — {spell_slots: {"1": {current: N, max: N}, ...}}
             # Validação estrita: nível 1-9, current/max ints >= 0 e <= _MAX_SS_QTD.
+            # CRIT-5: usa MERGE em vez de REPLACE para preservar decrementos feitos
+            # pelo backend (spell_detector / restaurar_slots) entre o último envio
+            # ao frontend e este sync. Sem merge, o frontend reverte qualquer
+            # decremento que aconteceu no servidor desde o último fim — race comum
+            # se o jogador edita a ficha enquanto um turno termina.
             if tipo_msg == "sync_spell_slots":
                 raw = dados.get("spell_slots", {})
                 if isinstance(raw, dict):
-                    validados: dict[int, dict[str, int]] = {}
                     for k, v in raw.items():
                         try:
                             nivel = int(k)
@@ -856,13 +861,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         mx  = v.get("max", 0)
                         if not isinstance(cur, int) or not isinstance(mx, int):
                             continue
-                        validados[nivel] = {
+                        # Merge: atualiza só os níveis presentes no payload.
+                        # Níveis não enviados pelo frontend mantêm valor backend.
+                        sessao.working_mem.spell_slots[nivel] = {
                             "current": max(0, min(_MAX_SS_QTD, cur)),
                             "max":     max(0, min(_MAX_SS_QTD, mx)),
                         }
-                    sessao.working_mem.spell_slots = validados
-                    log.info("spell_slots_sincronizados", session_id=session_id,
-                             niveis=len(validados))
+                    log.info("spell_slots_merge_aplicado", session_id=session_id,
+                             niveis_payload=list(raw.keys()),
+                             total_niveis_backend=len(sessao.working_mem.spell_slots))
                 continue
 
             # Sync de hit dice restantes — limite no player_level
@@ -1014,18 +1021,20 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                     nivel=dados_magia.get("nivel"),
                                     session_id=session_id,
                                 )
-                                # Decrementa o slot correspondente (se o nível for confirmado pelo SRD)
+                                # CRIT-1: NÃO decrementa o slot agora — registra como pendente.
+                                # Decremento real acontece APÓS o LLM narrar o cast com sucesso
+                                # (verificado no fim do turno via menção do nome da magia na resposta).
+                                # Sem isso, se o turno falhar (Groq cai, refusal, exception),
+                                # o jogador perde o slot sem nem ver o efeito da magia.
                                 nivel_magia = dados_magia.get("nivel")
                                 if isinstance(nivel_magia, int) and nivel_magia > 0:
-                                    from engine.magic.slot_tracker import decrementar_slot
-                                    slot_ok = decrementar_slot(sessao.working_mem, nivel_magia)
-                                    if not slot_ok:
-                                        log.info(
-                                            "spell_sem_slot",
-                                            nome=nome_magia,
-                                            nivel=nivel_magia,
-                                            session_id=session_id,
-                                        )
+                                    sessao.spell_pending = (nome_magia, nivel_magia)
+                                    log.info(
+                                        "spell_pending_registrado",
+                                        nome=nome_magia,
+                                        nivel=nivel_magia,
+                                        session_id=session_id,
+                                    )
 
                 # Injeta magias conhecidas no contexto antes de montar o prompt
                 contexto.spells_conhecidas = sessao.spells_conhecidas
@@ -1148,6 +1157,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 await websocket.send_text(
                     MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                 )
+                # CRIT-1: limpa pending para não decrementar slot em retry de outro turno
+                sessao.spell_pending = None
                 continue
             finally:
                 # Solta a task thinking em qualquer caminho de saída (sucesso,
@@ -1243,6 +1254,31 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
+
+            # CRIT-1: decrementa spell slot SÓ se o LLM realmente narrou o cast.
+            # Heurística: nome da magia (ou variantes) aparece na resposta. Se LLM
+            # negou o cast ou ignorou, o slot fica intacto — política conservadora
+            # (perder slot por falso positivo é pior que não perder por falso negativo).
+            if sessao.spell_pending:
+                nome_pending, nivel_pending = sessao.spell_pending
+                resposta_lower = resposta_limpa.lower()
+                primeira_palavra = nome_pending.lower().split()[0] if nome_pending else ""
+                # Confirma cast se nome completo ou primeira palavra significativa aparece
+                # na resposta (>3 chars evita "de", "a", "o", "um" gerando falso positivo).
+                if (nome_pending and nome_pending.lower() in resposta_lower) or (
+                    len(primeira_palavra) > 3 and primeira_palavra in resposta_lower
+                ):
+                    from engine.magic.slot_tracker import decrementar_slot
+                    slot_ok = decrementar_slot(sessao.working_mem, nivel_pending)
+                    if not slot_ok:
+                        log.info("spell_sem_slot_pos_turno",
+                                 nome=nome_pending, nivel=nivel_pending,
+                                 session_id=session_id)
+                else:
+                    log.info("spell_pending_cancelado_sem_narrativa",
+                             nome=nome_pending, nivel=nivel_pending,
+                             session_id=session_id)
+                sessao.spell_pending = None
 
             # Feature F: estado afetivo de NPC — fire-and-forget para Neo4j.
             # Não bloqueia o turno; Neo4j pode estar offline sem impacto.

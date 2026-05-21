@@ -176,6 +176,10 @@ class MensagemWS(BaseModel):
     conteudo: str = ""
     conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
     sequencia: int = 0       # índice sequencial do chunk de áudio
+    # CRIT-2: audio_chunk de thinking ("Hmm...") manda narrativo=false para que
+    # o useSyncTextoVoz no frontend NÃO use sua duração para calibrar o karaokê
+    # reverso. Default true preserva comportamento de TTS real.
+    narrativo: bool = True
     latencia_ms: int = 0
     chunks_lore: list[str] = Field(default_factory=list)
     chunks_regras: list[str] = Field(default_factory=list)

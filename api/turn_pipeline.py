@@ -433,31 +433,37 @@ def aplicar_pos_turno(
             working_mem.cartas_improviso = []
             working_mem.turnos_desde_cartas = 0
 
-    # 8. Contador de tensão narrativa fora de combate.
-    # Zera também quando trust muda neste turno — cenas sociais com consequências
-    # (interrogatório, barganha, confronto) são tensas mesmo sem espadas.
-    # Sem isso, um roleplay dramático de 5 turnos recebe [PACING: BAIXO].
-    if working_mem.em_combate or mudancas_trust:
-        working_mem.turnos_sem_tensao = 0
-    else:
-        working_mem.turnos_sem_tensao += 1
+    # CRIT-4: steps 8 e 9 só rodam em turnos REAIS do jogador. A abertura e
+    # reconexões chamam aplicar_pos_turno(wm, "", resposta_intro) — sem guard,
+    # essas chamadas incrementavam turnos_sem_tensao e mexiam no pacing sem
+    # ter havido ação do jogador, causando drift cumulativo em reconexões e
+    # PACING [BAIXO] disparado cedo demais.
+    if texto_jogador.strip():
+        # 8. Contador de tensão narrativa fora de combate.
+        # Zera também quando trust muda neste turno — cenas sociais com consequências
+        # (interrogatório, barganha, confronto) são tensas mesmo sem espadas.
+        # Sem isso, um roleplay dramático de 5 turnos recebe [PACING: BAIXO].
+        if working_mem.em_combate or mudancas_trust:
+            working_mem.turnos_sem_tensao = 0
+        else:
+            working_mem.turnos_sem_tensao += 1
 
-    # ── Features de Mestre Veterano ───────────────────────────────────────────
+        # ── Features de Mestre Veterano ───────────────────────────────────────────
 
-    # 9. Pacing Meter (Feat 5) — ajusta nível de tensão narrativa
-    if working_mem.em_combate:
-        # Combate eleva o pacing
-        working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 1.5)
-    elif working_mem.saiu_combate_recentemente:
-        # Logo após combate: reduz levemente (respiração pós-batalha)
-        working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.5)
-    elif working_mem.turnos_sem_tensao > 3:
-        # Muitos turnos calmos: reduz pacing gradualmente
-        working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.3)
-    else:
-        # Turno normal de exploração/social: leve aumento
-        working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
-    log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
+        # 9. Pacing Meter (Feat 5) — ajusta nível de tensão narrativa
+        if working_mem.em_combate:
+            # Combate eleva o pacing
+            working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 1.5)
+        elif working_mem.saiu_combate_recentemente:
+            # Logo após combate: reduz levemente (respiração pós-batalha)
+            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.5)
+        elif working_mem.turnos_sem_tensao > 3:
+            # Muitos turnos calmos: reduz pacing gradualmente
+            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.3)
+        else:
+            # Turno normal de exploração/social: leve aumento
+            working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
+        log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
 
     # 10. Fios Soltos (Feat 1) — coleta [FIO: ...] da resposta do LLM
     for m in _RE_FIO.finditer(resposta_completa):

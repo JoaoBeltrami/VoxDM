@@ -63,6 +63,7 @@ export interface MensagemWS {
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
+  narrativo?: boolean;  // CRIT-2: false em chunks de thinking audio (não calibra karaokê)
   latencia_ms?: number;
   chunks_lore?: string[];
   chunks_regras?: string[];

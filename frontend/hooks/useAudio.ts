@@ -64,7 +64,12 @@ export function useAudio(opcoes?: UseAudioOptions) {
     return audioCtxRef.current;
   }, []);
 
-  const tocarChunk = useCallback((base64mp3: string) => {
+  const tocarChunk = useCallback((base64mp3: string, opts?: { narrativo?: boolean }) => {
+    // CRIT-2: chunks de thinking audio ("Hmm...") NÃO devem calibrar o karaokê
+    // reverso — sua duração curta (~1.5s) faz charsPorSegundo do texto real
+    // ficar absurdamente alto, revelando o texto em flash. Caller passa
+    // narrativo=false para chunks não-narrativos. Default true mantém compat.
+    const narrativo = opts?.narrativo ?? true;
     // Captura o epoch no MOMENTO do enqueue. Se pararTudo bumpar o epoch
     // antes desse then() rodar, somos um chunk pré-stop e devemos sair.
     const epochInicio = epochRef.current;
@@ -89,8 +94,11 @@ export function useAudio(opcoes?: UseAudioOptions) {
         const buffer = await ctx.decodeAudioData(bytes.buffer);
 
         // Fase 5.6 — notifica duração antes de iniciar reprodução para que
-        // useSyncTextoVoz possa calibrar a velocidade de revelação do texto
-        onDuracaoRef.current?.(buffer.duration);
+        // useSyncTextoVoz possa calibrar a velocidade de revelação do texto.
+        // CRIT-2: só notifica para chunks narrativos (thinking audio NÃO entra).
+        if (narrativo) {
+          onDuracaoRef.current?.(buffer.duration);
+        }
 
         await new Promise<void>((resolve) => {
           const source = ctx.createBufferSource();

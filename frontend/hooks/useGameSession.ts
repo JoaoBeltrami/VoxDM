@@ -258,6 +258,10 @@ export function useGameSession() {
   // Item 1: isProcessing = texto enviado mas tipo="fim" ainda não chegou.
   // Representa o gap "LLM pensando" antes do primeiro token.
   const [isProcessing, setIsProcessing] = useState(false);
+  // CRIT-3: ref vivo que espelha isProcessing — leitura síncrona em enviarComando
+  // sem dependência de closure stale (callback é estável via useCallback []).
+  const isProcessingRef = useRef(false);
+  useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
 
   const { tocarChunk, pararTudo, setVolume } = useAudio({
     onDuracao: setAudioDuracao,
@@ -364,7 +368,9 @@ export function useGameSession() {
       const msg: MensagemWS = JSON.parse(ev.data);
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
-        tocarChunk(msg.conteudo_b64);
+        // CRIT-2: passa narrativo=false em chunks de thinking ("Hmm...") para
+        // que sua duração curta não calibre a velocidade do karaokê reverso.
+        tocarChunk(msg.conteudo_b64, { narrativo: msg.narrativo !== false });
         // UX-3: se o recap ainda está visível, guarda o chunk para re-enfileirar
         // se o usuário mudar de aba e o áudio for cancelado antes de terminar.
         if (estado.textoRecap) {
@@ -777,6 +783,15 @@ export function useGameSession() {
 
   const enviarComando = useCallback((texto: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    // CRIT-3: bloqueia comandos múltiplos durante stream ativo. Sem esse guard,
+    // click duplo em chips de combate (ou enter rápido no input) enfileira 2
+    // turnos no backend que rodam sobrepostos — o segundo entra no dialogo_recente
+    // antes da resposta do primeiro chegar, baguniçando o contexto.
+    // Lê via ref (não state) para evitar closure stale.
+    if (isProcessingRef.current) {
+      console.warn("[VoxDM] comando ignorado — turno anterior ainda processando");
+      return;
+    }
     // Se o jogador agir antes do áudio do turno anterior terminar, força o
     // flush do turno pendente — evita perda silenciosa no histórico.
     _flushTurnoPendente();
