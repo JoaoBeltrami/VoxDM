@@ -426,7 +426,8 @@ def aplicar_pos_turno(
     # 7d. Decay das cartas de improviso — após 5 turnos sem uso explícito, descarta.
     # Sem isso o prompt carrega 3 cartas (~260 chars) todo turno mesmo se o mestre
     # nunca as invoca, queimando 2-3k tokens em sessão de 1h.
-    if working_mem.cartas_improviso:
+    # CRIT-4: só decay em turno real do jogador — abertura/reconexão NÃO conta.
+    if working_mem.cartas_improviso and texto_jogador.strip():
         working_mem.turnos_desde_cartas += 1
         if working_mem.turnos_desde_cartas >= 5:
             log.info("cartas_improviso_descartadas", motivo="decay 5 turnos sem uso")
@@ -631,11 +632,18 @@ def aplicar_pos_turno(
             log.info("ancora_registrada", texto=ancora[:80])
 
     # 16. Assinaturas de voz de NPC — [VOZ: npc-id|pitch|rate] define parâmetros TTS por NPC.
+    # Cap: 20 vozes por sessão (eviction oldest). Sessão longa pode introduzir
+    # 30+ NPCs falantes; sem cap, dict cresce indefinidamente.
+    _MAX_VOZES = 20
     for m in _RE_VOZ.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
         pitch = m.group(2).strip()
         rate = m.group(3).strip()
         if npc_id and not working_mem.npc_vozes.get(npc_id):
+            if len(working_mem.npc_vozes) >= _MAX_VOZES:
+                # Remove a voz mais antiga (Python 3.7+ preserva ordem de inserção)
+                mais_antiga = next(iter(working_mem.npc_vozes))
+                del working_mem.npc_vozes[mais_antiga]
             working_mem.npc_vozes[npc_id] = {"pitch": pitch, "rate": rate}
             log.info("voz_npc_registrada", npc_id=npc_id, pitch=pitch, rate=rate)
 

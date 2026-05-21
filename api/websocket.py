@@ -103,6 +103,9 @@ from api.turn_pipeline import (  # noqa: E402
     _RE_INIMIGO_GRAVE,
     _RE_INIMIGO_FERIDO,
     _slugify,
+    aplicar_afeto_npcs,
+    aplicar_pos_turno,
+    aplicar_xp_e_detectar_level_up,
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
 
@@ -315,11 +318,11 @@ def _detectar_voz_npc(texto: str, npc_vozes: dict[str, dict[str, str]]) -> dict[
     Só detecta NPCs que já têm assinatura registrada em wm.npc_vozes.
     Retorna None se nenhum NPC com assinatura for detectado.
     """
+    from engine.memory.working_memory import _id_para_nome
     texto_lower = texto.lower()
     for npc_id, params in npc_vozes.items():
         # Tenta o id direto e o nome capitalizado (ex: "lyssa" ↔ "Lyssa")
-        nome = " ".join(parte.capitalize() for parte in npc_id.split("-"))
-        if npc_id in texto_lower or nome.lower() in texto_lower:
+        if npc_id in texto_lower or _id_para_nome(npc_id).lower() in texto_lower:
             return params
     return None
 
@@ -601,8 +604,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         # Também aplica quest markers e XP — o LLM da intro pode iniciar uma quest.
         # registrar_fala recebe texto limpo (strip de marcadores) para não poluir
         # o histórico de diálogo que é reenviado ao LLM como "assistant" messages.
-        from api.turn_pipeline import aplicar_pos_turno
-        from engine.memory.quest_detector import detectar_e_aplicar_quests, aplicar_recompensas_avancos
+        # Imports vivem no topo do arquivo — duplicação lazy removida.
         resposta_intro_limpa, avancos_intro = detectar_e_aplicar_quests(
             resposta_intro, wm, sessao.quest_catalog
         )
@@ -1246,11 +1248,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # iniciativa, trust, consequências, avanço de rodada, fim de combate
             # e contador de tensão — todos na ORDEM crítica (sync antes do
             # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
-            from api.turn_pipeline import (
-                aplicar_pos_turno,
-                aplicar_xp_e_detectar_level_up,
-                aplicar_afeto_npcs,
-            )
+            # Imports estão no topo do arquivo — sem lazy redundante.
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )

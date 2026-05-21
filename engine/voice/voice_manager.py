@@ -194,6 +194,7 @@ class VoiceManager:
         self._re_nomes = re.compile(pattern, re.IGNORECASE)
 
 
-def _id_para_nome(id_kebab: str) -> str:
-    """Converte 'fael-valdreksson' → 'Fael Valdreksson'."""
-    return " ".join(p.capitalize() for p in id_kebab.split("-"))
+# _id_para_nome centralizado em engine.memory.working_memory para evitar
+# duplicação (mesma função estava em 3 arquivos). Re-export aqui só por compat
+# com qualquer importação interna remanescente.
+from engine.memory.working_memory import _id_para_nome  # noqa: E402,F401
