@@ -215,6 +215,21 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **Verificação**: `git log --all -S <padrão>` → 0 matches em qualquer branch. `config.py` em cada branch confirmado limpo. 718/718 testes continuam passando.
   - **Caveat**: GitHub mantém reflog de commits órfãos por ~90 dias. Acesso direto via URL aos hashes antigos pode funcionar nesse período. Auto-resolve com o tempo.
 
+### ⚠️ Validação ao vivo pendente — próxima sessão prioridade alta
+
+As 12 mudanças funcionais de 21/05 passaram em **718/718 testes unitários + 7 testes de validação sem iniciar app**, mas **NÃO foram exercitadas em jogo real**.
+
+Checklist completo de 30min em `memory/validacao_proxima_sessao_21052026.md` cobre:
+- **A**: Substates atualizam corretamente em turno real (1135 acessos via property)
+- **B**: Markers `[INIMIGO_MORTO]` / `[DESCANSO]` em combate e descanso
+- **C**: Multi-LLM contextual — `NARRATIVE_LIGHT` em filler, `CLIMAX` em combate denso
+- **D**: `fatos_ancora` + `pacing_nivel` persistem após restart
+- **E**: 5 fixes críticos (CRIT-1 a CRIT-5) não regrediram
+- **F**: Audit fixes pós-refactor (dedup marker+regex)
+- **G**: Segurança — confirmar 0 matches no repo + recomendação de rotacionar senha Neo4j
+
+**Ordem sugerida**: smoke → combate → descanso → pacing → restart → UI race (30min total).
+
 ### Bugs conhecidos — próxima sessão de fixes
 
 > Atualizado 21/05. Pós-refactor + 5 fixes críticos + 2 audit fixes aplicados. Sem bugs pendentes críticos conhecidos.
