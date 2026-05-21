@@ -423,6 +423,16 @@ def aplicar_pos_turno(
                     working_mem.sair_combate()
                     log.info("combate_encerrado_timeout_sem_mencao")
 
+    # 7d. Decay das cartas de improviso — após 5 turnos sem uso explícito, descarta.
+    # Sem isso o prompt carrega 3 cartas (~260 chars) todo turno mesmo se o mestre
+    # nunca as invoca, queimando 2-3k tokens em sessão de 1h.
+    if working_mem.cartas_improviso:
+        working_mem.turnos_desde_cartas += 1
+        if working_mem.turnos_desde_cartas >= 5:
+            log.info("cartas_improviso_descartadas", motivo="decay 5 turnos sem uso")
+            working_mem.cartas_improviso = []
+            working_mem.turnos_desde_cartas = 0
+
     # 8. Contador de tensão narrativa fora de combate.
     # Zera também quando trust muda neste turno — cenas sociais com consequências
     # (interrogatório, barganha, confronto) são tensas mesmo sem espadas.

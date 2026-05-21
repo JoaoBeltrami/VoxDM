@@ -317,11 +317,14 @@ export function useGameSession() {
       clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
     }
-    setEstado(s => ({
-      ...s,
-      respostaAtual: "",
-      historico: [...s.historico, turno],
-    }));
+    setEstado(s => {
+      // Cap de 40 turnos — em sessão de 1h+ o DOM acumula 80+ bolhas e re-renders
+      // ficam pesados. Bolhas mais antigas já estão em opacity baixa (fade gradual),
+      // então perdê-las visualmente é aceitável; o backend mantém o resumo via episodic.
+      const novo = [...s.historico, turno];
+      const cortado = novo.length > 40 ? novo.slice(-40) : novo;
+      return { ...s, respostaAtual: "", historico: cortado };
+    });
   }, []);
 
   // Ref vivo que espelha audioTocando — permite leitura síncrona em callbacks WS
@@ -381,22 +384,22 @@ export function useGameSession() {
       if (msg.tipo === "recap" && msg.conteudo) {
         // Popula textoRecap para exibição em destaque com fade-out de 30s,
         // e adiciona ao histórico como item permanente para o log de exportação.
-        setEstado(s => ({
-          ...s,
-          textoRecap: msg.conteudo ?? "",
-          historico: [
-            ...s.historico,
-            {
-              id: Date.now(),
-              jogador: "",
-              mestre: msg.conteudo ?? "",
-              latencia_ms: 0,
-              chunks_lore: [],
-              chunks_regras: [],
-              tipo: "recap",
-            },
-          ],
-        }));
+        setEstado(s => {
+          const novo = [...s.historico, {
+            id: Date.now(),
+            jogador: "",
+            mestre: msg.conteudo ?? "",
+            latencia_ms: 0,
+            chunks_lore: [],
+            chunks_regras: [],
+            tipo: "recap" as const,
+          }];
+          return {
+            ...s,
+            textoRecap: msg.conteudo ?? "",
+            historico: novo.length > 40 ? novo.slice(-40) : novo,
+          };
+        });
       }
 
       if (msg.tipo === "token" && msg.conteudo) {
@@ -438,21 +441,18 @@ export function useGameSession() {
       if (msg.tipo === "lampejo" && msg.conteudo) {
         // Lampejo entra no histórico como item especial — UI renderiza
         // com gradient violeta, Cinzel itálico, fade lento.
-        setEstado(s => ({
-          ...s,
-          historico: [
-            ...s.historico,
-            {
-              id: Date.now() + Math.floor(Math.random() * 1000),
-              jogador: "",
-              mestre: msg.conteudo ?? "",
-              latencia_ms: 0,
-              chunks_lore: [],
-              chunks_regras: [],
-              tipo: "lampejo",
-            },
-          ],
-        }));
+        setEstado(s => {
+          const novo = [...s.historico, {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            jogador: "",
+            mestre: msg.conteudo ?? "",
+            latencia_ms: 0,
+            chunks_lore: [],
+            chunks_regras: [],
+            tipo: "lampejo" as const,
+          }];
+          return { ...s, historico: novo.length > 40 ? novo.slice(-40) : novo };
+        });
       }
 
       if (msg.tipo === "fim") {

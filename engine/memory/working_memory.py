@@ -226,7 +226,11 @@ class WorkingMemory:
     # DM Feat 4: Cartas de Improviso — lista de 3 elementos prontos para usar.
     # Populadas no início de cada sessão por chamada LLM de classification.
     # Cada carta: string curta com twist/complicação/oportunidade.
+    # Decay: após 5 turnos sem uso, as cartas são descartadas do prompt para
+    # liberar ~260 chars/turno (em sessão de 1h são ~10k chars desperdiçados
+    # se o mestre nunca as invoca).
     cartas_improviso: list[str] = field(default_factory=list)
+    turnos_desde_cartas: int = 0
 
     # DM Feat 5: Pacing Meter — 0-10 (0=totalmente calmo, 10=clímax total).
     # Incrementado por combate/drama, decrementado por calmaria/social.
@@ -766,7 +770,18 @@ class WorkingMemory:
                 self.npcs_apresentados.add(npc_id)
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
+        """Atualiza estado emocional do NPC com cap de 15 entradas (eviction oldest).
+
+        Em sessão de 1h percorrendo múltiplos locais, o dict acumulava 30+ entradas
+        de NPCs já fora da cena. para_texto() filtra por npcs_presentes mas o dict
+        cresce na memória e em payloads /debug. Cap previne crescimento ilimitado.
+        """
         self.npc_estados_emocionais[npc_id] = estado
+        if len(self.npc_estados_emocionais) > 15:
+            # Remove a entrada mais antiga (Python 3.7+ preserva ordem de inserção)
+            oldest = next(iter(self.npc_estados_emocionais))
+            if oldest != npc_id:  # nunca evicta a que acabou de ser adicionada
+                del self.npc_estados_emocionais[oldest]
 
     def adicionar_item(self, item_id: str) -> None:
         """Adiciona item ao inventário se ainda não estiver presente."""
@@ -902,9 +917,17 @@ class WorkingMemory:
         return tokens
 
     def atualizar_quest_stage(self, quest_id: str, stage_id: str) -> None:
+        """Avança quest e mantém active_quest_hooks com cap de 15 (eviction oldest).
+
+        para_texto() já exibe só os 5 mais recentes, mas a lista subjacente
+        crescia sem limite — em campanhas longas com 20+ quests, isso inflava
+        o payload episódico e o snapshot /debug.
+        """
         self.quest_stages[quest_id] = stage_id
         if quest_id not in self.active_quest_hooks:
             self.active_quest_hooks.append(quest_id)
+            if len(self.active_quest_hooks) > 15:
+                self.active_quest_hooks.pop(0)
 
     def para_texto(self, incluir_dialogo: bool = False) -> str:
         """Serializa o estado atual para texto formatado para o prompt.

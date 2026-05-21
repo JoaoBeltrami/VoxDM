@@ -651,7 +651,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     )
 
     # Fase 5.8 — imagem da cena inicial (fire-and-forget).
-    asyncio.create_task(_enviar_imagem_cena(websocket, sessao))
+    # _criar_background_task evita que o GC colete a task antes de terminar
+    # (asyncio.create_task direto não retém referência forte — risco real em
+    # turnos com janela curta de execução).
+    _criar_background_task(_enviar_imagem_cena(websocket, sessao))
 
     log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
@@ -1243,7 +1246,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # Feature F: estado afetivo de NPC — fire-and-forget para Neo4j.
             # Não bloqueia o turno; Neo4j pode estar offline sem impacto.
-            asyncio.create_task(
+            # _criar_background_task garante que a task não seja coletada pelo GC.
+            _criar_background_task(
                 aplicar_afeto_npcs(resposta_limpa, sessao.context_builder._neo4j)
             )
 
@@ -1271,7 +1275,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.warning("level_up_falhou", session_id=session_id, erro=str(e)[:200])
 
             # Fase 5.8 — imagem de cena (deduplicada em _enviar_imagem_cena).
-            asyncio.create_task(_enviar_imagem_cena(websocket, sessao))
+            _criar_background_task(_enviar_imagem_cena(websocket, sessao))
 
             sessao.iteracoes += 1
 

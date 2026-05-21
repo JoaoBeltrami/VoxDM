@@ -260,12 +260,15 @@ def montar_mensagens(
     secoes: list[str] = [master_system, ""]
 
     # Overlay de perfil do DM — sobrepõe o tom default quando perfil != equilibrado.
-    # Equilibrado também é injetado mas é uma confirmação do tom do master_system.
+    # "equilibrado" é o tom JÁ contido em master_system.md — injetar overlay é
+    # ~150 tokens/turno de redundância (6k tokens em sessão de 40 turnos).
+    # Pulamos quando perfil é o default.
     dm_profile_attr = getattr(contexto.working_memory, "dm_profile", "equilibrado")
-    overlay = _carregar_dm_profile(dm_profile_attr)
-    if overlay:
-        secoes.append(overlay)
-        log.info("dm_profile_aplicado", profile=dm_profile_attr)
+    if dm_profile_attr != "equilibrado":
+        overlay = _carregar_dm_profile(dm_profile_attr)
+        if overlay:
+            secoes.append(overlay)
+            log.info("dm_profile_aplicado", profile=dm_profile_attr)
 
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
     # Subclasse injetada separadamente para não inflar para_texto() com campo raro.
