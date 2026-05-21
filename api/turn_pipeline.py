@@ -63,6 +63,23 @@ _RE_VOZ = re.compile(
     re.IGNORECASE,
 )
 
+# Engine-authority markers (preferíveis sobre regex de vocab):
+# `[INIMIGO_MORTO: id]` — LLM declara explicitamente quem morreu. Resolve
+# COMBAT-1 (22 padrões de vocab PT-BR frágeis). Regex existente permanece
+# como fallback de defesa caso o LLM não emita o marker.
+_RE_INIMIGO_MORTO_MARKER = re.compile(
+    r"\[INIMIGO_MORTO:\s*([a-z0-9][a-z0-9-]{0,48})\s*\]",
+    re.IGNORECASE,
+)
+
+# `[DESCANSO: curto|longo]` — LLM declara descanso explicitamente após
+# narrativa ambígua. Substitui regex frágil (`_RE_DESCANSO_LONGO` falha em
+# "vou tirar uma soneca" e similares). Regex permanece como fallback.
+_RE_DESCANSO_MARKER = re.compile(
+    r"\[DESCANSO:\s*(curto|longo)\s*\]",
+    re.IGNORECASE,
+)
+
 # Estado afetivo de NPC: [AFETO: npc-id|campo|delta]
 # Ex: "[AFETO: fael-valdreksson|respeito|+2]" — salvo no Neo4j (persistência entre sessões).
 # Campos: afeto | medo | respeito | rancor. Delta: int com sinal (+/-).
@@ -302,7 +319,17 @@ def aplicar_pos_turno(
     working_mem.apresentar_npcs_mencionados(resposta_completa)
 
     # 2. Sync de inimigos ANTES de detectar fim de combate (ordem crítica —
-    #    sair_combate limpa inimigos_combate, perderíamos a última morte)
+    #    sair_combate limpa inimigos_combate, perderíamos a última morte).
+    # 2a. Engine-authority: marker [INIMIGO_MORTO: id] tem prioridade sobre regex.
+    #     LLM declara explicitamente quem morreu. Resolve COMBAT-1 onde vocab
+    #     PT-BR sutil ("o último orc cai ao chão") não casava com regex.
+    if working_mem.em_combate:
+        for m in _RE_INIMIGO_MORTO_MARKER.finditer(resposta_completa):
+            iid = m.group(1).strip().lower()
+            if iid in working_mem.inimigos_combate:
+                working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
+                log.info("combate_inimigo_morto_marker", id=iid)
+    # 2b. Fallback de defesa: regex de vocab para casos onde LLM não emitiu marker.
     sincronizar_inimigos_combate(working_mem, texto_jogador, resposta_completa)
 
     # 3. Iniciativa — engine é authority
@@ -333,10 +360,22 @@ def aplicar_pos_turno(
         working_mem.turno_atual_idx = _idx_jogador
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
-    # Ordem: antes do trust, pois o descanso é uma ação completa do jogador.
-    tipo_descanso = detectar_descanso(texto_jogador)
+    # Engine-authority: marker [DESCANSO: curto|longo] na resposta do LLM tem
+    # prioridade sobre regex no texto do jogador. Resolve casos onde o LLM
+    # confirma descanso em narrativa ambígua ("você desperta horas depois").
+    # Fallback: regex 1ª pessoa em texto_jogador.
+    tipo_descanso = None
+    m_descanso = _RE_DESCANSO_MARKER.search(resposta_completa)
+    if m_descanso:
+        tipo_descanso = m_descanso.group(1).strip().lower()
+        log.info("descanso_marker_detectado", tipo=tipo_descanso)
+    if not tipo_descanso:
+        tipo_descanso = detectar_descanso(texto_jogador)
     if tipo_descanso:
         restaurados = restaurar_slots(working_mem, tipo_descanso)
+        # Também restaura class features (Action Surge, Rage, etc.) — fix de bug
+        # latente: descanso só restaurava slots, features ficavam gastas.
+        working_mem.restaurar_features(tipo_descanso)
         if restaurados > 0:
             log.info("slots_restaurados", tipo=tipo_descanso, quantidade=restaurados)
 

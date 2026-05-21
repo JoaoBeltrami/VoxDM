@@ -1105,9 +1105,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             primeiro_token_evento = asyncio.Event()
             task_thinking = _criar_task_thinking(websocket, primeiro_token_evento, sessao)
 
+            # Multi-LLM por contexto: roteia turno para CLIMAX/NORMAL/LIGHT
+            # baseado em combate + pacing + cliffhanger pendente. Em sessão de
+            # 1h, ~30% dos turnos viram LIGHT (8B) economizando TPM do 70B.
+            from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+            _task_turno = escolher_task_type_narrativo(
+                em_combate=sessao.working_mem.em_combate,
+                pacing_nivel=sessao.working_mem.pacing_nivel,
+                cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
+            )
+            log.info("task_type_escolhido", task=_task_turno.value,
+                     em_combate=sessao.working_mem.em_combate,
+                     pacing=round(sessao.working_mem.pacing_nivel, 1),
+                     session_id=session_id)
+
             try:
                 async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=400
+                    mensagens, temperatura=0.8, max_tokens=400, task=_task_turno
                 ):
                     resposta_completa += token
                     if latencia_primeiro_token < 0:

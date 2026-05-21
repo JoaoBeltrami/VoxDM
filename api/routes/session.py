@@ -767,13 +767,18 @@ async def encerrar_sessao(
 def _wm_para_dm_state(wm: WorkingMemory) -> dict:
     """Serializa estado narrativo do mestre veterano para persistência.
 
-    Persiste fios_soltos, agenda_npcs e cliffhanger_pendente entre sessões e
-    crashes — sem isso o mestre "esquece" os plot threads ao reconectar.
+    Persiste fios_soltos, agenda_npcs, cliffhanger, fatos_ancora e pacing
+    entre sessões e crashes — sem isso o mestre "esquece" plot threads,
+    re-narra fatos já estabelecidos e perde o ritmo dramático ao reconectar.
     """
     return {
-        "fios_soltos":        list(wm.fios_soltos),
-        "agenda_npcs":        dict(wm.agenda_npcs),
+        "fios_soltos":          list(wm.fios_soltos),
+        "agenda_npcs":          dict(wm.agenda_npcs),
         "cliffhanger_pendente": wm.cliffhanger_pendente or "",
+        # Repetition guard — fatos já narrados não devem voltar após crash
+        "fatos_ancora":         list(wm.fatos_ancora),
+        # Pacing meter — drift do ritmo é caro de re-construir
+        "pacing_nivel":         float(wm.pacing_nivel),
     }
 
 
