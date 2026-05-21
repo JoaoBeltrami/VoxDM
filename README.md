@@ -181,7 +181,7 @@ cp .env.example .env
 | `QDRANT_URL` + `QDRANT_API_KEY` | https://cloud.qdrant.io (free 1GB) |
 | `NEO4J_URI` + `NEO4J_USER` + `NEO4J_PASSWORD` | https://console.neo4j.io (AuraDB Free) |
 
-> No AuraDB Free o `NEO4J_USER` **não é "neo4j"** — é o ID da instância (ex: `<auradb-instance-id>`).
+> No AuraDB Free o `NEO4J_USER` **não é "neo4j"** — é o ID hex da instância (8 caracteres, exibido em Connection Details).
 
 ### 4. Chaves opcionais (`.env`)
 

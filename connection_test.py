@@ -4,7 +4,7 @@ Testa conectividade com todos os serviços externos do VoxDM.
 Por que existe: verificação rápida de que Groq, Qdrant e Neo4j estão acessíveis
     antes de rodar a pipeline — evita falhas silenciosas no meio do processo.
 Dependências: groq, qdrant-client, neo4j, structlog
-Armadilha: Neo4j AuraDB usa o ID da instância como username (ex: <auradb-instance-id>),
+Armadilha: Neo4j AuraDB usa o ID hex da instância (8 chars) como username,
     não "neo4j" — verifique NEO4J_USER no .env.
 
 Exemplo:

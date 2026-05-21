@@ -4,8 +4,8 @@ Cliente Neo4j para consultas de grafo — relações entre entidades do módulo.
 Por que existe: o context_builder precisa consultar relações (quem conhece quem,
     qual facção controla o local) de forma assíncrona com retry automático.
 Dependências: neo4j (driver async), tenacity, structlog, config
-Armadilha: NEO4J_USER no AuraDB Free não é "neo4j" — é o ID da instância
-    (ex: "<auradb-instance-id>"). Verificar Connection Details no painel do AuraDB.
+Armadilha: NEO4J_USER no AuraDB Free não é "neo4j" — é o ID hex da
+    instância (8 caracteres). Verificar Connection Details no painel.
 
 Exemplo:
     cliente = Neo4jMemoryClient()
