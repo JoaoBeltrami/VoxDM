@@ -27,7 +27,9 @@ class TaskType(str, Enum):
     CASCATA_DEFAULT só quando o roteamento ótimo diferir do padrão narrativa.
     """
 
-    NARRATIVE = "narrative"            # turno do mestre, abertura — qualidade máxima
+    NARRATIVE = "narrative"            # default — qualidade máxima
+    NARRATIVE_CLIMAX = "narrative_climax"  # combate intenso, cliffhanger, momentos chave
+    NARRATIVE_LIGHT = "narrative_light"    # exploração filler, transição rápida → 8B
     SUMMARIZATION = "summarization"    # compressão de sessão episódica
     CLASSIFICATION = "classification"  # decisões binárias (placeholder; ainda não usado)
     ENTITY_EXTRACTION = "entity_extraction"  # placeholder
@@ -63,6 +65,22 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
         PROV_GEMINI,
         PROV_OLLAMA,
     ],
+    # Climax: combate denso, cliffhanger, momento chave — qualidade é tudo.
+    # Mesma cascata da default mas explicita a intenção (telemetria).
+    TaskType.NARRATIVE_CLIMAX: [
+        PROV_GROQ_70B,
+        PROV_GEMINI,        # pular 8B em climax: queremos qualidade
+        PROV_GROQ_8B,
+        PROV_OLLAMA,
+    ],
+    # Light: exploração filler, transição rápida — 8B é suficiente e barato.
+    # Economiza TPM do 70B para os momentos que importam.
+    TaskType.NARRATIVE_LIGHT: [
+        PROV_GROQ_8B,
+        PROV_GEMINI,
+        PROV_GROQ_70B,      # 70B só como último recurso aqui
+        PROV_OLLAMA,
+    ],
     # Resumo: Gemini é excelente em síntese e tem cota muito maior. Usar como
     # primário evita estourar a quota do Groq com tarefas não-narrativas.
     TaskType.SUMMARIZATION: [
@@ -95,3 +113,26 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
 def cascata_para(task: TaskType) -> list[str]:
     """Retorna a cascata aplicável (com fallback genérico)."""
     return CASCATA_DEFAULT.get(task, _DEFAULT)
+
+
+def escolher_task_type_narrativo(
+    em_combate: bool,
+    pacing_nivel: float,
+    cliffhanger_pendente: bool = False,
+) -> TaskType:
+    """Decide qual TaskType usar para o turno narrativo atual.
+
+    Lógica:
+      - Em combate + pacing≥7 OU cliffhanger pendente → CLIMAX (qualidade máxima)
+      - Pacing ≤ 2 e fora de combate → LIGHT (8B economiza TPM em filler)
+      - Default → NARRATIVE (cascata default 70B)
+
+    Por que isto importa: em sessão de 1h, ~30% dos turnos são "filler" de
+    exploração/social leve onde o 70B é overkill. Rotear para 8B nesses
+    momentos economiza ~25% do TPM, mantendo qualidade nos momentos chave.
+    """
+    if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
+        return TaskType.NARRATIVE_CLIMAX
+    if pacing_nivel <= 2.0 and not em_combate:
+        return TaskType.NARRATIVE_LIGHT
+    return TaskType.NARRATIVE
