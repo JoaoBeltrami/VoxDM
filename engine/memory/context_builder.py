@@ -364,19 +364,30 @@ class ContextBuilder:
             dict.fromkeys(working_mem.npcs_presentes[:3] + entidades_mencionadas[:3])
         )  # dict.fromkeys preserva ordem e deduplica
 
-        # ── Relações do grafo ─────────────────────────────────────────────────
-        relacoes: list[dict[str, Any]] = []
-        for entidade_id in ids_para_grafo[:4]:  # cap em 4 para não sobrecarregar
+        # ── Relações do grafo (paralelo) ──────────────────────────────────────
+        # Antes: 4 chamadas Neo4j sequenciais com timeout 2s cada (até 8s no pior caso).
+        # Agora: gather com timeout 2s — pior caso é 2s independente de N entidades.
+        async def _buscar_rels(entidade_id: str) -> list[dict[str, Any]]:
             try:
-                rels = await asyncio.wait_for(
+                return await asyncio.wait_for(
                     self._neo4j.buscar_relacionamentos(entidade_id),
                     timeout=2.0,
                 )
-                relacoes.extend(rels)
             except asyncio.TimeoutError:
                 log.warning("neo4j_timeout", entidade=entidade_id)
+                return []
             except Exception as e:
                 log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
+                return []
+
+        relacoes: list[dict[str, Any]] = []
+        if ids_para_grafo:
+            resultados_neo4j = await asyncio.gather(
+                *(_buscar_rels(eid) for eid in ids_para_grafo[:4]),
+                return_exceptions=False,  # exceções já tratadas no helper
+            )
+            for rels in resultados_neo4j:
+                relacoes.extend(rels)
 
         # ── Avaliação de secrets ──────────────────────────────────────────────
         secrets = await self._avaliar_secrets(working_mem)
