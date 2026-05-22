@@ -353,7 +353,7 @@ async def _sintetizar_e_enviar(
         log.info("tts_sintetizando", chars=len(texto), preview=texto[:300])
         audio_bytes: bytes = await tts.sintetizar(
             texto, voice=voice,
-            rate_override=rate_override, pitch_override=pitch_override,
+            rate=rate_override, pitch=pitch_override,
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -1381,6 +1381,26 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         )
                     except Exception as _e_casc:
                         log.warning("cascade_notificacao_falhou", erro=str(_e_casc)[:120])
+
+            # Dashboard admin: enriquece ultimo_turno com routing info e
+            # registra entry no histórico para os gráficos de sessão.
+            sessao.ultimo_turno["task_type"] = _task_turno.value
+            sessao.ultimo_turno["provider_usado"] = _ultimo_prov or "groq-70b"
+            _hist_entry: dict[str, Any] = {
+                "turno": sessao.iteracoes,
+                "pacing": round(sessao.working_mem.pacing_nivel, 1),
+                "hp": sessao.working_mem.player_hp,
+                "hp_max": sessao.working_mem.player_hp_max,
+                "em_combate": sessao.working_mem.em_combate,
+                "provider": _ultimo_prov or "groq-70b",
+                "task_type": _task_turno.value,
+                "latencia_ms": latencia_ms,
+                "erros": len(erros_turno),
+            }
+            sessao.historico_turnos.append(_hist_entry)
+            if len(sessao.historico_turnos) > 50:
+                sessao.historico_turnos.pop(0)
+            sessao.task_type_ultimo = _task_turno.value
 
             chunks_lore = [
                 c.get("text", "")[:120]

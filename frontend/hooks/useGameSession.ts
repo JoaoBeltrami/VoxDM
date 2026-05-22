@@ -620,7 +620,8 @@ export function useGameSession() {
           // Flush imediato se o áudio já terminou (resposta curta: TTS acabou
           // antes do "fim" chegar). Sem isso o turno ficaria preso 30s até o
           // fallback abaixo ou até o próximo input do jogador.
-          if (!audioTocandoRef.current) {
+          const _flushouImediato = !audioTocandoRef.current;
+          if (_flushouImediato) {
             _flushTurnoPendente();
           } else {
             // Fallback de segurança: se áudio nunca terminar (TTS falhou ou
@@ -630,11 +631,16 @@ export function useGameSession() {
         }
 
         if (turno || textoFinal) {
+          // _flushouImediato: o turno já foi para historico e respostaAtual foi
+          // limpa pelo flush. Sobrescrever com textoFinal causaria dupla exibição
+          // (bolhas no historico + bolha de streaming simultaneamente).
+          // Quando áudio está tocando: mantém textoFinal para o karaokê continuar.
+          const _flushouImediato = !audioTocandoRef.current;
           setEstado(s => ({
             ...s,
             // respostaAtual preservado = textoFinal: karaokê continua revelando
             // até audioTocando=false, quando _flushTurnoPendente empurra ao histórico.
-            respostaAtual: textoFinal,
+            respostaAtual: _flushouImediato ? "" : textoFinal,
             questStages: novoTurnoBase.questStages ?? s.questStages,
             activeQuests: novoTurnoBase.activeQuests ?? s.activeQuests,
             inventory: novoTurnoBase.inventory ?? s.inventory,

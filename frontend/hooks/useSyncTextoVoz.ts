@@ -102,8 +102,15 @@ export function useSyncTextoVoz({
       : Math.floor(charsPorSegundo * (OFFSET_MS / 1000));
     const delayMs = usandoFallback ? FALLBACK_DELAY_MS : 0;
 
-    // Inicializa relógio no primeiro tick depois que o áudio começa
+    // Efeito cinematográfico: quando o áudio começa pela primeira vez neste turno
+    // (startTimeRef null = sessão de áudio nova), rebobina o cursor para o início.
+    // Sem isso, o Case 1 já teria avançado cursorRef até charsTotal enquanto
+    // audioTocando=false — o RAF verificaria cursorRef < charsTotal → false → nunca
+    // iniciava, e o texto ficava estático enquanto a voz narrava. O reset faz o
+    // texto desaparecer brevemente e reaparecer em sincronia com a narração.
     if (startTimeRef.current === null) {
+      cursorRef.current = 0;
+      setTextoVisivel("");
       startTimeRef.current = performance.now() + delayMs;
     }
 

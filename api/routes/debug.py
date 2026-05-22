@@ -136,10 +136,22 @@ async def working_memory_completo(
         "rodada_combate": wm.rodada_combate,
         "iniciativa_jogador": wm.iniciativa_jogador,
         "inimigos_combate": wm.inimigos_combate,
+        "posicoes_combate": wm.posicoes_combate,
+        "movimento_restante_ft": wm.movimento_restante_ft,
+        "movimento_total_ft": wm.movimento_total_ft,
         # Narrativa
         "saiu_combate_recentemente": wm.saiu_combate_recentemente,
         "turnos_sem_tensao": wm.turnos_sem_tensao,
         "log_consequencias": wm.log_consequencias,
+        "pacing_nivel": round(wm.pacing_nivel, 2),
+        "fatos_ancora": wm.fatos_ancora,
+        "fios_soltos": wm.fios_soltos,
+        "cliffhanger_pendente": wm.cliffhanger_pendente,
+        "agenda_npcs": wm.agenda_npcs,
+        # Party
+        "companions": {
+            cid: dict(c) for cid, c in wm.companions.items()
+        },
         # Social
         "npcs_presentes": wm.npcs_presentes,
         "npc_estados_emocionais": wm.npc_estados_emocionais,
@@ -152,6 +164,28 @@ async def working_memory_completo(
             {"falante": t.falante, "texto": t.texto}
             for t in wm.dialogo_recente
         ],
+        # Routing LLM
+        "task_type_ultimo": sessao.task_type_ultimo,
+    }
+
+
+@router.get("/historico/{session_id}")
+async def historico_sessao(
+    session_id: str,
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
+    """Retorna histórico de turnos para gráficos da dashboard (max 50 turnos).
+
+    Cada entry contém: turno, pacing, hp, hp_max, em_combate, provider,
+    task_type, latencia_ms, erros. Populado apenas após turnos bem-sucedidos.
+    """
+    sessao = sessions.get(session_id)
+    if not sessao:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    return {
+        "session_id": session_id,
+        "total_turnos": sessao.iteracoes,
+        "historico": sessao.historico_turnos,
     }
 
 

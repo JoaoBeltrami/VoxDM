@@ -76,6 +76,13 @@ class SessaoAtiva:
     # (no fim do pipeline). Se o turno falhar, o slot não é perdido.
     spell_pending: tuple[str, int] | None = None
 
+    # Dashboard admin: histórico de turnos para gráficos (max 50, rolling).
+    # Cada entry: {turno, pacing, hp, hp_max, em_combate, provider, task_type,
+    #              latencia_ms, erros}. Populado em websocket.py após cada fim.
+    historico_turnos: list[dict] = field(default_factory=list)
+    # Último task_type narrativo usado — exibido no monitor sem precisar do turno.
+    task_type_ultimo: str = ""
+
 
 # Store global — keyed by session_id (kebab-case)
 sessions: dict[str, SessaoAtiva] = {}

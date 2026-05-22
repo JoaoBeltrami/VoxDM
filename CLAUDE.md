@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 21 de maio de 2026 (noite) — Refactor engine/state/ + facade + markers + multi-LLM contextual + paralelismo + auditoria de segurança com rewrite completo do histórico (5 branches). 718/718 testes. tsc clean.
+> Atualizado: 22 de maio de 2026 — Dashboard de debug admin + 3 bugfixes de UX ao vivo (TTS rate_override, dupla exibição, karaokê). 718/718 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -215,11 +215,18 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **Verificação**: `git log --all -S <padrão>` → 0 matches em qualquer branch. `config.py` em cada branch confirmado limpo. 718/718 testes continuam passando.
   - **Caveat**: GitHub mantém reflog de commits órfãos por ~90 dias. Acesso direto via URL aos hashes antigos pode funcionar nesse período. Auto-resolve com o tempo.
 
-### ⚠️ Validação ao vivo pendente — próxima sessão prioridade alta
+- **Dashboard de debug admin + 3 bugfixes de UX ao vivo (22/05)**: ✅ CONCLUÍDO. 718/718 testes, tsc clean. Mudanças não commitadas ainda.
+  - **Dashboard `/debug`**: reescrita completa de `frontend/app/debug/page.tsx` (~650 linhas). 2 abas: "Estado ao Vivo" (charts sessão, personagem, NPCs, companions, narrativa) + "Último Turno" (prompt completo, RAG scores, breakdown de latência). Recharts: LineChart dual-Y (HP% + pacing), BarChart latências por turno (color-coded por provider), PieChart donut de distribuição de providers.
+  - **Backend dashboard**: `api/state.py` ganhou `historico_turnos: list[dict]` (max 50 rolling) + `task_type_ultimo: str`. `api/websocket.py` grava entry após cada turno bem-sucedido (pacing, HP, provider, task_type, latência, erros). `api/routes/debug.py` estendido: `/debug/working-memory` agora inclui todos os campos do refactor 21/05 (companions, posicoes_combate, fatos_ancora, pacing_nivel, agenda_npcs etc.) + novo endpoint `/debug/historico/{session_id}`.
+  - **Bug TTS (`rate_override`)**: `api/websocket.py` linha 356 — `_sintetizar_e_enviar()` passava `rate_override=` e `pitch_override=` para o facade `TTSEngine.sintetizar()` que espera `rate=` e `pitch=`. Parâmetros são `voice_override`/`rate_override`/`pitch_override` na `EdgeTTSEngine` interna, mas `voice`/`rate`/`pitch` na facade pública. Fix: renomeados no call-site.
+  - **Bug dupla exibição**: no handler `tipo="fim"` de `useGameSession.ts`, quando `audioTocandoRef.current=false` (TTS falhou ou resposta muito curta), `_flushTurnoPendente()` colocava o turno no histórico + limpava `respostaAtual`. Mas o `setEstado` seguinte na linha 637 sobrescrevia `respostaAtual: textoFinal`. React batcha os dois updates → historico com bolhas + streaming bubble = double display. Fix: flag `_flushouImediato` — quando true, `setEstado` usa `respostaAtual: ""`.
+  - **Bug karaokê**: em `useSyncTextoVoz.ts`, o Case 1 (audioTocando=false) definia `cursorRef.current = charsTotal`. Quando áudio começava (audioTocando=true), Case 2 verificava `cursorRef.current < charsTotal` antes de iniciar o RAF — sempre `false` → RAF nunca iniciava → texto não revelava com a voz. Fix: quando `startTimeRef.current === null` (primeira vez que áudio toca neste turno), reseta `cursorRef.current = 0` + `textoVisivel = ""` para que o texto reapareça em sincronia com a narração.
 
-As 12 mudanças funcionais de 21/05 passaram em **718/718 testes unitários + 7 testes de validação sem iniciar app**, mas **NÃO foram exercitadas em jogo real**.
+### ⚠️ Validação ao vivo pendente — prioridade alta
 
-Checklist completo de 30min em `memory/validacao_proxima_sessao_21052026.md` cobre:
+As mudanças funcionais do refactor de 21/05 + 3 bugfixes de 22/05 precisam de teste ao vivo.
+
+Checklist completo em `memory/validacao_proxima_sessao_21052026.md` cobre:
 - **A**: Substates atualizam corretamente em turno real (1135 acessos via property)
 - **B**: Markers `[INIMIGO_MORTO]` / `[DESCANSO]` em combate e descanso
 - **C**: Multi-LLM contextual — `NARRATIVE_LIGHT` em filler, `CLIMAX` em combate denso
@@ -227,12 +234,13 @@ Checklist completo de 30min em `memory/validacao_proxima_sessao_21052026.md` cob
 - **E**: 5 fixes críticos (CRIT-1 a CRIT-5) não regrediram
 - **F**: Audit fixes pós-refactor (dedup marker+regex)
 - **G**: Segurança — confirmar 0 matches no repo + recomendação de rotacionar senha Neo4j
+- **H (NOVO 22/05)**: TTS funciona na abertura (áudio audível), karaokê revela texto com voz, sem dupla exibição de resposta
 
 **Ordem sugerida**: smoke → combate → descanso → pacing → restart → UI race (30min total).
 
 ### Bugs conhecidos — próxima sessão de fixes
 
-> Atualizado 21/05. Pós-refactor + 5 fixes críticos + 2 audit fixes aplicados. Sem bugs pendentes críticos conhecidos.
+> Atualizado 22/05. 3 bugs corrigidos nesta sessão. Sem bugs pendentes críticos conhecidos.
 
 **DESIGN — Personagem está atrelado à sessão (comportamento esperado)**
 - Um personagem por sessão — não é possível trocar personagem mid-session.
@@ -664,12 +672,13 @@ NÃO adicionar mais estados ao VoxOrb sem atualizar o tipo OrbState no component
 | `api/state.py` | SessaoAtiva dataclass + dict global `sessions` — compartilhado entre REST e WebSocket. Campo `ultimo_turno: dict` guarda snapshot do turno para /debug/ultimo-turno | ✅ Atualizado |
 | `api/models/schemas.py` | Schemas Pydantic v2 — SessaoConfig (+ session_anterior_id), MensagemWS (+ audio_chunk/conteudo_b64/sequencia), SessaoListaItem, TranscricaoResponse | ✅ Atualizado |
 | `api/routes/session.py` | POST /session/start (+ restauração episódica + char_state), POST /{id}/transcribe, GET /session/list, POST /{id}/turn, GET /{id}/status, DELETE /{id}, GET/PUT /{id}/character | ✅ Atualizado |
-| `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/telemetria, /debug/ultimo-turno/{id} — registrado APENAS quando DEBUG=True | ✅ Atualizado |
-| `api/websocket.py` | WebSocket streaming — TTS por sentença com asyncio.create_task(); detectar_idioma() passado; max_tokens=300; instrumentado com context_ms/tts_ms/erros_turno; popula sessao.ultimo_turno a cada turno; _emit(erro) nos excepts | ✅ Atualizado |
+| `api/routes/debug.py` | GET /debug/sessoes, /debug/estado/{id}, /debug/working-memory/{id}, /debug/historico/{id}, /debug/telemetria, /debug/ultimo-turno/{id} — registrado APENAS quando DEBUG=True; /historico adicionado 22/05 | ✅ Atualizado |
+| `api/websocket.py` | WebSocket streaming — TTS por sentença, multi-LLM task_type, spell_pending guard, historico_turnos recording. Fix 22/05: `rate=` em vez de `rate_override=` no call para facade TTSEngine | ✅ Atualizado |
 | `engine/memory/episodic_memory.py` | + `listar_com_metadata()` (scroll Qdrant, agrupa por session_id) + `buscar_por_session_id()` | ✅ Atualizado |
 | `frontend/lib/api.ts` | + `listarSessoes()`, `transcrever()`, tipos SessaoListaItem, audio_chunk em MensagemWS | ✅ Atualizado |
-| `frontend/hooks/useGameSession.ts` | + playerName state, tocarChunk via useAudio, handle audio_chunk, auto-detecção de condições D&D (14 regex), condicoesDetectadas state | ✅ Atualizado |
-| `frontend/hooks/useAudio.ts` | Fila sequencial MP3 via Web Audio API, tocarChunk(), pararTudo(), AudioContext.resume() aguardado | ✅ Criado |
+| `frontend/hooks/useGameSession.ts` | + playerName, audio, karaokê, condições. Fix 22/05: `_flushouImediato` evita dupla exibição quando TTS não toca no momento do `fim` | ✅ Atualizado |
+| `frontend/hooks/useSyncTextoVoz.ts` | Karaokê reverso — revela texto no ritmo do áudio via RAF. Fix 22/05: reset `cursorRef=0` quando áudio começa (`startTimeRef===null`) para que RAF inicie de fato | ✅ Atualizado |
+| `frontend/hooks/useAudio.ts` | Fila sequencial MP3 via Web Audio API, tocarChunk({narrativo}), pararTudo(), AudioContext.resume() aguardado | ✅ Atualizado |
 | `frontend/hooks/useAmbientAudio.ts` | Música ambiente por cena (taverna/combate/dungeon/campo/cidade) — troca suave baseada em locationNome | ✅ Criado |
 | `frontend/components/VoiceButton.tsx` | MediaRecorder primary (GPU), Web Speech API fallback, sessionId prop | ✅ Atualizado |
 | `frontend/components/MasterResponse.tsx` | + playerName prop, exibe nome na bolha do jogador | ✅ Atualizado |
