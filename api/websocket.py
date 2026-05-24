@@ -163,6 +163,7 @@ async def _enviar_lampejo(
                         tipo="audio_chunk",
                         conteudo_b64=base64.b64encode(audio).decode("ascii"),
                         sequencia=999,
+                        narrativo=False,  # rate=-25% — não calibra karaokê do TTS principal
                     ).model_dump_json()
                 )
         log.info("lampejo_emitido", chars=len(texto))
@@ -453,11 +454,17 @@ async def _enviar_recap_sessao_anterior(
             {"role": "user",   "content": prompt_recap},
         ]
 
-        texto_recap = await sessao.groq.completar(
-            mensagens=mensagens_recap,
-            task=TaskType.SUMMARIZATION,
-            temperatura=0.6,
-            max_tokens=120,
+        # Timeout de 15s: recap é awaited dentro da abertura — se a chamada
+        # travar (Groq stuck mid-stream), a sessão continuada nunca abre.
+        # Em timeout, segue para a abertura normal sem recap.
+        texto_recap = await asyncio.wait_for(
+            sessao.groq.completar(
+                mensagens=mensagens_recap,
+                task=TaskType.SUMMARIZATION,
+                temperatura=0.6,
+                max_tokens=120,
+            ),
+            timeout=15.0,
         )
         texto_recap = texto_recap.strip()
 
@@ -491,6 +498,7 @@ async def _enviar_recap_sessao_anterior(
                         tipo="audio_chunk",
                         conteudo_b64=base64.b64encode(audio).decode("ascii"),
                         sequencia=0,
+                        narrativo=False,  # rate=-15% — não calibra karaokê do TTS principal
                     ).model_dump_json()
                 )
                 log.info("recap_tts_enviado", session_id=sessao.session_id, bytes=len(audio))

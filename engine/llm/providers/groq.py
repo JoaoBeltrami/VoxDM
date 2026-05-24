@@ -115,7 +115,13 @@ class GroqProvider(BaseLLMProvider):
 
     def _get_client(self) -> AsyncGroq:
         if self._client is None:
-            self._client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            # timeout aplicado tanto à chamada REST quanto ao read entre chunks
+            # do streaming. Sem isso, TPM exaurido pode emitir tokens em rate
+            # baixíssimo (1/30s) e travar o turno por minutos sem disparar erro.
+            self._client = AsyncGroq(
+                api_key=settings.GROQ_API_KEY,
+                timeout=settings.LLM_PROVIDER_TIMEOUT,
+            )
         return self._client
 
     async def completar(
