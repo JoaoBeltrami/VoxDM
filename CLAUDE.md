@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 22 de maio de 2026 — Dashboard de debug admin + 3 bugfixes de UX ao vivo (TTS rate_override, dupla exibição, karaokê). 718/718 testes. tsc clean.
+> Atualizado: 24 de maio de 2026 — Fix crítico de hang de TTS em sessões longas (asyncio.wait_for timeout em todos os 4 call-sites de tts.sintetizar()). 718/718 testes. tsc clean.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -222,9 +222,14 @@ Próximo: Fase 4.7 (Cloudflare Tunnel + Access) para expor o jogo a amigos, ou F
   - **Bug dupla exibição**: no handler `tipo="fim"` de `useGameSession.ts`, quando `audioTocandoRef.current=false` (TTS falhou ou resposta muito curta), `_flushTurnoPendente()` colocava o turno no histórico + limpava `respostaAtual`. Mas o `setEstado` seguinte na linha 637 sobrescrevia `respostaAtual: textoFinal`. React batcha os dois updates → historico com bolhas + streaming bubble = double display. Fix: flag `_flushouImediato` — quando true, `setEstado` usa `respostaAtual: ""`.
   - **Bug karaokê**: em `useSyncTextoVoz.ts`, o Case 1 (audioTocando=false) definia `cursorRef.current = charsTotal`. Quando áudio começava (audioTocando=true), Case 2 verificava `cursorRef.current < charsTotal` antes de iniciar o RAF — sempre `false` → RAF nunca iniciava → texto não revelava com a voz. Fix: quando `startTimeRef.current === null` (primeira vez que áudio toca neste turno), reseta `cursorRef.current = 0` + `textoVisivel = ""` para que o texto reapareça em sincronia com a narração.
 
+- **Fix hang TTS em sessões longas (24/05)**: ✅ CONCLUÍDO. 718/718 testes.
+  - **Diagnóstico**: `EdgeTTSEngine.sintetizar()` usa `async for chunk in communicate.stream()` sem timeout. Se o servidor Microsoft Edge TTS aceitar a conexão mas parar de enviar dados (half-open TCP), a coroutine bloqueia indefinidamente sem lançar exceção. Em combate com 3-5 sentenças por turno e 40+ turnos em 1 hora, isso quase certamente travaria o jogo pelo menos uma vez.
+  - **Fix**: `asyncio.wait_for()` com timeout em todos os 4 call-sites de `tts.sintetizar()` em `api/websocket.py`: `_tts_sentenca` (12s), `_sintetizar_e_enviar` (15s), `_enviar_lampejo` (15s), `_enviar_recap_sessao_anterior` (15s).
+  - `asyncio.TimeoutError` é subclasse de `Exception` → capturado pelo `except` existente → `audio = b""` → jogo continua sem áudio para aquela sentença. Semáforo liberado corretamente na cancelação (via `__aexit__`).
+
 ### ⚠️ Validação ao vivo pendente — prioridade alta
 
-As mudanças funcionais do refactor de 21/05 + 3 bugfixes de 22/05 precisam de teste ao vivo.
+As mudanças funcionais do refactor de 21/05 + 3 bugfixes de 22/05 + fix de hang TTS de 24/05 precisam de teste ao vivo.
 
 Checklist completo em `memory/validacao_proxima_sessao_21052026.md` cobre:
 - **A**: Substates atualizam corretamente em turno real (1135 acessos via property)
@@ -235,6 +240,7 @@ Checklist completo em `memory/validacao_proxima_sessao_21052026.md` cobre:
 - **F**: Audit fixes pós-refactor (dedup marker+regex)
 - **G**: Segurança — confirmar 0 matches no repo + recomendação de rotacionar senha Neo4j
 - **H (NOVO 22/05)**: TTS funciona na abertura (áudio audível), karaokê revela texto com voz, sem dupla exibição de resposta
+- **I (NOVO 24/05)**: TTS não trava o jogo se Edge TTS ficar sem resposta — sentença cai silenciosa e próxima turno começa normalmente
 
 **Ordem sugerida**: smoke → combate → descanso → pacing → restart → UI race (30min total).
 
