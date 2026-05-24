@@ -150,9 +150,12 @@ async def _enviar_lampejo(
             MensagemWS(tipo="lampejo", conteudo=texto).model_dump_json()
         )
         if tts is not None:
-            audio = await tts.sintetizar(
-                texto, voice=voice,
-                rate=_LAMPEJO_RATE, pitch=_LAMPEJO_PITCH,
+            audio = await asyncio.wait_for(
+                tts.sintetizar(
+                    texto, voice=voice,
+                    rate=_LAMPEJO_RATE, pitch=_LAMPEJO_PITCH,
+                ),
+                timeout=15.0,
             )
             if audio:
                 await websocket.send_text(
@@ -351,9 +354,14 @@ async def _sintetizar_e_enviar(
                 rate_override = voz_npc.get("rate")
 
         log.info("tts_sintetizando", chars=len(texto), preview=texto[:300])
-        audio_bytes: bytes = await tts.sintetizar(
-            texto, voice=voice,
-            rate=rate_override, pitch=pitch_override,
+        # Timeout de 15s — mesmo motivo que _tts_sentenca: half-open TCP pode
+        # travar o communicate.stream() indefinidamente sem lançar exceção.
+        audio_bytes: bytes = await asyncio.wait_for(
+            tts.sintetizar(
+                texto, voice=voice,
+                rate=rate_override, pitch=pitch_override,
+            ),
+            timeout=15.0,
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -468,11 +476,14 @@ async def _enviar_recap_sessao_anterior(
         _RECAP_PITCH: str = "-2Hz"
         tts = _obter_tts()
         if tts:
-            audio = await tts.sintetizar(
-                texto_recap,
-                voice=sessao.working_mem.tts_voice,
-                rate=_RECAP_RATE,
-                pitch=_RECAP_PITCH,
+            audio = await asyncio.wait_for(
+                tts.sintetizar(
+                    texto_recap,
+                    voice=sessao.working_mem.tts_voice,
+                    rate=_RECAP_RATE,
+                    pitch=_RECAP_PITCH,
+                ),
+                timeout=15.0,
             )
             if audio:
                 await websocket.send_text(
@@ -1075,9 +1086,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         if voz_npc:
                             pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
                             rate_s = voz_npc.get("rate", rate_s) or rate_s
-                    audio = await tts.sintetizar(  # type: ignore[union-attr]
-                        texto_s, idioma=idioma,
-                        voice=voz_s, rate=rate_s, pitch=pitch_s,
+                    # Timeout de 12s: se o servidor Edge TTS aceitar a conexão
+                    # mas parar de enviar dados (half-open TCP), a task travaria
+                    # indefinidamente. asyncio.TimeoutError é Exception → audio=b"".
+                    audio = await asyncio.wait_for(
+                        tts.sintetizar(  # type: ignore[union-attr]
+                            texto_s, idioma=idioma,
+                            voice=voz_s, rate=rate_s, pitch=pitch_s,
+                        ),
+                        timeout=12.0,
                     )
                 except Exception as exc:
                     log.warning("tts_sentenca_falhou", seq=seq, erro=str(exc))
