@@ -113,10 +113,9 @@ from api.turn_pipeline import (  # noqa: E402
 # Lampejo — visões dramáticas com voz alterada
 # ---------------------------------------------------------------------------
 
-# Captura `[LAMPEJO: <texto>]` ou `[Lampejo: ...]` (case-insensitive) na resposta
-# do LLM. Tudo entre o ":" e o "]" vira o conteúdo. Preserva pontuação interna,
-# mas para no primeiro "]" (não suporta colchetes aninhados — não precisa).
-_RE_LAMPEJO = re.compile(r"\[LAMPEJO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+# _RE_LAMPEJO migrado pra api/turn_pipeline.py (mantém todos os markers
+# no mesmo lugar — base pra futura tabela única). Re-importado abaixo.
+from api.turn_pipeline import _RE_LAMPEJO
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.

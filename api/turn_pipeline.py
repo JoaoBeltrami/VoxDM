@@ -107,6 +107,12 @@ _RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECAS
 # Backend acumula em wm.xp e detecta level up via tabela SRD.
 _RE_XP = re.compile(r"\[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 
+# Lampejo — visão dramática emitida pelo LLM. Conteúdo entre `:` e `]` vira
+# uma mensagem WS `tipo="lampejo"` separada, com voz alterada (rate/pitch).
+# Usado por _extrair_lampejos / _enviar_lampejo no websocket — a regex vive
+# aqui pra ficar com os demais markers (futura tabela única em D4).
+_RE_LAMPEJO = re.compile(r"\[LAMPEJO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
 # Feature combate tático: LLM emite [POSICAO: npc-id = N ft] (ou "= N ft cobertura").
 # Ex: "[POSICAO: goblin = 10 ft]", "[POSICAO: orco-arqueiro = 60 ft cobertura]"
 # Engine atualiza wm.posicoes_combate para o CombatTracker mostrar chip de distância.
