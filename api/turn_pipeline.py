@@ -80,6 +80,15 @@ _RE_DESCANSO_MARKER = re.compile(
     re.IGNORECASE,
 )
 
+# `[COMBATE: iniciar]` — LLM declara início de combate quando a ação do jogador
+# é claramente bélica mas o regex de verbos não casou (sparring narrado, "uso X
+# em Y" não coberto, declarações indiretas). Bug COMBATE-VERB-1 (26/05).
+# Engine-authority complementar à RE_COMBATE no texto do jogador.
+_RE_COMBATE_MARKER = re.compile(
+    r"\[COMBATE:\s*iniciar\s*\]",
+    re.IGNORECASE,
+)
+
 # Estado afetivo de NPC: [AFETO: npc-id|campo|delta]
 # Ex: "[AFETO: fael-valdreksson|respeito|+2]" — salvo no Neo4j (persistência entre sessões).
 # Campos: afeto | medo | respeito | rancor. Delta: int com sinal (+/-).
@@ -328,6 +337,16 @@ def aplicar_pos_turno(
     fala_limpa = strip_marcadores(resposta_completa)
     working_mem.registrar_fala("mestre", fala_limpa)
     working_mem.apresentar_npcs_mencionados(resposta_completa)
+
+    # 1b. Entrar em combate via marker — LLM tem autoridade para iniciar combate
+    #     quando a ação do jogador é narrativamente bélica mas o regex de verbos
+    #     não casou (sparring, "uso X em Y", declaração indireta). Bug
+    #     COMBATE-VERB-1 (26/05): jogador dizia "vou usar chama sagrada nele"
+    #     e o combate não iniciava — Mestre ficava em modo exploração tentando
+    #     narrar troca de golpes sem combat.md/saves.md/initiative.
+    if not working_mem.em_combate and _RE_COMBATE_MARKER.search(resposta_completa):
+        working_mem.entrar_combate()
+        log.info("combate_iniciado_por_marker")
 
     # 2. Sync de inimigos ANTES de detectar fim de combate (ordem crítica —
     #    sair_combate limpa inimigos_combate, perderíamos a última morte).

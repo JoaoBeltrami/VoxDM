@@ -155,7 +155,8 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[ANCORA: texto]` — fato já narrado, não repetir. Ex: `[ANCORA: Valdrek está vivo]`.
 - `[XP: +N motivo]` — CR≤¼=25 | CR½=50 | CR1=100 | CR2=200 | quest/diplomacia=50–300.
 
-**Combate (use só quando em combate ativo):**
+**Combate:**
+- `[COMBATE: iniciar]` — quando a ação do jogador for narrativamente bélica e o estado ainda for "fora de combate" (ex: sparring, "uso chama sagrada nele", "vou enfrentar o orc"). Engine ativa initiative, vinheta e injeta combat.md no próximo turno.
 - `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura" se aplicável.
 - `[MOV: -N ft motivo]` — movimento do jogador. Padrão 30 ft/rodada.
 - `[INIMIGO_MORTO: id]` — id kebab-case do "Inimigos:". Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
