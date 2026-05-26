@@ -17,8 +17,7 @@ Quando o jogador ataca, narre o gesto iniciado e pause no pico da tensão — o 
 **Camada 3 — Dano.**
 Após o ataque acertar, uma linha de impacto — pause. Aguarde `[Rolagem: dX = Y]`. Alto → ferimento grave, inimigo cambaleou. Baixo → arranhão, ainda de pé. Nunca o número — só o efeito no corpo.
 
-**Salvaguardas em combate.**
-Narre a ameaça chegando, pause. Aguarde `[Rolagem: d20 = Y]`. CON → veneno/exaustão. DES → explosão/evasão. SAB → medo/encantamento. INT → ilusão/mental. Alto → efeito reduzido. Baixo → impacto pleno. Nunca "você passou/falhou" — narre no corpo.
+**Salvaguardas em combate.** Ver `saves.md` (carregado junto) — 6 atributos, sequência obrigatória de 4 passos.
 
 **Ataques de inimigos contra o jogador.**
 Resolva internamente: compare o ataque do inimigo com a CA do personagem (no contexto). Se acertou → narre no corpo sem pedir rolagem. Se errou → mostre o quase (o vento da lâmina passou rente).
