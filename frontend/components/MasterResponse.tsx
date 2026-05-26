@@ -1,6 +1,7 @@
 "use client";
 
 import type { TurnoHistorico } from "@/hooks/useGameSession";
+import { TurnoResumo } from "@/components/TurnoResumo";
 
 interface Props {
   historico: TurnoHistorico[];
@@ -113,25 +114,30 @@ export function MasterResponse({ historico, respostaAtual, playerName, mestrePen
                     >
                       {b}
                       {ultimo && (
-                        <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
-                          {turno.latencia_ms > 0 && <span>{turno.latencia_ms}ms</span>}
-                          {turno.chunks_lore.length > 0 && (
-                            <span
-                              title={turno.chunks_lore.join("\n\n")}
-                              className="cursor-help underline decoration-dotted"
-                            >
-                              {turno.chunks_lore.length} chunk{turno.chunks_lore.length > 1 ? "s" : ""} de lore
-                            </span>
-                          )}
-                          {turno.chunks_regras.length > 0 && (
-                            <span
-                              title={turno.chunks_regras.join("\n\n")}
-                              className="cursor-help underline decoration-dotted"
-                            >
-                              {turno.chunks_regras.length} regra{turno.chunks_regras.length > 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
+                        <>
+                          {/* UX2: mini-resumo do turno — XP/ouro/HP/itens/condições.
+                              Render nulo quando o diff é vazio (turno só de roleplay). */}
+                          <TurnoResumo diff={turno.diff} />
+                          <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
+                            {turno.latencia_ms > 0 && <span>{turno.latencia_ms}ms</span>}
+                            {turno.chunks_lore.length > 0 && (
+                              <span
+                                title={turno.chunks_lore.join("\n\n")}
+                                className="cursor-help underline decoration-dotted"
+                              >
+                                {turno.chunks_lore.length} chunk{turno.chunks_lore.length > 1 ? "s" : ""} de lore
+                              </span>
+                            )}
+                            {turno.chunks_regras.length > 0 && (
+                              <span
+                                title={turno.chunks_regras.join("\n\n")}
+                                className="cursor-help underline decoration-dotted"
+                              >
+                                {turno.chunks_regras.length} regra{turno.chunks_regras.length > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   );

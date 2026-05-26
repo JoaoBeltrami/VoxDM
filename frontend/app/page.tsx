@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useSceneMood } from "@/hooks/useSceneMood";
@@ -17,6 +17,7 @@ import { CompanionsPanel } from "@/components/CompanionsPanel";
 import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
+import { RolagemBanner } from "@/components/RolagemBanner";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
@@ -303,6 +304,22 @@ export default function Home() {
       setSyncAtivo(localStorage.getItem(LS_SYNC_TEXTO_VOZ_KEY) !== "false");
     }
   }, []);
+
+  // UX1: contexto da rolagem pendente (banner sticky). Cálculo deduplicado aqui
+  // no topo do componente — antes vivia dentro do IIFE da toolbar de dados.
+  // Usado tanto pelo banner persistente quanto pela toolbar (motivoCheck).
+  const { esperandoRolagem, motivoRolagem, atributoRolagem } = useMemo(() => {
+    const ultimaFala = historico.length > 0 ? historico[historico.length - 1].mestre : "";
+    const esperando =
+      !respostaAtual &&
+      historico.length > 0 &&
+      (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
+    if (!esperando) {
+      return { esperandoRolagem: false, motivoRolagem: "", atributoRolagem: "" };
+    }
+    const { motivo, atributo } = extrairMotivoRolagem(ultimaFala);
+    return { esperandoRolagem: true, motivoRolagem: motivo, atributoRolagem: atributo };
+  }, [historico, respostaAtual]);
 
   // Revela o texto do mestre em sincronia com o áudio (karaokê reverso).
   // textoSincronizado é usado onde antes exibiríamos respostaAtual diretamente.
@@ -1278,6 +1295,13 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* UX1: banner persistente — mestre veterano nunca esquece o que pediu */}
+          <RolagemBanner
+            visible={esperandoRolagem}
+            atributo={atributoRolagem}
+            motivo={motivoRolagem}
+          />
 
           <MasterResponse
             historico={historico}
