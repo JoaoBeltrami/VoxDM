@@ -106,15 +106,24 @@ _PALAVRAS_PTBR: frozenset[str] = frozenset({
 # ---------------------------------------------------------------------------
 
 
+# Marcadores técnicos da engine (`[Rolagem: d20 = 14]`, `[XP: +50]`, etc.) são
+# instruções mecânicas em qualquer idioma — não devem enviesar a detecção do
+# texto narrativo. Bug TTS-LANG-1 (26/05): frase "[Rolagem: d20 = 18]" sem
+# resto era detectada como EN porque `d20` é neutro e nada mais bate em PT-BR;
+# o TTS gerava pronúncia errada em PT (números/palavras curtas).
+_RE_MARCADOR_TECNICO = re.compile(r"\[[^\]]*\]")
+
+
 def detectar_idioma(texto: str) -> Idioma:
     """
     Detecta o idioma dominante do texto transcrito.
 
     Algoritmo:
-      1. Tokeniza texto em palavras minúsculas
-      2. Remove termos D&D neutros (não indicam idioma)
-      3. Conta interseção com palavras PT-BR conhecidas
-      4. Score >= 2 → PT-BR; score == 1 → MISTO; score == 0 → EN
+      1. Remove marcadores `[...]` (instruções mecânicas, idioma-neutro)
+      2. Tokeniza texto em palavras minúsculas
+      3. Remove termos D&D neutros (não indicam idioma)
+      4. Conta interseção com palavras PT-BR conhecidas
+      5. Score >= 2 → PT-BR; score == 1 → MISTO; score == 0 → EN
 
     Args:
         texto: Texto transcrito pelo STT (frase ou parágrafo curto).
@@ -125,7 +134,13 @@ def detectar_idioma(texto: str) -> Idioma:
     if not texto.strip():
         return Idioma.PTBR  # fallback padrão para texto vazio
 
-    palavras = frozenset(re.findall(r"\b\w+\b", texto.lower()))
+    # Remove marcadores técnicos ANTES de tokenizar. Sentença vazia após o
+    # strip (era só marcador) → PT-BR default (TTS usa voz PT padrão).
+    texto_limpo = _RE_MARCADOR_TECNICO.sub("", texto).strip()
+    if not texto_limpo:
+        return Idioma.PTBR
+
+    palavras = frozenset(re.findall(r"\b\w+\b", texto_limpo.lower()))
 
     # Remove termos neutros de D&D para não enviesar a detecção
     palavras_relevantes = palavras - _TERMOS_DND_NEUTROS
