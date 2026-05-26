@@ -119,20 +119,26 @@ def escolher_task_type_narrativo(
     em_combate: bool,
     pacing_nivel: float,
     cliffhanger_pendente: bool = False,
+    turnos_sem_tensao: int = 0,
 ) -> TaskType:
     """Decide qual TaskType usar para o turno narrativo atual.
 
     Lógica:
       - Em combate + pacing≥7 OU cliffhanger pendente → CLIMAX (qualidade máxima)
-      - Pacing ≤ 2 e fora de combate → LIGHT (8B economiza TPM em filler)
+      - Fora de combate + (pacing ≤ 3.0 OU 3+ turnos sem tensão) → LIGHT (8B)
       - Default → NARRATIVE (cascata default 70B)
 
     Por que isto importa: em sessão de 1h, ~30% dos turnos são "filler" de
     exploração/social leve onde o 70B é overkill. Rotear para 8B nesses
     momentos economiza ~25% do TPM, mantendo qualidade nos momentos chave.
+
+    Calibração 26/05: threshold antigo era pacing ≤ 2.0. Pacing parte de 3.0 e
+    decai apenas -0.3 a cada 3 turnos calmos — precisava de ~30 turnos seguidos
+    sem combate para disparar, o que nunca acontece em sessão real. Subido para
+    3.0 + alternativa de turnos_sem_tensao≥3 (sinal mais direto de filler).
     """
     if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
         return TaskType.NARRATIVE_CLIMAX
-    if pacing_nivel <= 2.0 and not em_combate:
+    if not em_combate and (pacing_nivel <= 3.0 or turnos_sem_tensao >= 3):
         return TaskType.NARRATIVE_LIGHT
     return TaskType.NARRATIVE
