@@ -29,6 +29,16 @@ export interface SyncTextoVozProps {
   audioDuracao: number;
   /** Toggle geral da feature — false = mostra textoCompleto direto (sem sync). */
   ativo: boolean;
+  /**
+   * Quando true, mascara o texto enquanto o áudio ainda não começou — útil pra
+   * streaming, onde tokens do LLM chegam antes do TTS sintetizar. Sem isso, o
+   * jogador lê o parágrafo inteiro antes da primeira frase ser falada.
+   * Failsafe: após `aguardarAudioMs` o texto é revelado mesmo sem áudio (TTS
+   * pode ter falhado silenciosamente em sentença curta).
+   */
+  aguardarAudio?: boolean;
+  /** Failsafe pra `aguardarAudio` — ms até revelar texto mesmo sem áudio. Default 3500ms. */
+  aguardarAudioMs?: number;
 }
 
 // Offset de revelação antecipada — texto aparece X ms antes do cursor de áudio.
@@ -49,6 +59,8 @@ export function useSyncTextoVoz({
   audioTocando,
   audioDuracao,
   ativo,
+  aguardarAudio = false,
+  aguardarAudioMs = 3500,
 }: SyncTextoVozProps): string {
   const [textoVisivel, setTextoVisivel] = useState("");
 
@@ -61,6 +73,10 @@ export function useSyncTextoVoz({
   textoRef.current = textoCompleto;
   duracaoRef.current = audioDuracao;
 
+  // Failsafe timer pra aguardarAudio — se TTS demorar muito ou falhar
+  const failsafeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failsafeExpiradoRef = useRef(false);
+
   // Cancela RAF pendente
   const cancelarRaf = () => {
     if (rafRef.current !== null) {
@@ -69,10 +85,19 @@ export function useSyncTextoVoz({
     }
   };
 
+  const cancelarFailsafe = () => {
+    if (failsafeRef.current !== null) {
+      clearTimeout(failsafeRef.current);
+      failsafeRef.current = null;
+    }
+  };
+
   // Reset quando turno novo começa (textoCompleto vai a "")
   useEffect(() => {
     if (textoCompleto === "") {
       cancelarRaf();
+      cancelarFailsafe();
+      failsafeExpiradoRef.current = false;
       cursorRef.current = 0;
       startTimeRef.current = null;
       setTextoVisivel("");
@@ -82,14 +107,44 @@ export function useSyncTextoVoz({
   useEffect(() => {
     const charsTotal = textoCompleto.length;
 
+    // Caso 0: aguardando áudio começar — mascara o texto durante streaming.
+    // Aplica só quando há texto a esconder e o áudio ainda não começou (e o
+    // failsafe ainda não expirou). Sem isso, tokens do LLM (~30/s) aparecem
+    // antes do TTS (delay 800ms-1.5s) — jogador lê tudo antes de ouvir.
+    if (
+      ativo
+      && aguardarAudio
+      && !audioTocando
+      && charsTotal >= MIN_CHARS_PARA_SYNC
+      && !failsafeExpiradoRef.current
+    ) {
+      cancelarRaf();
+      // Arma o failsafe se ainda não armado — depois de aguardarAudioMs, libera
+      // o texto mesmo sem áudio (TTS pode ter falhado em sentença muito curta).
+      if (failsafeRef.current === null) {
+        failsafeRef.current = setTimeout(() => {
+          failsafeExpiradoRef.current = true;
+          setTextoVisivel(textoRef.current);
+          cursorRef.current = textoRef.current.length;
+        }, aguardarAudioMs);
+      }
+      setTextoVisivel("");
+      cursorRef.current = 0;
+      return;
+    }
+
     // Caso 1: feature desligada, sem áudio, texto curto ou turno vazio.
     // Revela o texto imediatamente e encerra.
     if (!ativo || !audioTocando || charsTotal < MIN_CHARS_PARA_SYNC) {
       cancelarRaf();
+      cancelarFailsafe();
       setTextoVisivel(textoCompleto);
       cursorRef.current = charsTotal;
       return;
     }
+
+    // Áudio começou — cancela failsafe (se armado) e segue pro loop de sync
+    cancelarFailsafe();
 
     // Caso 2: audioTocando=true, mas duração ainda não chegou (0) →
     // usa fallback de taxa fixa com delay inicial para simular latência TTS.
@@ -145,7 +200,7 @@ export function useSyncTextoVoz({
     }
 
     return cancelarRaf;
-  }, [audioTocando, audioDuracao, textoCompleto, ativo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [audioTocando, audioDuracao, textoCompleto, ativo, aguardarAudio, aguardarAudioMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return textoVisivel;
 }
