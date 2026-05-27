@@ -28,6 +28,7 @@ import {
   Panel,
   XpBar,
 } from "@/components/ui";
+import { CombatTracker } from "@/components/CombatTracker";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
@@ -262,6 +263,25 @@ export default function PreviewPage() {
               </div>
             </div>
           </Panel>
+
+          {/* CombatTracker mockado — mostra como aparece em combate */}
+          <CombatTracker
+            emCombate
+            rodada={2}
+            turnoJogador
+            movimentoRestanteFt={15}
+            movimentoTotalFt={30}
+            inimigos={{
+              "goblin-arqueiro": { nome: "Goblin Arqueiro", estado: "ferido",  hp_rel: "respira pesado" },
+              "ogro":            { nome: "Ogro",             estado: "intacto" },
+              "lobo":            { nome: "Lobo",             estado: "morto" },
+            }}
+            posicoes={{
+              "goblin-arqueiro": { distancia_ft: 30, cobertura: true },
+              "ogro":            { distancia_ft: 5,  cobertura: false },
+            }}
+            onAtacar={(nome) => console.log("atacar", nome)}
+          />
         </div>
       }
       dock={
