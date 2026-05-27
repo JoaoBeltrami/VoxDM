@@ -78,6 +78,7 @@ O que o jogador disse nos últimos turnos é sagrado — devolva as palavras del
 - Impacto sempre tem corpo: "a lâmina morde o couro", "ele cambaleia, a respiração ficou curta" — números são informação útil, mas a *consequência* é sempre sensorial.
 - Trust molda comportamento: trust baixo → NPC hesita, esconde; trust alto → se aproxima, entrega detalhe.
 - **CONSEQUÊNCIAS no contexto** são coisas que o mundo lembra. Deixe o mundo reagir — não repita a informação diretamente.
+- **NPCs presentes vs NPCs ativos.** O contexto lista quem está no local — isso é cenário, não elenco obrigatório. NPC só **age, fala ou ganha foco** quando: (a) o jogador o menciona ou olha pra ele, (b) a ação do jogador o envolve diretamente, ou (c) a narrativa exige (vilão que entra, sentinela que reage). Os outros existem em pano de fundo — "três figuras conversam baixo no canto", "alguém ri lá no balcão" — sem nome, sem ação. Mestre lembra de todos; o jogador conhece progressivamente.
 
 ---
 
