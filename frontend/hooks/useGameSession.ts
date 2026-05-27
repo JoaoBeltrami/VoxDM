@@ -35,6 +35,19 @@ function narrarErro(bruto: string): string {
   return `Algo se desviou nas tramas da narrativa. (${bruto.slice(0, 80)})`;
 }
 
+/** Diff de um turno — o que mudou na ficha entre antes e depois do turno.
+ *  Calculado uma vez no momento do flush; persiste no TurnoHistorico pra
+ *  que TurnoResumo possa renderizar mesmo em bolhas antigas do histórico. */
+export interface TurnoDiff {
+  xp_delta?: number;
+  gold_delta?: number;
+  hp_delta?: number;
+  itens_ganhos?: string[];
+  itens_perdidos?: string[];
+  condicoes_novas?: string[];
+  condicoes_removidas?: string[];
+}
+
 export interface TurnoHistorico {
   id: number;
   jogador: string;   // "" quando é mensagem de abertura do mestre
@@ -43,6 +56,8 @@ export interface TurnoHistorico {
   chunks_lore: string[];
   chunks_regras: string[];
   tipo?: "normal" | "recap" | "lampejo";
+  /** Diff do turno: XP/ouro/HP/itens/condições. Calculado no flush. */
+  diff?: TurnoDiff;
 }
 
 /** Registro de uma rolagem feita pelo jogador. Mantemos as N últimas pra exibir
@@ -636,7 +651,39 @@ export function useGameSession() {
           // (bolhas no historico + bolha de streaming simultaneamente).
           // Quando áudio está tocando: mantém textoFinal para o karaokê continuar.
           const _flushouImediato = !audioTocandoRef.current;
-          setEstado(s => ({
+          setEstado(s => {
+            // Calcula diff antes/depois pro TurnoResumo. Atualiza o turnoPendenteRef
+            // que já foi criado acima — assim o histórico recebe o diff junto.
+            const novoXp = rpgUpdate.xp ?? s.xp;
+            const novoGold = rpgUpdate.gold ?? s.gold;
+            const novoHp = rpgUpdate.serverHp;
+            const xp_delta = novoXp - s.xp;
+            const gold_delta = novoGold - s.gold;
+            const hp_delta = (novoHp != null && s.serverHp != null) ? novoHp - s.serverHp : 0;
+            const novoInventory = novoTurnoBase.inventory ?? s.inventory;
+            const novaCondicoes = msg.conditions ?? s.playerConditions;
+            const setAntes = new Set(s.inventory);
+            const setNovo = new Set(novoInventory);
+            const itens_ganhos = novoInventory.filter(i => !setAntes.has(i));
+            const itens_perdidos = s.inventory.filter(i => !setNovo.has(i));
+            const setCondAntes = new Set(s.playerConditions);
+            const setCondNovo = new Set(novaCondicoes);
+            const condicoes_novas = novaCondicoes.filter(c => !setCondAntes.has(c));
+            const condicoes_removidas = s.playerConditions.filter(c => !setCondNovo.has(c));
+
+            if (turnoPendenteRef.current) {
+              const diff: TurnoDiff = {};
+              if (xp_delta) diff.xp_delta = xp_delta;
+              if (gold_delta) diff.gold_delta = gold_delta;
+              if (hp_delta) diff.hp_delta = hp_delta;
+              if (itens_ganhos.length) diff.itens_ganhos = itens_ganhos;
+              if (itens_perdidos.length) diff.itens_perdidos = itens_perdidos;
+              if (condicoes_novas.length) diff.condicoes_novas = condicoes_novas;
+              if (condicoes_removidas.length) diff.condicoes_removidas = condicoes_removidas;
+              turnoPendenteRef.current.diff = diff;
+            }
+
+            return {
             ...s,
             // respostaAtual preservado = textoFinal: karaokê continua revelando
             // até audioTocando=false, quando _flushTurnoPendente empurra ao histórico.
@@ -689,7 +736,8 @@ export function useGameSession() {
             condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
             pacingNivel: msg.pacing_nivel ?? s.pacingNivel,
-          }));
+            };
+          });
         }
       }
 
