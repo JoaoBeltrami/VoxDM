@@ -29,6 +29,7 @@ import {
   XpBar,
 } from "@/components/ui";
 import { CombatTracker } from "@/components/CombatTracker";
+import { DadoAnimado } from "@/components/DadoAnimado";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
@@ -75,6 +76,12 @@ export default function PreviewPage() {
   const proximoEstado = () => {
     const i = ORB_STATES.indexOf(orbState);
     setOrbState(ORB_STATES[(i + 1) % ORB_STATES.length]);
+  };
+
+  // Demonstração do DadoAnimado: cicla resultado normal/crit/falha quando clica
+  const [dado, setDado] = useState<{ tipo: string; valor: number; key: number } | null>(null);
+  const rolar = (tipo: string, valor: number) => {
+    setDado({ tipo, valor, key: Date.now() });
   };
 
   return (
@@ -289,14 +296,29 @@ export default function PreviewPage() {
           <Button variant="ghost" size="lg">🎙</Button>
           <Button variant="primary" size="md">Enviar</Button>
           <div className="flex items-center gap-1.5">
-            <Button variant="secondary" size="sm">d4</Button>
-            <Button variant="secondary" size="sm">d6</Button>
-            <Button variant="secondary" size="sm">d8</Button>
-            <Button variant="secondary" size="sm">d10</Button>
-            <Button variant="secondary" size="sm">d12</Button>
-            <Button variant="secondary" size="sm">d20</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d4", 1 + Math.floor(Math.random() * 4))}>d4</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d6", 1 + Math.floor(Math.random() * 6))}>d6</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d8", 1 + Math.floor(Math.random() * 8))}>d8</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d10", 1 + Math.floor(Math.random() * 10))}>d10</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d12", 1 + Math.floor(Math.random() * 12))}>d12</Button>
+            <Button variant="secondary" size="sm" onClick={() => rolar("d20", 1 + Math.floor(Math.random() * 20))}>d20</Button>
+            <Button variant="primary" size="sm" onClick={() => rolar("d20", 20)} title="Forçar crítico">20!</Button>
+            <Button variant="danger" size="sm" onClick={() => rolar("d20", 1)} title="Forçar falha">1!</Button>
           </div>
         </div>
+      }
+      overlays={
+        dado && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <DadoAnimado
+              key={dado.key}
+              tipo={dado.tipo}
+              resultado={dado.valor}
+              visivel
+              onTerminou={() => setDado(null)}
+            />
+          </div>
+        )
       }
       backgroundUrl="https://image.pollinations.ai/prompt/medieval%20norse%20port%20village%20at%20dawn%20foggy%20fantasy%20art?width=1920&height=1080&model=flux"
     />
