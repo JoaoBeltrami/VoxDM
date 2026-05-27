@@ -1,31 +1,33 @@
 "use client";
 
+/**
+ * MasterResponse — chat principal do Mestre.
+ *
+ * Renderiza histórico de turnos como bolhas (jogador à direita, mestre à
+ * esquerda). Trata 3 tipos especiais: normal, recap (sépia), lampejo
+ * (gradiente violeta dramático).
+ *
+ * Refatorado 27/05: usa Card + Avatar + font-atmospheric. Visual cinema.
+ */
+
 import type { TurnoHistorico } from "@/hooks/useGameSession";
 import { TurnoResumo } from "@/components/TurnoResumo";
+import { Avatar, Card, cn } from "@/components/ui";
 
 interface Props {
   historico: TurnoHistorico[];
   respostaAtual: string;
   playerName?: string | null;
   /** True quando o jogador enviou um comando mas o LLM ainda não emitiu o primeiro
-   *  token. Mascara o gap silencioso (2-6s no Gemini) com uma bolha de 3 pontinhos
-   *  pulsantes — espectador entende que o Mestre está pensando, não que travou. */
+   *  token. Mascara o gap silencioso com uma bolha de 3 pontinhos pulsantes. */
   mestrePensando?: boolean;
 }
 
-// Quebra a resposta do mestre em múltiplos balões.
-// Estratégia: divide por parágrafos (linhas em branco) — preserva o ritmo
-// natural escrito pelo LLM. Se a resposta não tem parágrafos mas é muito
-// longa (>360 chars), divide por sentenças agrupadas em ~280 chars cada.
-// Pra textos curtos, retorna [texto] (um único balão).
 function dividirEmBaloes(texto: string): string[] {
   const trim = texto.trim();
   if (!trim) return [];
-
   const paragrafos = trim.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   if (paragrafos.length > 1) return paragrafos;
-
-  // Sem parágrafos explícitos — só dividimos se for realmente longo
   if (trim.length <= 360) return [trim];
 
   const sentencas = trim.match(/[^.!?…]+[.!?…]+["')\]]?\s*/g) ?? [trim];
@@ -43,131 +45,168 @@ function dividirEmBaloes(texto: string): string[] {
   return baloes.length > 0 ? baloes : [trim];
 }
 
-export function MasterResponse({ historico, respostaAtual, playerName, mestrePensando = false }: Props) {
-  // Bolhas mais antigas ficam progressivamente mais apagadas — foco no presente.
-  // As 3 últimas ficam em opacity 1; as anteriores dimem gradualmente até 0.35.
+export function MasterResponse({
+  historico,
+  respostaAtual,
+  playerName,
+  mestrePensando = false,
+}: Props) {
   const total = historico.length;
   const getOpacity = (idx: number) => {
-    const dist = total - 1 - idx; // 0 = mais recente
+    const dist = total - 1 - idx;
     if (dist <= 2) return 1;
     return Math.max(0.35, 1 - dist * 0.1);
   };
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto">
+    <div className="flex flex-col gap-4 overflow-y-auto px-4 py-6">
       {historico.map((turno, idx) => (
-        <div key={turno.id} className="flex flex-col gap-2 transition-opacity duration-700" style={{ opacity: getOpacity(idx) }}>
-
-          {/* Lampejo — visão dramática, sussurro do passado/futuro.
-              Gradient violeta-índigo, Cinzel itálico, fade-in lento.
-              Mestre veterano usa pra flashbacks, presságios, sussurros etéreos. */}
+        <div
+          key={turno.id}
+          className="flex flex-col gap-2 transition-opacity duration-700 animate-fade-in-up"
+          style={{ opacity: getOpacity(idx) }}
+        >
+          {/* Lampejo — visão dramática */}
           {turno.tipo === "lampejo" && turno.mestre && (
-            <div
-              className="self-center w-[85%] rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-950/60 via-indigo-950/40 to-violet-900/30 px-6 py-4 shadow-[0_0_24px_-8px_rgba(139,92,246,0.4)] animate-[fade-in_800ms_ease-out]"
+            <Card
+              variant="bare"
+              elevation={3}
+              rounded="2xl"
+              padding="lg"
+              className="self-center w-[85%] border-violet-500/30 bg-gradient-to-br from-violet-950/60 via-indigo-950/40 to-violet-900/30 shadow-vox-glow animate-fade-in"
               role="note"
             >
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-violet-300/70">
+              <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-[0.25em] text-vox-accent-dramatic">
                 ✦ Lampejo
               </p>
-              <p className="text-base leading-relaxed italic text-violet-100/90"
-                 style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}>
+              <p className="font-atmospheric text-base leading-relaxed text-vox-accent-dramatic">
                 {turno.mestre}
               </p>
-            </div>
+            </Card>
           )}
 
-          {/* Recap da sessão anterior — exibido com estilo sepia antes da abertura */}
+          {/* Recap — sépia âmbar */}
           {turno.tipo === "recap" && turno.mestre && (
-            <div className="self-start w-full rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600/80">
+            <Card
+              variant="bare"
+              elevation={1}
+              rounded="xl"
+              padding="md"
+              className="self-start w-full border-amber-900/40 bg-amber-950/20"
+            >
+              <p className="mb-1.5 font-display text-[10px] font-semibold uppercase tracking-widest text-amber-600/80">
                 Anteriormente…
               </p>
-              <p className="text-sm leading-relaxed text-amber-200/70 italic">
+              <p className="font-atmospheric text-sm leading-relaxed text-amber-200/70">
                 {turno.mestre}
               </p>
-            </div>
+            </Card>
           )}
 
-          {/* Fala do jogador — omitida em mensagens de abertura (jogador == "") */}
+          {/* Fala do jogador */}
           {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.jogador && (
-            <div className="self-end flex flex-col items-end gap-0.5">
+            <div className="self-end flex flex-col items-end gap-1 max-w-[75%]">
               {playerName && (
-                <span className="mr-1 text-xs text-violet-400/70">{playerName}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-vox-accent-glow/80">{playerName}</span>
+                  <Avatar name={playerName} size="xs" tone="violet" />
+                </div>
               )}
-              <div className="max-w-[75%] rounded-xl bg-violet-900/60 px-4 py-2 text-sm text-violet-100">
+              <Card
+                variant="bare"
+                elevation={1}
+                rounded="xl"
+                padding="md"
+                className="bg-violet-900/60 border-violet-800/40 text-sm text-violet-100"
+              >
                 {turno.jogador}
-              </div>
+              </Card>
             </div>
           )}
 
-          {/* Resposta do Mestre — quebrada em múltiplos balões quando longa */}
+          {/* Resposta do Mestre — múltiplos balões com Avatar à esquerda */}
           {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.mestre && (() => {
             const baloes = dividirEmBaloes(turno.mestre);
             return (
-              <div className="flex flex-col gap-1.5">
-                {baloes.map((b, idx) => {
-                  const ultimo = idx === baloes.length - 1;
-                  return (
-                    <div
-                      key={idx}
-                      className="self-start max-w-[90%] rounded-xl bg-zinc-800 px-4 py-3 text-sm leading-relaxed text-zinc-100"
-                    >
-                      {b}
-                      {ultimo && (
-                        <>
-                          {/* UX2: mini-resumo do turno — XP/ouro/HP/itens/condições.
-                              Render nulo quando o diff é vazio (turno só de roleplay). */}
-                          <TurnoResumo diff={turno.diff} />
-                          <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
-                            {turno.latencia_ms > 0 && <span>{turno.latencia_ms}ms</span>}
-                            {turno.chunks_lore.length > 0 && (
-                              <span
-                                title={turno.chunks_lore.join("\n\n")}
-                                className="cursor-help underline decoration-dotted"
-                              >
-                                {turno.chunks_lore.length} chunk{turno.chunks_lore.length > 1 ? "s" : ""} de lore
-                              </span>
-                            )}
-                            {turno.chunks_regras.length > 0 && (
-                              <span
-                                title={turno.chunks_regras.join("\n\n")}
-                                className="cursor-help underline decoration-dotted"
-                              >
-                                {turno.chunks_regras.length} regra{turno.chunks_regras.length > 1 ? "s" : ""}
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="flex items-start gap-2.5">
+                <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1 shrink-0" />
+                <div className="flex flex-col gap-1.5 max-w-[85%] flex-1">
+                  {baloes.map((b, bidx) => {
+                    const ultimo = bidx === baloes.length - 1;
+                    return (
+                      <Card
+                        key={bidx}
+                        variant="panel"
+                        elevation={2}
+                        rounded="xl"
+                        padding="md"
+                        className="font-atmospheric text-base leading-relaxed text-vox-text-primary"
+                      >
+                        {b}
+                        {ultimo && (
+                          <>
+                            <TurnoResumo diff={turno.diff} />
+                            <div className="mt-2 flex items-center gap-3 text-xs text-vox-text-muted font-sans">
+                              {turno.latencia_ms > 0 && (
+                                <span className="tabular-nums">{turno.latencia_ms}ms</span>
+                              )}
+                              {turno.chunks_lore.length > 0 && (
+                                <span
+                                  title={turno.chunks_lore.join("\n\n")}
+                                  className="cursor-help underline decoration-dotted"
+                                >
+                                  {turno.chunks_lore.length} chunk{turno.chunks_lore.length > 1 ? "s" : ""} de lore
+                                </span>
+                              )}
+                              {turno.chunks_regras.length > 0 && (
+                                <span
+                                  title={turno.chunks_regras.join("\n\n")}
+                                  className="cursor-help underline decoration-dotted"
+                                >
+                                  {turno.chunks_regras.length} regra{turno.chunks_regras.length > 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
             );
           })()}
         </div>
       ))}
 
-      {/* Indicador "Mestre pensando" — preenche o gap entre enviar e primeiro
-          token (~2-6s no Gemini). Some instantaneamente quando o stream começa. */}
+      {/* Indicador "Mestre pensando" */}
       {mestrePensando && !respostaAtual && (
-        <div
-          className="self-start rounded-xl bg-zinc-800/80 px-4 py-3"
-          aria-label="Mestre pensando"
-        >
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:0ms]" />
-            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:200ms]" />
-            <span className="h-1.5 w-1.5 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400 [animation-delay:400ms]" />
-          </span>
+        <div className="self-start flex items-start gap-2.5">
+          <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1" />
+          <Card variant="panel" elevation={1} rounded="xl" padding="md" aria-label="Mestre pensando">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-vox-accent-glow [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-vox-accent-glow [animation-delay:200ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-vox-accent-glow [animation-delay:400ms]" />
+            </span>
+          </Card>
         </div>
       )}
 
       {/* Token streaming em tempo real */}
       {respostaAtual && (
-        <div className="self-start max-w-[90%] rounded-xl bg-zinc-800 px-4 py-3 text-sm leading-relaxed text-zinc-100">
-          {respostaAtual}
-          <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-violet-400" />
+        <div className="self-start flex items-start gap-2.5 max-w-[85%]">
+          <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1 shrink-0" />
+          <Card
+            variant="panel"
+            elevation={2}
+            rounded="xl"
+            padding="md"
+            className="font-atmospheric text-base leading-relaxed text-vox-text-primary"
+          >
+            {respostaAtual}
+            <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-vox-accent-glow align-middle" />
+          </Card>
         </div>
       )}
     </div>
