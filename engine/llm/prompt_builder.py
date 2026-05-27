@@ -38,6 +38,12 @@ _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 _SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
 _QUESTS_PATH        = Path(__file__).parent / "prompts" / "quests.md"
 _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
+# Fragmentos condicionais (Frente B — gating contextual, 27/05)
+# Injetados só quando a cena pede, não em todo turno. Economia: ~200-300
+# tok/turno em exploração calma (~50% das sessões reais).
+_FRAGMENTS_DIR      = Path(__file__).parent / "prompts" / "fragments"
+_FRAG_VOZ_DUPLA     = _FRAGMENTS_DIR / "voz_dupla.md"
+_FRAG_MARKERS_LISTA = _FRAGMENTS_DIR / "markers_lista.md"
 
 # Perfis válidos — alinhar com SessaoConfig.dm_profile e WorkingMemory.dm_profile
 _DM_PROFILES_VALIDOS: frozenset[str] = frozenset({
@@ -122,6 +128,43 @@ def _carregar_master_system() -> str:
 def _carregar_dice() -> str | None:
     """Guia de rolagem de dados — com hot reload. None se ausente."""
     return _ler_prompt(_DICE_PATH)
+
+
+def _carregar_voz_dupla() -> str | None:
+    """Fragmento de voz dupla Mestre vs NPC. Gated em montar_mensagens."""
+    return _ler_prompt(_FRAG_VOZ_DUPLA)
+
+
+def _carregar_markers_lista() -> str | None:
+    """Fragmento com lista completa de marcadores. Gated em montar_mensagens."""
+    return _ler_prompt(_FRAG_MARKERS_LISTA)
+
+
+def _cena_dramatica(wm: Any) -> bool:
+    """Heurística pra decidir se a cena tem ritmo dramático.
+
+    Critérios — qualquer um basta:
+      - em combate ativo (precisa dos markers de combate)
+      - pacing >= 4.0 (ação acelerando ou clímax)
+      - há cliffhanger pendente (cena guardada pra encerrar dramatico)
+      - já há fios_soltos ou agenda_npcs ativos (o LLM precisa saber quais
+        marcadores existem pra manter coerência)
+
+    Quando False, a lista detalhada de marcadores é omitida. O master_system.md
+    ainda menciona que marcadores existem e quais são os básicos — o LLM não
+    perde a noção, só não recebe a tabela completa quando não precisa.
+    """
+    if getattr(wm, "em_combate", False):
+        return True
+    if getattr(wm, "pacing_nivel", 3.0) >= 4.0:
+        return True
+    if getattr(wm, "cliffhanger_pendente", ""):
+        return True
+    if getattr(wm, "fios_soltos", []):
+        return True
+    if getattr(wm, "agenda_npcs", {}):
+        return True
+    return False
 
 
 def _carregar_combat() -> str | None:
@@ -258,6 +301,28 @@ def montar_mensagens(
 
     # ── System message: identidade + estado da cena (sem diálogo) ────────────
     secoes: list[str] = [master_system, ""]
+
+    # ── Frente B: fragmentos condicionais (27/05) ────────────────────────────
+    # Voz dupla: injeta só quando o LLM já registrou voz de algum NPC. Em
+    # sessões 100% narração de mob/exploração, economiza ~600 chars (~150 tok).
+    wm = contexto.working_memory
+    chars_voz_dupla = 0
+    chars_markers = 0
+    if getattr(wm, "npc_vozes", {}):
+        voz_dupla = _carregar_voz_dupla()
+        if voz_dupla:
+            secoes.append(voz_dupla)
+            chars_voz_dupla = len(voz_dupla)
+
+    # Markers list: injeta só quando a cena tem ritmo dramático (em combate,
+    # pacing alto, cliffhanger, fios ou agendas ativos). Em exploração calma
+    # o master_system já menciona que markers existem — a tabela completa
+    # custaria ~1500 chars (~380 tok) sem necessidade real.
+    if _cena_dramatica(wm):
+        markers = _carregar_markers_lista()
+        if markers:
+            secoes.append(markers)
+            chars_markers = len(markers)
 
     # Overlay de perfil do DM — sobrepõe o tom default quando perfil != equilibrado.
     # "equilibrado" é o tom JÁ contido em master_system.md — injetar overlay é
@@ -502,6 +567,8 @@ def montar_mensagens(
     # 1 token ≈ 4 chars; valores em chars são mais legíveis em log.
     chars_breakdown = {
         "master": len(master_system),
+        "voz_dupla_frag": chars_voz_dupla,
+        "markers_frag": chars_markers,
         "wm": len(wm_texto),
         "regras_srd": len(regras_texto),
         "combat_md": chars_combat,
