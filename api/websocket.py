@@ -345,6 +345,21 @@ def _obter_tts() -> Any:
     return _tts_engine
 
 
+import unicodedata
+
+
+def _strip_accents(s: str) -> str:
+    """Remove acentos pra comparar 'Tóric' (texto) com 'toric' (id kebab).
+
+    Decomposição NFD separa o caractere base do diacrítico; filtramos a marca
+    (categoria 'Mn'). 'Tóric' → 'Toric', 'João' → 'Joao'.
+    """
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
 # Threshold de quote-dominance — abaixo disso, atribuição domina e a voz fica
 # com o Mestre. 40% é conservador: prefere falso negativo (NPC fica na voz
 # padrão) a falso positivo (voz do NPC tocando em narração quebra imersão).
@@ -416,9 +431,10 @@ def _extrair_atribuicao(
     if not npc_vozes:
         return None
     from engine.memory.working_memory import _id_para_nome
-    texto_lower = texto.lower()
+    # Normaliza acentos pra casar "Tóric" (texto) com "toric" (id)
+    texto_lower = _strip_accents(texto.lower())
     for npc_id in npc_vozes:
-        nome = _id_para_nome(npc_id).lower()
+        nome = _strip_accents(_id_para_nome(npc_id).lower())
         nome_esc = re.escape(nome)
         # Pattern 1: Nome ... verbo
         if re.search(
@@ -459,10 +475,11 @@ def _detectar_voz_npc(
         return None
 
     # Guard 2a: nome de NPC com voz registrada na sentença
+    # Normaliza acentos pra casar "Tóric" (texto) com "toric" (id kebab)
     from engine.memory.working_memory import _id_para_nome
-    texto_lower = texto.lower()
+    texto_lower = _strip_accents(texto.lower())
     for npc_id, params in npc_vozes.items():
-        nome = _id_para_nome(npc_id).lower()
+        nome = _strip_accents(_id_para_nome(npc_id).lower())
         if npc_id in texto_lower or nome in texto_lower:
             return params
 
