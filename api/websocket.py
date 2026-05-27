@@ -345,19 +345,135 @@ def _obter_tts() -> Any:
     return _tts_engine
 
 
-def _detectar_voz_npc(texto: str, npc_vozes: dict[str, dict[str, str]]) -> dict[str, str] | None:
-    """Retorna parâmetros de voz do NPC que parece estar falando nesta sentença.
+# Threshold de quote-dominance — abaixo disso, atribuição domina e a voz fica
+# com o Mestre. 40% é conservador: prefere falso negativo (NPC fica na voz
+# padrão) a falso positivo (voz do NPC tocando em narração quebra imersão).
+_QUOTE_DOMINANCE_THRESHOLD: float = 0.40
 
-    Busca pelo npc_id (convertido de kebab para nome) dentro do texto.
-    Só detecta NPCs que já têm assinatura registrada em wm.npc_vozes.
-    Retorna None se nenhum NPC com assinatura for detectado.
+# Pronomes 3a pessoa singular + verbo de fala: pattern de atribuição curta
+# que herda o NPC em foco da sentença anterior ("ela diz", "ele murmura").
+_RE_PRONOME_ATRIBUICAO = re.compile(
+    r"\b(?:ela|ele)\s+(?:diz|disse|fala|falou|murmura|murmurou|grita|gritou|"
+    r"sussurra|sussurrou|responde|respondeu|exclama|grunhe|replica|comenta|"
+    r"conta|pergunta|rosna)\b",
+    re.IGNORECASE,
+)
+
+# Verbos de fala em PT-BR — usados em _extrair_atribuicao pra reconhecer
+# padrões "Nome verbo" ou "verbo Nome". Lista coberta de mestre brasileiro.
+_VERBOS_FALA: tuple[str, ...] = (
+    "diz", "disse", "fala", "falou", "falava", "murmura", "murmurou",
+    "grita", "gritou", "sussurra", "sussurrou", "responde", "respondeu",
+    "exclama", "exclamou", "grunhe", "grunhiu", "replica", "replicou",
+    "comenta", "comentou", "conta", "contou", "pergunta", "perguntou",
+    "rosna", "rosnou", "balbucia", "ri", "riu",
+)
+_VERBS_ALT = "|".join(_VERBOS_FALA)
+
+
+def _calc_quote_ratio(texto: str) -> float:
+    """Fração de chars dentro de aspas (qualquer tipo, retas ou curvas).
+
+    Máquina de estado simples: alterna in_quote ao encontrar `"` ou `'`.
+    Normaliza aspas curvas (“”‘’) pra retas antes.
+    Retorna 0.0 pra texto vazio — chamador trata como 'sem aspas'.
     """
+    total = len(texto.strip())
+    if not total:
+        return 0.0
+    normalizado = (
+        texto.replace("“", '"').replace("”", '"')
+             .replace("‘", "'").replace("’", "'")
+    )
+    chars_in_quotes = 0
+    in_quote: str | None = None
+    for c in normalizado:
+        if c in ('"', "'"):
+            if in_quote == c:
+                in_quote = None  # fecha
+            elif in_quote is None:
+                in_quote = c  # abre
+            continue
+        if in_quote:
+            chars_in_quotes += 1
+    return chars_in_quotes / total
+
+
+def _extrair_atribuicao(
+    texto: str, npc_vozes: dict[str, dict[str, str]]
+) -> str | None:
+    """Detecta padrão 'Nome verbo' ou 'verbo Nome' na mesma frase.
+
+    Retorna o npc_id se encontrar um NPC com voz registrada em padrão de
+    atribuição. Usado pelo loop de TTS pra atualizar `npc_em_foco` — sinal
+    forte de que esse NPC vai continuar falando nas próximas sentenças
+    (pronome "ela diz" / "ele murmura" herdará a voz dele).
+
+    Proximidade: nome e verbo até 40 chars de distância, sem `.!?\\n` entre
+    eles (mesma sentença lógica). Tolera vírgulas e adjetivos no meio:
+    "Lyssa, com a voz baixa, fala" → atribuição válida.
+    """
+    if not npc_vozes:
+        return None
+    from engine.memory.working_memory import _id_para_nome
+    texto_lower = texto.lower()
+    for npc_id in npc_vozes:
+        nome = _id_para_nome(npc_id).lower()
+        nome_esc = re.escape(nome)
+        # Pattern 1: Nome ... verbo
+        if re.search(
+            rf"\b{nome_esc}\b[^.!?\n]{{0,40}}\b(?:{_VERBS_ALT})\b",
+            texto_lower,
+        ):
+            return npc_id
+        # Pattern 2: verbo ... Nome
+        if re.search(
+            rf"\b(?:{_VERBS_ALT})\b[^.!?\n]{{0,40}}\b{nome_esc}\b",
+            texto_lower,
+        ):
+            return npc_id
+    return None
+
+
+def _detectar_voz_npc(
+    texto: str,
+    npc_vozes: dict[str, dict[str, str]],
+    npc_em_foco: str | None = None,
+) -> dict[str, str] | None:
+    """Retorna parâmetros de voz se a sentença é PRIMARILY fala direta de NPC.
+
+    Regra de precisão — voz de NPC só dispara em 3 condições combinadas:
+      1. `_calc_quote_ratio(texto) >= 0.40` — fala domina sobre narração
+      2. Há sinal claro de quem fala: nome de NPC com voz registrada,
+         OU pronome de atribuição ("ela diz") com `npc_em_foco` setado
+      3. Caso contrário → None (voz do Mestre)
+
+    Falso positivo > falso negativo: voz do NPC tocando em narração quebra
+    imersão mais do que NPC ficar na voz padrão. Mestre é o default seguro.
+    """
+    if not npc_vozes or not texto.strip():
+        return None
+
+    # Guard 1: fala precisa dominar
+    if _calc_quote_ratio(texto) < _QUOTE_DOMINANCE_THRESHOLD:
+        return None
+
+    # Guard 2a: nome de NPC com voz registrada na sentença
     from engine.memory.working_memory import _id_para_nome
     texto_lower = texto.lower()
     for npc_id, params in npc_vozes.items():
-        # Tenta o id direto e o nome capitalizado (ex: "lyssa" ↔ "Lyssa")
-        if npc_id in texto_lower or _id_para_nome(npc_id).lower() in texto_lower:
+        nome = _id_para_nome(npc_id).lower()
+        if npc_id in texto_lower or nome in texto_lower:
             return params
+
+    # Guard 2b: pronome de atribuição herda npc_em_foco
+    if (
+        npc_em_foco
+        and npc_em_foco in npc_vozes
+        and _RE_PRONOME_ATRIBUICAO.search(texto)
+    ):
+        return npc_vozes[npc_em_foco]
+
     return None
 
 
@@ -1103,18 +1219,31 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             tts_enviado_ate: int = -1
             tts_buffer_audio: dict[int, bytes] = {}
             tts_lock: asyncio.Lock = asyncio.Lock()
+            # `npc_em_foco` — npc_id que foi alvo de atribuição clara na sentença
+            # anterior. Permite que pronome "ela diz" / "ele murmura" herde a voz
+            # do NPC certo. Reseta naturalmente a cada turno (closure recriada).
+            npc_em_foco: str | None = None
 
             async def _tts_sentenca(seq: int, texto_s: str) -> None:
-                nonlocal tts_enviado_ate
+                nonlocal tts_enviado_ate, npc_em_foco
                 voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
                 # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
-                # Sobrescreve pitch/rate quando o LLM registrou uma assinatura para
-                # o NPC detectado nesta sentença — granularidade por turno de fala.
+                # Sobrescreve pitch/rate quando a sentença é PRIMARILY fala direta —
+                # regra de quote-dominance ≥40% protege contra falso positivo em
+                # narração que só menciona o nome do NPC.
                 if sessao.working_mem.npc_vozes:
-                    voz_npc = _detectar_voz_npc(texto_s, sessao.working_mem.npc_vozes)
+                    voz_npc = _detectar_voz_npc(
+                        texto_s, sessao.working_mem.npc_vozes, npc_em_foco
+                    )
                     if voz_npc:
                         pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
                         rate_s = voz_npc.get("rate", rate_s) or rate_s
+                    # Atualiza foco SÓ com atribuição clara (Nome + verbo de fala).
+                    # Pronome ("ela diz") herda mas não atualiza — mantém o NPC
+                    # original em foco até nova atribuição explícita.
+                    atrib = _extrair_atribuicao(texto_s, sessao.working_mem.npc_vozes)
+                    if atrib:
+                        npc_em_foco = atrib
                 # Helper unificado: timeout + erro silencioso. Sentença sem áudio é
                 # melhor que turno travado em half-open TCP do Edge TTS.
                 audio = await _sintetizar_com_timeout(

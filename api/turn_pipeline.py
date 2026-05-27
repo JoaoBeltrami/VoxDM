@@ -63,6 +63,36 @@ _RE_VOZ = re.compile(
     re.IGNORECASE,
 )
 
+# Caps de assinatura de voz — LLM pode emitir [VOZ: x|+20Hz|-30%] sem perceber
+# o efeito caricato. Engine clampa pra manter switches sutis e crível.
+# Edge TTS aceita até ±50Hz / ±50%, mas acima de ±10Hz / ±15% começa cartoon.
+_CAP_PITCH_HZ: int = 10
+_CAP_RATE_PCT: int = 15
+_RE_PITCH_VALOR = re.compile(r"^([+\-]?)(\d+)Hz$", re.IGNORECASE)
+_RE_RATE_VALOR = re.compile(r"^([+\-]?)(\d+)%$")
+
+
+def _clamp_pitch(pitch_str: str) -> str:
+    """Clamp pitch a ±_CAP_PITCH_HZ. Formato malformado passa adiante intacto."""
+    m = _RE_PITCH_VALOR.match(pitch_str.strip())
+    if not m:
+        return pitch_str
+    sinal, valor = m.group(1), int(m.group(2))
+    val = -valor if sinal == "-" else valor
+    val = max(-_CAP_PITCH_HZ, min(_CAP_PITCH_HZ, val))
+    return f"{'+' if val >= 0 else ''}{val}Hz"
+
+
+def _clamp_rate(rate_str: str) -> str:
+    """Clamp rate a ±_CAP_RATE_PCT. Formato malformado passa adiante intacto."""
+    m = _RE_RATE_VALOR.match(rate_str.strip())
+    if not m:
+        return rate_str
+    sinal, valor = m.group(1), int(m.group(2))
+    val = -valor if sinal == "-" else valor
+    val = max(-_CAP_RATE_PCT, min(_CAP_RATE_PCT, val))
+    return f"{'+' if val >= 0 else ''}{val}%"
+
 # Engine-authority markers (preferíveis sobre regex de vocab):
 # `[INIMIGO_MORTO: id]` — LLM declara explicitamente quem morreu. Resolve
 # COMBAT-1 (22 padrões de vocab PT-BR frágeis). Regex existente permanece
@@ -709,15 +739,22 @@ def aplicar_pos_turno(
     _MAX_VOZES = 20
     for m in _RE_VOZ.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
-        pitch = m.group(2).strip()
-        rate = m.group(3).strip()
+        pitch_raw = m.group(2).strip()
+        rate_raw = m.group(3).strip()
         if npc_id and not working_mem.npc_vozes.get(npc_id):
             if len(working_mem.npc_vozes) >= _MAX_VOZES:
                 # Remove a voz mais antiga (Python 3.7+ preserva ordem de inserção)
                 mais_antiga = next(iter(working_mem.npc_vozes))
                 del working_mem.npc_vozes[mais_antiga]
+            pitch = _clamp_pitch(pitch_raw)
+            rate = _clamp_rate(rate_raw)
             working_mem.npc_vozes[npc_id] = {"pitch": pitch, "rate": rate}
-            log.info("voz_npc_registrada", npc_id=npc_id, pitch=pitch, rate=rate)
+            log.info(
+                "voz_npc_registrada",
+                npc_id=npc_id, pitch=pitch, rate=rate,
+                pitch_raw=pitch_raw if pitch != pitch_raw else None,
+                rate_raw=rate_raw if rate != rate_raw else None,
+            )
 
     return mudancas_trust
 

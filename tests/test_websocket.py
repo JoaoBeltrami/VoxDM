@@ -1185,9 +1185,20 @@ def test_voz_stripped_do_tts():
 
 
 def test_detectar_voz_npc_helper():
-    """_detectar_voz_npc deve encontrar NPC pelo nome na sentença."""
+    """_detectar_voz_npc só dispara em sentenças PRIMARILY de fala direta.
+
+    Comportamento novo (27/05): regra de quote-dominance — narração que só
+    cita o nome do NPC fica na voz do Mestre. Sentença com aspas ≥40% +
+    nome do NPC → voz do NPC. Cobertura profunda em tests/test_voz_npc.py.
+    """
     from api.websocket import _detectar_voz_npc
 
     npc_vozes = {"lyssa": {"pitch": "+5Hz", "rate": "-10%"}}
-    assert _detectar_voz_npc("Lyssa sussurrou baixinho.", npc_vozes) == {"pitch": "+5Hz", "rate": "-10%"}
+    # Narração sobre Lyssa (sem aspas) → Mestre voice
+    assert _detectar_voz_npc("Lyssa sussurrou baixinho.", npc_vozes) is None
+    # Fala direta dominante (>40% aspas) + nome → voz da Lyssa
+    assert _detectar_voz_npc(
+        '"Saia daqui agora," diz Lyssa.', npc_vozes
+    ) == {"pitch": "+5Hz", "rate": "-10%"}
+    # Sem o NPC presente → None
     assert _detectar_voz_npc("O goblin avançou.", npc_vozes) is None
