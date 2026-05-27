@@ -306,11 +306,16 @@ export default function Home() {
 
   // Revela o texto do mestre em sincronia com o áudio (karaokê reverso).
   // textoSincronizado é usado onde antes exibiríamos respostaAtual diretamente.
+  //
+  // aguardarAudio: enquanto o LLM ainda está streamando tokens e o TTS não
+  // começou (isProcessing=true), segura o texto pra não aparecer 1-2s antes
+  // do áudio. Failsafe interno do hook libera após 3.5s se TTS falhar.
   const textoSincronizado = useSyncTextoVoz({
     textoCompleto: respostaAtual,
     audioTocando,
     audioDuracao,
     ativo: syncAtivo,
+    aguardarAudio: isProcessing,
   });
 
   const [tela, setTela] = useState<Tela>("menu");

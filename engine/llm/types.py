@@ -46,6 +46,20 @@ RE_COMBATE = re.compile(
     # Com alvo: "lanço bola de fogo no goblin", "lanço raio contra o guarda" → OK.
     r"lanç[ao]\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
     r"lancei\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
+    # ── Nível 2: usar magia/habilidade — análogo ao lanço ─────────────────────
+    # Bug COMBATE-VERB-1 (26/05): "uso chama sagrada nele" não disparava combate.
+    # Mesma restrição do lançar: precisa alvo explícito pra evitar "uso a corda".
+    # Suporta preposição + alvo OU contração (nele/nela/neles/nelas).
+    r"us[ao]\s+(?:\w+\s+){0,4}(?:(?:no|na|nos|nas|contra|sobre|em)\s+(?:o|a|os|as)?\s*\w+|n[ae]l[ae]s?)|"
+    r"usei\s+(?:\w+\s+){0,4}(?:(?:no|na|nos|nas|contra|sobre|em)\s+(?:o|a|os|as)?\s*\w+|n[ae]l[ae]s?)|"
+    # Também o "lançar" original — adiciona contrações (faltavam em "lanço fogo nele")
+    r"lanç[ao]\s+(?:\w+\s+){0,3}n[ae]l[ae]s?|"
+    r"lancei\s+(?:\w+\s+){0,3}n[ae]l[ae]s?|"
+    # ── Nível 1: declarações explícitas de combate ────────────────────────────
+    # Bug COMBATE-VERB-1 (26/05): "estamos em combate", "iniciei o combate" etc.
+    # eram declarações claras de intenção que a regex de verbos não pegava.
+    r"(?:estamos|estou|entramos|entrei|inicio|iniciei) (?:em |o )?combate|"
+    r"come[çc][ao]u o combate|"
     # ── Nível 1: defesa ativa ─────────────────────────────────────────────────
     r"esquiv[ao]|esquivei|esquivar|"
     r"par[ao] o (?:ataque|golpe)|"

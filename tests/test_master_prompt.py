@@ -348,6 +348,17 @@ def test_hot_reload_retorna_none_quando_arquivo_some(tmp_path):
     ("ela desembainha a adaga", True),
     ("desembainhou a espada antes de atacar", True),
     ("vou desembainhar minha espada", True),
+    # ── Fix COMBATE-VERB-1 (26/05): "uso X em/contra/no Y" — análogo ao lançar ──
+    ("uso chama sagrada nele", True),
+    ("uso bola de fogo contra o orc", True),
+    ("usei minha habilidade especial sobre o líder", True),
+    ("uso a corda", False),                       # sem alvo → não combate
+    ("uso o cajado para abrir a porta", False),   # propósito, não ataque
+    # ── Fix COMBATE-VERB-1: declarações explícitas de combate ─────────────────
+    ("estamos em combate agora", True),
+    ("entrei em combate com o guarda", True),
+    ("iniciei o combate", True),
+    ("começou o combate", True),
     # ── Não combate ────────────────────────────────────────────────────────────
     ("eu falo com o ferreiro", False),
     ("olho ao redor da sala", False),

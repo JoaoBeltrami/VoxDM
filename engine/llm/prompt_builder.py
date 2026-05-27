@@ -347,6 +347,10 @@ def montar_mensagens(
 
     # ── Features de Mestre Veterano ──────────────────────────────────────────
 
+    # Pacing meter — lido aqui pra ficar disponível em decisões de gating
+    # antes do bloco que injeta a instrução de pacing em si.
+    pacing = getattr(contexto.working_memory, "pacing_nivel", 3.0)
+
     # Feat 1: Fios Soltos — tópicos narrativos em aberto, para o mestre não esquecer
     fios = getattr(contexto.working_memory, "fios_soltos", [])
     if fios:
@@ -365,19 +369,32 @@ def montar_mensagens(
             "narre esta cena dramática como última linha antes de encerrar."
         )
 
-    # Feat 3: Agenda Paralela dos NPCs — motivações em background
+    # Feat 3: Agenda Paralela dos NPCs — motivações em background.
+    # Filtra só NPCs presentes na cena atual — agendas de NPCs ausentes
+    # custam tokens sem influenciar a narração imediata (eles voltam ao prompt
+    # quando o jogador entrar no local deles).
     agenda = getattr(contexto.working_memory, "agenda_npcs", {})
     if agenda:
-        items = "\n".join(f"• {npc}: {plano}" for npc, plano in agenda.items())
-        secoes.append(
-            f"\n=== AGENDA DOS NPCs (background) ===\n{items}\n"
-            "Estes planos correm em paralelo à ação do jogador. Deixe transparecer através "
-            "de comportamento, não de monólogo — sem revelar diretamente."
-        )
+        presentes = set(getattr(contexto.working_memory, "npcs_presentes", []) or [])
+        if presentes:
+            agenda_relevante = {k: v for k, v in agenda.items() if k in presentes}
+        else:
+            # Sem npcs_presentes definidos — preserva comportamento anterior (tudo)
+            agenda_relevante = agenda
+        if agenda_relevante:
+            items = "\n".join(f"• {npc}: {plano}" for npc, plano in agenda_relevante.items())
+            secoes.append(
+                f"\n=== AGENDA DOS NPCs (background) ===\n{items}\n"
+                "Estes planos correm em paralelo à ação do jogador. Deixe transparecer através "
+                "de comportamento, não de monólogo — sem revelar diretamente."
+            )
 
-    # Feat 4: Cartas de Improviso — elementos prontos para usar
+    # Feat 4: Cartas de Improviso — elementos prontos para usar.
+    # Cartas servem pra acender uma cena ou complicar exploração calma. Em
+    # combate denso (pacing alto) viram ruído — o LLM já tem urgência de
+    # mecânica e narrativa pra resolver sem precisar de improviso.
     cartas = getattr(contexto.working_memory, "cartas_improviso", [])
-    if cartas:
+    if cartas and not _em_combate_ativo and pacing < 6.0:
         lista_cartas = "\n".join(f"• {c}" for c in cartas)
         secoes.append(
             f"\n=== CARTAS DE IMPROVISO (use 1 se a cena pedir) ===\n{lista_cartas}"
@@ -389,7 +406,6 @@ def montar_mensagens(
     #   - 3+ turnos calmos: -0.3/turno; pós-combate: -0.5/turno
     # BAIXO era ≤1.5, tornando-o virtualmente inatingível (30+ turnos calmos).
     # Corrigido para ≤2.5: 3 turnos calmos após combate já o ativam (3.0 → 2.5→2.2→1.9).
-    pacing = getattr(contexto.working_memory, "pacing_nivel", 3.0)
     if pacing >= 8.0:
         secoes.append(
             "\n[PACING: CLÍMAX] — Tensão máxima. Frases curtas, urgentes. "
@@ -421,8 +437,14 @@ def montar_mensagens(
     # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
     #   qualquer rolagem interna (ataque de NPC, teste secreto, evento aleatório).
     # "narrated" → sem marker, número nunca aparece (roll behind the screen).
+    #
+    # Gated: só injeta quando há chance real do Mestre rolar — em combate ativo
+    # ou quando o turno do jogador trouxe rolagem (chip de dado). Fora disso,
+    # ~480 chars desperdiçados todo turno em cena social/exploração calma.
     roll_vis = getattr(contexto.working_memory, "roll_visibility", "result_only")
-    if roll_vis in ("open", "result_only"):
+    if roll_vis in ("open", "result_only") and (
+        _em_combate_ativo or _RE_ROLAGEM.search(contexto.transcricao_atual)
+    ):
         secoes.append(
             "\n[ROLAGENS DO MESTRE] Sempre que o Mestre rolar um dado internamente "
             "(ataque de NPC, teste secreto, evento aleatório), escreva "
@@ -475,6 +497,18 @@ def montar_mensagens(
 
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
 
+    # Breakdown de chars por componente — diagnóstico de prompt inflado.
+    # Útil pra calibrar quais blocos têm peso desproporcional em sessão real.
+    # 1 token ≈ 4 chars; valores em chars são mais legíveis em log.
+    chars_breakdown = {
+        "master": len(master_system),
+        "wm": len(wm_texto),
+        "regras_srd": len(regras_texto),
+        "combat_md": chars_combat,
+        "semantica": len(sem_texto),
+        "episodica": len(ep_texto),
+    }
+
     # Guard de budget — loga warning quando o system prompt excede o teto.
     # Target: ≤ 20 000 chars (≈ 5 700 tokens) para caber em 70B com respostas de
     # 400 tokens dentro de 6 000 TPM. Acima disso, o turn cascateia para 8B.
@@ -508,6 +542,7 @@ def montar_mensagens(
     log.info(
         "prompt_montado",
         chars_system=len(system_content),
+        chars_breakdown=chars_breakdown,
         turnos_historico=len(historico),
         chunks_semanticos=len(contexto.chunks_semanticos),
         chunks_episodicos=len(contexto.chunks_episodicos),

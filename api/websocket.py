@@ -1138,6 +1138,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 em_combate=sessao.working_mem.em_combate,
                 pacing_nivel=sessao.working_mem.pacing_nivel,
                 cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
+                turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
             )
             log.info("task_type_escolhido", task=_task_turno.value,
                      em_combate=sessao.working_mem.em_combate,
