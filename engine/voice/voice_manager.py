@@ -31,7 +31,8 @@ from engine.voice.voice_registry import VERBOS_FALA, PerfilVoz, selecionar_perfi
 log = structlog.get_logger(__name__)
 
 # Rate/pitch padrão para o narrador (espelham EDGE_RATE/EDGE_PITCH em tts.py)
-_NARRATOR_RATE = "-12%"
+# Bump 27/05: -12% -> +3% pra responder feedback de "soa lento" em sessão real.
+_NARRATOR_RATE = "+3%"
 _NARRATOR_PITCH = "+0Hz"
 
 # Regex pré-compilada para verbos de fala — reutilizada em todas as instâncias

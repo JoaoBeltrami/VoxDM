@@ -66,8 +66,11 @@ EDGE_VOZ_PTBR: str = "pt-BR-FranciscaNeural"
 # Voz EN para quando o jogador fala inglês
 EDGE_VOZ_EN: str = "en-US-GuyNeural"
 
-# Ajustes de prosódia para soar mais como um narrador de RPG
-EDGE_RATE: str = "-12%"   # ligeiramente mais lento → narração mais pausada e dramática
+# Ajustes de prosódia para soar mais como um narrador de RPG.
+# Histórico: -12% antes de 27/05 (soava soporífero em sessão real). +3% =
+# bump de 15 pontos perceptível pelo usuário, ainda dentro de "narração
+# pausada" pra Edge TTS. Sincronizado com _NARRATOR_RATE em voice_manager.py.
+EDGE_RATE: str = "+3%"
 EDGE_PITCH: str = "+0Hz"  # tom natural — FranciscaNeural já tem timbre narrativo
 
 # Caminho do dicionário de pronúncia D&D
