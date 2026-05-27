@@ -1,26 +1,127 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');
+/* ─────────────────────────────────────────────────────────────────────────
+ * VoxDM — Tipografia
+ *
+ * Inter (corpo)       → texto UI geral, ficha, controles
+ * Cinzel (display)    → títulos dramáticos, scene headers, splash
+ * Cormorant (atmos.)  → falas de NPC entre aspas, recap, lampejos, narração
+ *                       contemplativa. Itálico por default — soa como letra
+ *                       cursiva de um mestre humano escrevendo nota de mesa.
+ *
+ * Antes (27/05): body em ui-monospace fazia narração soar como log de
+ * terminal. Bug visual histórico — substituído pelo Inter.
+ * ───────────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Design tokens via CSS variables — espelhados no tailwind.config.ts
+ * Manter os dois sincronizados. Usar tokens semânticos no JSX preferencialmente.
+ * ───────────────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* Camadas de fundo */
+  --vox-bg-base:     #09090b;
+  --vox-bg-elevated: rgba(24, 24, 27, 0.50);   /* zinc-900/50 */
+  --vox-bg-panel:    rgba(24, 24, 27, 0.70);   /* zinc-900/70 */
+  --vox-bg-floating: rgba(9, 9, 11, 0.85);     /* zinc-950/85 */
+
+  /* Bordas */
+  --vox-border-subtle: rgba(255, 255, 255, 0.05);
+  --vox-border-soft:   rgba(255, 255, 255, 0.10);
+  --vox-border-strong: rgba(255, 255, 255, 0.20);
+
+  /* Texto */
+  --vox-text-primary:   #f4f4f5;  /* zinc-100 */
+  --vox-text-secondary: #a1a1aa;  /* zinc-400 */
+  --vox-text-muted:     #71717a;  /* zinc-500 */
+
+  /* Acentos semânticos */
+  --vox-accent-primary:  #8b5cf6;  /* violet-500 — interativo principal */
+  --vox-accent-glow:     #a78bfa;  /* violet-400 — hover/focus */
+  --vox-accent-warm:     #fbbf24;  /* amber-400 — XP, recompensas */
+  --vox-accent-success:  #34d399;  /* emerald-400 — ganho, vantagem */
+  --vox-accent-danger:   #ef4444;  /* red-500 — dano, perigo */
+  --vox-accent-dramatic: #a5b4fc;  /* indigo-300 — lampejo, etérico */
+
+  /* Sombras (elevation system) */
+  --vox-elev-1: 0 1px 3px rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --vox-elev-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.20);
+  --vox-elev-3: 0 12px 32px rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.25);
+  --vox-elev-glow: 0 0 24px -4px rgba(139, 92, 246, 0.40);
+}
+
+body {
+  background-color: var(--vox-bg-base);
+  color: var(--vox-text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tipografia atmospherica — usada em falas de NPC, recap, lampejos */
+.font-atmospheric {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+/* Tipografia dramática — títulos, splash de combate, scene headers */
+.font-display {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.02em;
+}
+
+/* Glassmorphism utilitário — camadas em ordem crescente de opacidade */
+.glass-subtle {
+  background-color: rgba(24, 24, 27, 0.40);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  border: 1px solid var(--vox-border-subtle);
+}
+
+.glass-panel {
+  background-color: rgba(24, 24, 27, 0.60);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--vox-border-soft);
+}
+
+.glass-strong {
+  background-color: rgba(9, 9, 11, 0.75);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--vox-border-strong);
+}
+
+/* Focus ring acessível — usar em Button, input, etc. */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 150ms ease, box-shadow 150ms ease;
+}
+.focus-ring:focus-visible {
+  outline-color: var(--vox-accent-glow);
+  box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.20);
+}
 
 @layer utilities {
   @keyframes blink {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0; }
   }
-  .animate-blink {
-    animation: blink 1s step-end infinite;
-  }
+  .animate-blink { animation: blink 1s step-end infinite; }
 
   /* Orb: respiração suave — estado idle */
   @keyframes breathe {
     0%, 100% { transform: scale(0.92); opacity: 0.65; }
     50%       { transform: scale(1.08); opacity: 1; }
   }
-  .animate-breathe {
-    animation: breathe 3.2s ease-in-out infinite;
-  }
+  .animate-breathe { animation: breathe 3.2s ease-in-out infinite; }
 
   /* Orb: pulso rápido + leve rotação — estado ouvindo */
   @keyframes listen {
@@ -30,38 +131,20 @@
     75%  { transform: scale(1.16) rotate(-4deg); }
     100% { transform: scale(0.96) rotate(0deg); }
   }
-  .animate-listen {
-    animation: listen 0.9s ease-in-out infinite;
-  }
+  .animate-listen { animation: listen 0.9s ease-in-out infinite; }
 
   /* Orb: pulso rápido — estado falando */
   @keyframes speak {
     0%, 100% { transform: scale(0.97); opacity: 0.85; }
     50%       { transform: scale(1.13); opacity: 1; }
   }
-  .animate-speak {
-    animation: speak 0.55s ease-in-out infinite;
-  }
+  .animate-speak { animation: speak 0.55s ease-in-out infinite; }
 
   /* Anel de ripple — expande e some */
   @keyframes ripple {
     0%   { transform: scale(0.7); opacity: 0.55; }
     100% { transform: scale(2.0); opacity: 0; }
   }
-  .animate-ripple {
-    animation: ripple 1.6s ease-out infinite;
-  }
-  .animate-ripple-delay {
-    animation: ripple 1.6s ease-out 0.55s infinite;
-  }
-}
-
-:root {
-  color-scheme: dark;
-}
-
-body {
-  background-color: #09090b;
-  color: #f4f4f5;
-  font-family: ui-monospace, "Cascadia Code", monospace;
+  .animate-ripple { animation: ripple 1.6s ease-out infinite; }
+  .animate-ripple-delay { animation: ripple 1.6s ease-out 0.55s infinite; }
 }

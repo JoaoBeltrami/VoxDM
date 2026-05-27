@@ -1,5 +1,17 @@
 import type { Config } from "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * VoxDM Tailwind Config — sistema de design cinematográfico
+ *
+ * Tokens semânticos espelham as variáveis CSS de globals.css. Use prefixo
+ * `vox-*` no JSX (ex: bg-vox-panel, text-vox-secondary, border-vox-soft).
+ *
+ * Sincronizado com:
+ *   - frontend/app/globals.css (variáveis CSS)
+ *   - frontend/lib/design.ts (constantes TypeScript)
+ *
+ * Adicionar token novo: atualizar OS TRÊS arquivos pra manter consistência.
+ * ───────────────────────────────────────────────────────────────────────── */
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,27 +21,69 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        // Compat com código antigo (background/foreground genéricos)
+        background: "var(--vox-bg-base)",
+        foreground: "var(--vox-text-primary)",
+
+        // Sistema semântico VoxDM — preferir estes em código novo
+        "vox-bg": {
+          base:     "var(--vox-bg-base)",
+          elevated: "var(--vox-bg-elevated)",
+          panel:    "var(--vox-bg-panel)",
+          floating: "var(--vox-bg-floating)",
+        },
+        "vox-text": {
+          primary:   "var(--vox-text-primary)",
+          secondary: "var(--vox-text-secondary)",
+          muted:     "var(--vox-text-muted)",
+        },
+        "vox-accent": {
+          primary:  "var(--vox-accent-primary)",
+          glow:     "var(--vox-accent-glow)",
+          warm:     "var(--vox-accent-warm)",
+          success:  "var(--vox-accent-success)",
+          danger:   "var(--vox-accent-danger)",
+          dramatic: "var(--vox-accent-dramatic)",
+        },
+        "vox-border": {
+          subtle: "var(--vox-border-subtle)",
+          soft:   "var(--vox-border-soft)",
+          strong: "var(--vox-border-strong)",
+        },
+      },
+      fontFamily: {
+        sans:         ['Inter', 'system-ui', 'sans-serif'],
+        display:      ['Cinzel', 'Georgia', 'serif'],
+        atmospheric:  ['"Cormorant Garamond"', 'Georgia', 'serif'],
+      },
+      boxShadow: {
+        "vox-1":    "var(--vox-elev-1)",
+        "vox-2":    "var(--vox-elev-2)",
+        "vox-3":    "var(--vox-elev-3)",
+        "vox-glow": "var(--vox-elev-glow)",
+      },
+      borderRadius: {
+        // Escala explícita pra elementos VoxDM
+        "vox-sm": "4px",   // chips, badges
+        "vox-md": "8px",   // buttons, inputs
+        "vox-lg": "12px",  // panels
+        "vox-xl": "16px",  // cards principais (master response)
+        "vox-2xl": "24px", // modais, hero
       },
       keyframes: {
-        // VoxOrb — estado idle: respira devagar
         breathe: {
           "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
           "50%":       { transform: "scale(1.06)", opacity: "1"    },
         },
-        // VoxOrb — estado ouvindo: pulsa mais rápido
         listen: {
           "0%, 100%": { transform: "scale(1)",    opacity: "0.9"  },
           "50%":       { transform: "scale(1.12)", opacity: "1"    },
         },
-        // VoxOrb — estado falando: oscila leve
         speak: {
           "0%, 100%": { transform: "rotate(-4deg) scale(1.02)" },
           "25%":       { transform: "rotate(4deg)  scale(1.08)" },
           "75%":       { transform: "rotate(-2deg) scale(1.05)" },
         },
-        // Anéis de ripple para estado ouvindo
         ripple: {
           "0%":   { transform: "scale(0.8)", opacity: "0.6" },
           "100%": { transform: "scale(1.6)", opacity: "0"   },
@@ -38,48 +92,44 @@ const config: Config = {
           "0%":   { transform: "scale(0.8)", opacity: "0.4" },
           "100%": { transform: "scale(1.8)", opacity: "0"   },
         },
-        // Flash de crítico/falha — entra com zoom e some
         "crit-pop": {
           "0%":   { transform: "scale(0.5)", opacity: "0"   },
           "20%":  { transform: "scale(1.15)",opacity: "1"   },
           "70%":  { transform: "scale(1)",   opacity: "1"   },
           "100%": { transform: "scale(0.95)",opacity: "0"   },
         },
-        // SceneHeader — fade ao trocar de local
         "fade-in": {
           "0%":   { opacity: "0", transform: "translateY(-4px)" },
           "100%": { opacity: "1", transform: "translateY(0)"    },
         },
-        // NpcsPresentes — chip entrando da direita
+        "fade-in-up": {
+          "0%":   { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)"   },
+        },
         "slide-in-right": {
           "0%":   { opacity: "0", transform: "translateX(8px)" },
           "100%": { opacity: "1", transform: "translateX(0)"   },
         },
-        // InitiativeBar — barra inteira descendo do topo
         "slide-down": {
           "0%":   { opacity: "0", transform: "translate(-50%, -16px)" },
           "100%": { opacity: "1", transform: "translate(-50%, 0)"     },
         },
-        // VoxOrb — pulso ritmado azul (recebendo tokens do LLM)
         "stream-pulse": {
           "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
           "50%":      { transform: "scale(1.08)", opacity: "1"    },
         },
-        // Flash de morte de inimigo nomeado — nome aparece em vermelho e dissolve
         "morte-flash": {
           "0%":   { transform: "scale(0.7)",  opacity: "0"   },
           "15%":  { transform: "scale(1.05)", opacity: "1"   },
           "60%":  { transform: "scale(1)",    opacity: "0.9" },
           "100%": { transform: "scale(1.1)",  opacity: "0"   },
         },
-        // Sinal "sua vez" — ping rápido na área do microfone
         "sua-vez": {
           "0%":   { transform: "scale(1)",    opacity: "0"   },
           "20%":  { transform: "scale(1.18)", opacity: "1"   },
           "65%":  { transform: "scale(1.08)", opacity: "0.7" },
           "100%": { transform: "scale(1)",    opacity: "0"   },
         },
-        // Screen shake em crítico/falha — tremor curto de 500ms na <main>
         "shake-cena": {
           "0%, 100%": { transform: "translateX(0)" },
           "15%":       { transform: "translateX(-4px) rotate(-0.3deg)" },
@@ -89,38 +139,42 @@ const config: Config = {
           "75%":       { transform: "translateX(-2px)" },
           "90%":       { transform: "translateX(2px)"  },
         },
-        // Toast de XP/ouro — sobe e dissolve em 2s
         "ganho-sobe": {
           "0%":   { transform: "translateY(0)",    opacity: "0"   },
           "15%":  { transform: "translateY(-6px)",  opacity: "1"   },
           "70%":  { transform: "translateY(-18px)", opacity: "0.9" },
           "100%": { transform: "translateY(-30px)", opacity: "0"   },
         },
-        // CompanionsPanel — glow esmeralda suave ao registrar novo companion.
-        // Só altera box-shadow/opacity — sem movimento, para não distrair da narração.
         "companion-glow": {
           "0%":   { boxShadow: "0 0 0 0 rgba(52,211,153,0)",    opacity: "1"   },
           "25%":  { boxShadow: "0 0 0 3px rgba(52,211,153,0.45), 0 0 18px rgba(52,211,153,0.2)", opacity: "1" },
           "65%":  { boxShadow: "0 0 0 2px rgba(52,211,153,0.3), 0 0 12px rgba(52,211,153,0.12)", opacity: "1" },
           "100%": { boxShadow: "0 0 0 0 rgba(52,211,153,0)",    opacity: "1"   },
         },
+        // Novo (27/05): glow violeta sutil pra interações de foco principal
+        "accent-glow-pulse": {
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(167,139,250,0)" },
+          "50%":       { boxShadow: "0 0 0 4px rgba(167,139,250,0.20), 0 0 24px -4px rgba(139,92,246,0.40)" },
+        },
       },
       animation: {
-        breathe:         "breathe 3.2s ease-in-out infinite",
-        listen:          "listen 0.9s ease-in-out infinite",
-        speak:           "speak 0.55s ease-in-out infinite",
-        ripple:          "ripple 1.4s ease-out infinite",
-        "ripple-delay":  "ripple-delay 1.4s ease-out 0.7s infinite",
-        "crit-pop":      "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "fade-in":       "fade-in 400ms ease-out",
-        "slide-in-right":"slide-in-right 200ms ease-out",
-        "slide-down":    "slide-down 400ms ease-out",
-        "stream-pulse":   "stream-pulse 1s ease-in-out infinite",
-        "companion-glow": "companion-glow 1.5s ease-out forwards",
-        "shake-cena":     "shake-cena 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
-        "ganho-sobe":     "ganho-sobe 2s ease-out forwards",
-        "morte-flash":    "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "sua-vez":        "sua-vez 0.8s ease-out forwards",
+        breathe:           "breathe 3.2s ease-in-out infinite",
+        listen:            "listen 0.9s ease-in-out infinite",
+        speak:             "speak 0.55s ease-in-out infinite",
+        ripple:            "ripple 1.4s ease-out infinite",
+        "ripple-delay":    "ripple-delay 1.4s ease-out 0.7s infinite",
+        "crit-pop":        "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "fade-in":         "fade-in 400ms ease-out",
+        "fade-in-up":      "fade-in-up 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "slide-in-right":  "slide-in-right 200ms ease-out",
+        "slide-down":      "slide-down 400ms ease-out",
+        "stream-pulse":    "stream-pulse 1s ease-in-out infinite",
+        "companion-glow":  "companion-glow 1.5s ease-out forwards",
+        "shake-cena":      "shake-cena 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
+        "ganho-sobe":      "ganho-sobe 2s ease-out forwards",
+        "morte-flash":     "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "sua-vez":         "sua-vez 0.8s ease-out forwards",
+        "accent-glow-pulse": "accent-glow-pulse 2.2s ease-in-out infinite",
       },
     },
   },
