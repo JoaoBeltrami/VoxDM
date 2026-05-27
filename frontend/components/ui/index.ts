@@ -10,4 +10,7 @@ export { Card } from "./Card";
 export { Panel } from "./Panel";
 export { Button } from "./Button";
 export { Chip } from "./Chip";
+export { HpBar } from "./HpBar";
+export { XpBar } from "./XpBar";
+export { Avatar } from "./Avatar";
 export { cn } from "./cn";
