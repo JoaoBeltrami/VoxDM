@@ -5,8 +5,8 @@
  *
  * Por que existe: presença na cena é fundamental para o jogador "saber onde está"
  *   sem precisar pedir descrição ao mestre. Sai do limbo de "tela cinza".
- * Dependências: nenhuma — só lê locationNome / timeOfDay do hook useGameSession.
- * Armadilha: usa font Cinzel se disponível (carregada via globals.css ou fallback serif).
+ *
+ * Refatorado 27/05: usa tokens semânticos do design system + font-display.
  *
  * Exemplo:
  *   <SceneHeader locationNome="Floresta de Valdrek" timeOfDay="Crepúsculo" />
@@ -37,24 +37,21 @@ export function SceneHeader({ locationNome, timeOfDay }: Props) {
   if (!locationNome) return null;
 
   const icone = iconeTempo(timeOfDay);
-  // Capitaliza time_of_day se vier minúsculo (ex: "crepusculo" → "Crepúsculo")
   const timeFormatado = timeOfDay
     ? timeOfDay.charAt(0).toUpperCase() + timeOfDay.slice(1)
     : "";
 
   return (
     <div
-      // key força fade ao trocar de local — animação inline simples
       key={locationNome}
-      className="flex items-center justify-center gap-2 border-b border-zinc-800/40 bg-zinc-900/30 px-4 py-1.5 text-sm tracking-wide text-zinc-400 animate-fade-in"
-      style={{ fontFamily: "'Cinzel', 'Cormorant Garamond', serif", opacity: 0.85 }}
+      className="flex items-center justify-center gap-3 border-b border-vox-border-subtle bg-vox-bg-elevated px-4 py-2 font-display text-sm tracking-wider text-vox-text-secondary animate-fade-in"
     >
-      <span aria-hidden>{icone}</span>
-      <span>{locationNome}</span>
+      <span aria-hidden className="text-base">{icone}</span>
+      <span className="uppercase">{locationNome}</span>
       {timeFormatado && (
         <>
-          <span className="text-zinc-700">·</span>
-          <span className="text-zinc-500">{timeFormatado}</span>
+          <span className="text-vox-text-muted">·</span>
+          <span className="text-vox-text-muted italic font-atmospheric">{timeFormatado}</span>
         </>
       )}
     </div>
