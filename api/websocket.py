@@ -1546,12 +1546,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             # UX-2: detecta cascata silenciosa (Groq TPM → Gemini) e notifica o frontend.
             # Se o provider que emitiu o primeiro token não é o esperado (primeiro da
-            # cascata efetiva para NARRATIVE), envia "cascade" antes do "fim".
+            # cascata efetiva para a TaskType DESTE turno), envia "cascade" antes do "fim".
+            # Bug 27/05: antes comparava sempre contra TaskType.NARRATIVE — turnos
+            # NARRATIVE_LIGHT (cuja cascata começa em groq-8b) disparavam toast falso
+            # de cascade toda vez que rodavam no 8B, que é exatamente o esperado.
             _ultimo_prov = sessao.groq.ultimo_provider_stream
             if _ultimo_prov is not None:
-                from engine.llm.tasks import TaskType as _TT
                 _prov_primario_esperado = next(
-                    (p.nome for p in sessao.groq._router._providers_disponiveis(_TT.NARRATIVE)),
+                    (p.nome for p in sessao.groq._router._providers_disponiveis(_task_turno)),
                     None,
                 )
                 if _prov_primario_esperado and _ultimo_prov != _prov_primario_esperado:
