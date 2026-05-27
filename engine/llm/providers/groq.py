@@ -118,9 +118,16 @@ class GroqProvider(BaseLLMProvider):
             # timeout aplicado tanto à chamada REST quanto ao read entre chunks
             # do streaming. Sem isso, TPM exaurido pode emitir tokens em rate
             # baixíssimo (1/30s) e travar o turno por minutos sem disparar erro.
+            #
+            # max_retries=0 — DESLIGAR retry interno do SDK. O default de 2 com
+            # backoff cego espera 34s em 429 (visto no log de 27/05). O LLMRouter
+            # já faz cascade pro próximo provider em <100ms quando lança
+            # LLMRetriable — isso é literalmente o motivo do router existir.
+            # Retry duplo só atrasa cascade e prende o usuário.
             self._client = AsyncGroq(
                 api_key=settings.GROQ_API_KEY,
                 timeout=settings.LLM_PROVIDER_TIMEOUT,
+                max_retries=0,
             )
         return self._client
 
