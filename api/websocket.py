@@ -113,15 +113,48 @@ from api.turn_pipeline import (  # noqa: E402
 # Lampejo — visões dramáticas com voz alterada
 # ---------------------------------------------------------------------------
 
-# Captura `[LAMPEJO: <texto>]` ou `[Lampejo: ...]` (case-insensitive) na resposta
-# do LLM. Tudo entre o ":" e o "]" vira o conteúdo. Preserva pontuação interna,
-# mas para no primeiro "]" (não suporta colchetes aninhados — não precisa).
-_RE_LAMPEJO = re.compile(r"\[LAMPEJO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+# _RE_LAMPEJO migrado pra api/turn_pipeline.py (mantém todos os markers
+# no mesmo lugar — base pra futura tabela única). Re-importado abaixo.
+from api.turn_pipeline import _RE_LAMPEJO
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
 _LAMPEJO_RATE: str = "-25%"
 _LAMPEJO_PITCH: str = "-3Hz"
+
+
+# ── Helper de TTS com timeout ────────────────────────────────────────────────
+# Edge TTS pode aceitar a conexão mas parar de enviar dados (half-open TCP) —
+# o communicate.stream() trava indefinidamente sem lançar exceção. Wrapper
+# único usa asyncio.wait_for + captura genérica. Retorna b"" em qualquer falha
+# (timeout, conn, refusal, etc.) — TTS é sempre opcional; sentença sem áudio
+# é melhor que o jogo travado.
+async def _sintetizar_com_timeout(
+    tts: Any,
+    texto: str,
+    timeout_s: float,
+    *,
+    voice: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
+    idioma: Any = None,
+    label: str = "tts",
+) -> bytes:
+    """TTS com timeout — wrapper único pra call-sites com erro silencioso."""
+    if tts is None or not texto.strip():
+        return b""
+    kwargs: dict[str, Any] = {}
+    if voice is not None: kwargs["voice"] = voice
+    if rate is not None: kwargs["rate"] = rate
+    if pitch is not None: kwargs["pitch"] = pitch
+    if idioma is not None: kwargs["idioma"] = idioma
+    try:
+        return await asyncio.wait_for(
+            tts.sintetizar(texto, **kwargs), timeout=timeout_s
+        )
+    except Exception as e:
+        log.warning("tts_falhou", label=label, erro=str(e)[:120])
+        return b""
 
 
 def _extrair_lampejos(texto: str) -> tuple[str, list[str]]:
@@ -149,23 +182,20 @@ async def _enviar_lampejo(
         await websocket.send_text(
             MensagemWS(tipo="lampejo", conteudo=texto).model_dump_json()
         )
-        if tts is not None:
-            audio = await asyncio.wait_for(
-                tts.sintetizar(
-                    texto, voice=voice,
-                    rate=_LAMPEJO_RATE, pitch=_LAMPEJO_PITCH,
-                ),
-                timeout=15.0,
+        audio = await _sintetizar_com_timeout(
+            tts, texto, 15.0,
+            voice=voice, rate=_LAMPEJO_RATE, pitch=_LAMPEJO_PITCH,
+            label="lampejo",
+        )
+        if audio:
+            await websocket.send_text(
+                MensagemWS(
+                    tipo="audio_chunk",
+                    conteudo_b64=base64.b64encode(audio).decode("ascii"),
+                    sequencia=999,
+                    narrativo=False,  # rate=-25% — não calibra karaokê do TTS principal
+                ).model_dump_json()
             )
-            if audio:
-                await websocket.send_text(
-                    MensagemWS(
-                        tipo="audio_chunk",
-                        conteudo_b64=base64.b64encode(audio).decode("ascii"),
-                        sequencia=999,
-                        narrativo=False,  # rate=-25% — não calibra karaokê do TTS principal
-                    ).model_dump_json()
-                )
         log.info("lampejo_emitido", chars=len(texto))
     except Exception as e:
         log.warning("lampejo_falhou", erro=str(e)[:120])
@@ -355,14 +385,10 @@ async def _sintetizar_e_enviar(
                 rate_override = voz_npc.get("rate")
 
         log.info("tts_sintetizando", chars=len(texto), preview=texto[:300])
-        # Timeout de 15s — mesmo motivo que _tts_sentenca: half-open TCP pode
-        # travar o communicate.stream() indefinidamente sem lançar exceção.
-        audio_bytes: bytes = await asyncio.wait_for(
-            tts.sintetizar(
-                texto, voice=voice,
-                rate=rate_override, pitch=pitch_override,
-            ),
-            timeout=15.0,
+        audio_bytes = await _sintetizar_com_timeout(
+            tts, texto, 15.0,
+            voice=voice, rate=rate_override, pitch=pitch_override,
+            label="sintetizar_e_enviar",
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -482,17 +508,13 @@ async def _enviar_recap_sessao_anterior(
         _RECAP_RATE: str = "-15%"
         _RECAP_PITCH: str = "-2Hz"
         tts = _obter_tts()
-        if tts:
-            audio = await asyncio.wait_for(
-                tts.sintetizar(
-                    texto_recap,
-                    voice=sessao.working_mem.tts_voice,
-                    rate=_RECAP_RATE,
-                    pitch=_RECAP_PITCH,
-                ),
-                timeout=15.0,
-            )
-            if audio:
+        audio = await _sintetizar_com_timeout(
+            tts, texto_recap, 15.0,
+            voice=sessao.working_mem.tts_voice,
+            rate=_RECAP_RATE, pitch=_RECAP_PITCH,
+            label="recap",
+        )
+        if audio:
                 await websocket.send_text(
                     MensagemWS(
                         tipo="audio_chunk",
@@ -1084,30 +1106,22 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             async def _tts_sentenca(seq: int, texto_s: str) -> None:
                 nonlocal tts_enviado_ate
-                try:
-                    voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
-                    # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
-                    # Sobrescreve pitch/rate quando o LLM registrou uma assinatura para
-                    # o NPC detectado nesta sentença — granularidade por turno de fala.
-                    if sessao.working_mem.npc_vozes:
-                        voz_npc = _detectar_voz_npc(texto_s, sessao.working_mem.npc_vozes)
-                        if voz_npc:
-                            pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
-                            rate_s = voz_npc.get("rate", rate_s) or rate_s
-                    # Timeout de 12s: se o servidor Edge TTS aceitar a conexão
-                    # mas parar de enviar dados (half-open TCP), a task travaria
-                    # indefinidamente. asyncio.TimeoutError é Exception → audio=b"".
-                    audio = await asyncio.wait_for(
-                        tts.sintetizar(  # type: ignore[union-attr]
-                            texto_s, idioma=idioma,
-                            voice=voz_s, rate=rate_s, pitch=pitch_s,
-                        ),
-                        timeout=12.0,
-                    )
-                except Exception as exc:
-                    log.warning("tts_sentenca_falhou", seq=seq, erro=str(exc))
-                    erros_turno.append(f"tts_seq{seq}: {exc}")
-                    audio = b""
+                voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
+                # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
+                # Sobrescreve pitch/rate quando o LLM registrou uma assinatura para
+                # o NPC detectado nesta sentença — granularidade por turno de fala.
+                if sessao.working_mem.npc_vozes:
+                    voz_npc = _detectar_voz_npc(texto_s, sessao.working_mem.npc_vozes)
+                    if voz_npc:
+                        pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
+                        rate_s = voz_npc.get("rate", rate_s) or rate_s
+                # Helper unificado: timeout + erro silencioso. Sentença sem áudio é
+                # melhor que turno travado em half-open TCP do Edge TTS.
+                audio = await _sintetizar_com_timeout(
+                    tts, texto_s, 12.0,
+                    voice=voz_s, rate=rate_s, pitch=pitch_s, idioma=idioma,
+                    label=f"sentenca_seq{seq}",
+                )
                 async with tts_lock:
                     tts_buffer_audio[seq] = audio
                     # Drena em ordem: envia todos os chunks prontos consecutivos

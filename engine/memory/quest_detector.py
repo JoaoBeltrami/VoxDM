@@ -36,16 +36,10 @@ _RE_Q = re.compile(
     re.IGNORECASE,
 )
 
-# Marcadores de Mestre Veterano (features Fase 4.6 DM) — removidos do TTS
-# mas mantidos na resposta completa para extração pelo turn_pipeline.
-# Inclui "Rolagem visível" (Fase 5.7) — o número é narrado pelo LLM,
-# o marcador é capturado pelo websocket e enviado como "dado_rolado".
-_RE_MESTRE_VET = re.compile(
-    r"\[(?:FIO|CLIFFHANGER|AGENDA|LAMPEJO|CONSEQUÊNCIA|XP|POSICAO|MOV|OURO|LOOT|PERDEU|MERCADO|FIM_MERCADO|COMPANION_ADD|COMPANION_HP|COMPANION_REMOVE|FUGIU|ANCORA|VOZ|AFETO|INIMIGO_MORTO|DESCANSO|COMBATE)(?::|=)?[^\]]*\]"
-    r"|"
-    r"\[Rolagem\s+visível:[^\]]*\]",
-    re.IGNORECASE,
-)
+# Marcadores de Mestre Veterano — fonte única em engine/markers.py (D4 26/05).
+# COMBATE, INIMIGO_MORTO e todos os outros estão na tabela canônica lá.
+# Re-exportado como _RE_MESTRE_VET pra preservar imports externos.
+from engine.markers import RE_STRIP_MARCADORES as _RE_MESTRE_VET  # noqa: E402
 
 # Também limpa espaços/newlines residuais deixados pelos marcadores
 _RE_TRAILING_WS = re.compile(r"\n{3,}")

@@ -29,7 +29,7 @@ from typing import Any
 
 import structlog
 
-from engine.magic.slot_tracker import detectar_descanso, restaurar_slots
+from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
@@ -72,13 +72,11 @@ _RE_INIMIGO_MORTO_MARKER = re.compile(
     re.IGNORECASE,
 )
 
-# `[DESCANSO: curto|longo]` — LLM declara descanso explicitamente após
-# narrativa ambígua. Substitui regex frágil (`_RE_DESCANSO_LONGO` falha em
-# "vou tirar uma soneca" e similares). Regex permanece como fallback.
-_RE_DESCANSO_MARKER = re.compile(
-    r"\[DESCANSO:\s*(curto|longo)\s*\]",
-    re.IGNORECASE,
-)
+# _RE_DESCANSO_MARKER migrado pra engine/magic/slot_tracker.py (junto da
+# lógica de restauração de slots — autoridade do LLM agora é encapsulada
+# em detectar_tipo_descanso()). Re-export aqui pra compat com testes
+# externos que ainda importam o nome.
+from engine.magic.slot_tracker import _RE_DESCANSO_MARKER  # noqa: E402
 
 # `[COMBATE: iniciar]` — LLM declara início de combate quando a ação do jogador
 # é claramente bélica mas o regex de verbos não casou (sparring narrado, "uso X
@@ -106,6 +104,12 @@ _RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECAS
 # Ex: "[XP: +50 derrotou goblin patrulheiro]", "[XP: +200 quest concluída]"
 # Backend acumula em wm.xp e detecta level up via tabela SRD.
 _RE_XP = re.compile(r"\[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+
+# Lampejo — visão dramática emitida pelo LLM. Conteúdo entre `:` e `]` vira
+# uma mensagem WS `tipo="lampejo"` separada, com voz alterada (rate/pitch).
+# Usado por _extrair_lampejos / _enviar_lampejo no websocket — a regex vive
+# aqui pra ficar com os demais markers (futura tabela única em D4).
+_RE_LAMPEJO = re.compile(r"\[LAMPEJO:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
 # Feature combate tático: LLM emite [POSICAO: npc-id = N ft] (ou "= N ft cobertura").
 # Ex: "[POSICAO: goblin = 10 ft]", "[POSICAO: orco-arqueiro = 60 ft cobertura]"
@@ -397,17 +401,9 @@ def aplicar_pos_turno(
         working_mem.turno_atual_idx = _idx_jogador
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
-    # Engine-authority: marker [DESCANSO: curto|longo] na resposta do LLM tem
-    # prioridade sobre regex no texto do jogador. Resolve casos onde o LLM
-    # confirma descanso em narrativa ambígua ("você desperta horas depois").
-    # Fallback: regex 1ª pessoa em texto_jogador.
-    tipo_descanso = None
-    m_descanso = _RE_DESCANSO_MARKER.search(resposta_completa)
-    if m_descanso:
-        tipo_descanso = m_descanso.group(1).strip().lower()
-        log.info("descanso_marker_detectado", tipo=tipo_descanso)
-    if not tipo_descanso:
-        tipo_descanso = detectar_descanso(texto_jogador)
+    # detectar_tipo_descanso encapsula a prioridade engine-authority:
+    # marker do LLM > regex no texto do jogador.
+    tipo_descanso = detectar_tipo_descanso(texto_jogador, resposta_completa)
     if tipo_descanso:
         restaurados = restaurar_slots(working_mem, tipo_descanso)
         # Também restaura class features (Action Surge, Rage, etc.) — fix de bug

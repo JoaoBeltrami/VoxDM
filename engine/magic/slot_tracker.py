@@ -90,8 +90,18 @@ def decrementar_slot(wm: "WorkingMemory", nivel: int) -> bool:
     return True
 
 
+# Marker engine-authority [DESCANSO: curto|longo] emitido pelo LLM. Tem
+# prioridade sobre a regex de vocab no texto do jogador — resolve casos onde
+# a narrativa confirma descanso de forma indireta ("você desperta horas
+# depois", "passada a noite"). Vive aqui pra ficar junto da lógica que decide.
+_RE_DESCANSO_MARKER = re.compile(
+    r"\[DESCANSO:\s*(curto|longo)\s*\]",
+    re.IGNORECASE,
+)
+
+
 def detectar_descanso(texto_jogador: str) -> str | None:
-    """Detecta se o jogador declarou intenção de descanso.
+    """Detecta se o jogador declarou intenção de descanso (regex de vocab).
 
     Prioridade: longo > curto (se ambas as regex casarem, retorna "longo"
     pois descanso longo é mais específico e inclui os efeitos do curto).
@@ -112,6 +122,22 @@ def detectar_descanso(texto_jogador: str) -> str | None:
     if _RE_DESCANSO_CURTO.search(texto_jogador):
         return "curto"
     return None
+
+
+def detectar_tipo_descanso(texto_jogador: str, resposta_llm: str) -> str | None:
+    """API unificada — engine-authority do LLM > regex no texto do jogador.
+
+    O LLM pode emitir [DESCANSO: curto|longo] quando confirma descanso em
+    narrativa ambígua. Se o marker estiver presente, ele ganha. Senão,
+    cai no fallback de regex sobre o texto do jogador.
+
+    Returns:
+        "longo" | "curto" | None se nenhum sinal de descanso.
+    """
+    m = _RE_DESCANSO_MARKER.search(resposta_llm)
+    if m:
+        return m.group(1).strip().lower()
+    return detectar_descanso(texto_jogador)
 
 
 def restaurar_slots(wm: "WorkingMemory", tipo_descanso: str) -> int:
