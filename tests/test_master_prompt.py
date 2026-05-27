@@ -518,16 +518,21 @@ def test_saves_md_dentro_do_budget():
 
 
 def test_master_system_dentro_do_budget():
-    """master_system.md comprimido: máx 10 500 chars (~3 000 tokens).
+    """master_system.md: máx 11 500 chars (~3 285 tokens).
 
-    Após adição de marcadores ANCORA/VOZ/AFETO o arquivo está em ~10 600 chars.
-    Teto de 11 000 dá margem para edições futuras sem ultrapassar o budget de
-    turno de combate (~3 100 tokens).
+    Histórico:
+    - 10 500 antes dos marcadores ANCORA/VOZ/AFETO
+    - 11 000 após (margem pra mexer)
+    - 11 500 após (27/05) inclusão da voz dupla refinada + regra NPC progressivo
+      — ambas resolveram feedback de jogo, valem o custo de tokens.
+
+    Acima de 11 500: pausar, justificar, e considerar gating condicional
+    (injetar só quando relevante) em vez de adicionar.
     """
     conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
-    assert len(conteudo) <= 11_000, (
-        f"master_system.md com {len(conteudo)} chars excede teto de 11 000 chars — "
-        "injeta >3 100 tokens em todo turno; revisar o que foi adicionado"
+    assert len(conteudo) <= 11_500, (
+        f"master_system.md com {len(conteudo)} chars excede teto de 11 500 chars — "
+        "injeta >3 285 tokens em todo turno; comprimir ou gating condicional"
     )
 
 
