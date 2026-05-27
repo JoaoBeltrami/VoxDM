@@ -120,6 +120,56 @@ def _normalizar(texto: str) -> str:
     return unicodedata.normalize("NFD", texto.lower()).encode("ascii", "ignore").decode()
 
 
+# Raças humanoides D&D que carregam gênero linguístico no sufixo PT-BR.
+# Restrito porque criaturas genéricas ("dragão", "gigante", "lobo") terminam em
+# "o" mas não indicam gênero do indivíduo — melhor cair no fallback aleatório
+# do que classificar errado.
+_RACAS_HUMANOIDES_GENERADAS: frozenset[str] = frozenset({
+    "humano", "humana",
+    "elfo", "elfa", "meio-elfo", "meio-elfa",
+    "anao", "ana",  # já normalizadas (sem acento)
+    "meio-orco", "meio-orca", "half-orc",
+    "tiefling",  # PT-BR não conjuga
+    "draconato", "draconata",
+    "halfling",  # PT-BR não conjuga
+    "gnomo", "gnoma",
+})
+
+
+def _inferir_genero_por_nome(npc_id: str, raca_norm: str) -> str:
+    """Heurística de gênero quando metadata vazia.
+
+    Sinais conservadores — em dúvida, retorna "" e deixa o hash decidir.
+
+    Convenções patronímicas nórdicas (presentes no módulo "Os Filhos de
+    Valdrek" e em D&D temático nórdico em geral):
+      - "-sson" / "-son" / "-sen" no fim do id → masculino (filho de)
+      - "-dottir" / "-sdottir" / "-dóttir" → feminino (filha de)
+
+    Sufixo PT-BR da raça (só pra humanoides reconhecidos):
+      - "humana" → feminino, "humano" → masculino
+      - "elfa", "meio-elfa" → feminino; "elfo", "meio-elfo" → masculino
+      - "draconata" → feminino; "draconato" → masculino
+
+    Criaturas genéricas (dragão, gigante, lobo) não aplicam regra de
+    sufixo — gênero sai do hash.
+
+    Returns: "male" | "female" | "" (sem inferência segura)
+    """
+    nid = npc_id.lower()
+    if nid.endswith(("dottir", "dóttir", "-sdottir", "-dóttir")):
+        return "female"
+    if nid.endswith(("sson", "-son", "sen")):
+        return "male"
+    if raca_norm in _RACAS_HUMANOIDES_GENERADAS:
+        if raca_norm.endswith("a"):
+            return "female"
+        # Halfling/tiefling não conjugam — só "humano/humana" e variantes seguem
+        if raca_norm.endswith(("o", "lf")):
+            return "male"
+    return ""
+
+
 def selecionar_perfil(
     npc_id: str,
     genero: str = "",
@@ -129,7 +179,8 @@ def selecionar_perfil(
     Retorna perfil de voz determinístico para um NPC.
 
     A atribuição é baseada em raça e gênero quando disponíveis; quando não,
-    usa hash do npc_id para distribuir consistentemente entre as variantes.
+    aplica heurística por sufixo do nome (nórdico) e gênero linguístico da
+    raça em PT-BR; em último caso usa hash do npc_id (~33% feminino).
 
     Args:
         npc_id: ID kebab-case do NPC (ex: "valdrek", "fael-valdreksson").
@@ -141,6 +192,11 @@ def selecionar_perfil(
     """
     raca_norm = _normalizar((raca or "").strip())
     genero_norm = (genero or "").lower().strip()
+
+    # Se metadata vazia, tenta inferir por nome/raça antes do fallback aleatório
+    if not genero_norm:
+        genero_norm = _inferir_genero_por_nome(npc_id, raca_norm)
+
     eh_feminino = genero_norm in ("female", "f", "feminino", "fem")
 
     # Busca exata no mapa de raças (normalizado)
