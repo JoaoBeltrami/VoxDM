@@ -1,5 +1,7 @@
 "use client";
 
+import { Card } from "@/components/ui";
+
 interface Props {
   volume: number;   // 0–1
   onChange: (v: number) => void;
@@ -14,25 +16,25 @@ export function VolumeControl({ volume, onChange }: Props) {
     onChange(next);
   };
 
+  const btn = "flex h-6 w-6 items-center justify-center rounded-full text-lg leading-none text-vox-text-muted transition hover:text-vox-text-primary active:scale-90 focus-ring";
+
   return (
-    <div className="fixed bottom-3 left-3 z-30 flex items-center gap-0.5 rounded-full border border-zinc-800 bg-zinc-900/90 px-1.5 py-1 backdrop-blur-sm">
-      <button
-        onClick={() => ajustar(-0.1)}
-        title="Diminuir volume da voz"
-        className="flex h-6 w-6 items-center justify-center rounded-full text-lg leading-none text-zinc-500 transition hover:text-zinc-200 active:scale-90"
-      >
+    <Card
+      variant="strong"
+      elevation={2}
+      rounded="2xl"
+      padding="none"
+      className="fixed bottom-3 left-3 z-30 flex items-center gap-0.5 px-1.5 py-1"
+    >
+      <button onClick={() => ajustar(-0.1)} title="Diminuir volume da voz" className={btn}>
         −
       </button>
-      <span className="mx-1 select-none text-[10px] text-zinc-600">
+      <span className="mx-1 select-none text-[10px] font-mono tabular-nums text-vox-text-muted">
         {icone} {pct}%
       </span>
-      <button
-        onClick={() => ajustar(+0.1)}
-        title="Aumentar volume da voz"
-        className="flex h-6 w-6 items-center justify-center rounded-full text-lg leading-none text-zinc-500 transition hover:text-zinc-200 active:scale-90"
-      >
+      <button onClick={() => ajustar(+0.1)} title="Aumentar volume da voz" className={btn}>
         +
       </button>
-    </div>
+    </Card>
   );
 }
