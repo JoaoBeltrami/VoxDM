@@ -31,7 +31,16 @@ import {
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
+import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { useViewMode, chromeOpacityClass } from "@/hooks/useViewMode";
+
+const ORB_STATES: OrbState[] = ["idle", "ouvindo", "processando", "falando"];
+const ORB_LABEL: Record<OrbState, string> = {
+  idle: "Aguardando",
+  ouvindo: "Ouvindo",
+  processando: "Mestre pensando",
+  falando: "Narrando",
+};
 
 const NPCS_MOCK = {
   "aldric-drevasson": 2,
@@ -58,8 +67,14 @@ const MENSAGENS_MOCK = [
 export default function PreviewPage() {
   const { mode, setMode, cycleMode } = useViewMode();
   const [esperandoRolagem, setEsperandoRolagem] = useState(true);
+  const [orbState, setOrbState] = useState<OrbState>("idle");
 
   const dimChrome = chromeOpacityClass(mode);
+
+  const proximoEstado = () => {
+    const i = ORB_STATES.indexOf(orbState);
+    setOrbState(ORB_STATES[(i + 1) % ORB_STATES.length]);
+  };
 
   return (
     <AppShell
@@ -122,6 +137,27 @@ export default function PreviewPage() {
               &ldquo;Aldric mencionou Vyrmathax. Precisa saber mais sobre o pacto antes
               de pressionar Bjorn.&rdquo;
             </p>
+          </Panel>
+
+          {/* VoxOrb — feedback visual da voz do Mestre. Click cicla os 4 estados
+              pra demonstrar as animações (idle/ouvindo/processando/falando). */}
+          <Panel title="Mestre" icon={<span>🎙</span>}>
+            <div className="flex flex-col items-center gap-3 py-2">
+              <button
+                onClick={proximoEstado}
+                className="focus-ring rounded-full"
+                title={`Estado: ${ORB_LABEL[orbState]} (click pra ciclar)`}
+                aria-label={`Estado do orb: ${ORB_LABEL[orbState]}`}
+              >
+                <VoxOrb estado={orbState} tamanho={84} />
+              </button>
+              <span className="font-display text-[10px] uppercase tracking-widest text-vox-text-muted">
+                {ORB_LABEL[orbState]}
+              </span>
+              <span className="text-[10px] text-vox-text-muted/70 text-center px-2">
+                click no orb pra ciclar estados
+              </span>
+            </div>
           </Panel>
         </div>
       }
