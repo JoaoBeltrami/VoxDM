@@ -42,7 +42,7 @@ from engine.memory.quest_detector import (
     strip_marcadores,
 )
 from engine.telemetry import emit as _emit
-from engine.voice.language import detectar_idioma
+from engine.voice.language import Idioma
 
 log = structlog.get_logger()
 
@@ -129,6 +129,29 @@ _LAMPEJO_PITCH: str = "-3Hz"
 # único usa asyncio.wait_for + captura genérica. Retorna b"" em qualquer falha
 # (timeout, conn, refusal, etc.) — TTS é sempre opcional; sentença sem áudio
 # é melhor que o jogo travado.
+# Teto de chamadas Edge TTS simultâneas. Um turno de combate pode gerar
+# 11-16 sentenças, cada uma virando uma task de síntese concorrente. Sem teto,
+# todas abrem conexão com o endpoint Azure Edge TTS ao mesmo tempo — ele
+# throttla / deixa conexões half-open, e cada uma só falha após o timeout de
+# 12s. Resultado em campo: o turno "trava num loop" enquanto o `gather` espera
+# os timeouts. Limitar a poucas conexões em voo elimina o storm — as sentenças
+# sintetizam em pequenas levas e o áudio flui suave.
+_TTS_MAX_CONCORRENTE: int = 3
+# Semáforo por event loop — evita "bound to a different event loop" quando a
+# suíte de testes cria loops distintos. Criado preguiçosamente no 1º uso.
+_TTS_SEMAFOROS: dict[Any, asyncio.Semaphore] = {}
+
+
+def _get_tts_semaforo() -> asyncio.Semaphore:
+    """Retorna (criando se preciso) o semáforo de TTS do loop atual."""
+    loop = asyncio.get_running_loop()
+    sem = _TTS_SEMAFOROS.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(_TTS_MAX_CONCORRENTE)
+        _TTS_SEMAFOROS[loop] = sem
+    return sem
+
+
 async def _sintetizar_com_timeout(
     tts: Any,
     texto: str,
@@ -149,9 +172,13 @@ async def _sintetizar_com_timeout(
     if pitch is not None: kwargs["pitch"] = pitch
     if idioma is not None: kwargs["idioma"] = idioma
     try:
-        return await asyncio.wait_for(
-            tts.sintetizar(texto, **kwargs), timeout=timeout_s
-        )
+        # Semáforo serializa em levas pra não estourar o endpoint Edge TTS.
+        # O timeout cobre só a síntese após adquirir a vaga — a espera pela
+        # vaga não conta, então uma leva lenta não cancela a próxima cedo demais.
+        async with _get_tts_semaforo():
+            return await asyncio.wait_for(
+                tts.sintetizar(texto, **kwargs), timeout=timeout_s
+            )
     except Exception as e:
         log.warning("tts_falhou", label=label, erro=str(e)[:120])
         return b""
@@ -1225,7 +1252,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             resposta_completa = ""
             latencia_primeiro_token = -1
             tts = _obter_tts()
-            idioma = detectar_idioma(texto_jogador)
+            # A narração do Mestre é SEMPRE em PT-BR (IDIOMA OBRIGATÓRIO no
+            # master_system.md). Detectar idioma do texto do JOGADOR e aplicar
+            # à voz do Mestre era o bug: input curto como "Iniciativa" pontuava
+            # 0 em palavras-função PT-BR → Idioma.EN → Edge TTS lia a resposta
+            # do Mestre com fonética en-US. O idioma da fala do jogador não tem
+            # relação com o idioma da resposta sintetizada.
+            idioma = Idioma.PTBR
             buffer_sentenca = ""
             tts_tasks: list[asyncio.Task] = []
 
