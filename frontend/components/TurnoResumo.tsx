@@ -8,11 +8,14 @@
  * mestre diz "anota aí: +50 XP, +30 ouro, 8 de dano". O jogador tem um
  * ponto único pra ver o que esse turno mexeu na ficha.
  *
- * Dependências: React, Tailwind.
+ * Refatorado 27/05: usa primitiva Chip + tones semânticos do design system.
+ *
  * Armadilha: o componente é puramente apresentacional. Recebe um diff
  * pré-calculado pelo hook (useGameSession). Sem cálculos próprios — se
  * o diff for vazio ou todos zeros, retorna null silenciosamente.
  */
+
+import { Chip } from "@/components/ui";
 
 export interface TurnoDiff {
   xp_delta?: number;
@@ -45,57 +48,73 @@ function fmtDelta(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
+type Tone = "neutral" | "violet" | "amber" | "emerald" | "red" | "indigo";
+
+interface ChipSpec {
+  key: string;
+  tone: Tone;
+  label: string;
+  title?: string;
+  className?: string;
+}
+
 export function TurnoResumo({ diff }: Props) {
   if (!diff || diffVazio(diff)) return null;
 
-  const chips: { label: string; cor: string; title?: string }[] = [];
+  const chips: ChipSpec[] = [];
 
   if (diff.xp_delta) {
     chips.push({
+      key: "xp",
+      tone: "amber",
       label: `${fmtDelta(diff.xp_delta)} XP`,
-      cor: "bg-amber-900/30 text-amber-200 ring-amber-700/40",
     });
   }
   if (diff.gold_delta) {
     chips.push({
+      key: "gold",
+      tone: "amber",
       label: `${fmtDelta(diff.gold_delta)} ouro`,
-      cor: "bg-yellow-900/30 text-yellow-200 ring-yellow-700/40",
     });
   }
   if (diff.hp_delta) {
     const isCura = diff.hp_delta > 0;
     chips.push({
+      key: "hp",
+      tone: isCura ? "emerald" : "red",
       label: `${fmtDelta(diff.hp_delta)} HP`,
-      cor: isCura
-        ? "bg-emerald-900/30 text-emerald-200 ring-emerald-700/40"
-        : "bg-rose-900/30 text-rose-200 ring-rose-700/40",
     });
   }
   for (const item of diff.itens_ganhos ?? []) {
     chips.push({
+      key: `g-${item}`,
+      tone: "violet",
       label: `+${item}`,
-      cor: "bg-violet-900/30 text-violet-200 ring-violet-700/40",
       title: `Adicionado ao inventário: ${item}`,
     });
   }
   for (const item of diff.itens_perdidos ?? []) {
     chips.push({
+      key: `p-${item}`,
+      tone: "neutral",
       label: `−${item}`,
-      cor: "bg-zinc-800/50 text-zinc-400 ring-zinc-600/40 line-through",
       title: `Removido do inventário: ${item}`,
+      className: "line-through opacity-70",
     });
   }
   for (const cond of diff.condicoes_novas ?? []) {
     chips.push({
+      key: `cn-${cond}`,
+      tone: "red",
       label: `⚠ ${cond}`,
-      cor: "bg-orange-900/30 text-orange-200 ring-orange-700/40",
       title: `Condição aplicada: ${cond}`,
     });
   }
   for (const cond of diff.condicoes_removidas ?? []) {
     chips.push({
+      key: `cr-${cond}`,
+      tone: "emerald",
       label: `✓ ${cond}`,
-      cor: "bg-teal-900/30 text-teal-300 ring-teal-700/40",
       title: `Condição removida: ${cond}`,
     });
   }
@@ -104,17 +123,18 @@ export function TurnoResumo({ diff }: Props) {
 
   return (
     <div
-      className="mt-2 flex flex-wrap gap-1.5 border-t border-zinc-700/40 pt-2"
+      className="mt-2 flex flex-wrap gap-1.5 border-t border-vox-border-soft pt-2"
       aria-label="Resumo do turno"
     >
-      {chips.map((c, idx) => (
-        <span
-          key={idx}
-          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ${c.cor}`}
+      {chips.map((c) => (
+        <Chip
+          key={c.key}
+          tone={c.tone}
           title={c.title}
+          className={`uppercase tracking-wide text-[10px] font-medium ${c.className ?? ""}`}
         >
           {c.label}
-        </span>
+        </Chip>
       ))}
     </div>
   );

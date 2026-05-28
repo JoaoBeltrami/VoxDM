@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button, Card } from "@/components/ui";
+
+/**
+ * Diário do jogador — overlay flutuante com anotações persistidas no localStorage.
+ *
+ * Refatorado 27/05: usa Card + Button + font-atmospheric pra notas.
+ *
+ * Sessões diferentes têm diários separados (chave por session_id).
+ * Ctrl+Enter no textarea salva sem precisar clicar.
+ */
 
 interface JournalEntry {
   id: number;
@@ -22,7 +32,6 @@ export function PlayerJournal({ sessionId }: Props) {
   const [rascunho, setRascunho] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Carrega do localStorage ao abrir / quando sessionId muda
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -62,19 +71,37 @@ export function PlayerJournal({ sessionId }: Props) {
 
   return (
     <div className="absolute left-4 top-14 z-10">
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setAberto(a => !a)}
         title="Diário do jogador"
-        className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs text-zinc-400 transition hover:border-amber-500 hover:text-amber-400"
+        className="h-8 w-8 rounded-full p-0 hover:border-vox-accent-warm hover:text-vox-accent-warm"
       >
         📓
-      </button>
+      </Button>
 
       {aberto && (
-        <div className="absolute left-0 top-10 w-72 max-h-[80vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
+        <Card
+          variant="strong"
+          elevation={3}
+          rounded="xl"
+          padding="md"
+          className="absolute left-0 top-10 w-72 max-h-[80vh] overflow-y-auto"
+        >
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold text-amber-400">Diário</p>
-            <button onClick={() => setAberto(false)} className="text-xs text-zinc-600 hover:text-zinc-400">×</button>
+            <p className="font-display text-xs font-semibold uppercase tracking-widest text-vox-accent-warm">
+              Diário
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAberto(false)}
+              className="px-1 py-0 text-xs"
+              aria-label="Fechar diário"
+            >
+              ×
+            </Button>
           </div>
 
           {/* Nova entrada */}
@@ -87,39 +114,55 @@ export function PlayerJournal({ sessionId }: Props) {
               placeholder="Anote algo… (Ctrl+Enter para salvar)"
               rows={3}
               maxLength={500}
-              className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-amber-500"
+              className="w-full resize-none rounded-vox-md border border-vox-border-soft bg-vox-bg-elevated px-3 py-2 text-xs text-vox-text-primary placeholder-vox-text-muted outline-none focus:border-vox-accent-warm focus:ring-1 focus:ring-vox-accent-warm/40 transition-colors"
             />
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={adicionarEntrada}
               disabled={!rascunho.trim()}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-1.5 text-xs text-zinc-300 transition hover:border-amber-500 hover:text-amber-300 disabled:opacity-30"
+              className="w-full hover:border-vox-accent-warm hover:text-vox-accent-warm"
             >
               Salvar anotação
-            </button>
+            </Button>
           </div>
 
           {/* Lista de entradas */}
           {entradas.length === 0 ? (
-            <p className="text-xs text-zinc-700">Nenhuma anotação ainda.</p>
+            <p className="font-atmospheric text-xs italic text-vox-text-muted">
+              Nenhuma anotação ainda.
+            </p>
           ) : (
             <div className="space-y-2">
               {[...entradas].reverse().map(entrada => (
-                <div key={entrada.id}
-                  className="group relative rounded-lg border border-zinc-800 bg-zinc-800/50 px-3 py-2"
+                <Card
+                  key={entrada.id}
+                  variant="subtle"
+                  elevation={1}
+                  rounded="md"
+                  padding="sm"
+                  className="group relative"
                 >
-                  <p className="mb-0.5 text-[10px] text-zinc-600">{entrada.timestamp}</p>
-                  <p className="text-xs leading-relaxed text-zinc-300 whitespace-pre-wrap">{entrada.texto}</p>
-                  <button
+                  <p className="mb-0.5 font-mono text-[10px] tabular-nums text-vox-text-muted">
+                    {entrada.timestamp}
+                  </p>
+                  <p className="font-atmospheric text-sm leading-relaxed text-vox-text-primary whitespace-pre-wrap">
+                    {entrada.texto}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removerEntrada(entrada.id)}
-                    className="absolute right-2 top-2 hidden text-xs text-zinc-700 transition hover:text-red-400 group-hover:block"
+                    className="absolute right-1 top-1 hidden px-1 py-0 text-xs text-vox-text-muted hover:text-vox-accent-danger group-hover:block"
+                    aria-label="Remover anotação"
                   >
                     ×
-                  </button>
-                </div>
+                  </Button>
+                </Card>
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   spellsDaClasse, spellsPorNivel, limiteProgressao,
   type SpellEntry,
 } from "@/lib/spells";
+import { Card, Chip } from "@/components/ui";
 
 const CLASSES_DND = [
   "Bárbaro", "Bardo", "Clérigo", "Druida", "Guerreiro",
@@ -348,14 +349,14 @@ export function CharacterForm({ onChange }: Props) {
         <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
           Seu Personagem
         </p>
-        <button
-          type="button"
+        <Chip
+          tone="violet"
           onClick={personagemAleatorio}
           title="Gera raça, classe, background, atributos e local aleatórios"
-          className="flex items-center gap-1 rounded-full border border-violet-700/60 bg-violet-900/30 px-2.5 py-1 text-[10px] font-semibold text-violet-300 transition hover:border-violet-500 hover:bg-violet-800/50 hover:text-violet-100 active:scale-95"
+          className="rounded-full px-2.5 py-1 text-[10px] font-semibold active:scale-95"
         >
           🎲 Aleatório
-        </button>
+        </Chip>
       </div>
 
       {/* Nome */}
@@ -484,7 +485,7 @@ export function CharacterForm({ onChange }: Props) {
             </div>
 
             {/* Lista de spells na aba ativa */}
-            <div className="space-y-1 max-h-48 overflow-y-auto rounded border border-zinc-800 bg-zinc-900/50 p-2">
+            <Card variant="subtle" elevation="none" padding="sm" className="space-y-1 max-h-48 overflow-y-auto">
               {spellsNaAba.length === 0 && (
                 <p className="text-[10px] text-zinc-600">Nenhuma magia disponível neste nível.</p>
               )}
@@ -520,7 +521,7 @@ export function CharacterForm({ onChange }: Props) {
                   </label>
                 );
               })}
-            </div>
+            </Card>
 
             {/* Resumo das selecionadas */}
             {totalSelecionadas > 0 && (
@@ -572,38 +573,34 @@ export function CharacterForm({ onChange }: Props) {
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs text-zinc-400">Atributos</label>
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
+            <Chip
+              tone="amber"
               onClick={rolarAtributos}
               title="Rola 4d6 e descarta o menor, seis vezes. Distribui priorizando sua classe."
-              className="flex items-center gap-1 rounded-full border border-amber-700/60 bg-amber-900/20 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300 transition hover:border-amber-500 hover:bg-amber-800/40 hover:text-amber-100 active:scale-95"
+              className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold active:scale-95"
             >
               🎲 Rolar 4d6↓
-            </button>
+            </Chip>
             {(modoAtributos === "rolado-auto" || modoAtributos === "rolado-manual") && (
               <>
-                <button
-                  type="button"
+                <Chip
+                  tone={modoAtributos === "rolado-manual" ? "violet" : "neutral"}
                   onClick={alternarRolagemManual}
                   title={modoAtributos === "rolado-manual"
                     ? "Voltar para distribuição automática (priorizada pela classe)"
                     : "Distribuir manualmente: arraste os valores rolados pros atributos"}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition ${
-                    modoAtributos === "rolado-manual"
-                      ? "border-violet-500 bg-violet-900/30 text-violet-300"
-                      : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                  }`}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
                 >
                   {modoAtributos === "rolado-manual" ? "✋ manual" : "✋ distribuir"}
-                </button>
-                <button
-                  type="button"
+                </Chip>
+                <Chip
+                  tone="neutral"
                   onClick={resetarParaArray}
                   title="Voltar para o Standard Array (15, 14, 13, 12, 10, 8)"
-                  className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300"
+                  className="rounded-full px-2 py-0.5 text-[10px]"
                 >
                   array
-                </button>
+                </Chip>
               </>
             )}
           </div>
@@ -698,7 +695,7 @@ export function CharacterForm({ onChange }: Props) {
 
       {/* Preview de stats — aparece quando classe + atributos atribuídos */}
       {classe && allAssigned && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 space-y-1.5">
+        <Card variant="subtle" elevation="none" padding="none" className="px-3 py-2 space-y-1.5">
           <div className="grid grid-cols-3 gap-x-4 text-xs">
             <div className="flex justify-between">
               <span className="text-zinc-500">HP</span>
@@ -725,7 +722,7 @@ export function CharacterForm({ onChange }: Props) {
               <span className="text-zinc-400">{allSkills.join(", ")}</span>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Local de início */}
