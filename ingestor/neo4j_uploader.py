@@ -125,6 +125,14 @@ class Neo4jUploader:
                 if not isinstance(elem, dict):
                     continue
                 props = _props_escalares(elem)
+                # _ext carrega escalares úteis aninhados (gender, race, age) que
+                # o VoiceManager precisa para escolher voz por gênero/raça. Como
+                # _ext é um dict, _props_escalares o descarta — promovemos seus
+                # escalares ao nível do nó. setdefault: chave top-level vence.
+                ext = elem.get("_ext")
+                if isinstance(ext, dict):
+                    for k, v in _props_escalares(ext).items():
+                        props.setdefault(k, v)
                 source_id = props.get("id")
                 if not source_id:
                     log.warning("neo4j_no_sem_id", categoria=categoria, elem=str(elem)[:80])
