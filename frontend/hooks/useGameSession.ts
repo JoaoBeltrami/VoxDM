@@ -849,6 +849,11 @@ export function useGameSession() {
     // Se o jogador agir antes do áudio do turno anterior terminar, força o
     // flush do turno pendente — evita perda silenciosa no histórico.
     _flushTurnoPendente();
+    // Corta a narração do turno anterior. Sem isso, o áudio ainda na fila do
+    // useAudio continua tocando "solto" por cima do novo turno quando o jogador
+    // rola um dado ou fala de novo antes da voz terminar (bug do teste ao vivo:
+    // "narração continua mesmo se o jogador rolar o dado e avançar o turno").
+    pararTudo();
     turnoAtualRef.current = { jogador: texto, id: Date.now() };
     textoAtualRef.current = "";
     setIsProcessing(true);
@@ -869,7 +874,7 @@ export function useGameSession() {
       // Fecha o socket morto para o handler onclose acionar a reconexão automática
       wsRef.current?.close();
     }, TURN_TIMEOUT_MS);
-  }, [TURN_TIMEOUT_MS, _flushTurnoPendente]);
+  }, [TURN_TIMEOUT_MS, _flushTurnoPendente, pararTudo]);
 
   const sincronizarEstado = useCallback((
     tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
