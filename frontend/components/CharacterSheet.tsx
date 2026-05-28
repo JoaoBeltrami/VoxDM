@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PersonagemConfig, SpellSlot } from "@/lib/api";
 import type { RolagemLog } from "@/hooks/useGameSession";
 import { nivelDaSpell } from "@/lib/spells";
+import { Card, HpBar } from "@/components/ui";
 
 interface Props {
   personagem: PersonagemConfig;
@@ -232,7 +233,6 @@ export function CharacterSheet({
     return () => clearTimeout(t);
   }, [hpAtual]);
 
-  const hpPercent = hpMax > 0 ? Math.max(0, Math.min(100, (hpAtual / hpMax) * 100)) : 0;
   const inconsciente = hpAtual <= 0;
 
   const ajustarHP = (delta: number) => {
@@ -511,7 +511,7 @@ export function CharacterSheet({
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-10 w-72 max-h-[85vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
+        <Card variant="strong" elevation={3} padding="lg" rounded="xl" className="absolute right-0 top-10 w-72 max-h-[85vh] overflow-y-auto">
 
           {/* Identidade */}
           <div className="mb-3 border-b border-zinc-800 pb-3">
@@ -598,14 +598,7 @@ export function CharacterSheet({
                   }`}>{hpAtual} / {hpMax}</span>
               }
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  inconsciente ? "bg-red-700" : hpPercent < 30 ? "bg-orange-500" : "bg-violet-500"
-                }`}
-                style={{ width: `${hpPercent}%` }}
-              />
-            </div>
+            <HpBar current={hpAtual} max={hpMax} showNumber={false} size="sm" className="mb-2" />
             <div className="flex items-center gap-1.5">
               <button onClick={() => ajustarHP(-1)} disabled={hpAtual <= 0}
                 className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
@@ -1279,7 +1272,7 @@ export function CharacterSheet({
               </div>
             )}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );
