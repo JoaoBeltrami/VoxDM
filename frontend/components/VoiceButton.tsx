@@ -2,6 +2,7 @@
 
 import { KeyboardEvent, useCallback, useRef, useState } from "react";
 import { transcrever } from "@/lib/api";
+import { Button, Chip } from "@/components/ui";
 
 interface Props {
   onEnviar:         (texto: string) => void;
@@ -316,22 +317,18 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
 
       {/* Toggle OOC/IC — fora do personagem vs em personagem */}
       <div className="flex w-full max-w-lg justify-end">
-        <button
-          type="button"
+        <Chip
+          tone={modoOOC ? "amber" : "neutral"}
           onClick={() => setModoOOC(v => !v)}
           title={modoOOC ? "Modo: Para o Mestre (OOC) — clique para voltar ao personagem" : "Modo: Personagem fala (IC) — clique para falar fora do personagem"}
-          className={`rounded-full px-3 py-0.5 text-[10px] font-medium tracking-wide transition-all border
-            ${modoOOC
-              ? "bg-amber-900/40 border-amber-700/60 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
-              : "bg-zinc-900/60 border-zinc-700 text-zinc-600 hover:text-zinc-400"
-            }`}
+          className="rounded-full px-3 py-0.5 text-[10px] tracking-wide"
         >
           {modoOOC ? "🗣 Para o Mestre (OOC)" : "🎭 Personagem (IC)"}
-        </button>
+        </Chip>
       </div>
 
       {/* Fallback texto */}
-      <div className="flex w-full max-w-lg items-end gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+      <div className="flex w-full max-w-lg items-end gap-2 rounded-2xl border border-vox-border-subtle bg-vox-bg-panel/60 px-3 py-2">
         <textarea
           ref={inputRef}
           value={texto}
@@ -340,15 +337,17 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           placeholder={semVoz ? "O que você faz? (Enter para enviar)" : "ou escreva aqui… (Enter para enviar)"}
           disabled={desabilitado}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-xs text-zinc-300 placeholder-zinc-600 outline-none disabled:opacity-40"
+          className="flex-1 resize-none bg-transparent text-xs text-vox-text-secondary placeholder-vox-text-muted outline-none disabled:opacity-40"
         />
-        <button
+        <Button
+          variant="primary"
+          size="sm"
           onClick={enviarTexto}
           disabled={desabilitado || !texto.trim()}
-          className="shrink-0 rounded-lg bg-violet-700 px-3 py-1 text-xs font-medium text-white transition hover:bg-violet-600 disabled:opacity-25"
+          className="shrink-0"
         >
           Enviar
-        </button>
+        </Button>
       </div>
     </div>
   );
