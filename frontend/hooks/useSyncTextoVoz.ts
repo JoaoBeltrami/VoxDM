@@ -45,11 +45,15 @@ export interface SyncTextoVozProps {
 // 300ms dá tempo para o olho "prever" a sílaba antes de ouvir, sem quebrar imersão.
 const OFFSET_MS = 300;
 
-// Taxa de revelação fallback quando audioDuracao=0 mas audioTocando=true.
-// 15 chars/s ≈ ritmo de fala PT-BR em velocidade natural de narração.
-// Delay inicial de 1.5s simula o delay real do TTS.
-const FALLBACK_CHARS_POR_SEGUNDO = 15;
-const FALLBACK_DELAY_MS = 1500;
+// Ritmo de revelação — chars/s da fala PT-BR do Mestre (Edge TTS rate +3%).
+// IMPORTANTE: o TTS é por-sentença. `audioDuracao` reflete a duração de UM
+// chunk (uma sentença), não da resposta inteira. Dividir charsTotal (resposta
+// completa, que cresce no streaming) pela duração de uma sentença dava uma
+// taxa absurdamente alta — o texto disparava até o fim antes do áudio chegar
+// ("letras aparecem bem antes"). Por isso revelamos num ritmo de fala constante,
+// dirigido por relógio a partir do início do áudio, em vez de calibrar pela
+// duração de um único chunk. ~16 chars/s aproxima a narração natural.
+const CHARS_POR_SEGUNDO = 16;
 
 // Texto muito curto (< N chars) — não vale a pena sincronizar; mostra tudo.
 const MIN_CHARS_PARA_SYNC = 10;
@@ -77,6 +81,12 @@ export function useSyncTextoVoz({
   const failsafeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failsafeExpiradoRef = useRef(false);
 
+  // True assim que o áudio começou ao menos uma vez neste turno. Uma vez ligado,
+  // o relógio de revelação roda até o fim independentemente de `audioTocando`
+  // oscilar (há micro-gaps entre chunks por-sentença). Sem isso, o gap entre
+  // sentenças fazia o texto despejar tudo de uma vez e a voz narrava por cima.
+  const iniciadoRef = useRef(false);
+
   // Cancela RAF pendente
   const cancelarRaf = () => {
     if (rafRef.current !== null) {
@@ -98,6 +108,7 @@ export function useSyncTextoVoz({
       cancelarRaf();
       cancelarFailsafe();
       failsafeExpiradoRef.current = false;
+      iniciadoRef.current = false;
       cursorRef.current = 0;
       startTimeRef.current = null;
       setTextoVisivel("");
@@ -107,23 +118,69 @@ export function useSyncTextoVoz({
   useEffect(() => {
     const charsTotal = textoCompleto.length;
 
-    // Caso 0: aguardando áudio começar — mascara o texto durante streaming.
-    // Aplica só quando há texto a esconder e o áudio ainda não começou (e o
-    // failsafe ainda não expirou). Sem isso, tokens do LLM (~30/s) aparecem
-    // antes do TTS (delay 800ms-1.5s) — jogador lê tudo antes de ouvir.
-    if (
-      ativo
-      && aguardarAudio
-      && !audioTocando
-      && charsTotal >= MIN_CHARS_PARA_SYNC
-      && !failsafeExpiradoRef.current
-    ) {
+    // Caso A: feature desligada, texto curto ou turno vazio → revela tudo.
+    if (!ativo || charsTotal < MIN_CHARS_PARA_SYNC) {
       cancelarRaf();
-      // Arma o failsafe se ainda não armado — depois de aguardarAudioMs, libera
-      // o texto mesmo sem áudio (TTS pode ter falhado em sentença muito curta).
+      cancelarFailsafe();
+      setTextoVisivel(textoCompleto);
+      cursorRef.current = charsTotal;
+      return;
+    }
+
+    // Caso B: o áudio já começou neste turno (uma vez ligado, fica ligado) →
+    // dirige a revelação por RELÓGIO num ritmo de fala constante, até o fim.
+    // Resiliente a `audioTocando` oscilar entre sentenças: não despejamos o
+    // texto nos micro-gaps, o cursor só avança no ritmo natural da narração.
+    if (audioTocando) {
+      iniciadoRef.current = true;
+    }
+
+    if (iniciadoRef.current) {
+      cancelarFailsafe();
+      // Marca o início do relógio na primeira vez que o áudio toca.
+      if (startTimeRef.current === null) {
+        cursorRef.current = 0;
+        setTextoVisivel("");
+        startTimeRef.current = performance.now();
+      }
+      const offsetChars = Math.floor(CHARS_POR_SEGUNDO * (OFFSET_MS / 1000));
+
+      const tick = (agora: number) => {
+        const inicio = startTimeRef.current ?? agora;
+        const elapsed = Math.max(0, (agora - inicio) / 1000);
+        const alvo = Math.floor(elapsed * CHARS_POR_SEGUNDO) + offsetChars;
+        const novoCursor = Math.min(charsTotal, Math.max(cursorRef.current, alvo));
+
+        if (novoCursor > cursorRef.current) {
+          cursorRef.current = novoCursor;
+          setTextoVisivel(textoRef.current.slice(0, novoCursor));
+        }
+
+        // Continua enquanto faltar texto OU o LLM ainda estiver streamando
+        // (charsTotal cresce). Quando tudo foi revelado E o stream parou de
+        // crescer, o cursor já igualou charsTotal e o loop encerra naturalmente.
+        if (cursorRef.current < textoRef.current.length) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else {
+          rafRef.current = null;
+        }
+      };
+
+      cancelarRaf();
+      rafRef.current = requestAnimationFrame(tick);
+      return cancelarRaf;
+    }
+
+    // Caso C: áudio ainda não começou neste turno.
+    // Se estamos aguardando o TTS (aguardarAudio), mascara o texto e arma o
+    // failsafe — tokens do LLM (~30/s) chegam antes do TTS (delay 800ms-1.5s);
+    // sem isso o jogador lê tudo antes de ouvir.
+    if (aguardarAudio && !failsafeExpiradoRef.current) {
+      cancelarRaf();
       if (failsafeRef.current === null) {
         failsafeRef.current = setTimeout(() => {
           failsafeExpiradoRef.current = true;
+          iniciadoRef.current = true; // libera o relógio mesmo sem áudio
           setTextoVisivel(textoRef.current);
           cursorRef.current = textoRef.current.length;
         }, aguardarAudioMs);
@@ -133,73 +190,11 @@ export function useSyncTextoVoz({
       return;
     }
 
-    // Caso 1: feature desligada, sem áudio, texto curto ou turno vazio.
-    // Revela o texto imediatamente e encerra.
-    if (!ativo || !audioTocando || charsTotal < MIN_CHARS_PARA_SYNC) {
-      cancelarRaf();
-      cancelarFailsafe();
-      setTextoVisivel(textoCompleto);
-      cursorRef.current = charsTotal;
-      return;
-    }
-
-    // Áudio começou — cancela failsafe (se armado) e segue pro loop de sync
+    // Sem áudio e sem aguardar (ex: TTS desligado / sentença sem voz) → revela.
+    cancelarRaf();
     cancelarFailsafe();
-
-    // Caso 2: audioTocando=true, mas duração ainda não chegou (0) →
-    // usa fallback de taxa fixa com delay inicial para simular latência TTS.
-    const usandoFallback = audioDuracao <= 0;
-    const charsPorSegundo = usandoFallback
-      ? FALLBACK_CHARS_POR_SEGUNDO
-      : charsTotal / audioDuracao;
-    const offsetChars = usandoFallback
-      ? Math.floor(FALLBACK_CHARS_POR_SEGUNDO * (OFFSET_MS / 1000))
-      : Math.floor(charsPorSegundo * (OFFSET_MS / 1000));
-    const delayMs = usandoFallback ? FALLBACK_DELAY_MS : 0;
-
-    // Efeito cinematográfico: quando o áudio começa pela primeira vez neste turno
-    // (startTimeRef null = sessão de áudio nova), rebobina o cursor para o início.
-    // Sem isso, o Case 1 já teria avançado cursorRef até charsTotal enquanto
-    // audioTocando=false — o RAF verificaria cursorRef < charsTotal → false → nunca
-    // iniciava, e o texto ficava estático enquanto a voz narrava. O reset faz o
-    // texto desaparecer brevemente e reaparecer em sincronia com a narração.
-    if (startTimeRef.current === null) {
-      cursorRef.current = 0;
-      setTextoVisivel("");
-      startTimeRef.current = performance.now() + delayMs;
-    }
-
-    // Garante que cursor não retrocede (pode acontecer se duração chegar depois)
-    const cursorAtual = cursorRef.current;
-
-    const tick = (agora: number) => {
-      const inicio = startTimeRef.current ?? agora;
-      const elapsed = Math.max(0, (agora - inicio) / 1000);
-      const novoCursor = Math.min(
-        charsTotal,
-        Math.max(cursorAtual, Math.floor(elapsed * charsPorSegundo) + offsetChars)
-      );
-
-      if (novoCursor > cursorRef.current) {
-        cursorRef.current = novoCursor;
-        setTextoVisivel(textoRef.current.slice(0, novoCursor));
-      }
-
-      if (cursorRef.current < charsTotal) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        // Revelou tudo — encerra o loop
-        setTextoVisivel(textoRef.current);
-        rafRef.current = null;
-      }
-    };
-
-    // Só inicia RAF se ainda há texto a revelar
-    if (cursorRef.current < charsTotal) {
-      rafRef.current = requestAnimationFrame(tick);
-    }
-
-    return cancelarRaf;
+    setTextoVisivel(textoCompleto);
+    cursorRef.current = charsTotal;
   }, [audioTocando, audioDuracao, textoCompleto, ativo, aguardarAudio, aguardarAudioMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return textoVisivel;
