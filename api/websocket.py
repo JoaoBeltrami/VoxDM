@@ -36,6 +36,7 @@ from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
 from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE, _LEMBRETE_SAIDA
 from engine.memory.trust_detector import detectar_mudancas_trust
+from engine.memory.rolling_summary import atualizar_resumo_rolling
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
     detectar_e_aplicar_quests,
@@ -1700,6 +1701,20 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Aftermath dura exatamente um turno — reset após o "fim" ser enviado
             if sessao.working_mem.saiu_combate_recentemente:
                 sessao.working_mem.saiu_combate_recentemente = False
+
+            # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
+            # O contador é incrementado dentro de aplicar_pos_turno (só turnos
+            # reais). Quando fecha o intervalo, regenera o resumo contínuo da
+            # sessão. Awaitar aqui (antes do próximo receive) evita race com o
+            # turno seguinte e não soma latência percebida — o "fim" já foi
+            # enviado. Try/except amplo: resumo NUNCA bloqueia a sessão.
+            if settings.ROLLING_SUMMARY_ATIVO and sessao.working_mem.narrative.deve_resumir(
+                settings.ROLLING_SUMMARY_INTERVALO
+            ):
+                try:
+                    await atualizar_resumo_rolling(sessao.working_mem)
+                except Exception as e:
+                    log.warning("rolling_summary_turno_falhou", erro=str(e))
 
             # Campos alinhados com voice_loop.py para compatibilidade com dashboard.py
             _emit({
