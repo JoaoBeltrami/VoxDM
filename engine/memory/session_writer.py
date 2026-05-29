@@ -37,11 +37,15 @@ _MAX_DIALOGO_CHARS = 6000
 
 _PROMPT_RESUMO = """\
 Você é um assistente que resume sessões de RPG de mesa de forma compacta.
-Dado o diálogo e estado abaixo, gere um parágrafo de 3-5 frases em português
-brasileiro descrevendo: o que aconteceu, quais NPCs foram encontrados e como
-a relação com eles evoluiu, que quests avançaram, e se o personagem ganhou
-aliados ou acumulou recursos notáveis.
+Com base no resumo contínuo da sessão, no estado e na última janela de
+diálogo abaixo, gere um parágrafo de 3-5 frases em português brasileiro
+descrevendo: o que aconteceu, quais NPCs foram encontrados e como a relação
+com eles evoluiu, que quests avançaram, e se o personagem ganhou aliados ou
+acumulou recursos notáveis.
 Seja factual e narrativo — sem opiniões, sem listas.
+
+Resumo contínuo da sessão (memória do que já passou):
+{resumo_rolling}
 
 Estado da sessão:
 {estado}
@@ -49,7 +53,7 @@ Estado da sessão:
 Aliados ativos: {companions}
 Fios narrativos em aberto: {fios_soltos}
 
-Diálogo da sessão:
+Última janela de diálogo:
 {dialogo}
 """
 
@@ -77,11 +81,18 @@ async def _resumir_via_groq(working_mem: WorkingMemory) -> str:
     # Fios soltos — lista ou "nenhum"
     fios_txt = "; ".join(working_mem.fios_soltos) if working_mem.fios_soltos else "nenhum"
 
+    # Resumo contínuo (Frente A) — memória já comprimida do que passou nesta
+    # sessão. Resumir A PARTIR dele dá fidelidade muito maior que truncar o
+    # diálogo bruto em 6000 chars: turnos antigos (fora da janela) já estão
+    # representados aqui. Pode estar vazio em sessão curta (< intervalo).
+    resumo_rolling_txt = working_mem.resumo_rolling or "(sessão curta — sem resumo contínuo)"
+
     prompt = _PROMPT_RESUMO.format(
         estado=estado,
         dialogo=dialogo,
         companions=companions_txt,
         fios_soltos=fios_txt,
+        resumo_rolling=resumo_rolling_txt,
     )
     mensagens = [{"role": "user", "content": prompt}]
 
@@ -155,6 +166,7 @@ class SessionWriter:
                 "fios_soltos":          list(working_mem.fios_soltos),
                 "agenda_npcs":          dict(working_mem.agenda_npcs),
                 "cliffhanger_pendente": working_mem.cliffhanger_pendente or "",
+                "resumo_rolling":       working_mem.resumo_rolling or "",
             },
         }
 
