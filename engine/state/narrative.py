@@ -14,6 +14,8 @@ Armadilha: cartas_improviso são one-shot — uma vez usadas (ou após decay),
 
 from dataclasses import dataclass, field
 
+from config import settings
+
 # Caps anti-crescimento em sessão longa
 _MAX_FIOS = 5
 _MAX_ANCORAS = 5
@@ -48,6 +50,14 @@ class NarrativeState:
 
     # Log de consequências (max 5, rolling)
     log_consequencias: list[str] = field(default_factory=list)
+
+    # ── Rolling summary (resumo contínuo intra-sessão) ───────────────────────
+    # Prosa que comprime tudo o que já aconteceu NESTA sessão. Injetada no
+    # system prompt como memória interna do mestre — acumula incrementalmente
+    # a cada janela de diálogo, evitando que turnos antigos (fora da janela de
+    # MAX_DIALOGOS) se percam em sessões longas.
+    resumo_rolling: str = ""
+    turnos_desde_resumo: int = 0
 
     # ── Operações idempotentes ───────────────────────────────────────────────
 
@@ -120,6 +130,43 @@ class NarrativeState:
             self.pacing_nivel = max(0.0, self.pacing_nivel - 0.3)
         else:
             self.pacing_nivel = min(10.0, self.pacing_nivel + 0.2)
+
+    # ── Rolling summary ──────────────────────────────────────────────────────
+
+    def marcar_turno_resumo(self) -> None:
+        """Conta mais um turno desde o último resumo rolling."""
+        self.turnos_desde_resumo += 1
+
+    def deve_resumir(
+        self,
+        intervalo: int,
+        em_climax: bool = False,
+        mudou_local: bool = False,
+    ) -> bool:
+        """Predicado barato: hora de regerar o resumo rolling?
+
+        True quando acumulou `intervalo` turnos desde o último resumo, ou em
+        clímax narrativo, ou em mudança de cena (momentos em que consolidar a
+        memória vale a pena mesmo antes de fechar o intervalo).
+        """
+        return (
+            self.turnos_desde_resumo >= intervalo
+            or em_climax
+            or mudou_local
+        )
+
+    def aplicar_resumo_rolling(self, novo: str) -> None:
+        """Substitui o resumo rolling e zera o contador de turnos.
+
+        Trunca em settings.ROLLING_SUMMARY_MAX_CHARS (corte em espaço pra não
+        partir palavra) — rede de segurança caso a LLM devolva texto longo.
+        """
+        texto = novo.strip()
+        limite = settings.ROLLING_SUMMARY_MAX_CHARS
+        if len(texto) > limite:
+            texto = texto[:limite].rsplit(" ", 1)[0].rstrip()
+        self.resumo_rolling = texto
+        self.turnos_desde_resumo = 0
 
     # ── Serialização ─────────────────────────────────────────────────────────
 

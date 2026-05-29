@@ -372,6 +372,12 @@ def aplicar_pos_turno(
     working_mem.registrar_fala("mestre", fala_limpa)
     working_mem.apresentar_npcs_mencionados(resposta_completa)
 
+    # Rolling summary: conta este turno. Só turnos reais do jogador — a
+    # abertura/reconexão chama com texto_jogador="" e não deve contar.
+    if texto_jogador:
+        working_mem.narrative.marcar_turno_resumo()
+
+
     # 1b. Entrar em combate via marker — LLM tem autoridade para iniciar combate
     #     quando a ação do jogador é narrativamente bélica mas o regex de verbos
     #     não casou (sparring, "uso X em Y", declaração indireta). Bug

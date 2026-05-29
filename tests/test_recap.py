@@ -398,6 +398,8 @@ def test_session_writer_payload_inclui_campos_continuidade():
     from engine.memory.session_writer import _PROMPT_RESUMO
     assert "{companions}" in _PROMPT_RESUMO, "Prompt deve ter placeholder {companions}"
     assert "{fios_soltos}" in _PROMPT_RESUMO, "Prompt deve ter placeholder {fios_soltos}"
+    # Frente A opcional: resumo episódico parte do resumo contínuo da sessão.
+    assert "{resumo_rolling}" in _PROMPT_RESUMO, "Prompt deve ter placeholder {resumo_rolling}"
 
 
 def test_buscar_por_session_id_nao_usa_buscar_semantico():

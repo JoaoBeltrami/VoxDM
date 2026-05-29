@@ -42,6 +42,20 @@ class Settings(BaseSettings):
     GEMINI_MODELS: str = "gemini-2.5-flash-lite,gemini-3.1-flash-lite"
     # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
     LLM_PROVIDER_TIMEOUT: float = 30.0
+
+    # ── Rolling summary (resumo contínuo intra-sessão) ───────────────────
+    # Resumo incremental do que já aconteceu NESTA sessão, injetado no
+    # system prompt como memória interna do mestre. Economiza tokens em
+    # sessões longas sem perder turnos antigos (fora da janela de diálogo).
+    ROLLING_SUMMARY_ATIVO: bool = True
+    # INTERVALO é contado em TURNOS; a janela de diálogo (MAX_DIALOGOS=6) é
+    # contada em FALAS (2 por turno: jogador + mestre). Logo o intervalo nunca
+    # deve passar de MAX_DIALOGOS/2 = 3 turnos — senão um turno introduzido no
+    # início de um intervalo sai da janela ANTES do resumo capturá-lo, e a
+    # informação se perde. rolling_summary.py loga warning se violado.
+    ROLLING_SUMMARY_INTERVALO: int = 3
+    ROLLING_SUMMARY_MAX_CHARS: int = 1200
+
     # Timeout reduzido pra Ollama no health check inicial (não trava cascata se down).
     OLLAMA_HEALTH_TIMEOUT: float = 3.0
     # Quanto tempo o Ollama mantém o modelo na VRAM após última request.
