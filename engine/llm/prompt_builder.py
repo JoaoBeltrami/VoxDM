@@ -25,6 +25,8 @@ from engine.llm.types import (
 )
 from engine.magic.spell_list import nivel_da_spell
 
+from config import settings
+
 # Re-exportados para compatibilidade com importações existentes
 __all__ = ["ContextoMontado", "SecretVisivel", "montar_mensagens", "invalidar_cache",
            "validar_master_system", "_RE_ROLAGEM", "_RE_COMBATE", "_LEMBRETE_SAIDA"]
@@ -559,6 +561,17 @@ def montar_mensagens(
     secrets_texto = _formatar_secrets(contexto.secrets_visiveis)
     if secrets_texto:
         secoes.append(f"\n{secrets_texto}")
+
+    # Rolling summary — resumo contínuo da sessão como memória interna do
+    # mestre. PROSA pura, sem === nem colchetes: rótulos de código disparam
+    # "modo leitura de código" no LLM e degradam a narração.
+    if settings.ROLLING_SUMMARY_ATIVO:
+        _resumo_rolling = getattr(contexto.working_memory, "resumo_rolling", "")
+        if _resumo_rolling:
+            secoes.append(
+                "\nVocê se lembra de tudo o que já aconteceu nesta sessão:\n"
+                + _resumo_rolling
+            )
 
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
 
