@@ -129,6 +129,18 @@ class WorkingMemory:
     @dialogo_recente.setter
     def dialogo_recente(self, v: list[DialogueTurn]) -> None: self.scene.dialogo_recente = v
 
+    # ── Rolling summary (delega a NarrativeState) ─────────────────────
+    @property
+    def resumo_rolling(self) -> str: return self.narrative.resumo_rolling
+    @resumo_rolling.setter
+    def resumo_rolling(self, v: str) -> None: self.narrative.resumo_rolling = v
+
+    @property
+    def turnos_desde_resumo(self) -> int: return self.narrative.turnos_desde_resumo
+    @turnos_desde_resumo.setter
+    def turnos_desde_resumo(self, v: int) -> None: self.narrative.turnos_desde_resumo = v
+
+
     # ── Properties: CombatState ──────────────────────────────────────────────
 
     @property
