@@ -20,9 +20,12 @@ Exemplo:
 
 from __future__ import annotations
 
+import time
 from typing import AsyncIterator
 
 import structlog
+
+from engine.telemetry import emit_llm_decisao
 
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 from engine.llm.providers.gemini import GeminiProvider
@@ -99,6 +102,36 @@ class LLMRouter:
         cauda = [n for n in base if n != self._override_primario]
         return [self._override_primario, *cauda]
 
+    def _emitir_decisao(
+        self,
+        *,
+        task: TaskType,
+        provider_primario: str | None,
+        provider_efetivo: str | None,
+        cascata_disparou: bool,
+        t0: float,
+        chars_saida: int,
+        status: str,
+        categoria_erro: str | None,
+    ) -> None:
+        """Emite telemetria de decisão LLM convertendo t0 (monotonic) em ms.
+
+        Falha de telemetria nunca quebra a chamada LLM — try/except amplo.
+        """
+        try:
+            emit_llm_decisao(
+                task=task.value,
+                provider_primario=provider_primario,
+                provider_efetivo=provider_efetivo,
+                cascata_disparou=cascata_disparou,
+                latencia_ms=int((time.monotonic() - t0) * 1000),
+                chars_saida=chars_saida,
+                status=status,
+                categoria_erro=categoria_erro,
+            )
+        except Exception as e:  # noqa: BLE001 — telemetria é best-effort
+            log.warning("telemetria_llm_falhou", erro=str(e)[:120])
+
     def _providers_disponiveis(self, task: TaskType) -> list[BaseLLMProvider]:
         """Cascata filtrada por disponibilidade — pula providers sem chave/serviço."""
         cascata = self._cascata_efetiva(task)
@@ -118,12 +151,24 @@ class LLMRouter:
         if not providers:
             raise RuntimeError("nenhum provider LLM disponível — configure GROQ_API_KEY ou GEMINI_API_KEY_V2")
 
-        ultimo_erro: Exception | None = None
+        # Perna 3 — telemetria por TaskType. Primário = cabeça da cascata efetiva.
+        provider_primario = providers[0].nome
+        t0 = time.monotonic()
+
+        ultimo_erro: LLMRetriable | None = None
         for p in providers:
             try:
                 log.info("llm_provider_tentando", provider=p.nome, task=task.value)
                 texto = await p.completar(mensagens, temperatura, max_tokens)
                 log.info("llm_provider_ok", provider=p.nome, task=task.value, chars=len(texto))
+                cascata_disparou = p.nome != provider_primario
+                self._emitir_decisao(
+                    task=task, provider_primario=provider_primario,
+                    provider_efetivo=p.nome, cascata_disparou=cascata_disparou,
+                    t0=t0, chars_saida=len(texto),
+                    status="cascade_used" if cascata_disparou else "ok",
+                    categoria_erro=ultimo_erro.categoria if ultimo_erro else None,
+                )
                 return texto
             except LLMRetriable as e:
                 log.warning(
@@ -136,6 +181,12 @@ class LLMRouter:
 
         # Todos cascateados falharam
         log.error("llm_cascata_esgotada", task=task.value, ultimo=str(ultimo_erro)[:160] if ultimo_erro else "")
+        self._emitir_decisao(
+            task=task, provider_primario=provider_primario, provider_efetivo=None,
+            cascata_disparou=True, t0=t0, chars_saida=0,
+            status="fallback_all_failed",
+            categoria_erro=ultimo_erro.categoria if ultimo_erro else None,
+        )
         raise RuntimeError(f"todos os providers LLM falharam — último erro: {ultimo_erro}")
 
     async def completar_stream(
@@ -156,20 +207,41 @@ class LLMRouter:
         if not providers:
             raise RuntimeError("nenhum provider LLM disponível — configure GROQ_API_KEY ou GEMINI_API_KEY_V2")
 
+        # Perna 3 — telemetria por TaskType. No stream, latência = tempo até o
+        # PRIMEIRO token (proxy de responsividade percebida); chars_saida soma
+        # o total emitido pelo provider vencedor.
+        provider_primario = providers[0].nome
+        t0 = time.monotonic()
+
         self.ultimo_provider_stream = None
-        ultimo_erro: Exception | None = None
+        ultimo_erro: LLMRetriable | None = None
         for p in providers:
             try:
                 log.info("llm_provider_tentando_stream", provider=p.nome, task=task.value)
                 emitiu = False
+                chars_saida = 0
+                latencia_primeiro_ms = 0
                 async for token in p.completar_stream(mensagens, temperatura, max_tokens):
                     if not emitiu:
                         log.info("llm_provider_stream_ok", provider=p.nome, task=task.value)
                         self.ultimo_provider_stream = p.nome
+                        latencia_primeiro_ms = int((time.monotonic() - t0) * 1000)
                         emitiu = True
+                    chars_saida += len(token)
                     yield token
                 # Stream terminou sem exceção — provider venceu, sai do for.
                 if emitiu:
+                    cascata_disparou = p.nome != provider_primario
+                    try:
+                        emit_llm_decisao(
+                            task=task.value, provider_primario=provider_primario,
+                            provider_efetivo=p.nome, cascata_disparou=cascata_disparou,
+                            latencia_ms=latencia_primeiro_ms, chars_saida=chars_saida,
+                            status="cascade_used" if cascata_disparou else "ok",
+                            categoria_erro=ultimo_erro.categoria if ultimo_erro else None,
+                        )
+                    except Exception as e:  # noqa: BLE001 — telemetria é best-effort
+                        log.warning("telemetria_llm_stream_falhou", erro=str(e)[:120])
                     return
                 # Provider esvaziou sem emitir nada nem lançar erro — trata como retriable
                 ultimo_erro = LLMRetriable(f"{p.nome} stream vazio sem erro", categoria="vazio")
@@ -186,4 +258,13 @@ class LLMRouter:
                 continue
 
         log.error("llm_cascata_stream_esgotada", task=task.value, ultimo=str(ultimo_erro)[:160] if ultimo_erro else "")
+        try:
+            emit_llm_decisao(
+                task=task.value, provider_primario=provider_primario, provider_efetivo=None,
+                cascata_disparou=True, latencia_ms=int((time.monotonic() - t0) * 1000),
+                chars_saida=0, status="fallback_all_failed",
+                categoria_erro=ultimo_erro.categoria if ultimo_erro else None,
+            )
+        except Exception as e:  # noqa: BLE001 — telemetria é best-effort
+            log.warning("telemetria_llm_stream_falhou", erro=str(e)[:120])
         raise RuntimeError(f"todos os providers LLM falharam (stream) — último erro: {ultimo_erro}")
