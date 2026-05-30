@@ -48,7 +48,7 @@ def _rodar(coro) -> Any:
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
-tab_debug, tab_video, tab_ultimo = st.tabs(["Debug", "Modo Video", "Ultimo Turno"])
+tab_debug, tab_video, tab_ultimo, tab_decisoes = st.tabs(["Debug", "Modo Video", "Ultimo Turno", "Decisoes LLM"])
 
 
 # ── Tab: Modo Vídeo ───────────────────────────────────────────────────────────
@@ -350,3 +350,96 @@ with tab_debug:
             "DEBUG": settings.DEBUG,
             "LOG_LEVEL": settings.LOG_LEVEL,
         })
+
+
+# ===================================================================
+# TAB: Decisoes LLM (perna 3 do pipeline multi-LLM)
+# Le eventos "llm_decisao" do telemetry.jsonl e agrega por TaskType /
+# provider. Responde "qual task e o gargalo?" e "qual provider cascateia?".
+with tab_decisoes:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=_REFRESH_MS, key="decisoes_refresh")
+    except ImportError:
+        pass
+
+    st.header("Decisoes LLM")
+
+    eventos_all = read_latest(n=500)
+    decisoes = [e for e in eventos_all
+                if isinstance(e, dict) and e.get("evento") == "llm_decisao"]
+
+    if not decisoes:
+        st.info(
+            "Nenhum evento 'llm_decisao' ainda. Eles aparecem assim que o "
+            "Mestre gerar a primeira resposta numa sessao ao vivo."
+        )
+    else:
+        total = len(decisoes)
+        n_cascata = sum(1 for d in decisoes if d.get("cascata_disparou"))
+        n_falha = sum(1 for d in decisoes if d.get("status") == "fallback_all_failed")
+        lats = [d.get("latencia_ms", 0) for d in decisoes if d.get("latencia_ms")]
+        lat_media = sum(lats) // len(lats) if lats else 0
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Decisoes", total)
+        c2.metric("Cascata", f"{n_cascata} ({100*n_cascata//total}%)")
+        c3.metric("Falha total", f"{n_falha} ({100*n_falha//total}%)")
+        c4.metric("Latencia media", f"{lat_media}ms")
+
+        st.divider()
+
+        # ── Agregacao por TaskType ───────────────────────────────────────────
+        st.subheader("Por TaskType")
+        por_task: dict[str, dict[str, Any]] = {}
+        for d in decisoes:
+            t = d.get("task", "?")
+            agg = por_task.setdefault(t, {"n": 0, "lat": [], "cascata": 0, "falha": 0})
+            agg["n"] += 1
+            if d.get("latencia_ms"):
+                agg["lat"].append(d["latencia_ms"])
+            if d.get("cascata_disparou"):
+                agg["cascata"] += 1
+            if d.get("status") == "fallback_all_failed":
+                agg["falha"] += 1
+
+        linhas_task = []
+        for t, agg in sorted(por_task.items(), key=lambda kv: -kv[1]["n"]):
+            lat = agg["lat"]
+            linhas_task.append({
+                "TaskType": t,
+                "Chamadas": agg["n"],
+                "Lat. media (ms)": (sum(lat) // len(lat)) if lat else 0,
+                "Lat. max (ms)": max(lat) if lat else 0,
+                "Cascata": agg["cascata"],
+                "Falha total": agg["falha"],
+            })
+        st.dataframe(linhas_task, use_container_width=True, hide_index=True)
+
+        # ── Agregacao por provider efetivo ───────────────────────────────────
+        st.subheader("Por provider que respondeu")
+        por_prov: dict[str, int] = {}
+        for d in decisoes:
+            p = d.get("provider_efetivo") or "(nenhum - falhou)"
+            por_prov[p] = por_prov.get(p, 0) + 1
+        linhas_prov = [
+            {"Provider": p, "Respostas": n, "Fatia": f"{100*n//total}%"}
+            for p, n in sorted(por_prov.items(), key=lambda kv: -kv[1])
+        ]
+        st.dataframe(linhas_prov, use_container_width=True, hide_index=True)
+
+        # ── Eventos recentes (ultimos 15) ────────────────────────────────────
+        st.subheader("Ultimas decisoes")
+        recentes = []
+        for d in reversed(decisoes[-15:]):
+            recentes.append({
+                "ts": (d.get("ts", "") or "")[11:19],
+                "task": d.get("task", "?"),
+                "primario": d.get("provider_primario", "?"),
+                "efetivo": d.get("provider_efetivo") or "-",
+                "status": d.get("status", "?"),
+                "lat (ms)": d.get("latencia_ms", 0),
+                "chars": d.get("chars_saida", 0),
+                "erro": d.get("categoria_erro") or "",
+            })
+        st.dataframe(recentes, use_container_width=True, hide_index=True)
