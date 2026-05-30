@@ -29,6 +29,51 @@ def emit(evento: dict) -> None:
         f.write(json.dumps(entrada, ensure_ascii=False) + "\n")
 
 
+def emit_llm_decisao(
+    *,
+    task: str,
+    provider_primario: str | None,
+    provider_efetivo: str | None,
+    cascata_disparou: bool,
+    latencia_ms: int,
+    chars_saida: int,
+    status: str,
+    categoria_erro: str | None = None,
+) -> None:
+    """Emite um evento estruturado de decisão LLM (segmentável por TaskType).
+
+    Por que existe: a perna 3 do roadmap multi-LLM — saber, por TaskType, qual
+        provider respondeu, se a cascata disparou, latência e volume. Sem isso
+        não dá pra responder "qual task é o gargalo?" nem "qual provider está
+        com mais fallback hoje?".
+
+    Nota sobre tokens: os providers atuais devolvem só texto (sem contagem de
+        tokens da API), então usamos `chars_saida` como proxy de volume — não
+        inventamos tokens_in/out que não temos. 1 token ≈ 4 chars PT-BR.
+
+    Args:
+        task: valor do TaskType (ex: "narrative", "summarization").
+        provider_primario: cabeça da cascata efetiva (quem deveria responder).
+        provider_efetivo: quem de fato respondeu (None se todos falharam).
+        cascata_disparou: True se o efetivo != primário (fallback usado).
+        latencia_ms: tempo total da chamada (incluindo tentativas falhas).
+        chars_saida: tamanho da resposta em chars (proxy de tokens_out).
+        status: "ok" | "cascade_used" | "fallback_all_failed".
+        categoria_erro: categoria do último LLMRetriable, se houve falha.
+    """
+    emit({
+        "evento": "llm_decisao",
+        "task": task,
+        "provider_primario": provider_primario,
+        "provider_efetivo": provider_efetivo,
+        "cascata_disparou": cascata_disparou,
+        "latencia_ms": latencia_ms,
+        "chars_saida": chars_saida,
+        "status": status,
+        "categoria_erro": categoria_erro,
+    })
+
+
 def read_latest(n: int = 10) -> list[dict]:
     """Retorna os últimos n eventos do arquivo JSONL."""
     if not _TELEMETRY_PATH.exists():
