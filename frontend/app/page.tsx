@@ -18,6 +18,7 @@ import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
 import { RolagemBanner } from "@/components/RolagemBanner";
+import { AppShell } from "@/components/AppShell";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
@@ -816,47 +817,36 @@ export default function Home() {
 
   // ── Tela de jogo ─────────────────────────────────────────────────────────
   if (conectado) {
-    return (
-      <main
-        className={[
-          "relative flex h-screen flex-col bg-zinc-950 transition-[background,box-shadow] duration-[800ms] ease-in-out",
-          shakeCena ? "animate-shake-cena" : "",
-          emCombate ? "cursor-crosshair" : "",
-        ].join(" ")}
-        style={{
-          // Mood ambiental (Bloco 3) — overlay sutil + vinheta interna, transita em 800ms
-          backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
-          boxShadow: ehTurnoInimigo
-            ? "inset 0 0 60px -5px rgba(200,15,15,0.7), inset 0 0 160px -30px rgba(200,15,15,0.45)"
-            : `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px ${
-                emCombate ? "rgba(127,29,29,0.55)" : "rgba(0,0,0,0.55)"
-              }`,
-        }}
-        data-tone={sceneMood.ambientTone}
-      >
-        {/* Fase 5.8: fundo de imagem Pollinations.ai. Revela em 55% por 1.8s ao trocar de cena,
-            depois volta para 8% sutil. Blur limpo no reveal para máximo impacto visual. */}
-        {sceneImageUrl && (
+    // ── Tela de jogo — AppShell de 3 colunas redimensionáveis ───────────────
+    // Migração do layout single-column antigo. Cada slot recebe um trecho
+    // coerente; todos os comportamentos preservados. Overlays display-only vão
+    // no slot `overlays` (pointer-events-none); overlays interativos
+    // (sessionEnd, levelUp, cinema toggle, volume, cascade) ficam como irmãos
+    // do AppShell pra receber cliques de verdade.
+
+    // Overlays display-only — animações e toasts, nenhum precisa de clique.
+    const overlaysSlot = (
+      <>
+        {/* Mood ambiental (Bloco 3) — tint sutil + vinheta por local/hora.
+            Antes vivia no style do <main>; com o AppShell vira overlay full-screen
+            atrás de tudo (z-0). O AppShell já tem vinheta radial própria; este
+            adiciona a cor de mood específica da cena. Combate é tratado à parte. */}
+        {!emCombate && (
           <div
-            className="pointer-events-none absolute inset-0 -z-10"
+            className="pointer-events-none absolute inset-0 z-0 transition-[background,box-shadow] duration-[800ms] ease-in-out"
             style={{
-              backgroundImage: `url(${sceneImageUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              opacity: revealCena ? 0.55 : 0.08,
-              filter: revealCena ? "blur(0px) saturate(1.1)" : "blur(2px) saturate(0.7)",
-              transition: revealCena
-                ? "opacity 600ms ease-in, filter 600ms ease-in"
-                : "opacity 1200ms ease-out, filter 1200ms ease-out",
+              backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
+              boxShadow: `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px rgba(0,0,0,0.55)`,
             }}
           />
         )}
-        {/* Overlay escuro durante o reveal — apaga o conteúdo por 1.8s para o jogador absorver a cena */}
+
+        {/* Scene reveal — overlay escuro durante a troca de cena (1.8s) */}
         {revealCena && (
           <div className="pointer-events-none absolute inset-0 z-10 bg-zinc-950/65 transition-opacity duration-700" />
         )}
 
-        {/* Feature 6: Toasts flutuantes de XP/ouro — sobem e dissolvem em 2s, canto direito */}
+        {/* Feature 6: Toasts flutuantes de XP/ouro — sobem e dissolvem em 2s */}
         {toastsGanho.length > 0 && (
           <div className="pointer-events-none fixed right-4 top-20 z-50 flex flex-col items-end gap-1">
             {toastsGanho.map(t => (
@@ -881,13 +871,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* UX-2: toast de cascata LLM — aparece quando Groq cai pro Gemini por rate limit.
-            Auto-dismiss após 5s. Cor azul discreta para não parecer erro. */}
-        {cascadeAtivo && (
-          <CascadeToast provider={cascadeAtivo} onDismiss={limparCascade} />
-        )}
-
-        {/* Feature 5: Flash de morte de inimigo nomeado — nome do abatido em destaque por 1.5s */}
+        {/* Feature 5: Flash de morte de inimigo nomeado — 1.5s */}
         {morteFlash && (
           <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
             <div className="animate-morte-flash text-center">
@@ -902,52 +886,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Feature 1: Tela de encerramento de sessão — exibida após Encerrar por 8s */}
-        {sessionEndStats && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm cursor-pointer"
-            onClick={() => { setSessionEndStats(null); }}
-          >
-            <div className="flex flex-col items-center gap-6 max-w-sm w-full px-6 text-center">
-              <div className="font-[Cinzel,serif] text-2xl tracking-widest text-violet-300">
-                ✦ Fim de Aventura ✦
-              </div>
-              <div className="grid grid-cols-3 gap-4 w-full">
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
-                  <span className="text-2xl font-bold text-amber-300">{sessionEndStats.xp}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">XP</span>
-                </div>
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
-                  <span className="text-2xl font-bold text-yellow-400">{sessionEndStats.gold}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Ouro</span>
-                </div>
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
-                  <span className="text-2xl font-bold text-violet-300">{sessionEndStats.turnosJogados}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Turnos</span>
-                </div>
-              </div>
-              {sessionEndStats.consequencias.length > 0 && (
-                <div className="w-full text-left">
-                  <div className="text-[10px] text-orange-400/70 uppercase tracking-widest mb-2">Consequências no mundo</div>
-                  {sessionEndStats.consequencias.slice(0, 3).map((c, i) => (
-                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">• {c}</div>
-                  ))}
-                </div>
-              )}
-              {sessionEndStats.fiosSoltos.length > 0 && (
-                <div className="w-full text-left">
-                  <div className="text-[10px] text-violet-400/70 uppercase tracking-widest mb-2">Fios em aberto</div>
-                  {sessionEndStats.fiosSoltos.slice(0, 2).map((f, i) => (
-                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">⋯ {f}</div>
-                  ))}
-                </div>
-              )}
-              <div className="text-[10px] text-zinc-600 mt-2">clique para continuar</div>
-            </div>
-          </div>
-        )}
-
-        {/* Splash "Combate Iniciado!" — transição cinematográfica calmaria→combate */}
+        {/* Splash "Combate Iniciado!" — transição calmaria→combate */}
         {battleSplash && (
           <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-red-950/30 backdrop-blur-[2px]">
             <div className="animate-crit-pop text-center">
@@ -964,7 +903,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Overlay de crítico / falha crítica — celebração visual, 1.2s */}
+        {/* Overlay de crítico / falha crítica — 1.2s */}
         {critFlash && (
           <div className={`pointer-events-none fixed inset-0 z-50 flex items-center justify-center ${
             critFlash === "crit" ? "bg-violet-500/10" : "bg-red-900/15"
@@ -982,11 +921,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Fase 5.7 — Dado do mestre rolando (canto inferior direito).
-            Visível somente quando roll_visibility="open" ou "result_only".
-            roll_visibility="open" → animação completa antes do resultado.
-            roll_visibility="result_only" → só o número (visivel=false → sem animação).
-            Nota: dadoAtivo chega via WS "dado_rolado"; limparDadoAtivo é o onTerminou. */}
+        {/* Fase 5.7 — Dado do mestre rolando (canto inferior direito) */}
         {dadoAtivo && rollVisibility !== "narrated" && (
           <div className="fixed bottom-24 right-6 z-50">
             <DadoAnimado
@@ -996,7 +931,6 @@ export default function Home() {
               onTerminou={limparDadoAtivo}
             />
             {rollVisibility === "result_only" && (
-              // Modo "só resultado" — dado estático sem animação, some após 1.5s
               <div className="inline-flex flex-col items-center gap-1 select-none animate-fade-in">
                 <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-widest">
                   {dadoAtivo.tipo}
@@ -1009,8 +943,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Fase 5.7 — Dado do jogador rolando (canto inferior esquerdo).
-            Sempre mostra animação — o jogador sempre vê o dado antes do mestre narrar. */}
+        {/* Fase 5.7 — Dado do jogador rolando (canto inferior esquerdo) */}
         {dadoJogadorAtivo && (
           <div className="fixed bottom-24 left-6 z-50">
             <DadoAnimado
@@ -1021,7 +954,12 @@ export default function Home() {
             />
           </div>
         )}
+      </>
+    );
 
+    // Top bar — status da sessão + botões + cabeçalho de cena + NPCs presentes
+    const topBarSlot = (
+      <>
         <header className={`flex items-center justify-between border-b px-4 py-3 transition-colors duration-500 ${
           emCombate ? "border-red-900/40 bg-red-950/10" : "border-zinc-800/60"
         }`}>
@@ -1095,13 +1033,10 @@ export default function Home() {
             {ownerEmail && (
               <button
                 onClick={() => {
-                  // Limpa prefs locais deste usuário e redireciona para logout CF Access
                   const prefix = `voxdm_`;
                   Object.keys(localStorage)
                     .filter(k => k.startsWith(prefix))
                     .forEach(k => localStorage.removeItem(k));
-                  // Em produção o Cloudflare Access redireciona para /cdn-cgi/access/logout
-                  // Em debug local apenas recarrega (sem CF)
                   if (window.location.hostname !== "localhost") {
                     window.location.href = "/cdn-cgi/access/logout";
                   } else {
@@ -1117,15 +1052,29 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Scene Header + NpcsPresentes — presença na cena (Bloco 1).
-            Refatorado de inline Scene Status Bar para componentes dedicados,
-            com tipografia Cinzel, ícones contextuais por hora do dia e chips
-            de trust mais expressivos. */}
         <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
         <NpcsPresentes npcsTrust={npcsTrust} />
+      </>
+    );
 
-        {!cinemaMode && <PlayerJournal sessionId={sessionId} />}
+    // Painel esquerdo — diário + companions. Colapsa em cinema mode.
+    const leftSlot = (
+      <div className="space-y-3">
+        <PlayerJournal sessionId={sessionId} />
+        <CompanionsPanel
+          companions={companions}
+          emCombate={emCombate}
+          onComandar={(cmd) => enviarComando(cmd)}
+          novoCompanionId={novoCompanionFlash}
+          partyRestorada={partyRestorada}
+          onDispensarParty={dispensarPartyBanner}
+        />
+      </div>
+    );
 
+    // Painel direito — ficha + tracker de combate.
+    const rightSlot = (
+      <div className="space-y-3">
         <CharacterSheet
           personagem={personagem}
           sessionId={sessionId}
@@ -1174,449 +1123,485 @@ export default function Home() {
           movimentoRestanteFt={movimentoRestanteFt}
           movimentoTotalFt={movimentoTotalFt}
         />
+      </div>
+    );
 
-        {!cinemaMode && (
-          <CompanionsPanel
-            companions={companions}
-            emCombate={emCombate}
-            onComandar={(cmd) => enviarComando(cmd)}
-            novoCompanionId={novoCompanionFlash}
-            partyRestorada={partyRestorada}
-            onDispensarParty={dispensarPartyBanner}
-          />
+    // Centro — fluxo de conversa: recap + banner de rolagem + respostas.
+    const centerSlot = (
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
+        {historico.length === 0 && !respostaAtual && (
+          <p className="mt-6 text-center text-xs text-zinc-700">
+            Sessão iniciada — aguardando o mestre...
+          </p>
         )}
 
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
-          {historico.length === 0 && !respostaAtual && (
-            <p className="mt-6 text-center text-xs text-zinc-700">
-              Sessão iniciada — aguardando o mestre...
-            </p>
-          )}
-
-          {/* Bolha de recap destacada — aparece antes das bolhas principais
-              quando o jogador continua uma sessão anterior. Some após 30s ou
-              no primeiro envio de comando. Renderiza apenas enquanto textoRecap
-              não foi limpo — não duplica o item já gravado no histórico. */}
-          {textoRecap && (
-            <div className="mb-4 rounded-xl border border-amber-800/30 bg-amber-950/20 px-5 py-4 animate-[fade-in_600ms_ease-out]">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600/80">
-                  <span>📜</span>
-                  <span>Anteriormente…</span>
-                </p>
-                {/* Bug UX #4: sem botão de fechar, recap bloqueava a leitura e
-                    não podia ser dispensado antes dos 30s automáticos. */}
-                <button
-                  onClick={limparRecap}
-                  title="Dispensar recap"
-                  className="text-amber-700/60 hover:text-amber-400 transition text-base leading-none"
-                >×</button>
-              </div>
-              <p
-                className="text-sm leading-relaxed italic text-amber-200/80"
-                style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}
-              >
-                {textoRecap}
+        {textoRecap && (
+          <div className="mb-4 rounded-xl border border-amber-800/30 bg-amber-950/20 px-5 py-4 animate-[fade-in_600ms_ease-out]">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600/80">
+                <span>📜</span>
+                <span>Anteriormente…</span>
               </p>
-              {/* UX-3: botão de retry de áudio — aparece quando o recap já foi exibido
-                  mas o áudio pode ter sido cancelado (mudança de aba, autoplay bloqueado). */}
               <button
-                onClick={retocarRecap}
-                className="mt-2 text-[10px] text-amber-600/60 hover:text-amber-400 transition flex items-center gap-1"
-                title="Ouvir o recap novamente"
-              >▶ Ouvir novamente</button>
+                onClick={limparRecap}
+                title="Dispensar recap"
+                className="text-amber-700/60 hover:text-amber-400 transition text-base leading-none"
+              >×</button>
             </div>
-          )}
-
-          {/* Modal de level up — overlay full-screen com resumo dos ganhos.
-              Aparece quando o backend emite tipo="level_up" e fica até auto-dismiss
-              de 12s ou clique no botão. Pulso visual de progressão. */}
-          {levelUp && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-[fade-in_300ms_ease-out]"
-              onClick={dismissLevelUp}
+            <p
+              className="text-sm leading-relaxed italic text-amber-200/80"
+              style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}
             >
-              <div
-                className="relative max-w-md mx-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/95 to-zinc-950/95 px-8 py-10 shadow-2xl animate-[crit-pop_700ms_cubic-bezier(0.16,1,0.3,1)]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-400/80">
-                  Marco
-                </p>
-                <h2
-                  className="mt-2 text-center text-3xl font-bold text-amber-100"
-                  style={{ fontFamily: '"Cinzel", serif' }}
-                >
-                  Nível {levelUp.nivel_novo}
-                </h2>
-                <p className="mt-1 text-center text-sm text-amber-300/70">
-                  era nível {levelUp.nivel_antigo}
-                </p>
+              {textoRecap}
+            </p>
+            <button
+              onClick={retocarRecap}
+              className="mt-2 text-[10px] text-amber-600/60 hover:text-amber-400 transition flex items-center gap-1"
+              title="Ouvir o recap novamente"
+            >▶ Ouvir novamente</button>
+          </div>
+        )}
 
-                <div className="mt-6 space-y-3 text-sm">
-                  <div className="flex items-center justify-between rounded-lg bg-zinc-900/50 px-4 py-2">
-                    <span className="text-zinc-300">❤️ HP máximo</span>
-                    <span className="font-mono text-emerald-300">
-                      +{levelUp.hp_ganho} <span className="text-zinc-500">(→ {levelUp.hp_max_novo})</span>
-                    </span>
-                  </div>
-                  {levelUp.slots_novos.length > 0 && (
-                    <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
-                      <p className="text-zinc-300">✨ Spell slots</p>
-                      <ul className="mt-1 ml-4 text-violet-300 text-xs list-disc">
-                        {levelUp.slots_novos.map((s, i) => (
-                          <li key={i}>{s}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {levelUp.features_novas.length > 0 && (
-                    <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
-                      <p className="text-zinc-300">⚔️ Novas features</p>
-                      <ul className="mt-1 ml-4 text-amber-300 text-xs list-disc">
-                        {levelUp.features_novas.map((f, i) => (
-                          <li key={i}>{f}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <p className="text-center text-xs text-zinc-500 italic">
-                    Features renovadas. Dado de vida restaurado.
-                  </p>
-                </div>
+        {/* UX1: banner persistente — mestre veterano nunca esquece o que pediu */}
+        <RolagemBanner
+          visible={esperandoRolagem}
+          atributo={atributoRolagem}
+          motivo={motivoRolagem}
+        />
 
+        <MasterResponse
+          historico={historico}
+          respostaAtual={textoSincronizado}
+          playerName={playerName}
+          mestrePensando={isProcessing}
+        />
+        <div ref={bottomRef} />
+      </div>
+    );
+
+    // Dock inferior — dados, ações de combate, orb do mestre, voz.
+    const dockSlot = (
+      <div className="flex flex-col items-center gap-1.5 py-2">
+        {(() => {
+          const ultimaFala = historico.length > 0
+            ? historico[historico.length - 1].mestre
+            : "";
+          const esperandoRolagem = !respostaAtual &&
+            historico.length > 0 &&
+            (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
+          const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
+          if (!turnoJogador) return null;
+          const toolbarUtil = emCombate || esperandoRolagem || rolamentosPendentes.length > 0;
+          if (!toolbarUtil) return null;
+
+          const { motivo: motivoCheck, atributo: atributoCheck } =
+            (rolamentosPendentes.length > 0 || esperandoRolagem)
+              ? extrairMotivoRolagem(ultimaFala)
+              : { motivo: "", atributo: "" };
+
+          const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
+            const r1 = Math.floor(Math.random() * 20) + 1;
+            const r2 = Math.floor(Math.random() * 20) + 1;
+            let val: number;
+            let sufixo = "";
+            let tipoLog = "d20";
+            if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; tipoLog = "d20▲"; }
+            else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; tipoLog = "d20▼"; }
+            else { val = r1; }
+            const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
+            if (val === 20) dispararCritFlash("crit");
+            else if (val === 1) dispararCritFlash("falha");
+            registrarRolagem(tipoLog, val);
+            setDadoJogadorAtivo({ tipo: "d20", resultado: val, id: Date.now() });
+            if (esperandoRolagem || emCombate) {
+              enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
+            }
+          };
+
+          const rolarDano = (faces: number) => {
+            const val = Math.floor(Math.random() * faces) + 1;
+            registrarRolagem(`d${faces}`, val, "Dano");
+            setDadoJogadorAtivo({ tipo: `d${faces}`, resultado: val, id: Date.now() });
+            if (emCombate) {
+              enviarComando(`[Rolagem: d${faces} = ${val}]`);
+            }
+          };
+
+          return (
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {rolamentosPendentes.length > 0 ? (
+                  rolamentosPendentes.map(roll => (
+                    <button
+                      key={roll.id}
+                      onClick={() => handleRolagemContextual(roll)}
+                      title={`Rolar ${roll.label}${roll.atributo ? ` (${roll.atributo})` : ""}${roll.dc ? ` vs CD ${roll.dc}` : ""}`}
+                      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${ROLL_STYLE[roll.cor]}`}
+                    >
+                      🎲 {roll.label}
+                      {roll.atributo && (
+                        <span className="font-semibold text-[10px] opacity-90">[{roll.atributo}]</span>
+                      )}
+                      <span className="font-normal text-[10px] opacity-80">
+                        {roll.modificador >= 0 ? `+${roll.modificador}` : roll.modificador}
+                        {roll.dc ? ` / CD${roll.dc}` : ""}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    onClick={() => rolarD20()}
+                    title="Rolar d20"
+                    className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                      esperandoRolagem
+                        ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                    }`}
+                  >
+                    🎲 d20
+                  </button>
+                )}
                 <button
-                  type="button"
-                  onClick={dismissLevelUp}
-                  className="mt-6 w-full rounded-lg bg-amber-700/80 hover:bg-amber-600/80 px-4 py-2 text-sm font-medium text-amber-50 transition-colors"
+                  onClick={() => rolarD20("vantagem")}
+                  title="Vantagem: 2d20, usa o maior"
+                  className="rounded-full border border-emerald-900 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 transition hover:border-emerald-600 hover:text-emerald-400"
                 >
-                  Continuar a jornada
+                  ▲d20
+                </button>
+                <button
+                  onClick={() => rolarD20("desvantagem")}
+                  title="Desvantagem: 2d20, usa o menor"
+                  className="rounded-full border border-rose-950 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-rose-800 transition hover:border-rose-700 hover:text-rose-500"
+                >
+                  ▼d20
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* UX1: banner persistente — mestre veterano nunca esquece o que pediu */}
-          <RolagemBanner
-            visible={esperandoRolagem}
-            atributo={atributoRolagem}
-            motivo={motivoRolagem}
-          />
-
-          <MasterResponse
-            historico={historico}
-            respostaAtual={textoSincronizado}
-            playerName={playerName}
-            mestrePensando={isProcessing}
-          />
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="flex flex-col items-center gap-1.5 border-t border-zinc-800/50 pb-3 pt-2">
-          {/* Toolbar de dados — aparece na vez do jogador.
-              Cinema mode preserva o essencial (d20 contextual + manual + motivo)
-              e esconde só a linha d4-d12 (uso esporádico fora de combate). */}
-          {(() => {
-            const ultimaFala = historico.length > 0
-              ? historico[historico.length - 1].mestre
-              : "";
-            const esperandoRolagem = !respostaAtual &&
-              historico.length > 0 &&
-              (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
-            const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
-            if (!turnoJogador) return null;
-            // Esconde toda a toolbar quando dado não fará nada útil:
-            // fora de combate, sem rolagem pedida pelo mestre e sem rolamentos
-            // pendentes. Libera espaço vertical pro hub de texto.
-            const toolbarUtil = emCombate || esperandoRolagem || rolamentosPendentes.length > 0;
-            if (!toolbarUtil) return null;
-
-            // Motivo do check — frase + atributo extraídos da última fala do mestre.
-            const { motivo: motivoCheck, atributo: atributoCheck } =
-              (rolamentosPendentes.length > 0 || esperandoRolagem)
-                ? extrairMotivoRolagem(ultimaFala)
-                : { motivo: "", atributo: "" };
-
-            const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
-              const r1 = Math.floor(Math.random() * 20) + 1;
-              const r2 = Math.floor(Math.random() * 20) + 1;
-              let val: number;
-              let sufixo = "";
-              let tipoLog = "d20";
-              if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; tipoLog = "d20▲"; }
-              else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; tipoLog = "d20▼"; }
-              else { val = r1; }
-              const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
-              if (val === 20) dispararCritFlash("crit");
-              else if (val === 1) dispararCritFlash("falha");
-              registrarRolagem(tipoLog, val);
-              setDadoJogadorAtivo({ tipo: "d20", resultado: val, id: Date.now() });
-              // Só envia ao LLM se o mestre pediu rolagem (esperandoRolagem) ou em combate ativo.
-              // Sem isso, clique acidental fora de contexto faz o LLM alucinar uma cena
-              // ("Você rolou 15! Você consegue..." mas não tinha ação declarada).
-              if (esperandoRolagem || emCombate) {
-                enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
-              }
-            };
-
-            const rolarDano = (faces: number) => {
-              const val = Math.floor(Math.random() * faces) + 1;
-              registrarRolagem(`d${faces}`, val, "Dano");
-              setDadoJogadorAtivo({ tipo: `d${faces}`, resultado: val, id: Date.now() });
-              // Dano só faz sentido em combate. Fora dele, registra no log mas não envia
-              // — evita LLM inventar dano gratuito ("Você causa 6 de dano em quê?").
-              if (emCombate) {
-                enviarComando(`[Rolagem: d${faces} = ${val}]`);
-              }
-            };
-
-            return (
-              <div className="flex flex-col items-center gap-1.5">
-                {/* Linha d20 — contextual quando o mestre pediu rolagens específicas */}
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  {rolamentosPendentes.length > 0 ? (
-                    rolamentosPendentes.map(roll => (
-                      <button
-                        key={roll.id}
-                        onClick={() => handleRolagemContextual(roll)}
-                        title={`Rolar ${roll.label}${roll.atributo ? ` (${roll.atributo})` : ""}${roll.dc ? ` vs CD ${roll.dc}` : ""}`}
-                        className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${ROLL_STYLE[roll.cor]}`}
-                      >
-                        🎲 {roll.label}
-                        {roll.atributo && (
-                          <span className="font-semibold text-[10px] opacity-90">[{roll.atributo}]</span>
-                        )}
-                        <span className="font-normal text-[10px] opacity-80">
-                          {roll.modificador >= 0 ? `+${roll.modificador}` : roll.modificador}
-                          {roll.dc ? ` / CD${roll.dc}` : ""}
-                        </span>
-                      </button>
-                    ))
-                  ) : (
+              {!cinemaMode && emCombate && (
+                <div className="flex items-center gap-1.5">
+                  {([4, 6, 8, 10, 12, 100] as const).map(f => (
                     <button
-                      onClick={() => rolarD20()}
-                      title="Rolar d20"
-                      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
-                        esperandoRolagem
-                          ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
-                          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                      }`}
+                      key={f}
+                      onClick={() => rolarDano(f)}
+                      title={`Rolar d${f}`}
+                      className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
                     >
-                      🎲 d20
+                      d{f}
                     </button>
-                  )}
-                  <button
-                    onClick={() => rolarD20("vantagem")}
-                    title="Vantagem: 2d20, usa o maior"
-                    className="rounded-full border border-emerald-900 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 transition hover:border-emerald-600 hover:text-emerald-400"
-                  >
-                    ▲d20
-                  </button>
-                  <button
-                    onClick={() => rolarD20("desvantagem")}
-                    title="Desvantagem: 2d20, usa o menor"
-                    className="rounded-full border border-rose-950 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-rose-800 transition hover:border-rose-700 hover:text-rose-500"
-                  >
-                    ▼d20
-                  </button>
+                  ))}
                 </div>
-                {/* Linha dano — só em combate (dano fora dele não faz sentido). */}
-                {!cinemaMode && emCombate && (
-                  <div className="flex items-center gap-1.5">
-                    {([4, 6, 8, 10, 12, 100] as const).map(f => (
-                      <button
-                        key={f}
-                        onClick={() => rolarDano(f)}
-                        title={`Rolar d${f}`}
-                        className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
-                      >
-                        d{f}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* Contexto do check: atributo em chip + frase do mestre */}
-                {(atributoCheck || motivoCheck) && (
-                  <div className="flex flex-col items-center gap-1">
-                    {atributoCheck && (
-                      <span className="rounded-full border border-violet-500/50 bg-violet-900/30 px-3 py-0.5 text-xs font-bold tracking-wide text-violet-300">
-                        d20 {atributoCheck.toUpperCase()}
-                      </span>
-                    )}
-                    {motivoCheck && (
-                      <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-zinc-400">
-                        {motivoCheck}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Fios Soltos — threads narrativas abertas (DM Feat 1). Some em cinema mode. */}
-          {!cinemaMode && fiosSoltos.length > 0 && (
-            <div className="max-w-sm w-full">
-              <details className="group">
-                <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-violet-400/70 hover:text-violet-300 transition-colors list-none">
-                  <span className="text-violet-500">◈</span>
-                  Fios narrativos ({fiosSoltos.length})
-                  <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                  <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-                </summary>
-                <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-violet-900/40">
-                  {fiosSoltos.map((fio, i) => (
-                    <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
-                      {fio}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </div>
-          )}
-
-          {/* Consequências visíveis — efeitos duradouros das escolhas do jogador. Some em cinema mode. */}
-          {!cinemaMode && consequencias.length > 0 && (
-            <div className="max-w-sm w-full">
-              <details className="group">
-                <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-orange-400/70 hover:text-orange-300 transition-colors list-none">
-                  <span className="text-orange-500">⚡</span>
-                  Consequências ({consequencias.length})
-                  <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                  <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-                </summary>
-                <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-orange-900/40">
-                  {consequencias.map((c, i) => (
-                    <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
-                      • {c}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </div>
-          )}
-
-          {/* Combate — ações rápidas + economia de ação. Some em cinema mode. */}
-          {emCombate && !cinemaMode && (() => {
-            const turnoJogadorCombate = !respostaAtual && historico.length > 0 && !ouvindo;
-            // Ações comuns de combate D&D 5e — 1 clique narra a intenção pro mestre.
-            // "Cor" só é decorativa pra distinguir defensiva (azul) de agressiva (vermelha).
-            const acoesCombate: { label: string; comando: string; cor: "atk" | "def" | "mov" }[] = [
-              { label: "🛡 Esquivar",   comando: "Uso minha ação para Esquivar.",         cor: "def" },
-              { label: "💨 Disparada",  comando: "Uso minha ação para Disparar (correr).", cor: "mov" },
-              { label: "⚡ Desengajar", comando: "Uso minha ação para Desengajar.",        cor: "def" },
-              { label: "🤝 Ajudar",     comando: "Uso minha ação para Ajudar um aliado.",  cor: "def" },
-              { label: "🎯 Mirar",      comando: "Uso minha ação para Mirar (vantagem no próximo ataque).", cor: "atk" },
-            ];
-            const cores: Record<"atk" | "def" | "mov", string> = {
-              atk: "border-red-900/60 bg-red-950/30 text-red-300 hover:border-red-500 hover:bg-red-900/40",
-              def: "border-cyan-900/60 bg-cyan-950/30 text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900/40",
-              mov: "border-amber-900/60 bg-amber-950/30 text-amber-300 hover:border-amber-500 hover:bg-amber-900/40",
-            };
-            return (
-              <div className="flex flex-col items-center gap-1.5">
-                {turnoJogadorCombate && (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 px-3">
-                    {acoesCombate.map(a => (
-                      <button
-                        key={a.label}
-                        onClick={() => {
-                          enviarComando(a.comando);
-                          setActionEconomy(prev => ({ ...prev, acao: true }));
-                        }}
-                        disabled={actionEconomy.acao}
-                        title={a.comando}
-                        className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${cores[a.cor]}`}
-                      >
-                        {a.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className={`flex items-center gap-4 rounded-xl border px-5 py-1.5 transition-colors duration-300 ${
-                  actionEconomyFlash
-                    ? "border-emerald-600/60 bg-emerald-950/30 shadow-[0_0_8px_1px_rgba(16,185,129,0.2)]"
-                    : "border-zinc-800/50 bg-zinc-900/40"
-                }`}>
-                  {actionEconomyFlash && (
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-emerald-500 animate-fade-in">
-                      Nova rodada
+              )}
+              {(atributoCheck || motivoCheck) && (
+                <div className="flex flex-col items-center gap-1">
+                  {atributoCheck && (
+                    <span className="rounded-full border border-violet-500/50 bg-violet-900/30 px-3 py-0.5 text-xs font-bold tracking-wide text-violet-300">
+                      d20 {atributoCheck.toUpperCase()}
                     </span>
                   )}
-                  {(["acao", "acaoBônus", "reacao"] as const).map(k => {
-                    const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
-                    return (
-                      <label key={k} className="flex cursor-pointer select-none items-center gap-1.5 text-[10px]">
-                        <input
-                          type="checkbox"
-                          checked={actionEconomy[k]}
-                          onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
-                          className="h-3 w-3 accent-violet-500"
-                        />
-                        <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
-                          {labels[k]}
-                        </span>
-                      </label>
-                    );
-                  })}
+                  {motivoCheck && (
+                    <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-zinc-400">
+                      {motivoCheck}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {!cinemaMode && fiosSoltos.length > 0 && (
+          <div className="max-w-sm w-full">
+            <details className="group">
+              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-violet-400/70 hover:text-violet-300 transition-colors list-none">
+                <span className="text-violet-500">◈</span>
+                Fios narrativos ({fiosSoltos.length})
+                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-violet-900/40">
+                {fiosSoltos.map((fio, i) => (
+                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                    {fio}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )}
+
+        {!cinemaMode && consequencias.length > 0 && (
+          <div className="max-w-sm w-full">
+            <details className="group">
+              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-orange-400/70 hover:text-orange-300 transition-colors list-none">
+                <span className="text-orange-500">⚡</span>
+                Consequências ({consequencias.length})
+                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-orange-900/40">
+                {consequencias.map((c, i) => (
+                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                    • {c}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )}
+
+        {emCombate && !cinemaMode && (() => {
+          const turnoJogadorCombate = !respostaAtual && historico.length > 0 && !ouvindo;
+          const acoesCombate: { label: string; comando: string; cor: "atk" | "def" | "mov" }[] = [
+            { label: "🛡 Esquivar",   comando: "Uso minha ação para Esquivar.",         cor: "def" },
+            { label: "💨 Disparada",  comando: "Uso minha ação para Disparar (correr).", cor: "mov" },
+            { label: "⚡ Desengajar", comando: "Uso minha ação para Desengajar.",        cor: "def" },
+            { label: "🤝 Ajudar",     comando: "Uso minha ação para Ajudar um aliado.",  cor: "def" },
+            { label: "🎯 Mirar",      comando: "Uso minha ação para Mirar (vantagem no próximo ataque).", cor: "atk" },
+          ];
+          const cores: Record<"atk" | "def" | "mov", string> = {
+            atk: "border-red-900/60 bg-red-950/30 text-red-300 hover:border-red-500 hover:bg-red-900/40",
+            def: "border-cyan-900/60 bg-cyan-950/30 text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900/40",
+            mov: "border-amber-900/60 bg-amber-950/30 text-amber-300 hover:border-amber-500 hover:bg-amber-900/40",
+          };
+          return (
+            <div className="flex flex-col items-center gap-1.5">
+              {turnoJogadorCombate && (
+                <div className="flex flex-wrap items-center justify-center gap-1.5 px-3">
+                  {acoesCombate.map(a => (
+                    <button
+                      key={a.label}
+                      onClick={() => {
+                        enviarComando(a.comando);
+                        setActionEconomy(prev => ({ ...prev, acao: true }));
+                      }}
+                      disabled={actionEconomy.acao}
+                      title={a.comando}
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${cores[a.cor]}`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className={`flex items-center gap-4 rounded-xl border px-5 py-1.5 transition-colors duration-300 ${
+                actionEconomyFlash
+                  ? "border-emerald-600/60 bg-emerald-950/30 shadow-[0_0_8px_1px_rgba(16,185,129,0.2)]"
+                  : "border-zinc-800/50 bg-zinc-900/40"
+              }`}>
+                {actionEconomyFlash && (
+                  <span className="text-[9px] font-semibold uppercase tracking-widest text-emerald-500 animate-fade-in">
+                    Nova rodada
+                  </span>
+                )}
+                {(["acao", "acaoBônus", "reacao"] as const).map(k => {
+                  const labels: Record<string, string> = { acao: "Ação", acaoBônus: "Bônus", reacao: "Reação" };
+                  return (
+                    <label key={k} className="flex cursor-pointer select-none items-center gap-1.5 text-[10px]">
+                      <input
+                        type="checkbox"
+                        checked={actionEconomy[k]}
+                        onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
+                        className="h-3 w-3 accent-violet-500"
+                      />
+                      <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
+                        {labels[k]}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        <div className="relative">
+          <VoxOrb estado={orbEstado} tamanho={64} />
+          {respostaAtual && (
+            <button
+              onClick={pararAudio}
+              title="Parar fala do mestre"
+              className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 transition hover:bg-black/70"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-white">
+                <rect x="4" y="4" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {condicoesDetectadas.length > 0 && !cinemaMode && (
+          <div className="flex flex-wrap justify-center gap-1.5 px-4">
+            {condicoesDetectadas.map(cond => (
+              <div key={cond}
+                className="flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/30 px-2.5 py-0.5 text-[10px]"
+              >
+                <span className="text-amber-500">⚠</span>
+                <span className="text-amber-300/80">{cond}</span>
+                <button
+                  onClick={() => confirmarCondicao(cond)}
+                  title={`Adicionar ${cond} à ficha`}
+                  className="ml-0.5 font-bold text-amber-400 hover:text-amber-200"
+                >+</button>
+                <button
+                  onClick={() => dispensarCondicaoDetectada(cond)}
+                  title="Ignorar"
+                  className="text-zinc-600 hover:text-zinc-400"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className={`rounded-full transition-all duration-200 ${
+          suaVezGlow ? "shadow-[0_0_0_3px_rgba(251,191,36,0.45),0_0_18px_rgba(251,191,36,0.2)] animate-sua-vez" : ""
+        }`}>
+          <VoiceButton
+            onEnviar={enviarComando}
+            onOuvindoChange={setOuvindo}
+            desabilitado={!!respostaAtual}
+            sessionId={sessionId}
+            onIniciarFala={pararAudio}
+            mestreAudioTocando={audioTocando && !ouvindo}
+          />
+        </div>
+      </div>
+    );
+
+    return (
+      <div
+        className={[
+          "h-screen w-screen",
+          shakeCena ? "animate-shake-cena" : "",
+          emCombate ? "cursor-crosshair" : "",
+        ].join(" ")}
+        data-tone={sceneMood.ambientTone}
+      >
+        <AppShell
+          backgroundUrl={sceneImageUrl}
+          topBar={topBarSlot}
+          left={cinemaMode ? undefined : leftSlot}
+          center={centerSlot}
+          right={rightSlot}
+          dock={dockSlot}
+          overlays={overlaysSlot}
+        />
+
+        {/* ── Overlays interativos — irmãos do AppShell (recebem cliques) ──── */}
+
+        {/* Feature 1: Tela de encerramento de sessão — 8s ou clique */}
+        {sessionEndStats && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm cursor-pointer"
+            onClick={() => { setSessionEndStats(null); }}
+          >
+            <div className="flex flex-col items-center gap-6 max-w-sm w-full px-6 text-center">
+              <div className="font-[Cinzel,serif] text-2xl tracking-widest text-violet-300">
+                ✦ Fim de Aventura ✦
+              </div>
+              <div className="grid grid-cols-3 gap-4 w-full">
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-amber-300">{sessionEndStats.xp}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">XP</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-yellow-400">{sessionEndStats.gold}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Ouro</span>
+                </div>
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                  <span className="text-2xl font-bold text-violet-300">{sessionEndStats.turnosJogados}</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Turnos</span>
                 </div>
               </div>
-            );
-          })()}
-
-          <div className="relative">
-            <VoxOrb estado={orbEstado} tamanho={64} />
-            {/* Botão de parar fala — aparece sobre o orb quando o mestre está falando */}
-            {respostaAtual && (
-              <button
-                onClick={pararAudio}
-                title="Parar fala do mestre"
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 transition hover:bg-black/70"
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-white">
-                  <rect x="4" y="4" width="12" height="12" rx="2" />
-                </svg>
-              </button>
-            )}
-          </div>
-          {/* Chips de condição auto-detectada. Some em cinema mode. */}
-          {condicoesDetectadas.length > 0 && !cinemaMode && (
-            <div className="flex flex-wrap justify-center gap-1.5 px-4">
-              {condicoesDetectadas.map(cond => (
-                <div key={cond}
-                  className="flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/30 px-2.5 py-0.5 text-[10px]"
-                >
-                  <span className="text-amber-500">⚠</span>
-                  <span className="text-amber-300/80">{cond}</span>
-                  <button
-                    onClick={() => confirmarCondicao(cond)}
-                    title={`Adicionar ${cond} à ficha`}
-                    className="ml-0.5 font-bold text-amber-400 hover:text-amber-200"
-                  >+</button>
-                  <button
-                    onClick={() => dispensarCondicaoDetectada(cond)}
-                    title="Ignorar"
-                    className="text-zinc-600 hover:text-zinc-400"
-                  >×</button>
+              {sessionEndStats.consequencias.length > 0 && (
+                <div className="w-full text-left">
+                  <div className="text-[10px] text-orange-400/70 uppercase tracking-widest mb-2">Consequências no mundo</div>
+                  {sessionEndStats.consequencias.slice(0, 3).map((c, i) => (
+                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">• {c}</div>
+                  ))}
                 </div>
-              ))}
+              )}
+              {sessionEndStats.fiosSoltos.length > 0 && (
+                <div className="w-full text-left">
+                  <div className="text-[10px] text-violet-400/70 uppercase tracking-widest mb-2">Fios em aberto</div>
+                  {sessionEndStats.fiosSoltos.slice(0, 2).map((f, i) => (
+                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">⋯ {f}</div>
+                  ))}
+                </div>
+              )}
+              <div className="text-[10px] text-zinc-600 mt-2">clique para continuar</div>
             </div>
-          )}
-
-          {/* Anel "sua vez" — glow âmbar no container do mic quando o mestre parou de falar */}
-          <div className={`rounded-full transition-all duration-200 ${
-            suaVezGlow ? "shadow-[0_0_0_3px_rgba(251,191,36,0.45),0_0_18px_rgba(251,191,36,0.2)] animate-sua-vez" : ""
-          }`}>
-            <VoiceButton
-              onEnviar={enviarComando}
-              onOuvindoChange={setOuvindo}
-              desabilitado={!!respostaAtual}
-              sessionId={sessionId}
-              onIniciarFala={pararAudio}
-              mestreAudioTocando={audioTocando && !ouvindo}
-            />
           </div>
-        </div>
+        )}
+
+        {/* Modal de level up — 12s ou clique */}
+        {levelUp && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-[fade-in_300ms_ease-out]"
+            onClick={dismissLevelUp}
+          >
+            <div
+              className="relative max-w-md mx-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/95 to-zinc-950/95 px-8 py-10 shadow-2xl animate-[crit-pop_700ms_cubic-bezier(0.16,1,0.3,1)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-400/80">
+                Marco
+              </p>
+              <h2
+                className="mt-2 text-center text-3xl font-bold text-amber-100"
+                style={{ fontFamily: '"Cinzel", serif' }}
+              >
+                Nível {levelUp.nivel_novo}
+              </h2>
+              <p className="mt-1 text-center text-sm text-amber-300/70">
+                era nível {levelUp.nivel_antigo}
+              </p>
+
+              <div className="mt-6 space-y-3 text-sm">
+                <div className="flex items-center justify-between rounded-lg bg-zinc-900/50 px-4 py-2">
+                  <span className="text-zinc-300">❤️ HP máximo</span>
+                  <span className="font-mono text-emerald-300">
+                    +{levelUp.hp_ganho} <span className="text-zinc-500">(→ {levelUp.hp_max_novo})</span>
+                  </span>
+                </div>
+                {levelUp.slots_novos.length > 0 && (
+                  <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
+                    <p className="text-zinc-300">✨ Spell slots</p>
+                    <ul className="mt-1 ml-4 text-violet-300 text-xs list-disc">
+                      {levelUp.slots_novos.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {levelUp.features_novas.length > 0 && (
+                  <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
+                    <p className="text-zinc-300">⚔️ Novas features</p>
+                    <ul className="mt-1 ml-4 text-amber-300 text-xs list-disc">
+                      {levelUp.features_novas.map((f, i) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p className="text-center text-xs text-zinc-500 italic">
+                  Features renovadas. Dado de vida restaurado.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={dismissLevelUp}
+                className="mt-6 w-full rounded-lg bg-amber-700/80 hover:bg-amber-600/80 px-4 py-2 text-sm font-medium text-amber-50 transition-colors"
+              >
+                Continuar a jornada
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* UX-2: toast de cascata LLM — clicável */}
+        {cascadeAtivo && (
+          <CascadeToast provider={cascadeAtivo} onDismiss={limparCascade} />
+        )}
 
         {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}
         <button
@@ -1631,9 +1616,9 @@ export default function Home() {
           {cinemaMode ? "🎬" : "🛠️"}
         </button>
 
-        {/* Controle de volume da voz — canto inferior esquerdo, todas as telas */}
+        {/* Controle de volume da voz — canto inferior esquerdo */}
         <VolumeControl volume={volume} onChange={handleVolumeChange} />
-      </main>
+      </div>
     );
   }
 
