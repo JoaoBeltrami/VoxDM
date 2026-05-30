@@ -827,6 +827,20 @@ export default function Home() {
     // Overlays display-only — animações e toasts, nenhum precisa de clique.
     const overlaysSlot = (
       <>
+        {/* Mood ambiental (Bloco 3) — tint sutil + vinheta por local/hora.
+            Antes vivia no style do <main>; com o AppShell vira overlay full-screen
+            atrás de tudo (z-0). O AppShell já tem vinheta radial própria; este
+            adiciona a cor de mood específica da cena. Combate é tratado à parte. */}
+        {!emCombate && (
+          <div
+            className="pointer-events-none absolute inset-0 z-0 transition-[background,box-shadow] duration-[800ms] ease-in-out"
+            style={{
+              backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
+              boxShadow: `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px rgba(0,0,0,0.55)`,
+            }}
+          />
+        )}
+
         {/* Scene reveal — overlay escuro durante a troca de cena (1.8s) */}
         {revealCena && (
           <div className="pointer-events-none absolute inset-0 z-10 bg-zinc-950/65 transition-opacity duration-700" />
