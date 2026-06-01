@@ -205,7 +205,7 @@ make ingest-rules  # carrega SRD 5e (246 magias, condições, equipamentos)
 ### 6. Subir
 
 ```bash
-start.bat          # Windows — sobe API + frontend + abre browser automaticamente
+scripts\exec\start.bat   # Windows — sobe API + frontend + abre browser automaticamente
 # OU
 make run-api &
 cd frontend && npm run dev

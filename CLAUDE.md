@@ -519,7 +519,7 @@ NÃO adicionar mais estados ao VoxOrb sem atualizar o tipo OrbState no component
 | `.env.example` | Template de variáveis de ambiente documentado — encoding UTF-8 corrigido; LANGCHAIN_API_KEY movida para seção legado | ✅ Atualizado |
 | `.gitignore` | Exclusões: .env, __pycache__, .venv, PDFs | ✅ Criado |
 | `Makefile` | Targets: run, run-api, test (dep: ingest), ingest, debug, backup — usa `uv run` | ✅ Atualizado |
-| `start.bat` | Mata portas 8000/3000, limpa .next, inicia API+frontend, abre browser após 20s | ✅ Corrigido |
+| `scripts/exec/*.bat`, `scripts/exec/*.ps1` | Executáveis Windows organizados em `scripts/exec/` (start, monitor, ingest, check, test, voice) — `.bat` resolve ROOT 2 níveis acima, `.ps1` faz Set-Location pra raiz. README na pasta. | ✅ Reorganizado 30/05 |
 | `tests/conftest.py` | Fixtures base + os.environ.setdefault antes dos imports (fix pydantic ValidationError no pytest) | ✅ Atualizado |
 | `tests/test_config.py` | Smoke tests — config carrega e falha corretamente | ✅ Criado |
 | `QUICKSTART.md` | Guia de uso local com GPU — Windows/RTX, ordem dos terminais, problemas comuns | ✅ Criado |

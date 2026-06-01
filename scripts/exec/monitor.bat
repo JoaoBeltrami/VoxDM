@@ -8,9 +8,9 @@ setlocal
 :: Pre-requisito: o jogo ja deve estar rodando (start.bat). Estes sao apenas
 :: os monitores; nao sobem API nem frontend.
 
-:: %~dp0 termina com \  -- remove o backslash final para nao quebrar aspas
-set ROOT=%~dp0
-set ROOT=%ROOT:~0,-1%
+:: Este .bat vive em scripts\exec\ -- ROOT = 2 niveis acima (raiz do projeto).
+:: "%%~fi" resolve para caminho absoluto sem barra final.
+for %%i in ("%~dp0..\..") do set "ROOT=%%~fi"
 
 echo.
 echo VoxDM - monitores de teste...

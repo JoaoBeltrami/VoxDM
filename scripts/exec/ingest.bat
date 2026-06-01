@@ -4,8 +4,8 @@ setlocal
 :: VoxDM - Ingestão do módulo de teste no Qdrant + Neo4j
 :: Wrapper de `make ingest` (equivalente a: uv run python main.py)
 
-set ROOT=%~dp0
-set ROOT=%ROOT:~0,-1%
+:: Este .bat vive em scripts\exec\ -- ROOT = 2 niveis acima (raiz do projeto).
+for %%i in ("%~dp0..\..") do set "ROOT=%%~fi"
 
 echo.
 echo === VoxDM - Ingestao ===
