@@ -21,26 +21,24 @@ Exemplo:
 from __future__ import annotations
 
 import time
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import structlog
 
-from engine.telemetry import emit_llm_decisao
-
+from config import settings
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 from engine.llm.providers.gemini import GeminiProvider
 from engine.llm.providers.groq import GroqProvider
 from engine.llm.providers.ollama import OllamaProvider
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_70B,
     PROV_GROQ_8B,
+    PROV_GROQ_70B,
     PROV_OLLAMA,
     TaskType,
     cascata_para,
 )
-
-from config import settings
+from engine.telemetry import emit_llm_decisao
 
 log = structlog.get_logger(__name__)
 

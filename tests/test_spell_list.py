@@ -7,19 +7,16 @@ Cobre: consulta de spells por classe, filtragem por nível, limites de progress�
 
 import pytest
 
-
 # ── Importações ────────────────────────────────────────────────────────────────
-
 from engine.magic.spell_list import (
-    SpellEntry,
-    SPELLS_POR_CLASSE,
     PROGRESSAO_MAGIAS,
-    spells_da_classe,
-    spells_por_nivel,
+    SPELLS_POR_CLASSE,
+    SpellEntry,
     limite_progressao,
     nivel_da_spell,
+    spells_da_classe,
+    spells_por_nivel,
 )
-
 
 # ── Testes: spells_da_classe ───────────────────────────────────────────────────
 
@@ -245,8 +242,8 @@ class TestPromptInjecao:
         contexto.spells_conhecidas — que é o campo lido pelo prompt_builder
         (via bloco autoritativo alimentado pelo websocket).
         """
-        from engine.memory.working_memory import WorkingMemory
         from engine.llm.types import ContextoMontado
+        from engine.memory.working_memory import WorkingMemory
 
         wm = WorkingMemory.nova_sessao(
             "drevamor", "Drevamor", session_id="test-prompt",
@@ -266,7 +263,7 @@ class TestPromptInjecao:
 
     def test_spells_conhecidas_injetadas_no_system(self):
         """Se spells_conhecidas não vazia, prompt deve conter a seção."""
-        from engine.llm.prompt_builder import montar_mensagens, invalidar_cache
+        from engine.llm.prompt_builder import invalidar_cache, montar_mensagens
         invalidar_cache()
         contexto = self._criar_contexto(["Bola de Fogo", "Míssil Mágico"])
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
@@ -275,7 +272,7 @@ class TestPromptInjecao:
 
     def test_prompt_contem_nome_da_magia(self):
         """O nome da magia selecionada deve aparecer no prompt."""
-        from engine.llm.prompt_builder import montar_mensagens, invalidar_cache
+        from engine.llm.prompt_builder import invalidar_cache, montar_mensagens
         invalidar_cache()
         contexto = self._criar_contexto(["Bola de Fogo"])
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
@@ -284,7 +281,7 @@ class TestPromptInjecao:
 
     def test_prompt_sem_spells_nao_tem_secao(self):
         """Se spells_conhecidas vazio (Guerreiro), prompt NÃO deve ter a seção."""
-        from engine.llm.prompt_builder import montar_mensagens, invalidar_cache
+        from engine.llm.prompt_builder import invalidar_cache, montar_mensagens
         invalidar_cache()
         contexto = self._criar_contexto([], player_class="Guerreiro")
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
@@ -293,7 +290,7 @@ class TestPromptInjecao:
 
     def test_prompt_contem_aviso_restricao(self):
         """O prompt deve alertar que o personagem SÓ pode conjurar as magias listadas."""
-        from engine.llm.prompt_builder import montar_mensagens, invalidar_cache
+        from engine.llm.prompt_builder import invalidar_cache, montar_mensagens
         invalidar_cache()
         contexto = self._criar_contexto(["Raio de Gelo"])
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
@@ -304,7 +301,7 @@ class TestPromptInjecao:
 
     def test_prompt_agrupa_truques_separados(self):
         """Truques e magias de nível 1+ devem aparecer em grupos separados."""
-        from engine.llm.prompt_builder import montar_mensagens, invalidar_cache
+        from engine.llm.prompt_builder import invalidar_cache, montar_mensagens
         invalidar_cache()
         # Raio de Gelo = truque (nível 0), Míssil Mágico = nível 1
         contexto = self._criar_contexto(["Raio de Gelo", "Míssil Mágico"])

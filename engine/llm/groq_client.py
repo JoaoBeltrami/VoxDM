@@ -21,15 +21,15 @@ Exemplo:
         ...
 """
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import structlog
 
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_70B,
     PROV_GROQ_8B,
+    PROV_GROQ_70B,
     PROV_OLLAMA,
     TaskType,
 )

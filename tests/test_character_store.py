@@ -28,7 +28,6 @@ import pytest_asyncio
 import engine.persistence.character_store as cs_module
 from engine.persistence.character_store import CharacterState, CharacterStore
 
-
 # ── Fixture: banco isolado por teste ──────────────────────────────────────────
 
 @pytest.fixture(autouse=True)

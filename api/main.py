@@ -16,13 +16,13 @@ Exemplo:
 import asyncio
 import os
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from pathlib import Path
+from typing import Any
 
 import structlog
 import uvicorn
-from pathlib import Path
-
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -214,8 +214,8 @@ async def _warmup_tts() -> None:
     """
     t0 = time.perf_counter()
     try:
-        from engine.voice.tts import TTSEngine, _get_dicionario
         from engine.voice.language import Idioma
+        from engine.voice.tts import TTSEngine, _get_dicionario
         _get_dicionario()  # carrega dicionário de pronúncia (~120 termos)
         # Sintetiza um quantum mínimo de áudio só pra esquentar HTTP/TLS Edge TTS
         await TTSEngine().sintetizar("Olá.", idioma=Idioma.PTBR)

@@ -14,7 +14,6 @@ Armadilha: npcs_apresentados é set — NPCs do local mas que não foram nomeado
 import time
 from dataclasses import dataclass, field
 
-
 # Janela deslizante de diálogo
 MAX_DIALOGOS = 6
 

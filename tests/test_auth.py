@@ -4,7 +4,6 @@ import pytest
 
 from engine.auth.identity import Owner, is_admin
 
-
 # ── Owner ──────────────────────────────────────────────────────────────────────
 
 

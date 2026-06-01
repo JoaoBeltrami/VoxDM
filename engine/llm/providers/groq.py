@@ -17,15 +17,15 @@ Exemplo:
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import structlog
 from groq import (
-    AsyncGroq,
     APIConnectionError,
     APIError,
     APIStatusError,
     APITimeoutError,
+    AsyncGroq,
     InternalServerError,
     RateLimitError,
 )

@@ -801,7 +801,7 @@ def aplicar_xp_e_detectar_level_up(
         Dict resumo do level up se o jogador subiu de nível, ou None se só
         acumulou XP sem progredir. O resumo vem direto de `aplicar_level_up`.
     """
-    from engine.progression import calcular_novo_nivel, aplicar_level_up
+    from engine.progression import aplicar_level_up, calcular_novo_nivel
 
     ganhos: list[tuple[int, str]] = []
     _xp_vistos: set[tuple[int, str]] = set()  # dedup: mesmo marker duplicado na resposta

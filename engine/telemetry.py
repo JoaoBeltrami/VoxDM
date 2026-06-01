@@ -15,7 +15,7 @@ Exemplo:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 _TELEMETRY_PATH = Path(".internal/telemetry.jsonl")
@@ -24,7 +24,7 @@ _TELEMETRY_PATH = Path(".internal/telemetry.jsonl")
 def emit(evento: dict) -> None:
     """Apenda evento com timestamp ao arquivo JSONL de telemetria."""
     _TELEMETRY_PATH.parent.mkdir(exist_ok=True)
-    entrada = {"ts": datetime.now(timezone.utc).isoformat(), **evento}
+    entrada = {"ts": datetime.now(UTC).isoformat(), **evento}
     with _TELEMETRY_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entrada, ensure_ascii=False) + "\n")
 

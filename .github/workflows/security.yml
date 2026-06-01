@@ -1,0 +1,50 @@
+name: Security
+
+# DevSecOps: secret scanning (gitleaks) + audit de vulnerabilidades (pip-audit).
+# Motivado pelo historico real do projeto: email + PAT ja vazaram, exigindo
+# git filter-repo. Este workflow e a rede de seguranca automatizada.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Audit semanal de CVEs novos nas deps (segunda 06:00 UTC) mesmo sem push.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # historico completo — gitleaks varre todos os commits
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Config em .gitleaks.toml na raiz. Falha o job se achar segredo.
+
+  deps-audit:
+    name: Audit de deps (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Python 3.12
+        run: uv python install 3.12
+
+      - name: pip-audit
+        # Reporta CVEs conhecidos. Nao bloqueia por ora (algumas deps de ML tem
+        # CVEs sem fix disponivel) — revisar manualmente. Trocar `|| true` por
+        # nada quando a lista estiver limpa/triada.
+        run: uvx pip-audit -r requirements.txt --desc || true

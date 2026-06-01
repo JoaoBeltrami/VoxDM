@@ -9,7 +9,6 @@ import pytest
 
 from engine.voice.language import Idioma, detectar_idioma
 
-
 # ── Casos básicos ────────────────────────────────────────────────────────────
 
 

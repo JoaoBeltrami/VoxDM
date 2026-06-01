@@ -94,6 +94,7 @@ class EpisodicMemory:
         """
         try:
             from qdrant_client import QdrantClient
+
             from config import settings
 
             client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
@@ -129,8 +130,10 @@ class EpisodicMemory:
         """
         try:
             import asyncio
-            from config import settings
+
             from qdrant_client import QdrantClient
+
+            from config import settings
 
             client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
             loop = asyncio.get_running_loop()
@@ -195,8 +198,10 @@ class EpisodicMemory:
         """
         try:
             import asyncio
-            from config import settings
+
             from qdrant_client import QdrantClient
+
+            from config import settings
 
             client = QdrantClient(
                 url=settings.QDRANT_URL,
@@ -206,7 +211,7 @@ class EpisodicMemory:
             loop = asyncio.get_running_loop()
 
             # Usa scroll com filtro exato — sem embedding, sem score_threshold
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
             filtro = Filter(must=[
                 FieldCondition(key="session_id", match=MatchValue(value=session_id))
             ])

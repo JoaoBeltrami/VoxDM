@@ -6,8 +6,8 @@ para ações positivas, negativas, revelação de segredos e casos-limite.
 """
 
 import pytest
-from engine.memory.trust_detector import detectar_mudancas_trust
 
+from engine.memory.trust_detector import detectar_mudancas_trust
 
 NPCS = ["fael-valdreksson", "osmund-ferreiro", "lyra-caçadora"]
 

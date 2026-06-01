@@ -2,7 +2,6 @@
 
 from ingestor.parser import validar_schema
 
-
 # ── Fixtures de schema ────────────────────────────────────────────────────────
 
 def _schema_minimo() -> dict:

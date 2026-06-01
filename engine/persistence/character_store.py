@@ -15,10 +15,10 @@ Exemplo:
 """
 
 import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator
 
 import aiosqlite
 import structlog

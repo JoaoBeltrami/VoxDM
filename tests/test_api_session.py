@@ -8,11 +8,10 @@ Executar com: make test
 """
 
 import re
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -124,9 +123,10 @@ def test_start_location_personalizada(client):
 
 def test_start_limite_sessoes_503(client):
     """Atingir MAX_SESSOES → 503 na próxima criação."""
-    from api.state import MAX_SESSOES, sessions, SessaoAtiva
-    from unittest.mock import MagicMock
     import time
+    from unittest.mock import MagicMock
+
+    from api.state import MAX_SESSOES, SessaoAtiva, sessions
 
     # Preenche o store até o limite sem passar pela rota (evita cold start real)
     for i in range(MAX_SESSOES):
@@ -240,8 +240,8 @@ def _make_mock_builder():
 
 def _client_com_override(owner):
     """Cria TestClient com get_owner sobrescrito para o Owner dado."""
-    from api.main import app
     from api.auth import get_owner
+    from api.main import app
 
     mock_cb = _make_mock_builder()
     mock_groq = MagicMock()
@@ -254,10 +254,10 @@ def _client_com_override(owner):
 
 def test_isolamento_usuario_comum_nao_ve_sessao_de_outro():
     """Usuário comum (não-admin) não pode acessar sessão que pertence a outro usuário."""
-    from api.main import app
     from api.auth import get_owner
-    from engine.auth.identity import Owner
+    from api.main import app
     from api.state import sessions
+    from engine.auth.identity import Owner
 
     owner_a = Owner(email="alice@voxdm.test", is_admin=False)
     owner_b = Owner(email="bob@voxdm.test", is_admin=False)
@@ -283,10 +283,10 @@ def test_isolamento_usuario_comum_nao_ve_sessao_de_outro():
 
 def test_isolamento_admin_ve_qualquer_sessao():
     """Admin (is_admin=True) pode ver sessões de qualquer usuário."""
-    from api.main import app
     from api.auth import get_owner
-    from engine.auth.identity import Owner
+    from api.main import app
     from api.state import sessions
+    from engine.auth.identity import Owner
 
     owner_comum = Owner(email="alice@voxdm.test", is_admin=False)
     owner_admin = Owner(email="admin@voxdm.test", is_admin=True)
@@ -309,10 +309,10 @@ def test_isolamento_admin_ve_qualquer_sessao():
 
 def test_isolamento_delete_nao_deleta_sessao_alheia():
     """DELETE de sessão alheia retorna 404 sem deletar."""
-    from api.main import app
     from api.auth import get_owner
-    from engine.auth.identity import Owner
+    from api.main import app
     from api.state import sessions
+    from engine.auth.identity import Owner
 
     owner_a = Owner(email="alice@voxdm.test", is_admin=False)
     owner_b = Owner(email="bob@voxdm.test", is_admin=False)

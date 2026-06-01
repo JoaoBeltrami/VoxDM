@@ -25,8 +25,8 @@ import structlog
 from config import settings
 from engine.llm.groq_client import GroqClient
 from engine.llm.tasks import TaskType
-from engine.memory.working_memory import WorkingMemory
 from engine.memory.qdrant_client import QdrantMemoryClient
+from engine.memory.working_memory import WorkingMemory
 
 log = structlog.get_logger()
 
@@ -184,10 +184,12 @@ class SessionWriter:
 
     async def _fazer_upsert(self, payload: dict[str, Any]) -> None:
         """Gera embedding do resumo e faz upsert no Qdrant."""
-        from ingestor.embedder import Embedder
         import asyncio
+
         from qdrant_client import QdrantClient
-        from qdrant_client.models import PointStruct, Distance, VectorParams
+        from qdrant_client.models import Distance, PointStruct, VectorParams
+
+        from ingestor.embedder import Embedder
 
         embedder = Embedder()
         vetor_array = embedder.gerar([payload["text"]])

@@ -22,8 +22,8 @@ import io
 import json
 import re
 import wave
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 import edge_tts
 import structlog

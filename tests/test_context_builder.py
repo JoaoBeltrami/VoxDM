@@ -10,16 +10,16 @@ Todos os testes são offline — sem Qdrant, Neo4j nem Groq.
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from engine.memory.context_builder import (
+    _QUERY_CURTA_LIMITE,
     ContextBuilder,
     _deduplicar_por_source_id,
-    _QUERY_CURTA_LIMITE,
 )
 from engine.memory.working_memory import WorkingMemory
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

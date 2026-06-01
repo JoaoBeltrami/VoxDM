@@ -36,9 +36,9 @@ from typing import Any
 
 import structlog
 from groq import (
-    AsyncGroq,
     APIConnectionError,
     APITimeoutError,
+    AsyncGroq,
     InternalServerError,
     RateLimitError,
 )

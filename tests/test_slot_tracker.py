@@ -1,7 +1,8 @@
 """Testes para engine/magic/slot_tracker.py."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from engine.magic.slot_tracker import decrementar_slot, detectar_descanso, restaurar_slots
 

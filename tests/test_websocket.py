@@ -7,11 +7,10 @@ JSON inválido, texto vazio ignorado e texto longo rejeitado.
 Executar com: make test
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -947,8 +946,9 @@ def test_combat2_clamp_idx_fora_de_bounds():
 
 def test_auto_checkpoint_funcao_exportavel():
     """AUTO-CHECKPOINT: salvar_checkpoint_sessao deve ser importável de routes.session."""
-    from api.routes.session import salvar_checkpoint_sessao
     import asyncio
+
+    from api.routes.session import salvar_checkpoint_sessao
     assert asyncio.iscoroutinefunction(salvar_checkpoint_sessao)
 
 
@@ -956,8 +956,9 @@ def test_auto_checkpoint_funcao_exportavel():
 
 def test_thinking_dedup_campo_em_sessao_ativa():
     """THINKING-DEDUP: SessaoAtiva deve ter campo ultima_frase_thinking."""
-    from api.state import SessaoAtiva
     import dataclasses
+
+    from api.state import SessaoAtiva
     campos = {f.name for f in dataclasses.fields(SessaoAtiva)}
     assert "ultima_frase_thinking" in campos
 

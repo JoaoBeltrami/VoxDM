@@ -15,8 +15,9 @@ Exemplo:
 
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 import numpy as np
 import structlog
@@ -33,6 +34,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # context manager que também restaura a constante após o load.
 
 import transformers
+
 transformers.logging.set_verbosity_error()
 
 from sentence_transformers import SentenceTransformer

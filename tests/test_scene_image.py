@@ -18,7 +18,6 @@ from engine.image.scene_image import (
     construir_prompt_cena,
 )
 
-
 # ── Testes de construção de prompt ─────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -157,6 +156,7 @@ async def test_gerar_e_enviar_usa_cache(monkeypatch):
 async def test_gerar_e_enviar_falha_silenciosa_em_erro_http(monkeypatch):
     """Erro de rede deve ser silencioso — não propagar exceção."""
     import httpx
+
     import engine.image.scene_image as m
 
     async def _head_falha(*args, **kwargs):

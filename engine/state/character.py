@@ -16,7 +16,6 @@ Armadilha: properties D&D 5e (mod_*, prof_bonus, ca, passive_perception) são
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # Mapa de perícia D&D 5e → atributo abreviado
 _PERICIA_ATRIBUTO: dict[str, str] = {
     "Acrobacia": "des", "Adestrar Animais": "sab", "Arcanismo": "int",

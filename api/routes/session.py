@@ -23,18 +23,6 @@ import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from api.auth import get_owner
-from api.rate_limit import limiter
-from api.turn_pipeline import aplicar_pos_turno
-from engine.auth.identity import Owner
-from engine.llm.types import RE_COMBATE as _RE_COMBATE
-from engine.memory.quest_detector import (
-    aplicar_recompensas_avancos,
-    carregar_catalog_modulo,
-    carregar_efeitos_modulo,
-    catalog_para_texto,
-    detectar_e_aplicar_quests,
-)
-
 from api.models.schemas import (
     CharacterStateSchema,
     ComandoJogador,
@@ -44,14 +32,25 @@ from api.models.schemas import (
     SessaoListaItem,
     TranscricaoResponse,
 )
-from engine.memory.episodic_memory import EpisodicMemory
+from api.rate_limit import limiter
 from api.state import MAX_SESSOES, SessaoAtiva, sessions
+from api.turn_pipeline import aplicar_pos_turno
+from engine.auth.identity import Owner
 from engine.llm.groq_client import GroqClient
 from engine.llm.prompt_builder import montar_mensagens
+from engine.llm.types import RE_COMBATE as _RE_COMBATE
 from engine.memory.context_builder import ContextBuilder
+from engine.memory.episodic_memory import EpisodicMemory
+from engine.memory.neo4j_client import Neo4jMemoryClient
+from engine.memory.quest_detector import (
+    aplicar_recompensas_avancos,
+    carregar_catalog_modulo,
+    carregar_efeitos_modulo,
+    catalog_para_texto,
+    detectar_e_aplicar_quests,
+)
 from engine.memory.session_writer import SessionWriter
 from engine.memory.working_memory import WorkingMemory
-from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.persistence.character_store import CharacterState, CharacterStore
 from engine.voice.voice_manager import VoiceManager
 

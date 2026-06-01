@@ -17,15 +17,18 @@ from typing import Any
 
 import structlog
 
+from config import settings
+from engine.llm.types import (
+    RE_COMBATE as _RE_COMBATE,
+)
+from engine.llm.types import (
+    RE_ROLAGEM as _RE_ROLAGEM,
+)
 from engine.llm.types import (
     ContextoMontado,
     SecretVisivel,
-    RE_ROLAGEM as _RE_ROLAGEM,
-    RE_COMBATE as _RE_COMBATE,
 )
 from engine.magic.spell_list import nivel_da_spell
-
-from config import settings
 
 # Re-exportados para compatibilidade com importações existentes
 __all__ = ["ContextoMontado", "SecretVisivel", "montar_mensagens", "invalidar_cache",

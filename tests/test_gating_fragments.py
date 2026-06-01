@@ -14,9 +14,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from engine.llm.prompt_builder import (
-    _cena_dramatica,
-    _carregar_voz_dupla,
     _carregar_markers_lista,
+    _carregar_voz_dupla,
+    _cena_dramatica,
     montar_mensagens,
 )
 from engine.llm.types import ContextoMontado
