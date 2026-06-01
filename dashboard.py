@@ -359,7 +359,7 @@ with tab_debug:
 with tab_decisoes:
     try:
         from streamlit_autorefresh import st_autorefresh
-        st_autorefresh(interval=_REFRESH_MS, key="decisoes_refresh")
+        st_autorefresh(interval=2000, key="decisoes_refresh")
     except ImportError:
         pass
 

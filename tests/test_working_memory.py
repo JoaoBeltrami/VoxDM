@@ -6,6 +6,7 @@ log de consequências, janela deslizante de diálogo, serialização para_texto(
 """
 
 import os
+
 os.environ.setdefault("GROQ_API_KEY",   "test-key")
 os.environ.setdefault("QDRANT_URL",     "http://localhost:6333")
 os.environ.setdefault("QDRANT_API_KEY", "test")
@@ -14,8 +15,8 @@ os.environ.setdefault("NEO4J_USER",     "neo4j")
 os.environ.setdefault("NEO4J_PASSWORD", "test")
 
 import pytest
-from engine.memory.working_memory import WorkingMemory, MAX_DIALOGOS
 
+from engine.memory.working_memory import MAX_DIALOGOS, WorkingMemory
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 

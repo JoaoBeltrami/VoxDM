@@ -24,8 +24,9 @@ Instalação:
 import asyncio
 import tempfile
 import threading
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator, Any
+from typing import Any
 
 import structlog
 
@@ -310,7 +311,7 @@ class STTEngine:
         try:
             texto = await asyncio.wait_for(self._fila.get(), timeout=timeout)
             return texto
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return None
 
     def silenciar(self) -> None:

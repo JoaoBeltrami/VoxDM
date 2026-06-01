@@ -6,6 +6,7 @@ prompt_builder.py não quebra em cenários de arquivo ausente ou corrompido.
 """
 
 import os
+
 os.environ.setdefault("GROQ_API_KEY",    "test-key")
 os.environ.setdefault("QDRANT_URL",      "http://localhost:6333")
 os.environ.setdefault("QDRANT_API_KEY",  "test")
@@ -14,7 +15,7 @@ os.environ.setdefault("NEO4J_USER",      "neo4j")
 os.environ.setdefault("NEO4J_PASSWORD",  "test")
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,10 +23,11 @@ from engine.llm.prompt_builder import (
     _COMBAT_PATH,
     _DICE_PATH,
     _MASTER_SYSTEM_PATH,
-    _SAVES_PATH,
     _PROMPT_MIN_CHARS,
     _RE_COMBATE,
     _RE_ROLAGEM,
+    _SAVES_PATH,
+    ContextoMontado,
     _carregar_combat,
     _carregar_dice,
     _carregar_master_system,
@@ -35,8 +37,6 @@ from engine.llm.prompt_builder import (
     validar_master_system,
 )
 from engine.memory.working_memory import WorkingMemory
-from engine.llm.prompt_builder import ContextoMontado
-
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 

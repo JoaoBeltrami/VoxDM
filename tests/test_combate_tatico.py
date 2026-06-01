@@ -2,7 +2,7 @@
 
 import pytest
 
-from api.turn_pipeline import aplicar_pos_turno, _RE_POSICAO, _RE_MOVIMENTO
+from api.turn_pipeline import _RE_MOVIMENTO, _RE_POSICAO, aplicar_pos_turno
 from engine.memory.working_memory import WorkingMemory
 
 

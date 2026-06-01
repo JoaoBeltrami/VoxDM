@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 import structlog
-from neo4j import AsyncGraphDatabase, AsyncDriver
+from neo4j import AsyncDriver, AsyncGraphDatabase
 from tenacity import (
     RetryCallState,
     retry,

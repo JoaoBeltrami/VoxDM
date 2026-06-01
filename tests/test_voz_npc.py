@@ -18,7 +18,6 @@ from api.websocket import (
 )
 from engine.memory.working_memory import WorkingMemory
 
-
 # ── _calc_quote_ratio ──────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("texto,esperado_min,esperado_max", [

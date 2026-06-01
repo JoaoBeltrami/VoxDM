@@ -1,0 +1,27 @@
+# gitleaks — config de secret scanning do VoxDM.
+# Usa o ruleset default do gitleaks + allowlist pros falsos positivos do projeto
+# (chaves fake de teste, placeholders do .env.example).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Falsos positivos conhecidos do VoxDM"
+
+# Arquivos que contem placeholders/fakes por design — nunca segredos reais.
+paths = [
+    '''\.env\.example$''',
+    '''tests/conftest\.py$''',     # chaves fake: test-groq-key, test-neo4j-password
+    '''\.gitleaks\.toml$''',       # este proprio arquivo
+]
+
+# Strings que sao claramente placeholders, nao segredos.
+regexes = [
+    '''test-groq-key''',
+    '''test-qdrant-key''',
+    '''test-neo4j-password''',
+    '''admin@localhost''',
+    '''admin@example\.com''',
+    '''your[-_].*[-_]key''',
+    '''<.*>''',                     # <SUA_CHAVE_AQUI> etc.
+]

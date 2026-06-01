@@ -1,0 +1,37 @@
+# pre-commit — espelha o CI localmente, falhando ANTES do commit em vez de
+# depois do push. Instalar uma vez:  uvx pre-commit install
+# Rodar manual em tudo:              uvx pre-commit run --all-files
+
+repos:
+  # ── Ruff: lint + format ─────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        # NAO passa --fix aqui: F401 de re-export legitimo seria removido e
+        # quebraria testes (licao aprendida). So reporta; correcao e manual.
+        args: [--no-fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  # ── gitleaks: secret scanning local ─────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret scan)
+
+  # ── Higiene basica de arquivos ──────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'   # mantem 2-espacos de quebra em markdown
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]   # bloqueia binarios grandes (modelos, mp3, db)
+      - id: check-yaml
+      - id: check-toml

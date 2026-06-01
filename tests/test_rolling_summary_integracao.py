@@ -15,13 +15,14 @@ Armadilha: montar_mensagens lê master_system.md do disco — roda offline, mas 
     teste de injeção patcha settings no módulo prompt_builder (onde é lido).
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from engine.memory.working_memory import WorkingMemory
-from engine.llm.types import ContextoMontado
+import pytest
+
 from engine.llm import prompt_builder
 from engine.llm.prompt_builder import montar_mensagens
+from engine.llm.types import ContextoMontado
+from engine.memory.working_memory import WorkingMemory
 
 
 def _ctx(working_memory: WorkingMemory, transcricao: str = "Olá") -> ContextoMontado:
@@ -128,6 +129,7 @@ def test_dm_state_inclui_resumo_rolling():
     """O payload de fechar_sessao deve carregar resumo_rolling no dm_state —
     verificado por inspeção do fonte (sem I/O de Qdrant)."""
     import inspect
+
     from engine.memory.session_writer import SessionWriter
     src = inspect.getsource(SessionWriter.fechar_sessao)
     assert '"resumo_rolling"' in src, "dm_state deve incluir a chave resumo_rolling"

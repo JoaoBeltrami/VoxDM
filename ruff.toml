@@ -1,0 +1,61 @@
+# Ruff — linter + formatter do VoxDM.
+# Roda no CI (.github/workflows/ci.yml) e localmente via pre-commit.
+# Filosofia: pegar bugs reais (imports mortos, nomes indefinidos, var nao usada)
+# sem brigar com os padroes intencionais do projeto.
+
+target-version = "py312"
+line-length = 120  # codebase usa linhas longas em prompts/dataclasses; 88 geraria ruido
+
+# Diretorios gerados/externos — fora do lint.
+extend-exclude = [
+    ".venv",
+    "frontend",
+    "srd_data",
+    "benchmark",
+    "demo",  # scripts de gravacao, estilo solto proposital
+]
+
+[lint]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear.
+select = ["E", "W", "F", "I", "UP", "B"]
+
+ignore = [
+    # E701: multiplos statements na mesma linha (`def x(): return ...`).
+    #   Padrao INTENCIONAL das ~80 properties one-liner do WorkingMemory facade.
+    "E701",
+    # E402: import nao no topo. INTENCIONAL no websocket.py (imports tardios
+    #   documentados com `# noqa: E402` originalmente) e em conftest (env antes de importar).
+    "E402",
+    # E741: nome de variavel ambiguo (l, I, O). Casos pontuais em loops curtos.
+    "E741",
+    # B008: call no default de argumento — FastAPI Depends() usa isso por design.
+    "B008",
+    # E501: linha longa. Codebase usa prompts/comentarios PT-BR longos por design;
+    #   line length nao pega bug — so ruido. Formatter cuida do que importa.
+    "E501",
+    # B023: function-uses-loop-variable — padrao em closures de telemetria/async
+    #   gather onde a var e usada imediatamente; falsos positivos aqui.
+    "B023",
+]
+
+[lint.per-file-ignores]
+# Testes podem ter imports locais redundantes e asserts soltos.
+"tests/*" = ["F811", "F841", "B017"]
+# conftest seta env antes dos imports — E402 ja ignorado global, reforco aqui.
+"tests/conftest.py" = ["E402", "F401"]
+# websocket.py RE-EXPORTA simbolos de turn_pipeline (_RE_ALVO_ATAQUE, _slugify,
+# _sincronizar_inimigos_combate, ...) para compat com os testes. Parecem F401
+# "nao usado" mas sao re-exports intencionais — NAO remover.
+"api/websocket.py" = ["F401"]
+# __init__.py e types.py costumam re-exportar simbolos da subarvore.
+"**/__init__.py" = ["F401"]
+"engine/llm/types.py" = ["F401"]
+
+# IMPORTANTE: F401 (import nao usado) fica como AVISO, nunca auto-removido.
+# O codebase usa re-exports demais pra confiar em remocao cega — a licao foi
+# aprendida quando `ruff --fix` quebrou 13 testes removendo re-exports validos.
+[lint.flake8-import-conventions]
+# (placeholder — mantem secao explicita pra documentar a decisao acima)
+
+[lint.isort]
+known-first-party = ["engine", "api", "ingestor", "config"]

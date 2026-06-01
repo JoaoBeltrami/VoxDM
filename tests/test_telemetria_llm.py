@@ -18,14 +18,14 @@ Armadilha: o router instancia providers reais no __init__ (Groq/Gemini/Ollama),
     _providers_disponiveis por mocks, então nenhuma rede é tocada.
 """
 
-import pytest
 from unittest.mock import patch
 
-from engine.llm.router import LLMRouter
-from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
-from engine.llm.tasks import TaskType
-from engine import telemetry
+import pytest
 
+from engine import telemetry
+from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
+from engine.llm.router import LLMRouter
+from engine.llm.tasks import TaskType
 
 # ── Provider fake ─────────────────────────────────────────────────────────────
 

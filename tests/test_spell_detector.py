@@ -8,7 +8,6 @@ from engine.magic.spell_detector import (
     formatar_bloco_magia,
 )
 
-
 # ── Testes do regex _RE_CASTING ───────────────────────────────────────────────
 
 def test_extrair_nome_corta_stopwords_alvo():

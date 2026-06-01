@@ -16,6 +16,7 @@ Exemplo:
 
 import time
 from dataclasses import dataclass, field
+
 import structlog
 
 _log = structlog.get_logger()

@@ -86,7 +86,7 @@ class QdrantMemoryClient:
         score_threshold: float,
     ) -> list[ScoredPoint]:
         """Busca síncrona com retry — executada em thread pool."""
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
 
         query_filter = None
         if filtro:

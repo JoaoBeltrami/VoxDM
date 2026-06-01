@@ -1,6 +1,7 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     # OBRIGATÓRIAS — sem essas no .env, o programa não sobe
     GROQ_API_KEY: str

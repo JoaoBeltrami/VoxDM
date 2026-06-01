@@ -2,7 +2,7 @@
 
 import pytest
 
-from api.turn_pipeline import aplicar_pos_turno, _RE_OURO, _RE_LOOT, _RE_PERDEU
+from api.turn_pipeline import _RE_LOOT, _RE_OURO, _RE_PERDEU, aplicar_pos_turno
 from engine.memory.working_memory import WorkingMemory
 
 

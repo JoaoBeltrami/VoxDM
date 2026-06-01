@@ -34,14 +34,14 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
-from engine.llm.prompt_builder import montar_mensagens, _RE_COMBATE, _LEMBRETE_SAIDA
-from engine.memory.trust_detector import detectar_mudancas_trust
-from engine.memory.rolling_summary import atualizar_resumo_rolling
+from engine.llm.prompt_builder import _LEMBRETE_SAIDA, _RE_COMBATE, montar_mensagens
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
     detectar_e_aplicar_quests,
     strip_marcadores,
 )
+from engine.memory.rolling_summary import atualizar_resumo_rolling
+from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.telemetry import emit as _emit
 from engine.voice.language import Idioma
 
@@ -98,25 +98,25 @@ _RE_ROLAGEM_VISIVEL = re.compile(
 # Os regexes de combate e o sync de inimigos vivem em api/turn_pipeline para que
 # o endpoint REST `/turn` e o WebSocket usem a MESMA implementação. Re-exportados
 # aqui só por compat com tests legados que importam de api.websocket.
+# ---------------------------------------------------------------------------
+# Lampejo — visões dramáticas com voz alterada
+# ---------------------------------------------------------------------------
+# _RE_LAMPEJO migrado pra api/turn_pipeline.py (mantém todos os markers
+# no mesmo lugar — base pra futura tabela única). Re-importado abaixo.
 from api.turn_pipeline import (  # noqa: E402
     _RE_ALVO_ATAQUE,
-    _RE_INIMIGO_MORTO,
-    _RE_INIMIGO_GRAVE,
     _RE_INIMIGO_FERIDO,
+    _RE_INIMIGO_GRAVE,
+    _RE_INIMIGO_MORTO,
+    _RE_LAMPEJO,
     _slugify,
     aplicar_afeto_npcs,
     aplicar_pos_turno,
     aplicar_xp_e_detectar_level_up,
+)
+from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
-
-# ---------------------------------------------------------------------------
-# Lampejo — visões dramáticas com voz alterada
-# ---------------------------------------------------------------------------
-
-# _RE_LAMPEJO migrado pra api/turn_pipeline.py (mantém todos os markers
-# no mesmo lugar — base pra futura tabela única). Re-importado abaixo.
-from api.turn_pipeline import _RE_LAMPEJO
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
@@ -261,7 +261,7 @@ def _criar_task_thinking(
                     primeiro_token_evento.wait(), timeout=_THINKING_DELAY_S
                 )
                 return  # token chegou a tempo — silêncio é OK
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             from engine.voice.thinking_cache import pegar_random
             # Dedup: evita repetir a mesma frase de "pensamento" em turnos consecutivos
@@ -878,8 +878,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
     2. Auth — valida JWT/DEV_USER via get_owner_ws.
     3. Ownership — session_id deve pertencer ao owner autenticado.
     """
-    from config import settings
     from api.auth import get_owner_ws
+    from config import settings
 
     # 1. Origin check — CORS não se aplica a WS nativamente, fazemos manual.
     # Em DEBUG local (Next.js em :3000) podemos não ter Origin — permitir vazio.
@@ -1184,8 +1184,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 # o jogo segue com narração pura (sem dados mecânicos).
                 from engine.magic.spell_detector import (
                     _RE_CASTING,
-                    extrair_nome_magia,
                     buscar_dados_magia,
+                    extrair_nome_magia,
                     formatar_bloco_magia,
                 )
                 if _RE_CASTING.search(texto_jogador):

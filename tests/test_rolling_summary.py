@@ -18,15 +18,15 @@ Armadilha: atualizar_resumo_rolling instancia GroqClient() internamente — patc
     em engine.memory.rolling_summary.GroqClient, não no módulo groq_client.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from config import settings
-from engine.state.narrative import NarrativeState
-from engine.memory.working_memory import WorkingMemory
-from engine.memory import rolling_summary
-from engine.llm.tasks import TaskType
+import pytest
 
+from config import settings
+from engine.llm.tasks import TaskType
+from engine.memory import rolling_summary
+from engine.memory.working_memory import WorkingMemory
+from engine.state.narrative import NarrativeState
 
 # ── NarrativeState: predicado e contador (puro, sem I/O) ──────────────────────
 

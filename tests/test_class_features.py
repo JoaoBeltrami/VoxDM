@@ -13,6 +13,7 @@ Exemplo:
 """
 
 import pytest
+
 from engine.memory.working_memory import WorkingMemory
 
 

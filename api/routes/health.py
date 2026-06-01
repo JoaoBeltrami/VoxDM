@@ -63,7 +63,7 @@ async def _check_qdrant() -> dict[str, Any]:
             "latency_ms": int((time.perf_counter() - t0) * 1000),
             "detalhe": f"{total} coleção(ões)",
         }
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"status": "timeout", "latency_ms": int(_TIMEOUT_DEP_SECONDS * 1000), "detalhe": f"sem resposta em {_TIMEOUT_DEP_SECONDS}s"}
     except Exception as e:
         return {"status": "down", "latency_ms": int((time.perf_counter() - t0) * 1000), "detalhe": str(e)[:160]}
@@ -97,7 +97,7 @@ async def _check_neo4j() -> dict[str, Any]:
                 "detalhe": "RETURN 1 OK",
             }
         return {"status": "down", "latency_ms": int((time.perf_counter() - t0) * 1000), "detalhe": "query não retornou 1"}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"status": "timeout", "latency_ms": int(_TIMEOUT_DEP_SECONDS * 1000), "detalhe": f"sem resposta em {_TIMEOUT_DEP_SECONDS}s"}
     except Exception as e:
         return {"status": "down", "latency_ms": int((time.perf_counter() - t0) * 1000), "detalhe": str(e)[:160]}
@@ -125,7 +125,7 @@ async def _check_groq() -> dict[str, Any]:
                 "latency_ms": int((time.perf_counter() - t0) * 1000),
                 "detalhe": f"HTTP {resp.status_code}",
             }
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"status": "timeout", "latency_ms": int(_TIMEOUT_DEP_SECONDS * 1000), "detalhe": f"sem resposta em {_TIMEOUT_DEP_SECONDS}s"}
     except Exception as e:
         return {"status": "down", "latency_ms": int((time.perf_counter() - t0) * 1000), "detalhe": str(e)[:160]}

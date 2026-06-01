@@ -26,11 +26,11 @@ Exemplo:
 
 from dataclasses import dataclass, field
 
-from engine.state.character import PlayerCharacter, _PERICIA_ATRIBUTO
+from engine.state.character import _PERICIA_ATRIBUTO, PlayerCharacter
 from engine.state.combat import CombatState
 from engine.state.narrative import NarrativeState
 from engine.state.party import PartyState
-from engine.state.scene import DialogueTurn, MAX_DIALOGOS, SceneState
+from engine.state.scene import MAX_DIALOGOS, DialogueTurn, SceneState
 
 # Re-export para compat com testes legados e dashboard
 __all__ = [

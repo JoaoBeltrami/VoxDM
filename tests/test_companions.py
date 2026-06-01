@@ -3,8 +3,10 @@
 import pytest
 
 from api.turn_pipeline import (
+    _RE_COMPANION_ADD,
+    _RE_COMPANION_HP,
+    _RE_COMPANION_REMOVE,
     aplicar_pos_turno,
-    _RE_COMPANION_ADD, _RE_COMPANION_HP, _RE_COMPANION_REMOVE,
 )
 from engine.memory.working_memory import WorkingMemory
 

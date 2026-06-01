@@ -23,7 +23,9 @@ from typing import Any
 import structlog
 
 from config import settings
-from engine.llm.types import ContextoMontado, SecretVisivel, RE_ROLAGEM as _RE_ROLAGEM, RE_COMBATE as _RE_COMBATE
+from engine.llm.types import RE_COMBATE as _RE_COMBATE
+from engine.llm.types import RE_ROLAGEM as _RE_ROLAGEM
+from engine.llm.types import ContextoMontado, SecretVisivel
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.qdrant_client import QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory
@@ -373,7 +375,7 @@ class ContextBuilder:
                     self._neo4j.buscar_relacionamentos(entidade_id),
                     timeout=2.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 log.warning("neo4j_timeout", entidade=entidade_id)
                 return []
             except Exception as e:

@@ -1,7 +1,8 @@
 """Testes para engine/memory/quest_detector.py."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
@@ -11,7 +12,6 @@ from engine.memory.quest_detector import (
     detectar_e_aplicar_quests,
     strip_marcadores,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

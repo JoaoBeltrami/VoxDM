@@ -22,7 +22,6 @@ import pytest
 from api.models.schemas import MensagemWS
 from engine.memory.episodic_memory import EpisodicMemory
 
-
 # ── MensagemWS — tipo="recap" ─────────────────────────────────────────────────
 
 def test_mensagem_ws_aceita_tipo_recap():
@@ -405,6 +404,7 @@ def test_session_writer_payload_inclui_campos_continuidade():
 def test_buscar_por_session_id_nao_usa_buscar_semantico():
     """buscar_por_session_id NÃO deve chamar self._qdrant.buscar (usa scroll direto)."""
     import inspect
+
     from engine.memory.episodic_memory import EpisodicMemory
     src = inspect.getsource(EpisodicMemory.buscar_por_session_id)
     # Método novo usa scroll, não self.buscar
@@ -418,6 +418,7 @@ def test_buscar_por_session_id_nao_usa_buscar_semantico():
 def test_iniciar_sessao_le_campo_text_nao_resumo_curto():
     """iniciar_sessao deve ler 'text' do payload episódico, não 'resumo_curto'."""
     import inspect
+
     from api.routes.session import iniciar_sessao
     src = inspect.getsource(iniciar_sessao)
     # Bug #2: campo no Qdrant é "text", não "resumo_curto"
@@ -430,6 +431,7 @@ def test_iniciar_sessao_le_campo_text_nao_resumo_curto():
 def test_cliffhanger_limpo_apos_uso_na_abertura():
     """wm.cliffhanger_pendente deve ser zerado após ser usado como gancho de abertura."""
     import inspect
+
     from api.websocket import _enviar_abertura
     src = inspect.getsource(_enviar_abertura)
     assert 'cliffhanger_pendente = ""' in src, (

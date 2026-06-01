@@ -31,8 +31,9 @@ async def _query_legacy(texto: str, top_k: int = TOP_K) -> dict[str, Any]:
     """Busca original: embedding → Qdrant → Neo4j direto, sem ContextBuilder."""
     tempos: dict[str, float] = {}
 
-    from qdrant_client import QdrantClient
     from neo4j import AsyncGraphDatabase
+    from qdrant_client import QdrantClient
+
     from config import settings
     from ingestor.embedder import Embedder
 

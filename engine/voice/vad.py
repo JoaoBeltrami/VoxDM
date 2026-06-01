@@ -13,7 +13,7 @@ Uso típico:
 """
 
 import asyncio
-from typing import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable
 
 import numpy as np
 import structlog

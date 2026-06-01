@@ -95,10 +95,10 @@ class VoiceRunner:
         location_nome: str = "Tharnvik",
         max_iteracoes: int | None = None,
     ) -> None:
-        from engine.voice.tts import TTSEngine
         from engine.llm.groq_client import GroqClient
         from engine.memory.context_builder import ContextBuilder
         from engine.memory.working_memory import WorkingMemory
+        from engine.voice.tts import TTSEngine
 
         self._tts = TTSEngine()
         self._groq = GroqClient()
@@ -156,9 +156,9 @@ class VoiceRunner:
             (resposta_completa, latencia_total_ms, primeiro_audio_ms)
             primeiro_audio_ms = -1 se nenhum chunk de áudio foi gerado.
         """
-        from engine.voice.language import detectar_idioma
         from engine.llm.prompt_builder import montar_mensagens
         from engine.telemetry import emit as _emit
+        from engine.voice.language import detectar_idioma
 
         t0 = time.perf_counter()
         idioma = detectar_idioma(texto)
@@ -258,8 +258,8 @@ class VoiceRunner:
 
     async def run(self) -> None:
         """Loop interativo: escuta o microfone e processa cada utterance."""
-        from engine.voice.stt import STTEngine
         from engine.telemetry import purge_old
+        from engine.voice.stt import STTEngine
 
         purge_old()
         log.info(
@@ -319,8 +319,8 @@ def _relatorio(latencias: list[int], primeiros_audios: list[int]) -> None:
 
 async def _modo_tts(texto: str) -> None:
     """Sintetiza texto diretamente — útil para validar pronúncias sem microfone."""
-    from engine.voice.tts import TTSEngine
     from engine.voice.language import detectar_idioma
+    from engine.voice.tts import TTSEngine
 
     tts = TTSEngine()
     idioma = detectar_idioma(texto)

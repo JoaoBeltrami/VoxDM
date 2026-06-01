@@ -21,6 +21,6 @@ Exemplo:
 """
 
 from engine.auth.identity import Owner, is_admin
-from engine.auth.jwt_validator import validar_jwt_cf, JWTInvalido
+from engine.auth.jwt_validator import JWTInvalido, validar_jwt_cf
 
 __all__ = ["Owner", "is_admin", "validar_jwt_cf", "JWTInvalido"]
