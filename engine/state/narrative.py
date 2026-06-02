@@ -45,6 +45,12 @@ class NarrativeState:
     pacing_nivel: float = 3.0
     turnos_sem_tensao: int = 0
 
+    # Quantos turnos narrativos seguidos foram roteados para o 8B (LIGHT).
+    # Usado pelo cap anti-robô: o 8B encadeado repete estruturas ("X diz",
+    # clichês), então um 70B periódico reseta o estilo. Ver
+    # escolher_task_type_narrativo em engine/llm/tasks.py.
+    turnos_light_consecutivos: int = 0
+
     # Repetition guard — fatos já narrados
     fatos_ancora: list[str] = field(default_factory=list)
 
@@ -130,6 +136,17 @@ class NarrativeState:
             self.pacing_nivel = max(0.0, self.pacing_nivel - 0.3)
         else:
             self.pacing_nivel = min(10.0, self.pacing_nivel + 0.2)
+
+    def registrar_task_narrativo(self, foi_light: bool) -> None:
+        """Atualiza o contador de turnos LIGHT consecutivos.
+
+        Incrementa quando o turno foi roteado para o 8B (LIGHT); zera quando
+        foi 70B/CLIMAX. Alimenta o cap anti-robô na próxima decisão de routing.
+        """
+        if foi_light:
+            self.turnos_light_consecutivos += 1
+        else:
+            self.turnos_light_consecutivos = 0
 
     # ── Rolling summary ──────────────────────────────────────────────────────
 

@@ -42,6 +42,8 @@ Português brasileiro falado — não traduzido do inglês, não solene de fanta
 - Ação: verbos na frente, tempo presente, pouco adjetivo.
 - Descanso: ritmo lento, detalhes pequenos — cheiro, luz, gesto miúdo.
 
+**Nunca se repita.** Varie como apresenta fala de NPC — nunca abra todo turno com "Fulano diz"; use ação, interrupção ou silêncio antes da fala. Proibido reciclar clichê ("a noite é fria", "o ar pesado", "arrepio na espinha"): imagem já usada nesta sessão não volta.
+
 ---
 
 ## Quatro hábitos inegociáveis.

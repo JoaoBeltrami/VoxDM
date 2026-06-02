@@ -382,6 +382,17 @@ def test_sair_combate_reseta_tensao():
     assert wm.turnos_sem_tensao == 0
 
 
+def test_registrar_task_narrativo_conta_light_consecutivos():
+    # Cap anti-robô: LIGHT incrementa, 70B/CLIMAX zera. Ver tasks.py.
+    wm = _wm()
+    assert wm.turnos_light_consecutivos == 0
+    wm.narrative.registrar_task_narrativo(foi_light=True)
+    wm.narrative.registrar_task_narrativo(foi_light=True)
+    assert wm.turnos_light_consecutivos == 2
+    wm.narrative.registrar_task_narrativo(foi_light=False)
+    assert wm.turnos_light_consecutivos == 0
+
+
 def test_sair_combate_registra_consequencia_com_mortos():
     wm = _wm()
     wm.entrar_combate()
