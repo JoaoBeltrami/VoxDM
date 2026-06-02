@@ -22,6 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Libs de sistema (build de wheels nativas)
+        # pyaudio (transitivo de RealtimeSTT) compila contra portaudio.h, ausente
+        # no runner. Sem GPU/microfone o pacote nao roda nada nos testes, mas
+        # precisa BUILDAR pra instalar. portaudio19-dev fornece o header.
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+
       - name: Instalar uv
         uses: astral-sh/setup-uv@v5
         with:
