@@ -115,30 +115,53 @@ def cascata_para(task: TaskType) -> list[str]:
     return CASCATA_DEFAULT.get(task, _DEFAULT)
 
 
+# Máximo de turnos LIGHT (8B) consecutivos antes de forçar um 70B para
+# "resetar" o estilo. O 8B encadeado repete estruturas ("X diz", clichês de
+# ambientação); um 70B periódico quebra o loop. 2 = no máx. 2 turnos fracos
+# seguidos antes de um turno forte obrigatório.
+MAX_LIGHT_CONSECUTIVOS: Final[int] = 2
+
+
 def escolher_task_type_narrativo(
     em_combate: bool,
     pacing_nivel: float,
     cliffhanger_pendente: bool = False,
     turnos_sem_tensao: int = 0,
+    npc_na_cena: bool = False,
+    light_consecutivos: int = 0,
 ) -> TaskType:
     """Decide qual TaskType usar para o turno narrativo atual.
 
-    Lógica:
-      - Em combate + pacing≥7 OU cliffhanger pendente → CLIMAX (qualidade máxima)
-      - Fora de combate + (pacing ≤ 3.0 OU 3+ turnos sem tensão) → LIGHT (8B)
-      - Default → NARRATIVE (cascata default 70B)
+    Lógica (híbrida — calibração 02/06 pós teste ao vivo):
+      1. Combate + pacing≥7 OU cliffhanger → CLIMAX (qualidade máxima)
+      2. Fora de combate COM NPC na cena → NARRATIVE (70B), nunca 8B: cena
+         social/RP é narrativamente exigente (diálogo, subtexto, voz de
+         personagem), independente do pacing. Pacing mede tensão de COMBATE,
+         não riqueza de cena.
+      3. Filler (exploração sem NPC, pacing baixo ou turnos calmos) → LIGHT (8B),
+         MAS com cap: nunca mais que MAX_LIGHT_CONSECUTIVOS turnos 8B seguidos.
+      4. Default → NARRATIVE (70B)
 
-    Por que isto importa: em sessão de 1h, ~30% dos turnos são "filler" de
-    exploração/social leve onde o 70B é overkill. Rotear para 8B nesses
-    momentos economiza ~25% do TPM, mantendo qualidade nos momentos chave.
+    Por que isto importa: o 1º teste ao vivo (01/06) mostrou o mestre virando
+    robô em cena social longa — o pacing despencava, o router travava no 8B e
+    nunca voltava ao 70B. O 8B repete "X diz" / "a noite é fria". As regras 2
+    e 3 (NPC força 70B + cap consecutivo) atacam exatamente isso, preservando a
+    economia de TPM em exploração genuína sem NPC.
 
-    Calibração 26/05: threshold antigo era pacing ≤ 2.0. Pacing parte de 3.0 e
-    decai apenas -0.3 a cada 3 turnos calmos — precisava de ~30 turnos seguidos
-    sem combate para disparar, o que nunca acontece em sessão real. Subido para
-    3.0 + alternativa de turnos_sem_tensao≥3 (sinal mais direto de filler).
+    `light_consecutivos` é o contador de turnos LIGHT seguidos (vem do
+    NarrativeState); o caller deve atualizá-lo via registrar_task_narrativo().
     """
     if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
         return TaskType.NARRATIVE_CLIMAX
+
+    # RP social: NPC presente puxa qualidade máxima, mesmo com pacing baixo.
+    if not em_combate and npc_na_cena:
+        return TaskType.NARRATIVE
+
     if not em_combate and (pacing_nivel <= 3.0 or turnos_sem_tensao >= 3):
+        # Cap anti-robô: força um 70B periódico para resetar o estilo do 8B.
+        if light_consecutivos >= MAX_LIGHT_CONSECUTIVOS:
+            return TaskType.NARRATIVE
         return TaskType.NARRATIVE_LIGHT
+
     return TaskType.NARRATIVE

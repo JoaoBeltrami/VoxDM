@@ -435,6 +435,11 @@ class WorkingMemory:
     def turnos_sem_tensao(self, v: int) -> None: self.narrative.turnos_sem_tensao = v
 
     @property
+    def turnos_light_consecutivos(self) -> int: return self.narrative.turnos_light_consecutivos
+    @turnos_light_consecutivos.setter
+    def turnos_light_consecutivos(self, v: int) -> None: self.narrative.turnos_light_consecutivos = v
+
+    @property
     def fatos_ancora(self) -> list[str]: return self.narrative.fatos_ancora
     @fatos_ancora.setter
     def fatos_ancora(self, v: list[str]) -> None: self.narrative.fatos_ancora = v

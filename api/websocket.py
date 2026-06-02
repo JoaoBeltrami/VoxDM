@@ -1352,10 +1352,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 pacing_nivel=sessao.working_mem.pacing_nivel,
                 cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
                 turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
+                npc_na_cena=bool(sessao.working_mem.npcs_presentes),
+                light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
+            )
+            # Atualiza o cap anti-robô: conta turnos LIGHT (8B) seguidos para
+            # que a próxima decisão force um 70B periódico e quebre o loop.
+            sessao.working_mem.narrative.registrar_task_narrativo(
+                _task_turno == TaskType.NARRATIVE_LIGHT
             )
             log.info("task_type_escolhido", task=_task_turno.value,
                      em_combate=sessao.working_mem.em_combate,
                      pacing=round(sessao.working_mem.pacing_nivel, 1),
+                     npc_na_cena=bool(sessao.working_mem.npcs_presentes),
+                     light_seguidos=sessao.working_mem.turnos_light_consecutivos,
                      session_id=session_id)
 
             try:

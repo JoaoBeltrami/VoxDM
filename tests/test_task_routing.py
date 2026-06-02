@@ -74,6 +74,60 @@ class TestEscolherTaskTypeNarrativo:
         assert escolher_task_type_narrativo(em_combate=False, pacing_nivel=3.0) == TaskType.NARRATIVE_LIGHT
 
 
+class TestHibridoQualidadeMestre:
+    """Calibração 02/06 — NPC na cena força 70B + cap anti-robô no 8B.
+
+    Origem: 1º teste ao vivo (01/06) — mestre virou robô em cena social longa,
+    travado no 8B. Ver memory/teste_ao_vivo_01062026.md (CONTEXT-ROT-8B).
+    """
+
+    def test_npc_na_cena_forca_70b_mesmo_com_pacing_baixo(self):
+        # Cena social/RP: NPC presente puxa qualidade máxima, nunca 8B.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, npc_na_cena=True
+        ) == TaskType.NARRATIVE
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=0.2, npc_na_cena=True
+        ) == TaskType.NARRATIVE
+
+    def test_npc_na_cena_forca_70b_mesmo_com_turnos_sem_tensao(self):
+        # O caso exato do bug: pacing despencou em cena social longa.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=1.0, turnos_sem_tensao=10, npc_na_cena=True
+        ) == TaskType.NARRATIVE
+
+    def test_sem_npc_ainda_vira_light(self):
+        # Exploração genuína sem NPC: economia de TPM preservada.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, npc_na_cena=False
+        ) == TaskType.NARRATIVE_LIGHT
+
+    def test_cap_forca_70b_apos_light_consecutivos(self):
+        # 2 turnos LIGHT seguidos → o 3º é forçado a 70B (reset de estilo).
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, light_consecutivos=2
+        ) == TaskType.NARRATIVE
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, light_consecutivos=5
+        ) == TaskType.NARRATIVE
+
+    def test_cap_permite_light_abaixo_do_teto(self):
+        # 0 ou 1 LIGHT seguidos ainda permite mais um LIGHT.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, light_consecutivos=0
+        ) == TaskType.NARRATIVE_LIGHT
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0, light_consecutivos=1
+        ) == TaskType.NARRATIVE_LIGHT
+
+    def test_cliffhanger_vence_npc_e_cap(self):
+        # CLIMAX tem prioridade sobre tudo.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0,
+            cliffhanger_pendente=True, npc_na_cena=True, light_consecutivos=5,
+        ) == TaskType.NARRATIVE_CLIMAX
+
+
 class TestCascataPara:
     def test_narrative_light_prefere_8b(self):
         cascata = cascata_para(TaskType.NARRATIVE_LIGHT)
