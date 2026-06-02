@@ -852,6 +852,25 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             companions=dict(wm.companions),
             rodada_esperada=wm.rodada_combate,
             pacing_nivel=wm.pacing_nivel,
+            # Bug de continuidade (caça 02/06): a abertura tambem roda ao CONTINUAR
+            # uma sessao. Se ela parou EM combate, o frontend abria sem saber —
+            # sem CombatTracker/InitiativeBar/vinheta, apesar de wm.em_combate=True.
+            # Estes 4 campos restauram o estado de combate na continuacao. (Em
+            # sessao nova sao falsos/vazios, sem efeito colateral.)
+            em_combate=wm.em_combate,
+            inimigos_combate=dict(wm.inimigos_combate),
+            rodada_combate=wm.rodada_combate,
+            iniciativa_ordem=(
+                [
+                    {
+                        "id": t.id, "nome": t.nome, "tipo": t.tipo,
+                        "iniciativa": t.iniciativa, "turno_atual": t.turno_atual,
+                        "morto": t.morto, "hp_atual": t.hp_atual, "hp_max": t.hp_max,
+                    }
+                    for t in wm.calcular_ordem_iniciativa()
+                ]
+                if wm.em_combate else []
+            ),
         ).model_dump_json()
     )
 

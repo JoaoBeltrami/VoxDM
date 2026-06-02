@@ -437,3 +437,17 @@ def test_cliffhanger_limpo_apos_uso_na_abertura():
     assert 'cliffhanger_pendente = ""' in src, (
         "Cliffhanger deve ser limpo (one-shot) após ser injetado no intro_user"
     )
+
+
+def test_abertura_envia_estado_de_combate():
+    """A abertura (usada tambem ao CONTINUAR sessao) deve enviar o estado de
+    combate. Bug da caca 02/06: continuar uma sessao parada EM combate abria sem
+    CombatTracker/InitiativeBar porque o payload da abertura omitia esses campos."""
+    import inspect
+
+    from api.websocket import _enviar_abertura
+    src = inspect.getsource(_enviar_abertura)
+    for campo in ("em_combate=", "inimigos_combate=", "rodada_combate=", "iniciativa_ordem="):
+        assert campo in src, (
+            f"abertura deve enviar {campo} para restaurar combate na continuacao"
+        )
