@@ -1477,7 +1477,7 @@ export default function Home() {
         })()}
 
         <div className="relative">
-          <VoxOrb estado={orbEstado} tamanho={64} />
+          <VoxOrb estado={orbEstado} tamanho={52} />
           {respostaAtual && (
             <button
               onClick={pararAudio}

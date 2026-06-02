@@ -59,7 +59,7 @@ export function AppShell({
   dock,
   overlays,
   backgroundUrl,
-  storageKey = "voxdm:appshell:sizes",
+  storageKey = "voxdm:appshell:sizes:v2",
 }: AppShellProps) {
   const temLeft = !!left;
   const temRight = !!right;
@@ -67,8 +67,10 @@ export function AppShell({
   // Default sizes (esquerda, centro, direita) — calibrados pra ultra-wide
   // mantendo o chat dominante. Persistem em localStorage automaticamente
   // via autoSaveId.
-  const defaultLeft = 22;
-  const defaultRight = 26;
+  // Calibração 02/06 (feedback "tela maior"): painéis laterais mais magros pra
+  // o centro (narração) dominar ~60% da largura em vez de ~52%.
+  const defaultLeft = 18;
+  const defaultRight = 22;
   const defaultCenter = 100 - (temLeft ? defaultLeft : 0) - (temRight ? defaultRight : 0);
 
   // BUG FIX (teste 01/06): o react-resizable-panels corrompe o layout quando o
