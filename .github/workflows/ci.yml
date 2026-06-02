@@ -1,6 +1,6 @@
 name: CI
 
-# Qualidade: lint (ruff) + testes (pytest) + type-check do frontend (tsc).
+# Qualidade: lint (ruff) + testes (pytest) no backend; next build (tsc+lint+compile) no frontend.
 # Roda offline — conftest mocka todas as I/O externas e seta VOXDM_SKIP_WARMUP.
 # NAO precisa de GPU nem de secrets reais.
 
@@ -31,30 +31,39 @@ jobs:
         run: uv python install 3.12
 
       - name: Lint (ruff)
-        # Lint nao bloqueia o merge por ora (so reporta) — o codebase tem ~39
-        # F401 de re-export legitimo. Quando zerarmos os avisos, trocar para
-        # bloqueante removendo o `|| true`.
+        # Lint nao bloqueia o merge por ora (so reporta) — restam erros B904/F401
+        # a triar. Quando zerados, remover o `|| true` pra virar bloqueante.
         run: uvx ruff check . || true
 
+      - name: Criar venv
+        run: uv venv
+
+      - name: Instalar torch CPU
+        # Stack ML (sentence-transformers/RealtimeSTT/kokoro) exige torch. No
+        # Linux o default seria a build CUDA (~2.5GB, inviavel no runner) — entao
+        # forcamos a build CPU pelo index oficial do PyTorch. Os testes nao usam
+        # GPU (VOXDM_SKIP_WARMUP + nenhum teste instancia STT/embedder real).
+        run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+
       - name: Instalar deps
-        run: uv pip install --system -r requirements.txt
+        # torch ja satisfeito pelo passo anterior; o resto vem do requirements.
+        run: uv pip install -r requirements.txt
 
       - name: Testes (pytest)
         env:
-          # Valores fake — conftest ja faz setdefault, mas reforcamos aqui.
           VOXDM_SKIP_WARMUP: "1"
-        run: uv run --no-project pytest tests/ -q
+        run: uv run pytest tests/ -q
 
   frontend:
-    name: Frontend — tsc
+    name: Frontend — build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Node 20
+      - name: Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -62,6 +71,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Type-check (tsc)
+      - name: Build (tsc + lint + compile)
+        # next build inclui tsc + ESLint + compilacao. Pega rules-of-hooks que
+        # o `tsc --noEmit` sozinho NAO pega (foi o debito que quebrou producao
+        # sem ninguem ver — ver memory/debito_next_build_lint.md). Agora bloqueia.
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: npm run build
