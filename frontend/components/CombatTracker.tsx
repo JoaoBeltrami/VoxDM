@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Avatar, Button, Card, Chip, Panel } from "@/components/ui";
+import { Avatar, Button, Chip, Panel } from "@/components/ui";
 
 /**
  * Tracker de combate — barras narrativas + ataque rápido por inimigo.

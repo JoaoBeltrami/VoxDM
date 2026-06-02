@@ -12,7 +12,7 @@
 
 import type { TurnoHistorico } from "@/hooks/useGameSession";
 import { TurnoResumo } from "@/components/TurnoResumo";
-import { Avatar, Card, cn } from "@/components/ui";
+import { Avatar, Card } from "@/components/ui";
 
 interface Props {
   historico: TurnoHistorico[];

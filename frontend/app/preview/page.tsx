@@ -67,7 +67,7 @@ const MENSAGENS_MOCK = [
 ];
 
 export default function PreviewPage() {
-  const { mode, setMode, cycleMode } = useViewMode();
+  const { mode, setMode } = useViewMode();
   const [esperandoRolagem, setEsperandoRolagem] = useState(true);
   const [orbState, setOrbState] = useState<OrbState>("idle");
 

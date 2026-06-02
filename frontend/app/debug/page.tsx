@@ -329,7 +329,7 @@ function PacingMeter({ value }: { value: number }) {
   );
 }
 
-function CompanionCard({ id, data }: { id: string; data: CompanionData }) {
+function CompanionCard({ data }: { data: CompanionData }) {
   const hp = data.hp ?? 0;
   const hpMax = data.hp_max ?? 1;
   const pct = hpMax > 0 ? (hp / hpMax) * 100 : 0;
@@ -701,7 +701,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
             <Section title="Party" icon="🛡">
               <div className="space-y-2">
                 {Object.entries(wm.companions).map(([id, c]) => (
-                  <CompanionCard key={id} id={id} data={c} />
+                  <CompanionCard key={id} data={c} />
                 ))}
               </div>
             </Section>
