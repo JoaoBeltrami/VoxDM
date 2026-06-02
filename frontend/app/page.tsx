@@ -22,8 +22,8 @@ import { AppShell } from "@/components/AppShell";
 import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/useCombatSounds";
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
-import type { PersonagemConfig, SessaoListaItem } from "@/lib/api";
-import { trocarLlmBackend, obterIdentidade, checkpointSessao } from "@/lib/api";
+import type { PersonagemConfig, SessaoListaItem, PersonagemSalvoItem } from "@/lib/api";
+import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos } from "@/lib/api";
 
 // Vozes pt-BR disponíveis no Edge TTS — curada manualmente
 const VOZES_PTBR = [
@@ -242,6 +242,43 @@ function extrairMotivoRolagem(texto: string): { motivo: string; atributo: string
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
 
+// Frases temáticas da tela de transição — rotacionam enquanto o mundo carrega.
+const FRASES_TRANSICAO = [
+  "O mundo desperta…",
+  "Tecendo os fios do destino…",
+  "Acendendo as tochas…",
+  "O Mestre prepara a cena…",
+  "Rolando os dados do destino…",
+  "As sombras se acomodam…",
+];
+
+/** Tela de transição imersiva (gamificação) — VoxOrb pulsando + frase temática
+ *  rotativa. Cobre o gap entre "Entrar no Mundo" e a primeira fala do mestre
+ *  com clima, em vez de um spinner seco. */
+function TelaTransicao() {
+  const [frase, setFrase] = useState(
+    () => FRASES_TRANSICAO[Math.floor(Math.random() * FRASES_TRANSICAO.length)],
+  );
+  useEffect(() => {
+    const t = setInterval(() => {
+      setFrase(FRASES_TRANSICAO[Math.floor(Math.random() * FRASES_TRANSICAO.length)]);
+    }, 2600);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-950">
+      <VoxOrb estado="processando" tamanho={120} />
+      <p
+        key={frase}
+        className="animate-[fade-in_700ms_ease-out] text-center text-lg italic text-violet-300/80"
+        style={{ fontFamily: '"Cinzel", "Cormorant Garamond", serif' }}
+      >
+        {frase}
+      </p>
+    </main>
+  );
+}
+
 /** UX-2: toast discreto quando a cascata LLM cai do Groq pro provider de backup.
  *  Auto-dismiss após 5s; clicável para fechar imediatamente. */
 function CascadeToast({ provider, onDismiss }: { provider: string; onDismiss: () => void }) {
@@ -351,6 +388,11 @@ export default function Home() {
     if (!conectado) return;
     setSessionEndStats({ xp, gold, inventoryCount: inventory.length, fiosSoltos: [...fiosSoltos], consequencias: [...consequencias], turnosJogados: historico.length });
     desconectar();
+    // Bug do teste 01/06: ao encerrar, o jogo caía na tela em que `tela` tinha
+    // ficado (ex: "nova-sessao" → CharacterForm), feio pra quem só quer voltar.
+    // Forçar "menu" garante que, ao fechar a tela de stats, o fundo é o menu
+    // inicial (Nova / Continuar / Opções).
+    setTela("menu");
     if (sessionEndTimerRef.current) clearTimeout(sessionEndTimerRef.current);
     sessionEndTimerRef.current = setTimeout(() => setSessionEndStats(null), 8000);
   }, [conectado, xp, gold, inventory, fiosSoltos, consequencias, historico, desconectar]);
@@ -418,10 +460,17 @@ export default function Home() {
     }).catch(() => {});
   }, []);
 
-  // Session input removido — servidor gera UUID v4. Mantido como string vazia
-  // para compat com handleConectar que ainda passa sessionInput ao conectar().
-  const [sessionInput, setSessionInput] = useState("");
+  // Session input removido da UI (gamificação 01/06) — servidor gera UUID v4.
   const [personagem, setPersonagem] = useState<PersonagemConfig>({});
+
+  // Gamificação: save mais recente, pra oferecer "Continuar" em destaque no menu.
+  // Carregado na montagem; null = jogador sem save (menu mostra só Nova Aventura).
+  const [saveRecente, setSaveRecente] = useState<PersonagemSalvoItem | null>(null);
+  useEffect(() => {
+    listarPersonagensSalvos()
+      .then(lista => { if (lista.length > 0) setSaveRecente(lista[0]); })
+      .catch(() => {});
+  }, []);
 
   // Quando o servidor restaura a identidade de uma sessão anterior, aplica no estado
   // local para que CharacterSheet, magias e nome no header apareçam corretamente
@@ -753,7 +802,6 @@ export default function Home() {
 
   const handleContinuarSessao = useCallback((sessao: SessaoListaItem) => {
     setSessaoSelecionada(sessao);
-    setSessionInput(sessao.session_id);
     // Fase C: bypass direto do CharacterForm — o servidor restaura o personagem.
     // criarSessao + WS são iniciados imediatamente. Se personagem_restaurado vier
     // não-null do servidor, a ficha é populada pelo useEffect abaixo. Se vier null
@@ -778,8 +826,10 @@ export default function Home() {
   }, [conectar, vozSelecionada, dmProfile, rollVisibility]);
 
   const handleConectar = useCallback(() => {
-    conectar(sessionInput || "sess-01", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility });
-  }, [conectar, sessionInput, personagem, vozSelecionada, dmProfile, rollVisibility]);
+    // 1º arg ignorado pelo conectar (servidor gera o UUID). Campo manual de ID
+    // foi removido da UI na gamificação — passamos "" explicitamente.
+    conectar("", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility });
+  }, [conectar, personagem, vozSelecionada, dmProfile, rollVisibility]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
     if (!sessaoSelecionada) return;
@@ -837,6 +887,19 @@ export default function Home() {
             style={{
               backgroundImage: `linear-gradient(${sceneMood.overlayColor}, ${sceneMood.overlayColor})`,
               boxShadow: `inset 0 0 ${Math.round(120 * (0.4 + sceneMood.vignetteIntensity))}px -30px rgba(0,0,0,0.55)`,
+            }}
+          />
+        )}
+
+        {/* Combate — vinheta vermelha. Mais intensa no turno do inimigo (perigo).
+            Era boxShadow no <main> antigo; reconectada como overlay no AppShell. */}
+        {emCombate && (
+          <div
+            className="pointer-events-none absolute inset-0 z-0 transition-[box-shadow] duration-500"
+            style={{
+              boxShadow: ehTurnoInimigo
+                ? "inset 0 0 60px -5px rgba(200,15,15,0.7), inset 0 0 160px -30px rgba(200,15,15,0.45)"
+                : "inset 0 0 120px -30px rgba(127,29,29,0.55)",
             }}
           />
         )}
@@ -1622,6 +1685,14 @@ export default function Home() {
     );
   }
 
+  // ── Tela de transição imersiva — cobre o gap de conexão/abertura ───────────
+  // Aparece quando `carregando` (criando sessão + WS + primeira abertura do
+  // mestre) mas ainda não conectou. VoxOrb pulsando + frase temática rotativa
+  // dão clima de "o mundo despertando" em vez de um spinner seco.
+  if (carregando && !conectado) {
+    return <TelaTransicao />;
+  }
+
   // ── Menu inicial ──────────────────────────────────────────────────────────
   if (tela === "menu") {
     return (
@@ -1635,21 +1706,45 @@ export default function Home() {
         </div>
 
         <div className="flex w-full max-w-xs flex-col gap-3">
-          <button
-            onClick={() => setTela("nova-sessao")}
-            className="w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95"
-          >
-            Nova Sessão
-          </button>
-          <button
-            onClick={() => setTela("carregar-sessao")}
-            className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 py-4 text-base font-semibold text-zinc-200 transition hover:border-violet-500 hover:bg-zinc-800 active:scale-95"
-          >
-            Carregar Sessão
-          </button>
+          {/* Gamificação: se há save, "Continuar" em destaque retoma o mais
+              recente direto (bypass do CharacterForm via handleContinuarPersonagem). */}
+          {saveRecente ? (
+            <>
+              <button
+                onClick={() => handleContinuarPersonagem(saveRecente.session_id)}
+                className="group w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg shadow-violet-900/40 transition hover:bg-violet-500 active:scale-95"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <span>▶ Continuar</span>
+                </span>
+                <span className="mt-0.5 block text-xs font-normal text-violet-200/80">
+                  {saveRecente.player_name} · {saveRecente.player_class} nv {saveRecente.player_level}
+                </span>
+              </button>
+              <button
+                onClick={() => setTela("nova-sessao")}
+                className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 py-3.5 text-base font-semibold text-zinc-200 transition hover:border-violet-500 hover:bg-zinc-800 active:scale-95"
+              >
+                Nova Aventura
+              </button>
+              <button
+                onClick={() => setTela("carregar-sessao")}
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 active:scale-95"
+              >
+                Carregar outra sessão
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setTela("nova-sessao")}
+              className="w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95"
+            >
+              Nova Aventura
+            </button>
+          )}
           <button
             onClick={() => setTela("opcoes")}
-            className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-4 text-base font-semibold text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300 active:scale-95"
+            className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300 active:scale-95"
           >
             Opções
           </button>
@@ -1675,16 +1770,6 @@ export default function Home() {
           </div>
 
           <CharacterForm onChange={setPersonagem} />
-
-          <div className="space-y-1 text-left">
-            <label className="block text-xs text-zinc-600">ID da sessão</label>
-            <input
-              value={sessionInput}
-              onChange={e => setSessionInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-              onKeyDown={e => { if (e.key === "Enter") handleConectar(); }}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-500 outline-none focus:border-zinc-600"
-            />
-          </div>
 
           {erro && (
             <p className="rounded-lg bg-red-900/40 px-3 py-2 text-xs text-red-300">{erro}</p>

@@ -71,6 +71,13 @@ export function AppShell({
   const defaultRight = 26;
   const defaultCenter = 100 - (temLeft ? defaultLeft : 0) - (temRight ? defaultRight : 0);
 
+  // BUG FIX (teste 01/06): o react-resizable-panels corrompe o layout quando o
+  // NÚMERO de Panels muda com o mesmo autoSaveId — ao entrar em cinema mode
+  // (left=undefined), os tamanhos salvos pra 3 painéis não batiam com 2 e o
+  // center colapsava ("chat sumiu do nada"). Solução: o storageKey varia com a
+  // topologia (quantos painéis existem), então cada layout tem seu estado salvo.
+  const layoutKey = `${storageKey}:${temLeft ? "L" : ""}${temRight ? "R" : ""}`;
+
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-vox-bg-base text-vox-text-primary">
       {/* Background dinâmico — scene_image renderiza como blur de fundo full-screen */}
@@ -101,7 +108,7 @@ export function AppShell({
 
       {/* Grid de 3 colunas redimensionáveis */}
       <div className="relative z-0 flex-1 overflow-hidden">
-        <PanelGroup direction="horizontal" autoSaveId={storageKey} className="h-full">
+        <PanelGroup key={layoutKey} direction="horizontal" autoSaveId={layoutKey} className="h-full">
           {temLeft && (
             <>
               <Panel defaultSize={defaultLeft} minSize={15} maxSize={40} className="flex flex-col overflow-hidden">

@@ -419,19 +419,28 @@ def test_fim_combate_llm_nao_dispara_em_combate_normal():
 # ── Testes: timeout de combate (combate eterno) ──────────────────────────────
 
 
-def test_combate_encerra_quando_sem_inimigos_vivos_por_duas_rodadas():
-    """Combate ativo sem inimigos vivos por 2+ rodadas é encerrado."""
+def test_combate_encerra_quando_sem_inimigos_vivos_por_quatro_rodadas():
+    """Combate ativo sem NENHUM inimigo registrado encerra só na 4ª rodada.
+
+    Bug do teste ao vivo 01/06: threshold=2 encerrava combate legítimo na 1ª
+    vantagem do jogador quando a regex de alvo não capturava o inimigo. Subido
+    pra 4 — dá fôlego ao combate genérico/sem-alvo-nomeado.
+    """
     from api.turn_pipeline import aplicar_pos_turno
     from engine.memory.working_memory import WorkingMemory
 
     wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
     wm.entrar_combate()
-    # Combate ativo sem inimigos_combate registrados
-    aplicar_pos_turno(wm, "olho ao redor", "Você não vê ninguém.")
+    # Combate ativo sem inimigos_combate registrados — 3 rodadas NÃO encerram.
+    aplicar_pos_turno(wm, "ataco todo mundo", "Você gira a lâmina.")
     assert wm.em_combate is True
     assert wm.rodadas_sem_acao_inimigo == 1
-    aplicar_pos_turno(wm, "continuo procurando", "Nada se move.")
-    assert wm.em_combate is False  # encerrou na 2ª
+    aplicar_pos_turno(wm, "continuo atacando", "A poeira sobe.")
+    assert wm.em_combate is True
+    aplicar_pos_turno(wm, "avanço", "Gritos ecoam.")
+    assert wm.em_combate is True  # 3ª — ainda em combate
+    aplicar_pos_turno(wm, "sigo lutando", "Silêncio.")
+    assert wm.em_combate is False  # encerrou na 4ª
 
 
 def test_combate_encerra_quando_inimigos_nao_mencionados_por_tres_rodadas():
