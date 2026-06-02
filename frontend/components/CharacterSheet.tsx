@@ -182,8 +182,13 @@ export function CharacterSheet({
           int_score = 10, wis_score = 10, cha_score = 10,
           skill_profs = [], save_profs = [] } = personagem;
 
+  // BUG (rules-of-hooks): este early return vivia AQUI, no meio dos ~40 hooks
+  // abaixo — violava as regras (hooks chamados condicionalmente). Como o
+  // personagem começa vazio e é populado pelo servidor (temPersonagem
+  // false→true), o React quebraria com "rendered fewer hooks than expected".
+  // O return foi movido pra DEPOIS de todos os hooks (antes do JSX). Esta flag
+  // é só calculada aqui; o return acontece lá embaixo.
   const temPersonagem = !!(player_name || player_race || player_class);
-  if (!temPersonagem) return null;
 
   const hpMax = player_hp_max ?? 0;
   const profBon = Math.floor((player_level - 1) / 4) + 2;
@@ -494,6 +499,9 @@ export function CharacterSheet({
     setDiaDaJornada(novo);
     if (typeof window !== "undefined") localStorage.setItem(_diaKey, String(novo));
   };
+
+  // Early return movido pra cá (depois de TODOS os hooks) — ver nota acima.
+  if (!temPersonagem) return null;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
