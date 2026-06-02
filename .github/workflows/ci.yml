@@ -1,8 +1,10 @@
 name: CI
 
-# Qualidade: lint (ruff) + testes (pytest) no backend; next build (tsc+lint+compile) no frontend.
-# Roda offline — conftest mocka todas as I/O externas e seta VOXDM_SKIP_WARMUP.
-# NAO precisa de GPU nem de secrets reais.
+# Qualidade: lint (ruff) + testes (pytest) no backend; next build no frontend.
+# Roda em windows-latest porque o ambiente REAL do VoxDM é Windows (GPU + áudio
+# diretos, sem Docker — ver CLAUDE.md). Testar no SO de produção evita os
+# problemas-fantasma do Ubuntu (PEP-668, portaudio.h, torch-CUDA) que não
+# existem aqui. Offline — conftest mocka I/O externa e seta VOXDM_SKIP_WARMUP.
 
 on:
   push:
@@ -17,16 +19,10 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend — ruff + pytest
-    runs-on: ubuntu-latest
+    name: Backend — ruff + pytest (Windows)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Libs de sistema (build de wheels nativas)
-        # pyaudio (transitivo de RealtimeSTT) compila contra portaudio.h, ausente
-        # no runner. Sem GPU/microfone o pacote nao roda nada nos testes, mas
-        # precisa BUILDAR pra instalar. portaudio19-dev fornece o header.
-        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@v5
@@ -39,20 +35,17 @@ jobs:
       - name: Lint (ruff)
         # Lint nao bloqueia o merge por ora (so reporta) — restam erros B904/F401
         # a triar. Quando zerados, remover o `|| true` pra virar bloqueante.
+        # shell: bash explicito — no Windows o default e PowerShell, onde `|| true`
+        # nao funciona. Git Bash vem instalado no windows-latest.
+        shell: bash
         run: uvx ruff check . || true
 
       - name: Criar venv
         run: uv venv
 
-      - name: Instalar torch CPU
-        # Stack ML (sentence-transformers/RealtimeSTT/kokoro) exige torch. No
-        # Linux o default seria a build CUDA (~2.5GB, inviavel no runner) — entao
-        # forcamos a build CPU pelo index oficial do PyTorch. Os testes nao usam
-        # GPU (VOXDM_SKIP_WARMUP + nenhum teste instancia STT/embedder real).
-        run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-
       - name: Instalar deps
-        # torch ja satisfeito pelo passo anterior; o resto vem do requirements.
+        # No Windows: torch default ja e CPU (sem index especial), pyaudio tem
+        # wheel pronto (sem build/portaudio), e venv evita PEP-668. Simples.
         run: uv pip install -r requirements.txt
 
       - name: Testes (pytest)
@@ -61,8 +54,8 @@ jobs:
         run: uv run pytest tests/ -q
 
   frontend:
-    name: Frontend — build
-    runs-on: ubuntu-latest
+    name: Frontend — build (Windows)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
