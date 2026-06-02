@@ -514,9 +514,15 @@ def aplicar_pos_turno(
             if d.get("estado") not in ("morto",)
         ]
         if not vivos:
-            # Combate ativo sem inimigos vivos registrados — aguarda 2 rodadas
+            # Combate ativo sem NENHUM inimigo registrado. Isso acontece em dois
+            # casos: (a) combate fantasma de verdade (cena migrou pra fora), ou
+            # (b) combate legítimo cujo alvo a regra _RE_ALVO_ATAQUE não capturou
+            # ("dei tapa em todo mundo"). Bug do teste 01/06: threshold=2 punia o
+            # caso (b) — combate encerrava na 1ª vantagem do jogador. Subido pra 4
+            # rodadas pra dar fôlego ao combate genérico/sem-alvo-nomeado. Combate
+            # fantasma real ainda encerra, só um pouco mais tarde (custo aceitável).
             working_mem.rodadas_sem_acao_inimigo += 1
-            if working_mem.rodadas_sem_acao_inimigo >= 2:
+            if working_mem.rodadas_sem_acao_inimigo >= 4:
                 working_mem.sair_combate()
                 log.info("combate_encerrado_sem_inimigos_vivos")
         else:

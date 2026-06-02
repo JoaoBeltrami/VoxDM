@@ -351,6 +351,11 @@ export default function Home() {
     if (!conectado) return;
     setSessionEndStats({ xp, gold, inventoryCount: inventory.length, fiosSoltos: [...fiosSoltos], consequencias: [...consequencias], turnosJogados: historico.length });
     desconectar();
+    // Bug do teste 01/06: ao encerrar, o jogo caía na tela em que `tela` tinha
+    // ficado (ex: "nova-sessao" → CharacterForm), feio pra quem só quer voltar.
+    // Forçar "menu" garante que, ao fechar a tela de stats, o fundo é o menu
+    // inicial (Nova / Continuar / Opções).
+    setTela("menu");
     if (sessionEndTimerRef.current) clearTimeout(sessionEndTimerRef.current);
     sessionEndTimerRef.current = setTimeout(() => setSessionEndStats(null), 8000);
   }, [conectado, xp, gold, inventory, fiosSoltos, consequencias, historico, desconectar]);
