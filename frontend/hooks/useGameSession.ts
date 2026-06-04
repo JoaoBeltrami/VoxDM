@@ -424,6 +424,16 @@ export function useGameSession() {
       }
 
       if (msg.tipo === "token" && msg.conteudo) {
+        // APPSHELL-KARAOKE-1 (teste 01/06): a abertura e o recap NÃO passam por
+        // enviarComando, então isProcessing fica false e o karaokê
+        // (aguardarAudio=isProcessing em page.tsx) não mascara o texto no 1º
+        // prompt — os tokens (~30/s) despejam na tela antes do TTS começar
+        // (800ms-1.5s depois) e o jogador lê tudo antes de ouvir. Armar o sinal
+        // ao primeiro token de QUALQUER stream não iniciado pelo jogador faz o
+        // mask funcionar já na abertura. Só dispara aqui (turnos normais já têm
+        // isProcessing=true via enviarComando); o handler tipo="fim" reseta, e o
+        // onclose/erro também — sem risco de travar o jogador.
+        if (!isProcessingRef.current) setIsProcessing(true);
         textoAtualRef.current += msg.conteudo;
         // Strip de marcadores [Q:...] e [LAMPEJO:...] — nunca visíveis na bolha
         // principal. Lampejos chegam como mensagem própria `tipo: "lampejo"`.
