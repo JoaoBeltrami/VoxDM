@@ -473,6 +473,111 @@ def test_combate_persiste_quando_inimigo_mencionado():
     assert wm.em_combate is True
 
 
+def test_inimigo_marker_registra_e_entra_combate():
+    """[INIMIGO: id|nome] registra combatente e entra em combate se preciso.
+
+    Resolve COMBAT-EARLY-END (teste 01/06): ataque genérico sem alvo nomeado
+    deixava inimigos_combate vazio. Agora o LLM declara os inimigos que narra.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    assert wm.em_combate is False
+    aplicar_pos_turno(
+        wm,
+        "ataco todos eles",
+        "Tres goblins saltam das sombras. "
+        "[INIMIGO: goblin-1|Goblin Batedor] [INIMIGO: goblin-2|Goblin Arqueiro]",
+    )
+    assert wm.em_combate is True
+    assert "goblin-1" in wm.inimigos_combate
+    assert "goblin-2" in wm.inimigos_combate
+    assert wm.inimigos_combate["goblin-1"]["nome"] == "Goblin Batedor"
+    assert wm.inimigos_combate["goblin-1"]["estado"] == "intacto"
+
+
+def test_inimigo_marker_srd_index_opcional():
+    """[INIMIGO: id|nome|srd-index] guarda o índice SRD pro bestiário (estado fica intacto)."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    aplicar_pos_turno(wm, "observo", "Um ogro avança. [INIMIGO: chefe|Grok, o Esmagador|ogre]")
+    assert wm.inimigos_combate["chefe"]["srd_index"] == "ogre"
+    assert wm.inimigos_combate["chefe"]["estado"] == "intacto"
+    assert wm.inimigos_combate["chefe"]["nome"] == "Grok, o Esmagador"
+
+
+def test_inimigo_marker_redeclaracao_preserva_estado():
+    """Re-declarar um inimigo já ferido não o reseta pra intacto; só completa o srd_index."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    aplicar_pos_turno(wm, "ataco", "Surge um ogro. [INIMIGO: ogro-1|Ogro]")
+    wm.atualizar_estado_inimigo("ogro-1", "gravemente ferido")
+    # LLM re-declara o mesmo inimigo num turno seguinte, agora com índice SRD
+    aplicar_pos_turno(wm, "ataco de novo", "O ogro resiste. [INIMIGO: ogro-1|Ogro|ogre]")
+    assert wm.inimigos_combate["ogro-1"]["estado"] == "gravemente ferido"  # não resetou
+    assert wm.inimigos_combate["ogro-1"]["srd_index"] == "ogre"  # backfill
+
+
+def test_inimigo_marker_reseta_timeout_de_combate_fantasma():
+    """Declarar inimigo zera rodadas_sem_acao_inimigo — combate genérico não encerra.
+
+    Antes (COMBAT-EARLY-END): "ataco todos" sem alvo nomeado deixava o combate
+    vazio e o guard de combate-fantasma o encerrava. Com o LLM declarando os
+    inimigos via [INIMIGO], o rastreador popula e o contador zera.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    aplicar_pos_turno(wm, "ataco todos", "Voce gira a lamina.")
+    aplicar_pos_turno(wm, "continuo", "A poeira sobe.")
+    assert wm.rodadas_sem_acao_inimigo == 2
+    aplicar_pos_turno(
+        wm,
+        "avanco",
+        "Dois bandidos cercam voce. "
+        "[INIMIGO: bandido-1|Bandido] [INIMIGO: bandido-2|Bandido Lider]",
+    )
+    assert wm.rodadas_sem_acao_inimigo == 0
+    assert wm.em_combate is True
+    assert len(wm.inimigos_combate) == 2
+
+
+def test_inimigo_marker_nao_colide_com_inimigo_morto():
+    """[INIMIGO_MORTO: id] não vira registro; declarar + abater no mesmo turno funciona.
+
+    O registro (step 1c) roda ANTES da morte (step 2a), então um inimigo
+    declarado e morto no mesmo turno já existe quando [INIMIGO_MORTO] casa.
+    """
+    from api.turn_pipeline import _RE_INIMIGO_REGISTRAR, aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    # Não colidem: registro exige ":" logo após INIMIGO + pipe.
+    assert _RE_INIMIGO_REGISTRAR.search("[INIMIGO_MORTO: goblin-1]") is None
+    assert _RE_INIMIGO_REGISTRAR.search("[INIMIGO: goblin-1|Goblin]") is not None
+
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    aplicar_pos_turno(
+        wm,
+        "ataco o primeiro",
+        "Dois esqueletos. O da frente se desfaz. "
+        "[INIMIGO: esqueleto-1|Esqueleto] [INIMIGO: esqueleto-2|Esqueleto Arqueiro] "
+        "[INIMIGO_MORTO: esqueleto-1]",
+    )
+    assert wm.em_combate is True  # sobrevivente mantém o combate
+    assert wm.inimigos_combate["esqueleto-1"]["estado"] == "morto"
+    assert wm.inimigos_combate["esqueleto-2"]["estado"] == "intacto"
+
+
 # ── Testes: _RE_ROLAGEM_VISIVEL — Fase 5.7 ──────────────────────────────────
 
 def test_re_rolagem_visivel_detecta_d20():

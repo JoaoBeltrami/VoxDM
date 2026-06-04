@@ -32,6 +32,11 @@ _ESTADOS_INIMIGO = frozenset(
     {"intacto", "ferido", "gravemente ferido", "incapacitado", "morto"}
 )
 
+# Máximo de fichas SRD injetadas no prompt de combate (dedup por tipo de monstro).
+# Teto de budget: cada ficha compacta ~55 palavras; 3 tipos cobrem a esmagadora
+# maioria dos encontros sem inflar o prompt além do teto de tokens do combate.
+_MAX_FICHAS_PROMPT = 3
+
 
 @dataclass
 class CombatState:
@@ -41,7 +46,9 @@ class CombatState:
     rodada_combate: int = 0
     iniciativa_jogador: int | None = None
 
-    # Inimigos: id → {nome, estado, hp_rel}
+    # Inimigos: id → {nome, estado, hp_rel, srd_index, ficha}
+    # srd_index/ficha são opcionais — preenchidos pelo bestiário quando o monstro
+    # existe no SRD indexado (engine.bestiary).
     inimigos_combate: dict[str, dict[str, str]] = field(default_factory=dict)
 
     # Cache de iniciativa: token_id → valor
@@ -92,13 +99,24 @@ class CombatState:
     # ── Inimigos ─────────────────────────────────────────────────────────────
 
     def registrar_inimigo(
-        self, inimigo_id: str, nome: str, estado: str = "intacto", hp_rel: str = ""
+        self,
+        inimigo_id: str,
+        nome: str,
+        estado: str = "intacto",
+        hp_rel: str = "",
+        srd_index: str = "",
     ) -> None:
-        """Adiciona ou atualiza inimigo no combate atual."""
+        """Adiciona ou atualiza inimigo no combate atual.
+
+        srd_index: índice SRD do monstro (ex: "goblin") para o bestiário puxar a
+        ficha mecânica. A ficha em si (campo "ficha") é preenchida depois, async,
+        por engine.bestiary.enriquecer_fichas_inimigos.
+        """
         self.inimigos_combate[inimigo_id] = {
             "nome": nome,
             "estado": estado if estado in _ESTADOS_INIMIGO else "intacto",
             "hp_rel": hp_rel,
+            "srd_index": srd_index,
         }
 
     def atualizar_estado_inimigo(
@@ -223,6 +241,27 @@ class CombatState:
                 partes_ini.append(desc)
             if partes_ini:
                 linhas.append(f"Inimigos: {', '.join(partes_ini)}")
+
+            # Fichas SRD dos inimigos vivos — dados mecânicos reais (CA/PV/ataques)
+            # pro Mestre narrar com consistência. Dedup por tipo (5 goblins = 1
+            # ficha) e cap em _MAX_FICHAS pra não estourar o budget de combate.
+            fichas_vistas: set[str] = set()
+            blocos: list[str] = []
+            for npc_id, dados in self.inimigos_combate.items():
+                if dados.get("estado") == "morto":
+                    continue
+                ficha = dados.get("ficha")
+                if not ficha:
+                    continue
+                chave = dados.get("srd_index") or dados.get("nome", npc_id)
+                if chave in fichas_vistas:
+                    continue
+                fichas_vistas.add(chave)
+                blocos.append(ficha)
+                if len(blocos) >= _MAX_FICHAS_PROMPT:
+                    break
+            for bloco in blocos:
+                linhas.append(f"Ficha: {bloco}")
 
         if self.movimento_restante_ft < self.movimento_total_ft:
             linhas.append(

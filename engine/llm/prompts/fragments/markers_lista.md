@@ -11,10 +11,11 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[XP: +N motivo]` — CR≤¼=25 | CR½=50 | CR1=100 | CR2=200 | quest/diplomacia=50–300.
 
 **Combate:**
-- `[COMBATE: iniciar]` — quando a ação do jogador for narrativamente bélica e o estado ainda for "fora de combate" (ex: sparring, "uso chama sagrada nele", "vou enfrentar o orc"). Engine ativa initiative, vinheta e injeta combat.md no próximo turno.
+- `[COMBATE: iniciar]` — ação bélica fora de combate (sparring, "uso chama nele"). Engine ativa iniciativa e vinheta.
+- `[INIMIGO: id|nome|srd?]` — registra combatente (rastreador/iniciativa); use ao introduzir inimigos ou ataque sem alvo. `srd` opcional = índice SRD p/ ficha real. Ex: `[INIMIGO: g1|Goblin|goblin]`.
 - `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura" se aplicável.
 - `[MOV: -N ft motivo]` — movimento do jogador. Padrão 30 ft/rodada.
-- `[INIMIGO_MORTO: id]` — id kebab-case do "Inimigos:". Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
+- `[INIMIGO_MORTO: id]` — id do "Inimigos:". Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
 
 **Economia (use só em [MERCADO] ativo ou loot legítimo):**
 - `[OURO: ±N motivo]` — sinal explícito obrigatório, engine clampa em 0.

@@ -815,6 +815,13 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         # texto_jogador="" porque a abertura não tem input do jogador.
         aplicar_pos_turno(wm, "", resposta_intro_limpa)
         wm.apresentar_npcs_mencionados(resposta_intro)
+        # Bestiário: se a abertura (sessão continuada em combate, ou intro que
+        # já introduz inimigos) tem inimigos, carrega as fichas SRD deles.
+        try:
+            from engine.bestiary.bestiary import enriquecer_fichas_inimigos
+            await enriquecer_fichas_inimigos(wm)
+        except Exception as exc:
+            log.warning("bestiario_enriquecimento_falhou", erro=str(exc)[:120])
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
@@ -1514,6 +1521,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             mudancas_trust = aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
+
+            # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
+            # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a
+            # ficha entra no prompt do próximo turno. Falha silenciosa.
+            try:
+                from engine.bestiary.bestiary import enriquecer_fichas_inimigos
+                await enriquecer_fichas_inimigos(sessao.working_mem)
+            except Exception as exc:
+                log.warning("bestiario_enriquecimento_falhou", erro=str(exc)[:120])
 
             # CRIT-1: decrementa spell slot SÓ se o LLM realmente narrou o cast.
             # Heurística: nome da magia (ou variantes) aparece na resposta. Se LLM
