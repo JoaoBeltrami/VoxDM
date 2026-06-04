@@ -571,9 +571,14 @@ class WorkingMemory:
         self.combat.avancar_rodada()
 
     def registrar_inimigo(
-        self, inimigo_id: str, nome: str, estado: str = "intacto", hp_rel: str = ""
+        self,
+        inimigo_id: str,
+        nome: str,
+        estado: str = "intacto",
+        hp_rel: str = "",
+        srd_index: str = "",
     ) -> None:
-        self.combat.registrar_inimigo(inimigo_id, nome, estado, hp_rel)
+        self.combat.registrar_inimigo(inimigo_id, nome, estado, hp_rel, srd_index)
 
     def atualizar_estado_inimigo(self, inimigo_id: str, estado: str, hp_rel: str = "") -> None:
         self.combat.atualizar_estado_inimigo(inimigo_id, estado, hp_rel)

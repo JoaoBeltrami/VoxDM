@@ -87,15 +87,32 @@ async def main() -> None:
     textos = [c["text"] for c in chunks]
     vetores = embedder.gerar(textos, show_progress=True)
 
-    # ── Upload Qdrant ─────────────────────────────────────────────────────────
+    # ── Upload Qdrant — monstros vão pro bestiário (coleção própria), o resto
+    #    (spells/conditions/equipment/classes/...) pra coleção de regras. ───────
     qdrant = QdrantUploader()
-    total_pontos = await qdrant.upsert(chunks, vetores, args.colecao)
+    idx_monstros = [i for i, c in enumerate(chunks) if c["source_type"] == "monster"]
+    idx_regras = [i for i, c in enumerate(chunks) if c["source_type"] != "monster"]
+
+    total_regras = 0
+    total_bestiario = 0
+
+    if idx_regras:
+        regras = [chunks[i] for i in idx_regras]
+        total_regras = await qdrant.upsert(regras, vetores[idx_regras], args.colecao)
+
+    if idx_monstros:
+        monstros = [chunks[i] for i in idx_monstros]
+        total_bestiario = await qdrant.upsert(
+            monstros, vetores[idx_monstros], settings.QDRANT_COLECAO_BESTIARY
+        )
 
     log.info(
         "ingest_rules_concluido",
         chunks=len(chunks),
-        pontos_qdrant=total_pontos,
-        colecao=args.colecao,
+        pontos_regras=total_regras,
+        colecao_regras=args.colecao,
+        pontos_bestiario=total_bestiario,
+        colecao_bestiario=settings.QDRANT_COLECAO_BESTIARY,
         tempo_total_s=round(time.perf_counter() - t0, 2),
     )
 

@@ -30,7 +30,7 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     "FIO", "CLIFFHANGER", "AGENDA", "CONSEQUÊNCIA", "ANCORA",
     "XP", "LAMPEJO",
     # Combate
-    "POSICAO", "MOV", "INIMIGO_MORTO", "FUGIU", "COMBATE",
+    "POSICAO", "MOV", "INIMIGO_MORTO", "INIMIGO", "FUGIU", "COMBATE",
     # Economia
     "OURO", "LOOT", "PERDEU", "MERCADO", "FIM_MERCADO",
     # Aliados

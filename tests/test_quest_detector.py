@@ -143,6 +143,30 @@ def test_strip_consequencia_combinada_com_fio():
     assert "Silêncio." in resultado
 
 
+def test_strip_remove_inimigo():
+    """[INIMIGO: id|nome] (declaração de combatente) é removido do texto para TTS."""
+    texto = (
+        "Tres goblins saltam das sombras. "
+        "[INIMIGO: goblin-1|Goblin Batedor] [INIMIGO: goblin-2|Goblin Arqueiro|ferido]"
+    )
+    resultado = strip_marcadores(texto)
+    assert "[INIMIGO:" not in resultado
+    assert "Tres goblins saltam das sombras." in resultado
+
+
+def test_strip_inimigo_e_inimigo_morto_juntos():
+    """[INIMIGO] e [INIMIGO_MORTO] no mesmo texto — ambos removidos, prosa preservada."""
+    texto = (
+        "Um esqueleto se ergue e se desfaz. "
+        "[INIMIGO: esqueleto|Esqueleto] [INIMIGO_MORTO: esqueleto] Poeira no ar."
+    )
+    resultado = strip_marcadores(texto)
+    assert "[INIMIGO:" not in resultado
+    assert "[INIMIGO_MORTO:" not in resultado
+    assert "Um esqueleto se ergue e se desfaz." in resultado
+    assert "Poeira no ar." in resultado
+
+
 # ── detectar_e_aplicar_quests ─────────────────────────────────────────────────
 
 def test_avanca_quest_valida():

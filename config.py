@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # Fase 1 — Regras SRD
     SRD_DATA_DIR: str = "./srd_data"
     QDRANT_COLECAO_RULES: str = "voxdm_rules"
+    # Bestiário — stat blocks de monstro em coleção própria. Separado de
+    # voxdm_rules porque o acesso é lookup determinístico por source_id (no
+    # registro de inimigo), não retrieval semântico de narração — e pra não
+    # poluir a busca de magias/regras com fichas de monstro.
+    QDRANT_COLECAO_BESTIARY: str = "voxdm_bestiary"
 
     # Fase 1 — Embeddings
     EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"

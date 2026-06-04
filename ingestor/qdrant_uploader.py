@@ -86,6 +86,20 @@ class QdrantUploader:
                     vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
                 )
                 log.info("qdrant_colecao_criada", nome=nome, vector_size=vector_size)
+                # Índice de payload em source_id — o Qdrant Cloud REJEITA filtros
+                # exatos (ex: lookup determinístico de ficha de monstro no bestiário
+                # por source_id) com 400 "Index required" sem este índice. Idempotente.
+                try:
+                    from qdrant_client.models import PayloadSchemaType
+
+                    client.create_payload_index(
+                        collection_name=nome,
+                        field_name="source_id",
+                        field_schema=PayloadSchemaType.KEYWORD,
+                    )
+                    log.info("qdrant_indice_payload_criado", nome=nome, campo="source_id")
+                except Exception as e:
+                    log.warning("qdrant_indice_payload_falhou", nome=nome, erro=str(e)[:120])
                 return
             except Exception as e:
                 if "already exists" in str(e) and tentativa < 4:

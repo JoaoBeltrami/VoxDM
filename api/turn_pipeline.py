@@ -117,6 +117,23 @@ _RE_COMBATE_MARKER = re.compile(
     re.IGNORECASE,
 )
 
+# `[INIMIGO: id|nome]` ou `[INIMIGO: id|nome|srd-index]` — LLM declara um combatente
+# para a engine rastrear. Resolve COMBAT-EARLY-END (teste ao vivo 01/06): quando
+# o jogador ataca em massa sem nomear alvo ("ataco todos", "dei tapa em todo
+# mundo"), _RE_ALVO_ATAQUE não captura ninguém → inimigos_combate fica vazio →
+# CombatTracker/InitiativeBar vazios + o guard de combate-fantasma encerra o
+# combate legítimo na 1ª vantagem do jogador. Com este marker o LLM popula os
+# inimigos que ele mesmo está narrando (introdução de cena, reforços, ataque em
+# massa). Declarar inimigo implica combate — a engine entra se ainda não está.
+# O 3º campo opcional é o índice SRD do monstro (ex: "goblin") para o bestiário
+# puxar a ficha mecânica; se omitido, a engine tenta o slug do nome.
+# Não colide com [INIMIGO_MORTO: ...]: este exige ":" logo após INIMIGO + pipe.
+_RE_INIMIGO_REGISTRAR = re.compile(
+    r"\[INIMIGO:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*"
+    r"([^|\]]{1,40}?)\s*(?:\|\s*([a-z0-9][a-z0-9-]{0,40})\s*)?\]",
+    re.IGNORECASE,
+)
+
 # Estado afetivo de NPC: [AFETO: npc-id|campo|delta]
 # Ex: "[AFETO: fael-valdreksson|respeito|+2]" — salvo no Neo4j (persistência entre sessões).
 # Campos: afeto | medo | respeito | rancor. Delta: int com sinal (+/-).
@@ -387,6 +404,34 @@ def aplicar_pos_turno(
     if not working_mem.em_combate and _RE_COMBATE_MARKER.search(resposta_completa):
         working_mem.entrar_combate()
         log.info("combate_iniciado_por_marker")
+
+    # 1c. Registro de inimigos via marker — engine-authority. LLM declara os
+    #     combatentes ([INIMIGO: id|nome|estado?]) que está narrando. Resolve
+    #     COMBAT-EARLY-END (teste 01/06): ataque genérico sem alvo nomeado deixava
+    #     inimigos_combate vazio e o guard de combate-fantasma (7c) encerrava
+    #     combate legítimo. Roda ANTES do sync de morte (2a/2b) para que um inimigo
+    #     declarado e abatido no mesmo turno já exista quando [INIMIGO_MORTO] casar.
+    #     Declarar inimigo implica combate — entra se ainda não está (entrar_combate
+    #     já zera rodadas_sem_acao_inimigo; reforço mid-combate zera explicitamente).
+    inimigos_declarados = list(_RE_INIMIGO_REGISTRAR.finditer(resposta_completa))
+    if inimigos_declarados:
+        if not working_mem.em_combate:
+            working_mem.entrar_combate()
+            log.info("combate_iniciado_por_inimigo_declarado")
+        for m in inimigos_declarados:
+            iid = m.group(1).strip().lower()
+            nome = m.group(2).strip()
+            srd = (m.group(3) or "").strip().lower()
+            existente = working_mem.inimigos_combate.get(iid)
+            if existente is not None:
+                # Re-declaração: NÃO reseta estado/ficha (inimigo já ferido não
+                # volta a intacto); só completa o srd_index se ainda faltava.
+                if srd and not existente.get("srd_index"):
+                    existente["srd_index"] = srd
+            else:
+                working_mem.registrar_inimigo(iid, nome, "intacto", srd_index=srd)
+                log.info("combate_inimigo_declarado", id=iid, srd=srd)
+        working_mem.rodadas_sem_acao_inimigo = 0
 
     # 2. Sync de inimigos ANTES de detectar fim de combate (ordem crítica —
     #    sair_combate limpa inimigos_combate, perderíamos a última morte).

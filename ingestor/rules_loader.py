@@ -38,6 +38,10 @@ _SRD_URLS: dict[str, str] = {
     "conditions": "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Conditions.json",
     "equipment":  "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Equipment.json",
     "classes":    "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Classes.json",
+    "monsters":   "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Monsters.json",
+    "rule-sections": "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Rule-Sections.json",
+    "magic-items":   "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Magic-Items.json",
+    "feats":         "https://raw.githubusercontent.com/5e-bits/5e-database/main/src/2014/en/5e-SRD-Feats.json",
 }
 
 _NOMES_ARQUIVOS: dict[str, str] = {
@@ -45,6 +49,10 @@ _NOMES_ARQUIVOS: dict[str, str] = {
     "conditions": "5e-SRD-Conditions.json",
     "equipment":  "5e-SRD-Equipment.json",
     "classes":    "5e-SRD-Classes.json",
+    "monsters":   "5e-SRD-Monsters.json",
+    "rule-sections": "5e-SRD-Rule-Sections.json",
+    "magic-items":   "5e-SRD-Magic-Items.json",
+    "feats":         "5e-SRD-Feats.json",
 }
 
 _SOURCE_TYPES: dict[str, str] = {
@@ -52,6 +60,10 @@ _SOURCE_TYPES: dict[str, str] = {
     "conditions": "condition",
     "equipment":  "equipment",
     "classes":    "class",
+    "monsters":   "monster",
+    "rule-sections": "rule",
+    "magic-items":   "magic-item",
+    "feats":         "feat",
 }
 
 
@@ -188,11 +200,204 @@ def _normalizar_classe(entry: dict[str, Any]) -> str:
     return "\n".join(partes)
 
 
+def _fmt_cr(cr: Any) -> str:
+    """Formata challenge rating: 0.25 → '1/4', 0.5 → '1/2', 2.0 → '2'."""
+    try:
+        valor = float(cr)
+    except (TypeError, ValueError):
+        return str(cr)
+    fracoes = {0.125: "1/8", 0.25: "1/4", 0.5: "1/2"}
+    if valor in fracoes:
+        return fracoes[valor]
+    return str(int(valor)) if valor.is_integer() else str(valor)
+
+
+def _normalizar_monstro(entry: dict[str, Any]) -> str:
+    """Produz um stat block COMPACTO e atômico (1 chunk) de um monstro do SRD.
+
+    Compacto de propósito: o bloco é injetado no prompt de combate por inimigo
+    ativo (cap + dedup), então cada caractere conta no budget de tokens. Inclui
+    só o que o Mestre precisa pra narrar com consistência mecânica: CA, PV,
+    deslocamento, atributos, perícias/saves chave, sentidos, 1-2 traços e os
+    ataques principais (com bônus e dano). Campos ausentes são omitidos.
+    """
+    nome: str = entry.get("name", "")
+    tam: str = entry.get("size", "")
+    tipo: str = entry.get("type", "")
+    cr: str = _fmt_cr(entry.get("challenge_rating", 0))
+    xp: Any = entry.get("xp", 0)
+
+    # CA — armor_class é lista de {type, value}
+    ac_list = entry.get("armor_class", [])
+    ca: Any = ""
+    if isinstance(ac_list, list) and ac_list and isinstance(ac_list[0], dict):
+        ca = ac_list[0].get("value", "")
+    elif isinstance(ac_list, (int, str)):
+        ca = ac_list
+
+    pv: Any = entry.get("hit_points", "")
+    hd: str = entry.get("hit_dice", "")
+
+    # Deslocamento — speed é dict {walk: "30 ft.", fly: "60 ft."}
+    speed = entry.get("speed", {})
+    desloc = ""
+    if isinstance(speed, dict):
+        # valores do SRD vêm como "30 ft." — strip do ponto final evita "30 ft.."
+        desloc = ", ".join(f"{k} {str(v).rstrip('.')}" for k, v in speed.items() if v)
+
+    forca = entry.get("strength", 10)
+    des = entry.get("dexterity", 10)
+    con = entry.get("constitution", 10)
+    inte = entry.get("intelligence", 10)
+    sab = entry.get("wisdom", 10)
+    car = entry.get("charisma", 10)
+
+    # Proficiências (saves + perícias) — proficiency.name é "Saving Throw: DEX" / "Skill: Stealth"
+    profs = entry.get("proficiencies", [])
+    prof_strs: list[str] = []
+    if isinstance(profs, list):
+        for p in profs:
+            if not isinstance(p, dict):
+                continue
+            ref = p.get("proficiency", {})
+            pnome = ref.get("name", "") if isinstance(ref, dict) else ""
+            val = p.get("value", "")
+            etiqueta = pnome.split(":", 1)[1].strip() if ":" in pnome else pnome
+            if etiqueta:
+                prof_strs.append(f"{etiqueta} +{val}" if val != "" else etiqueta)
+
+    # Sentidos
+    senses = entry.get("senses", {})
+    sentidos = ""
+    if isinstance(senses, dict):
+        sentidos = ", ".join(f"{k} {v}" for k, v in senses.items() if v)
+
+    # Traços especiais — nome + 1ª frase da descrição (cap 2 traços, ~100 chars
+    # cada) pra o Mestre narrar a mecânica certa (Pack Tactics, Nimble Escape,
+    # sopro, etc.) sem só citar o nome. Mantém o bloco compacto e atômico.
+    sab_esp = entry.get("special_abilities", []) or []
+    tracos: list[str] = []
+    for a in sab_esp[:2]:
+        if not isinstance(a, dict) or not a.get("name"):
+            continue
+        nome_t = a["name"]
+        desc_t = _juntar_desc(a.get("desc", "")).split(". ")[0].strip().rstrip(".")
+        if desc_t:
+            if len(desc_t) > 100:
+                desc_t = desc_t[:100].rsplit(" ", 1)[0] + "…"
+            tracos.append(f"{nome_t} ({desc_t})")
+        else:
+            tracos.append(nome_t)
+
+    # Ataques — cap 3, com bônus e dano
+    actions = entry.get("actions", []) or []
+    ataques: list[str] = []
+    for a in actions[:3]:
+        if not isinstance(a, dict):
+            continue
+        anome = a.get("name", "")
+        bonus = a.get("attack_bonus")
+        dano_partes: list[str] = []
+        for d in a.get("damage", []) or []:
+            if not isinstance(d, dict):
+                continue
+            dice = d.get("damage_dice", "")
+            dtipo_ref = d.get("damage_type", {})
+            dtipo = dtipo_ref.get("name", "") if isinstance(dtipo_ref, dict) else ""
+            if dice:
+                dano_partes.append(f"{dice} {dtipo}".strip())
+        if anome and bonus is not None:
+            dano_str = f" ({', '.join(dano_partes)})" if dano_partes else ""
+            ataques.append(f"{anome} {bonus:+d}{dano_str}")
+
+    # Montagem compacta
+    cabecalho = f"{nome} — {tam} {tipo}".strip(" —")
+    if cr != "":
+        cabecalho += f", CR {cr}"
+        if xp:
+            cabecalho += f" ({xp} XP)"
+
+    linha_defesa_partes: list[str] = []
+    if ca != "":
+        linha_defesa_partes.append(f"CA {ca}")
+    if pv != "":
+        linha_defesa_partes.append(f"PV {pv}" + (f" ({hd})" if hd else ""))
+    if desloc:
+        linha_defesa_partes.append(f"Desloc: {desloc}")
+
+    partes = [cabecalho + "."]
+    if linha_defesa_partes:
+        partes.append(" | ".join(linha_defesa_partes) + ".")
+    partes.append(f"FOR {forca} DES {des} CON {con} INT {inte} SAB {sab} CAR {car}.")
+    if prof_strs:
+        partes.append("Perícias/Saves: " + ", ".join(prof_strs) + ".")
+    if sentidos:
+        partes.append(f"Sentidos: {sentidos}.")
+    if tracos:
+        partes.append("Traços: " + ", ".join(tracos) + ".")
+    if ataques:
+        partes.append("Ataques: " + "; ".join(ataques) + ".")
+
+    return " ".join(partes)
+
+
+def _normalizar_rule_section(entry: dict[str, Any]) -> str:
+    """Seção de regra do SRD (Combate, Aventura, etc.) — texto de adjudicação.
+
+    desc é markdown longo; o chunker fatia com overlap (retrieval semântico).
+    """
+    nome: str = entry.get("name", "")
+    desc: str = _juntar_desc(entry.get("desc", []))
+    return f"{nome} (Regra D&D 5e)\n{desc}" if desc else f"{nome} (Regra D&D 5e)"
+
+
+def _normalizar_item_magico(entry: dict[str, Any]) -> str:
+    """Item mágico do SRD — nome + categoria + raridade + efeito."""
+    nome: str = entry.get("name", "")
+    cat = entry.get("equipment_category", {})
+    cat_nome = cat.get("name", "") if isinstance(cat, dict) else ""
+    rar = entry.get("rarity", {})
+    rar_nome = rar.get("name", "") if isinstance(rar, dict) else ""
+    desc: str = _juntar_desc(entry.get("desc", []))
+
+    detalhes = " — ".join(p for p in [cat_nome, rar_nome] if p)
+    cabecalho = f"{nome} ({detalhes})" if detalhes else nome
+    return f"{cabecalho}\n{desc}" if desc else cabecalho
+
+
+def _normalizar_feat(entry: dict[str, Any]) -> str:
+    """Talento (feat) do SRD — nome + pré-requisitos + benefício."""
+    nome: str = entry.get("name", "")
+    desc: str = _juntar_desc(entry.get("desc", []))
+
+    partes = [f"{nome} (Talento D&D 5e)"]
+    prereqs = entry.get("prerequisites", [])
+    if isinstance(prereqs, list) and prereqs:
+        nomes_prereq: list[str] = []
+        for p in prereqs:
+            if not isinstance(p, dict):
+                continue
+            ab = p.get("ability_score", {})
+            ab_nome = ab.get("name", "") if isinstance(ab, dict) else ""
+            minimo = p.get("minimum_score", "")
+            if ab_nome and minimo:
+                nomes_prereq.append(f"{ab_nome} {minimo}")
+        if nomes_prereq:
+            partes.append("Pré-requisito: " + ", ".join(nomes_prereq))
+    if desc:
+        partes.append(desc)
+    return "\n".join(partes)
+
+
 _NORMALIZADORES: dict[str, Callable[[dict[str, Any]], str]] = {
-    "spells":     _normalizar_magia,
-    "conditions": _normalizar_condicao,
-    "equipment":  _normalizar_equipamento,
-    "classes":    _normalizar_classe,
+    "spells":        _normalizar_magia,
+    "conditions":    _normalizar_condicao,
+    "equipment":     _normalizar_equipamento,
+    "classes":       _normalizar_classe,
+    "monsters":      _normalizar_monstro,
+    "rule-sections": _normalizar_rule_section,
+    "magic-items":   _normalizar_item_magico,
+    "feats":         _normalizar_feat,
 }
 
 
