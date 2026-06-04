@@ -340,6 +340,35 @@ def montar_mensagens(
             secoes.append(overlay)
             log.info("dm_profile_aplicado", profile=dm_profile_attr)
 
+    # ── Camada de combate — parte do PREFIXO ESTÁTICO (cache-friendly) ────────
+    # combat.md + saves.md são INSTRUÇÕES de comportamento ("como rodar combate"),
+    # não estado dinâmico. Por isso vivem aqui, junto da persona/markers, e não
+    # depois do RAG/working-memory. Isso (a) agrupa todo o conteúdo estático num
+    # prefixo contíguo — cacheável por prefixo durante uma sequência de turnos de
+    # combate (o maior dreno de tokens do projeto) — e (b) deixa o estado dinâmico
+    # (inimigos, HP, fichas) na posição de recência, logo antes do diálogo.
+    # _combat_md_presente é computado aqui pois o bloco de REGRAS SRD abaixo
+    # também depende dele (regras só entram fora de combate).
+    _em_combate_ativo = contexto.working_memory.em_combate
+    _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
+    _combat_md_presente = _em_combate_ativo or _acao_combate
+    chars_combat = 0
+    if _combat_md_presente:
+        combat_texto = _carregar_combat()
+        if combat_texto:
+            secoes.append(f"\n{combat_texto}")
+            chars_combat = len(combat_texto)
+            log.info(
+                "combat_md_injetado",
+                em_combate=_em_combate_ativo,
+                acao_detectada=_acao_combate,
+                chars_combat=chars_combat,
+                transcricao=contexto.transcricao_atual[:60],
+            )
+        saves_texto = _carregar_saves()
+        if saves_texto:
+            secoes.append(f"\n{saves_texto}")
+
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
     # Subclasse injetada separadamente para não inflar para_texto() com campo raro.
     wm_texto = contexto.working_memory.para_texto(incluir_dialogo=False)
@@ -362,13 +391,8 @@ def montar_mensagens(
     if sem_texto:
         secoes.append(f"\n=== CONTEÚDO DO MÓDULO ===\n{sem_texto}")
 
-    # Detecta combate ANTES do bloco de regras — quando combat.md vai ser
-    # injetado, não duplicamos com chunks SRD (combat.md já cobre modificadores).
-    _em_combate_ativo = contexto.working_memory.em_combate
-    _acao_combate = bool(_RE_COMBATE.search(contexto.transcricao_atual))
-    _combat_md_presente = _em_combate_ativo or _acao_combate
-
     # Regras SRD relevantes (saves, condições, checks fora de combate).
+    # _combat_md_presente já foi computado no bloco de combate (prefixo estático).
     # combat.md já cobre os modificadores relevantes — injetar regras SRD
     # simultaneamente duplica conteúdo e estoura o budget do Groq.
     # Prefixo [source_name] removido — chunks puros mantêm o modelo em modo
@@ -389,25 +413,6 @@ def montar_mensagens(
         if dice_texto:
             secoes.append(f"\n{dice_texto}")
             log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
-
-    # Camada de combate + salvaguardas — injetadas quando em_combate ativo OU ação detectada
-    chars_combat = 0
-    if _combat_md_presente:
-        combat_texto = _carregar_combat()
-        if combat_texto:
-            secoes.append(f"\n{combat_texto}")
-            chars_combat = len(combat_texto)
-            log.info(
-                "combat_md_injetado",
-                em_combate=_em_combate_ativo,
-                acao_detectada=_acao_combate,
-                chars_combat=chars_combat,
-                chars_regras=len(regras_texto),
-                transcricao=contexto.transcricao_atual[:60],
-            )
-        saves_texto = _carregar_saves()
-        if saves_texto:
-            secoes.append(f"\n{saves_texto}")
 
     # Instrução de progressão de quests — injetada apenas quando o módulo define quests
     if getattr(contexto.working_memory, "quests_modulo", ""):
