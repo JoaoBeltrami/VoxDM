@@ -37,6 +37,12 @@ TOP_K_SEMANTICO  = 5
 TOP_K_EPISODICO  = 3
 TOP_K_REGRAS     = 3
 
+# Re-rank de precisão: gap de score (cosseno) abaixo do melhor resultado a partir
+# do qual um chunk é considerado "cauda marginal" e descartado. Calibrado para
+# paraphrase-multilingual-MiniLM-L12-v2 (relevantes ~0.5-0.7). Relativo ao topo
+# de CADA query: query focada injeta poucos chunks, query ampla injeta até o cap.
+_GAP_RELEVANCIA = 0.10
+
 # Trust mínimo padrão quando secret não define min_trust_level
 _TRUST_PADRAO = 2
 
@@ -356,8 +362,14 @@ class ContextBuilder:
             log.warning("qdrant_regras_falhou", erro=str(chunks_reg))
             chunks_reg = []
 
-        # ── Deduplicação por source_id — mantém chunk de maior score por entidade ──
-        chunks_sem = _deduplicar_por_source_id(chunks_sem)[:TOP_K_SEMANTICO]  # type: ignore[arg-type]
+        # ── Dedup por source_id + re-rank de precisão (corta cauda marginal) ──
+        # Antes: dedup e pega top-5 cegamente. Agora: dedup, depois descarta
+        # chunks cujo score fica abaixo do gap relativo ao melhor — query focada
+        # injeta menos chunks (menos tokens/ruído), query ampla mantém até o cap.
+        chunks_sem_dedup = _deduplicar_por_source_id(chunks_sem)  # type: ignore[arg-type]
+        chunks_sem = _selecionar_por_relevancia(chunks_sem_dedup, TOP_K_SEMANTICO)
+        chunks_ep_disp = chunks_ep if isinstance(chunks_ep, list) else []
+        chunks_ep = _selecionar_por_relevancia(chunks_ep_disp, TOP_K_EPISODICO)
 
         # ── Entidades para consulta no Neo4j ─────────────────────────────────
         # Combina npcs_presentes + entidades mencionadas na transcrição
@@ -407,7 +419,9 @@ class ContextBuilder:
         log.info(
             "contexto_montado",
             sem=len(chunks_sem),   # type: ignore[arg-type]
+            sem_disp=len(chunks_sem_dedup),  # disponíveis antes do re-rank de precisão
             ep=len(chunks_ep),     # type: ignore[arg-type]
+            ep_disp=len(chunks_ep_disp),
             reg=len(chunks_reg),   # type: ignore[arg-type]
             rels=len(relacoes),
             secrets=len(secrets),
@@ -425,6 +439,36 @@ def _buscar_honesty_npc(schema: dict[str, Any], npc_id: str) -> float:
             if entidade.get("id") == npc_id:
                 return float(entidade.get("honesty", 0.5))
     return 0.5
+
+
+def _selecionar_por_relevancia(
+    chunks: list[dict[str, Any]],
+    top_k: int,
+    gap: float = _GAP_RELEVANCIA,
+    min_keep: int = 1,
+) -> list[dict[str, Any]]:
+    """Re-rank de precisão: mantém só os chunks densos em relevância.
+
+    Em vez de pegar cegamente os top_k, corta a "cauda marginal" — descarta
+    chunks cujo _score fica `gap` abaixo do melhor resultado DESTA query. Efeito:
+    - query focada (1 match domina): injeta 1-2 chunks, economiza tokens;
+    - query ampla (vários comparáveis): injeta até top_k, preserva recall.
+
+    Garantias: nunca devolve mais que top_k (só reduz vs. comportamento antigo),
+    nunca menos que min_keep (sempre mantém o melhor). Reduz tokens E ruído sem
+    um cross-encoder/modelo novo — usa o score do bi-encoder que já temos.
+    """
+    if not chunks:
+        return []
+    ordenados = sorted(chunks, key=lambda c: float(c.get("_score", 0.0)), reverse=True)
+    corte = float(ordenados[0].get("_score", 0.0)) - gap
+    selecionados = [
+        c for c in ordenados[:top_k]
+        if float(c.get("_score", 0.0)) >= corte
+    ]
+    if len(selecionados) < min_keep:
+        selecionados = ordenados[:min_keep]
+    return selecionados
 
 
 def _deduplicar_por_source_id(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -18,6 +18,7 @@ from engine.memory.context_builder import (
     _QUERY_CURTA_LIMITE,
     ContextBuilder,
     _deduplicar_por_source_id,
+    _selecionar_por_relevancia,
 )
 from engine.memory.working_memory import WorkingMemory
 
@@ -206,3 +207,63 @@ async def test_query_longa_nao_adiciona_localizacao(builder_com_schema, working_
 
     assert len(queries_enviadas) == 1
     assert working_mem.location_nome not in queries_enviadas[0]
+
+
+# ── Testes: re-rank de precisão (_selecionar_por_relevancia) ──────────────────
+
+def test_relevancia_corta_cauda_marginal():
+    """Query focada: 1-2 chunks dominam, o resto (gap > 0.10) é descartado."""
+    chunks = [
+        {"source_id": "a", "_score": 0.70},
+        {"source_id": "b", "_score": 0.68},
+        {"source_id": "c", "_score": 0.55},  # 0.15 abaixo do topo → cortado
+        {"source_id": "d", "_score": 0.48},  # cortado
+    ]
+    sel = _selecionar_por_relevancia(chunks, top_k=5)
+    assert [c["source_id"] for c in sel] == ["a", "b"]
+
+
+def test_relevancia_query_ampla_mantem_ate_cap():
+    """Vários chunks comparáveis (dentro do gap): mantém até top_k."""
+    chunks = [
+        {"source_id": "a", "_score": 0.65},
+        {"source_id": "b", "_score": 0.63},
+        {"source_id": "c", "_score": 0.61},
+        {"source_id": "d", "_score": 0.60},
+        {"source_id": "e", "_score": 0.59},
+    ]
+    sel = _selecionar_por_relevancia(chunks, top_k=5)
+    assert len(sel) == 5
+
+
+def test_relevancia_nunca_excede_top_k():
+    """Mesmo com muitos candidatos densos, nunca devolve mais que top_k."""
+    chunks = [{"source_id": str(i), "_score": 0.70} for i in range(8)]
+    sel = _selecionar_por_relevancia(chunks, top_k=5)
+    assert len(sel) == 5
+
+
+def test_relevancia_sempre_mantem_o_melhor():
+    """Mesmo com cauda toda marginal, o melhor chunk nunca é descartado (min_keep)."""
+    chunks = [
+        {"source_id": "top", "_score": 0.72},
+        {"source_id": "x", "_score": 0.40},
+        {"source_id": "y", "_score": 0.30},
+    ]
+    sel = _selecionar_por_relevancia(chunks, top_k=5)
+    assert [c["source_id"] for c in sel] == ["top"]
+
+
+def test_relevancia_vazio():
+    assert _selecionar_por_relevancia([], top_k=5) == []
+
+
+def test_relevancia_ordena_defensivamente():
+    """Aceita entrada fora de ordem e ordena por score desc antes de cortar."""
+    chunks = [
+        {"source_id": "c", "_score": 0.55},
+        {"source_id": "a", "_score": 0.70},
+        {"source_id": "b", "_score": 0.68},
+    ]
+    sel = _selecionar_por_relevancia(chunks, top_k=5)
+    assert [c["source_id"] for c in sel] == ["a", "b"]
