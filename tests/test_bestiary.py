@@ -72,6 +72,7 @@ def test_normalizar_monstro_campos_essenciais():
     assert "Scimitar +4" in bloco
     assert "1d6+2 Slashing" in bloco
     assert "Nimble Escape" in bloco
+    assert "Disengage" in bloco  # descrição do traço incluída, não só o nome
     assert "Stealth +6" in bloco
 
 
@@ -79,8 +80,8 @@ def test_normalizar_monstro_atomico_e_compacto():
     """Bloco deve caber em 1 chunk (< 375 palavras) — nunca fatiado no Qdrant."""
     bloco = _normalizar_monstro(_GOBLIN)
     assert len(bloco.split()) < 375
-    # Compacto de verdade: um goblin não deveria passar de ~60 palavras
-    assert len(bloco.split()) < 80
+    # Compacto de verdade (com traços enriquecidos ainda fica enxuto)
+    assert len(bloco.split()) < 120
 
 
 def test_normalizar_monstro_campos_ausentes_nao_quebra():

@@ -272,9 +272,22 @@ def _normalizar_monstro(entry: dict[str, Any]) -> str:
     if isinstance(senses, dict):
         sentidos = ", ".join(f"{k} {v}" for k, v in senses.items() if v)
 
-    # Traços especiais — só nomes (cap 2) pra manter compacto
+    # Traços especiais — nome + 1ª frase da descrição (cap 2 traços, ~100 chars
+    # cada) pra o Mestre narrar a mecânica certa (Pack Tactics, Nimble Escape,
+    # sopro, etc.) sem só citar o nome. Mantém o bloco compacto e atômico.
     sab_esp = entry.get("special_abilities", []) or []
-    tracos = [a.get("name", "") for a in sab_esp[:2] if isinstance(a, dict) and a.get("name")]
+    tracos: list[str] = []
+    for a in sab_esp[:2]:
+        if not isinstance(a, dict) or not a.get("name"):
+            continue
+        nome_t = a["name"]
+        desc_t = _juntar_desc(a.get("desc", "")).split(". ")[0].strip().rstrip(".")
+        if desc_t:
+            if len(desc_t) > 100:
+                desc_t = desc_t[:100].rsplit(" ", 1)[0] + "…"
+            tracos.append(f"{nome_t} ({desc_t})")
+        else:
+            tracos.append(nome_t)
 
     # Ataques — cap 3, com bônus e dano
     actions = entry.get("actions", []) or []
