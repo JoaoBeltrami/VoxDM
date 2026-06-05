@@ -1,0 +1,55 @@
+VoxDM — engine de narração de RPG de mesa por voz
+Copyright (C) 2026 João Beltrami
+
+Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os
+termos da GNU Affero General Public License, versão 3, conforme publicada pela
+Free Software Foundation. Veja o arquivo LICENSE para o texto completo.
+
+Este programa é distribuído na esperança de ser útil, mas SEM QUALQUER GARANTIA;
+sem mesmo a garantia implícita de COMERCIALIZAÇÃO ou ADEQUAÇÃO A UM PROPÓSITO
+ESPECÍFICO.
+
+================================================================================
+ATRIBUIÇÃO DE CONTEÚDO DE TERCEIROS
+================================================================================
+
+## Conteúdo do System Reference Document (SRD) 5.1 de D&D
+
+A engine indexa e usa, como referência mecânica (magias, condições, equipamento,
+classes, monstros/bestiário, regras, itens mágicos, talentos), conteúdo do
+System Reference Document 5.1 ("SRD 5.1") da Dungeons & Dragons.
+
+Fonte dos dados: repositório público 5e-bits/5e-database
+(https://github.com/5e-bits/5e-database). O código daquele repositório é
+licenciado sob MIT; os DADOS do SRD são publicados pela Wizards of the Coast LLC.
+
+O SRD 5.1 está disponível sob a Open Game License v1.0a (OGL) e, desde 2023,
+também sob a Creative Commons Attribution 4.0 International (CC-BY-4.0). Quando
+distribuído sob CC-BY-4.0, exige-se a seguinte atribuição:
+
+  "This work includes material from the System Reference Document 5.1 ('SRD
+   5.1') by Wizards of the Coast LLC, available at
+   https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is
+   licensed under the Creative Commons Attribution 4.0 International License,
+   available at https://creativecommons.org/licenses/by/4.0/legalcode."
+
+Nenhum conteúdo de "Product Identity" da Wizards of the Coast é incluído. NÃO há
+material de produtos licenciados/fechados (ex.: Curse of Strahd) neste projeto —
+apenas conteúdo aberto do SRD.
+
+NOTA: a conformidade exata com OGL/CC-BY (incluindo, se aplicável, a inclusão do
+texto da OGL e da Section 15) deve ser revisada por quem redistribuir. Esta
+atribuição é feita de boa-fé.
+
+## Módulo de aventura "Os Filhos de Valdrek"
+
+O módulo de teste/aventura "Os Filhos de Valdrek" (em modulo_teste/) é obra
+original de João Beltrami, coberta pela mesma licença do projeto (AGPL-3.0),
+salvo o conteúdo de SRD nele referenciado.
+
+## Dependências de software de terceiros
+
+Este projeto usa bibliotecas de terceiros (FastAPI, Next.js, faster-whisper,
+edge-tts, Kokoro, sentence-transformers, qdrant-client, neo4j, groq, google-genai,
+entre outras), cada uma sob sua própria licença. Veja requirements.txt e
+frontend/package.json para a lista completa.
