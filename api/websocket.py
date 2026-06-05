@@ -37,6 +37,8 @@ from api.state import SessaoAtiva, sessions
 from engine.llm.prompt_builder import (
     _LEMBRETE_SAIDA,
     _RE_COMBATE,
+    _carregar_intro_fallback,
+    _carregar_intro_system,
     _carregar_recap,
     montar_mensagens,
 )
@@ -568,26 +570,9 @@ async def _sintetizar_e_enviar(
     except Exception as e:
         log.warning("tts_falhou", preview=texto[:40], erro=str(e))
 
-# Prompt de abertura — hot reload via mtime, edita o .md e próximo init pega.
-_INTRO_SYSTEM_PATH = Path(__file__).parent.parent / "engine/llm/prompts/intro_system.md"
-_intro_mtime: float = 0.0
-_intro_cache: str = ""
-
-
-def _get_intro_system() -> str:
-    """Retorna o intro_system.md atual, recarregando se o arquivo mudou."""
-    global _intro_mtime, _intro_cache
-    try:
-        mtime = _INTRO_SYSTEM_PATH.stat().st_mtime
-        if mtime != _intro_mtime:
-            _intro_cache = _INTRO_SYSTEM_PATH.read_text(encoding="utf-8").strip()
-            if _intro_mtime != 0.0:
-                log.info("intro_system_recarregado", mtime=mtime)
-            _intro_mtime = mtime
-        return _intro_cache
-    except Exception as e:
-        log.warning("intro_system_falhou", erro=str(e))
-        return _intro_cache  # mantém última versão boa, ou "" se nunca leu
+# Abertura: intro_system.md carregado via prompt_builder._carregar_intro_system
+# (mesmo hot-reload por mtime do _ler_prompt + fallback pro master_system). Drift #21
+# resolvido — sem reimplementar a lógica de cache aqui.
 
 
 async def _enviar_recap_sessao_anterior(
@@ -756,7 +741,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     intro_user = " ".join(partes) if partes else "—"
 
     mensagens_intro = [
-        {"role": "system", "content": f"{_get_intro_system()}\n\n{contexto_abertura}{_LEMBRETE_SAIDA}"},
+        {"role": "system", "content": f"{_carregar_intro_system()}\n\n{contexto_abertura}{_LEMBRETE_SAIDA}"},
         {"role": "user", "content": intro_user},
     ]
 
@@ -780,7 +765,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             )
     except Exception as e:
         log.error("ws_abertura_falhou", session_id=sessao.session_id, erro=str(e))
-        msg_fallback = "Bem-vindo. O mundo aguarda. Quem é você?"
+        # Fallback de emergência em engine/llm/prompts/intro_fallback.md (compliant
+        # com intro_system; sintetizado via resposta_intro abaixo, não bypassa o TTS).
+        # Drifts #11/#13/#17/#24 resolvidos.
+        msg_fallback = _carregar_intro_fallback()
         resposta_intro = msg_fallback
         await websocket.send_text(
             MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()

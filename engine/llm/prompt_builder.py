@@ -44,6 +44,8 @@ _SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
 _QUESTS_PATH        = Path(__file__).parent / "prompts" / "quests.md"
 _SOCIAL_PATH        = Path(__file__).parent / "prompts" / "social.md"
 _RECAP_PATH         = Path(__file__).parent / "prompts" / "recap.md"
+_INTRO_SYSTEM_PATH  = Path(__file__).parent / "prompts" / "intro_system.md"
+_INTRO_FALLBACK_PATH = Path(__file__).parent / "prompts" / "intro_fallback.md"
 _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
 # Fragmentos condicionais (Frente B — gating contextual, 27/05)
 # Injetados só quando a cena pede, não em todo turno. Economia: ~200-300
@@ -197,6 +199,22 @@ def _carregar_social() -> str | None:
 def _carregar_recap() -> str | None:
     """Instrução de recap de abertura (sessão continuada). None se ausente."""
     return _ler_prompt(_RECAP_PATH)
+
+
+def _carregar_intro_system() -> str:
+    """Prompt de abertura (intro_system.md) com hot reload via _ler_prompt.
+    Fallback pro master_system se ausente — a abertura nunca fica sem persona."""
+    return _ler_prompt(_INTRO_SYSTEM_PATH) or _carregar_master_system()
+
+
+def _carregar_intro_fallback() -> str:
+    """Texto de abertura de EMERGÊNCIA (LLM falhou na intro). Prosa pura — vai pro
+    TTS direto, sem markdown. Compliant com intro_system (nada de 'bem-vindo'
+    genérico). Fallback inline curto se o arquivo sumir."""
+    return _ler_prompt(_INTRO_FALLBACK_PATH) or (
+        "O ar à sua volta está parado, pesado de expectativa. "
+        "Alguma coisa, em algum lugar, aguarda o seu próximo passo."
+    )
 
 
 def _carregar_dm_profile(profile: str) -> str | None:
