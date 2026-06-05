@@ -18,6 +18,7 @@ Exemplo:
 
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -57,6 +58,33 @@ Fios narrativos em aberto: {fios_soltos}
 {dialogo}
 """
 
+# Guia de compressão de sessão (session_eval.md) usado como SYSTEM message — guia
+# rico (5 momentos, estrutura, sinais de engajamento). Resolve drift #60: o arquivo
+# existia mas o resumo usava só o prompt inline. Quando carrega, vira o system e
+# _PROMPT_DADOS (só os dados) vira o user; se ausente, cai no _PROMPT_RESUMO inline
+# (auto-suficiente) — sem regressão.
+_SESSION_EVAL_PATH = Path(__file__).resolve().parent.parent / "llm" / "prompts" / "session_eval.md"
+
+_PROMPT_DADOS = """\
+Resumo contínuo da sessão (memória do que já passou):
+{resumo_rolling}
+
+Estado da sessão:
+{estado}
+
+Aliados ativos: {companions}
+Fios narrativos em aberto: {fios_soltos}
+
+Última janela de diálogo:
+{dialogo}
+"""
+
+
+def _carregar_session_eval() -> str | None:
+    """Carrega session_eval.md (guia de compressão). Import tardio evita ciclo."""
+    from engine.llm.prompt_builder import _ler_prompt
+    return _ler_prompt(_SESSION_EVAL_PATH)
+
 
 def _montar_dialogo(working_mem: WorkingMemory) -> str:
     """Formata o diálogo recente da working memory como texto simples."""
@@ -87,14 +115,30 @@ async def _resumir_via_groq(working_mem: WorkingMemory) -> str:
     # representados aqui. Pode estar vazio em sessão curta (< intervalo).
     resumo_rolling_txt = working_mem.resumo_rolling or "(sessão curta — sem resumo contínuo)"
 
-    prompt = _PROMPT_RESUMO.format(
-        estado=estado,
-        dialogo=dialogo,
-        companions=companions_txt,
-        fios_soltos=fios_txt,
-        resumo_rolling=resumo_rolling_txt,
-    )
-    mensagens = [{"role": "user", "content": prompt}]
+    guia = _carregar_session_eval()
+    if guia:
+        # session_eval.md = guia (system); só os dados vão no user.
+        dados = _PROMPT_DADOS.format(
+            estado=estado,
+            dialogo=dialogo,
+            companions=companions_txt,
+            fios_soltos=fios_txt,
+            resumo_rolling=resumo_rolling_txt,
+        )
+        mensagens = [
+            {"role": "system", "content": guia},
+            {"role": "user", "content": dados},
+        ]
+    else:
+        # Fallback: prompt inline auto-suficiente (session_eval.md ausente/curto).
+        prompt = _PROMPT_RESUMO.format(
+            estado=estado,
+            dialogo=dialogo,
+            companions=companions_txt,
+            fios_soltos=fios_txt,
+            resumo_rolling=resumo_rolling_txt,
+        )
+        mensagens = [{"role": "user", "content": prompt}]
 
     try:
         groq = GroqClient()

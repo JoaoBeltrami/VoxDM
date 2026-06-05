@@ -42,6 +42,8 @@ _DICE_PATH          = Path(__file__).parent / "prompts" / "dice.md"
 _COMBAT_PATH        = Path(__file__).parent / "prompts" / "combat.md"
 _SAVES_PATH         = Path(__file__).parent / "prompts" / "saves.md"
 _QUESTS_PATH        = Path(__file__).parent / "prompts" / "quests.md"
+_SOCIAL_PATH        = Path(__file__).parent / "prompts" / "social.md"
+_RECAP_PATH         = Path(__file__).parent / "prompts" / "recap.md"
 _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
 # Fragmentos condicionais (Frente B — gating contextual, 27/05)
 # Injetados só quando a cena pede, não em todo turno. Economia: ~200-300
@@ -185,6 +187,16 @@ def _carregar_saves() -> str | None:
 def _carregar_quests() -> str | None:
     """Instrução de sinalização de quest — com hot reload. None se ausente."""
     return _ler_prompt(_QUESTS_PATH)
+
+
+def _carregar_social() -> str | None:
+    """Camada social — injetada em cena social (NPCs presentes, fora de combate)."""
+    return _ler_prompt(_SOCIAL_PATH)
+
+
+def _carregar_recap() -> str | None:
+    """Instrução de recap de abertura (sessão continuada). None se ausente."""
+    return _ler_prompt(_RECAP_PATH)
 
 
 def _carregar_dm_profile(profile: str) -> str | None:
@@ -368,6 +380,16 @@ def montar_mensagens(
         saves_texto = _carregar_saves()
         if saves_texto:
             secoes.append(f"\n{saves_texto}")
+
+    # Camada social — cena de conversa/barganha/interrogatório (NPCs presentes,
+    # fora de combate). Parte do prefixo estático (cache-friendly), igual combat.md.
+    # Mutuamente exclusiva com combat.md (esta exige NÃO-combate), então nunca soma
+    # ao prompt de combate nem ao seu teto de budget. Resolve drift #61 (social.md
+    # existia mas nunca era carregado).
+    if (not _em_combate_ativo) and bool(getattr(wm, "npcs_presentes", [])):
+        social_texto = _carregar_social()
+        if social_texto:
+            secoes.append(f"\n{social_texto}")
 
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
     # Subclasse injetada separadamente para não inflar para_texto() com campo raro.

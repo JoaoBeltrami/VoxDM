@@ -109,7 +109,9 @@ async def test_resumir_via_groq_passa_resumo_rolling_no_prompt():
     capturado: list[str] = []
 
     async def fake_completar(mensagens, **kwargs):
-        capturado.append(mensagens[0]["content"])
+        # resumo_rolling agora vai na mensagem de DADOS (user); session_eval.md é o
+        # system. Concatena tudo pra validar que o resumo chega ao LLM, onde quer que esteja.
+        capturado.append(" ".join(m["content"] for m in mensagens))
         return "Resumo episódico final."
 
     groq = MagicMock()
