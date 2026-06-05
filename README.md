@@ -4,6 +4,8 @@ Um Mestre de RPG de mesa controlado 100% por voz, construído do zero com custo 
 
 > Desenvolvimento ao vivo — acompanhe no [YouTube](https://www.youtube.com/@Beltramidev)
 
+> Open-source sob [AGPL-3.0](./LICENSE) · [Arquitetura](./ARCHITECTURE.md) · [Contribuir](./CONTRIBUTING.md) · [Changelog](./CHANGELOG.md)
+
 ---
 
 ## O que é
@@ -49,6 +51,7 @@ Latência alvo: **<2s ponta a ponta**. Atual: ~3-6s no Groq, ~7-9s no Gemini.
 - **Progressão XP/Level Up**: LLM concede `[XP: +N motivo]` → engine aplica tabela SRD → HP máximo sobe, slots recalculados, modal celebra
 - **Subclass picker**: seleção de subclasse no CharacterForm (Campeão/Mestre de Batalha/Cavaleiro Místico para Guerreiro, etc.)
 - **Lista de 246 magias SRD**: seleção na criação com tabs por nível, limite por classe/nível
+- **Bestiário SRD**: 334 monstros indexados em `voxdm_bestiary`; o LLM declara combatentes com `[INIMIGO: id\|nome\|srd]` e a engine puxa a ficha real (CA/PV/ataques + mecânica dos traços) direto pro combate
 
 ### Combate
 - **Iniciativa visual horizontal**: tokens circulares com anel violeta no turno ativo, 💀 mortos em grayscale, seta ▼
@@ -145,7 +148,7 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | 5.7 | Dados visuais com roll behind the screen | 🟡 planejado |
 | 5.8 | Imagem de cena gerada por IA (Pollinations.ai) | 🟡 planejado |
 
-**Cobertura de testes:** 609/609 passam.
+**Cobertura de testes:** 919/919 passam.
 
 ---
 
@@ -260,7 +263,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  609 testes (pytest)
+└── tests/                  919 testes (pytest)
 ```
 
 ---
@@ -268,7 +271,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 609 testes
+uv run pytest tests/ -q   # 919 testes
 make ingest
 make run-api
 make debug
@@ -319,4 +322,17 @@ Veja [`CLAUDE.md`](./CLAUDE.md) para lista completa.
 
 ---
 
+## Licença e contribuição
+
+- **Licença:** [AGPL-3.0](./LICENSE) — você pode usar, estudar, modificar e
+  redistribuir; forks **hospedados** e modificados precisam abrir o código.
+- **Atribuição de conteúdo:** o SRD 5.1 (magias, monstros, regras) é da Wizards of
+  the Coast sob OGL/CC-BY — veja [NOTICE](./NOTICE). Nenhum material licenciado/fechado.
+- **Contribuir:** leia [CONTRIBUTING.md](./CONTRIBUTING.md) e a
+  [ARCHITECTURE.md](./ARCHITECTURE.md). Abra uma issue antes de PRs grandes.
+- **Segurança:** veja [SECURITY.md](./SECURITY.md) (reporte privado, não em issue pública).
+
+---
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](./LICENSE)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-black?logo=anthropic)](https://claude.ai/claude-code)

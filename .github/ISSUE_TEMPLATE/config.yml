@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Canal no YouTube (desenvolvimento ao vivo)
+    url: https://www.youtube.com/@Beltramidev
+    about: Veja o VoxDM sendo construído e jogado ao vivo.
+  - name: Reportar vulnerabilidade de segurança
+    url: https://github.com/JoaoBeltrami/VoxDM/security/advisories/new
+    about: Não use issues públicas para segurança — use o reporte privado.
