@@ -5,7 +5,6 @@ Verificam que a detecção de mudanças de trust via regex funciona corretamente
 para ações positivas, negativas, revelação de segredos e casos-limite.
 """
 
-import pytest
 
 from engine.memory.trust_detector import detectar_mudancas_trust
 

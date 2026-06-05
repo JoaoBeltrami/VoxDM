@@ -1,6 +1,5 @@
 """Testes para a feature de inventário/economia (ouro, loot, mercado)."""
 
-import pytest
 
 from api.turn_pipeline import _RE_LOOT, _RE_OURO, _RE_PERDEU, aplicar_pos_turno
 from engine.memory.working_memory import WorkingMemory

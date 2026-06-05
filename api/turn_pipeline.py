@@ -106,7 +106,6 @@ _RE_INIMIGO_MORTO_MARKER = re.compile(
 # lógica de restauração de slots — autoridade do LLM agora é encapsulada
 # em detectar_tipo_descanso()). Re-export aqui pra compat com testes
 # externos que ainda importam o nome.
-from engine.magic.slot_tracker import _RE_DESCANSO_MARKER  # noqa: E402
 
 # `[COMBATE: iniciar]` — LLM declara início de combate quando a ação do jogador
 # é claramente bélica mas o regex de verbos não casou (sparring narrado, "uso X

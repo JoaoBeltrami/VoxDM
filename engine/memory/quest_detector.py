@@ -21,7 +21,6 @@ Exemplo:
 """
 
 import re
-from typing import Any
 
 import structlog
 

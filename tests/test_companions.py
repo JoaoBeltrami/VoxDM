@@ -1,6 +1,5 @@
 """Testes para a feature de companions/party (aliados controlados)."""
 
-import pytest
 
 from api.turn_pipeline import (
     _RE_COMPANION_ADD,

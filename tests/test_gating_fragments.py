@@ -9,9 +9,7 @@ Garante:
 - chars_breakdown reflete o que foi injetado
 """
 
-from unittest.mock import MagicMock
 
-import pytest
 
 from engine.llm.prompt_builder import (
     _carregar_markers_lista,

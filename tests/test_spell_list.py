@@ -5,13 +5,9 @@ Cobre: consulta de spells por classe, filtragem por nível, limites de progress�
     integração com WorkingMemory.nova_sessao() e injeção no prompt_builder.
 """
 
-import pytest
 
 # ── Importações ────────────────────────────────────────────────────────────────
 from engine.magic.spell_list import (
-    PROGRESSAO_MAGIAS,
-    SPELLS_POR_CLASSE,
-    SpellEntry,
     limite_progressao,
     nivel_da_spell,
     spells_da_classe,

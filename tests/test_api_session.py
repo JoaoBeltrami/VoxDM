@@ -28,7 +28,6 @@ def limpar_sessoes():
 def mock_context_builder():
     """ContextBuilder que retorna contexto vazio sem I/O."""
     from engine.llm.prompt_builder import ContextoMontado
-    from engine.memory.working_memory import WorkingMemory
 
     contexto = MagicMock(spec=ContextoMontado)
     contexto.chunks_semanticos = []
@@ -123,7 +122,6 @@ def test_start_location_personalizada(client):
 
 def test_start_limite_sessoes_503(client):
     """Atingir MAX_SESSOES → 503 na próxima criação."""
-    import time
     from unittest.mock import MagicMock
 
     from api.state import MAX_SESSOES, SessaoAtiva, sessions

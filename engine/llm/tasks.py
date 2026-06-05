@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Final
 
 
-class TaskType(str, Enum):
+class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda str() usado em telemetria/logs
     """Tipos de tarefa LLM no VoxDM.
 
     Não é necessário implementar cascata customizada para cada um — tipos

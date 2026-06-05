@@ -5,7 +5,6 @@ técnicos `[Rolagem: d20 = 18]` eram detectadas como EN porque `d20` é neutro
 e nada mais batia em PT-BR. TTS pronunciava errado palavras curtas.
 """
 
-import pytest
 
 from engine.voice.language import Idioma, detectar_idioma
 

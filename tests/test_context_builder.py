@@ -10,7 +10,7 @@ Todos os testes são offline — sem Qdrant, Neo4j nem Groq.
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

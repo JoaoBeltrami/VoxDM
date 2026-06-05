@@ -14,8 +14,6 @@ os.environ.setdefault("NEO4J_URI",       "bolt://localhost:7687")
 os.environ.setdefault("NEO4J_USER",      "neo4j")
 os.environ.setdefault("NEO4J_PASSWORD",  "test")
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -509,7 +507,6 @@ def test_combat_md_dentro_do_budget():
 
 def test_saves_md_dentro_do_budget():
     """saves.md comprimido: máx 2 000 chars (~571 tokens)."""
-    from pathlib import Path
     saves_path = _COMBAT_PATH.parent / "saves.md"
     conteudo = saves_path.read_text(encoding="utf-8")
     assert len(conteudo) <= 2_000, (

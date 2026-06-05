@@ -1524,7 +1524,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # e contador de tensão — todos na ORDEM crítica (sync antes do
             # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
             # Imports estão no topo do arquivo — sem lazy redundante.
-            mudancas_trust = aplicar_pos_turno(
+            # aplicar_pos_turno retorna mudanças de trust (útil p/ telemetria),
+            # mas o WS não as consome — não atribui pra não deixar var órfã.
+            aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
 

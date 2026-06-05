@@ -11,7 +11,6 @@ saves.md + initiative entram na próxima montagem de prompt). O turno em que
 ele é emitido ainda foi narrado sem combat.md — comportamento aceito.
 """
 
-import pytest
 
 from api.turn_pipeline import _RE_COMBATE_MARKER, aplicar_pos_turno
 from engine.memory.quest_detector import strip_marcadores

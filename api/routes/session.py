@@ -462,7 +462,7 @@ async def processar_turno(
         resposta_texto = await sessao.groq.completar(mensagens, temperatura=0.8, max_tokens=200)
     except Exception as e:
         log.error("groq_falhou", session_id=session_id, erro=str(e))
-        raise HTTPException(status_code=503, detail=f"LLM indisponível: {e}")
+        raise HTTPException(status_code=503, detail=f"LLM indisponível: {e}") from e
 
     # Detecção de quests — extrai e strip de [Q:...] antes do pipeline pós-turno
     resposta_limpa, avanco_quests = detectar_e_aplicar_quests(
@@ -534,7 +534,7 @@ async def transcrever_audio(
         return TranscricaoResponse(texto=texto, idioma="pt")
     except Exception as e:
         log.error("transcricao_falhou", session_id=session_id, erro=str(e))
-        raise HTTPException(status_code=503, detail=f"Falha na transcrição: {e}")
+        raise HTTPException(status_code=503, detail=f"Falha na transcrição: {e}") from e
 
 
 @router.get("/{session_id}/status", response_model=SessaoInfo)

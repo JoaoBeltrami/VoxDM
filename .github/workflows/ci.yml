@@ -33,12 +33,9 @@ jobs:
         run: uv python install 3.12
 
       - name: Lint (ruff)
-        # Lint nao bloqueia o merge por ora (so reporta) — restam erros B904/F401
-        # a triar. Quando zerados, remover o `|| true` pra virar bloqueante.
-        # shell: bash explicito — no Windows o default e PowerShell, onde `|| true`
-        # nao funciona. Git Bash vem instalado no windows-latest.
-        shell: bash
-        run: uvx ruff check . || true
+        # Bloqueante: as violacoes B904/F401/etc. foram zeradas. ruff pinado em
+        # 0.15.16 pra CI reprodutivel (versao nova nao quebra o build de surpresa).
+        run: uvx ruff@0.15.16 check .
 
       - name: Criar venv
         run: uv venv

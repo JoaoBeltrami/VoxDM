@@ -213,7 +213,8 @@ class PlayerCharacter:
             linhas.insert(1, f"Subclasse: {self.player_subclass}")
 
         # Atributos
-        _m = lambda v: f"+{v}" if v >= 0 else str(v)
+        def _m(v: int) -> str:
+            return f"+{v}" if v >= 0 else str(v)
         linhas.append(
             f"FOR {self.str_score}({_m(self.mod_for)}) "
             f"DES {self.dex_score}({_m(self.mod_des)}) "

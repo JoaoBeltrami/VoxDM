@@ -9,10 +9,8 @@ Armadilha: thresholds estão acoplados ao decay de pacing em
 engine/state/narrative.py — mexer num lado sem o outro descalibra.
 """
 
-import pytest
 
 from engine.llm.tasks import (
-    CASCATA_DEFAULT,
     TaskType,
     cascata_para,
     escolher_task_type_narrativo,

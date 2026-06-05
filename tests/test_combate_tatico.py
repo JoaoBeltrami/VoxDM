@@ -1,6 +1,5 @@
 """Testes para a feature de combate tático (posicionamento + movimento)."""
 
-import pytest
 
 from api.turn_pipeline import _RE_MOVIMENTO, _RE_POSICAO, aplicar_pos_turno
 from engine.memory.working_memory import WorkingMemory

@@ -70,7 +70,7 @@ _PALAVRAS_PTBR: frozenset[str] = frozenset({
     "o", "a", "os", "as", "um", "uma", "uns", "umas",
     # Preposições e contrações — altíssima frequência
     "de", "do", "da", "dos", "das",
-    "no", "na", "nos", "nas",
+    "no", "na", "nas",
     "ao", "à", "aos", "às",
     "pelo", "pela", "pelos", "pelas",
     "num", "numa",

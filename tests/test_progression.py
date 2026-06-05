@@ -1,6 +1,5 @@
 """Testes para engine/progression.py — XP, level up e seus efeitos."""
 
-import pytest
 
 from engine.memory.working_memory import WorkingMemory
 from engine.progression import (

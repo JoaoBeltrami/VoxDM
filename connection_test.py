@@ -106,7 +106,7 @@ async def main() -> None:
 
     print("\n" + "=" * 50)
     print(f"RESULTADO: {total_ok}/{total} serviços OK")
-    for nome, ok in zip(nomes, resultados):
+    for nome, ok in zip(nomes, resultados, strict=False):
         status = "[OK]" if ok else "[FALHA]"
         print(f"  {status} {nome}")
     print("=" * 50 + "\n")

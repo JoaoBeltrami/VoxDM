@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
     carregar_catalog_modulo,

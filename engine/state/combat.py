@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from engine.llm.types import TokenIniciativa
+    pass
 
 
 # Estados narrativos válidos para inimigos (mapeiam para barra visual no frontend)

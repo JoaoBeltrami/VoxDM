@@ -95,7 +95,7 @@ async def get_owner(
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="JWT do Cloudflare Access inválido",
-                )
+                ) from e
 
     # Caminho B — DEV_USER_EMAIL como fallback explícito em modo debug.
     # NÃO há fallback "qualquer um" em prod: se chegamos aqui sem email, é 401.

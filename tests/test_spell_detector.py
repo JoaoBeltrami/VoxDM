@@ -1,6 +1,5 @@
 """Testes para engine/magic/spell_detector.py."""
 
-import pytest
 
 from engine.magic.spell_detector import (
     _RE_CASTING,

@@ -12,7 +12,6 @@ Exemplo:
     assert "action-surge" in wm.class_features
 """
 
-import pytest
 
 from engine.memory.working_memory import WorkingMemory
 

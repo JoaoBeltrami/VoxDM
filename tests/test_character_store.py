@@ -23,7 +23,6 @@ os.environ.setdefault("NEO4J_PASSWORD", "test")
 from pathlib import Path
 
 import pytest
-import pytest_asyncio
 
 import engine.persistence.character_store as cs_module
 from engine.persistence.character_store import CharacterState, CharacterStore

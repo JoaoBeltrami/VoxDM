@@ -1,6 +1,6 @@
 """Testes para ingestor/chunker.py."""
 
-from ingestor.chunker import MAX_PALAVRAS, OVERLAP_PALAVRAS, ChunkRecord, extrair_chunks
+from ingestor.chunker import MAX_PALAVRAS, OVERLAP_PALAVRAS, extrair_chunks
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

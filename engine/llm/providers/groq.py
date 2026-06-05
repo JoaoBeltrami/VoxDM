@@ -23,7 +23,6 @@ import structlog
 from groq import (
     APIConnectionError,
     APIError,
-    APIStatusError,
     APITimeoutError,
     AsyncGroq,
     InternalServerError,

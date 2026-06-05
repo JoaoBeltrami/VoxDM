@@ -13,7 +13,6 @@ Exemplo:
 """
 
 import asyncio
-import sys
 import time
 from typing import Any
 

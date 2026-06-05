@@ -1,6 +1,5 @@
 """Testes para ingestor/pdf_reader.py."""
 
-import io
 from pathlib import Path
 
 import fitz
