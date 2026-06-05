@@ -214,8 +214,15 @@ Este arquivo é o plano de execução técnica do VoxDM, fase por fase. Quando o
 - [x] `engine/llm/prompt_builder.py` — budget por camada, lembrete de saída
 - [x] `engine/llm/prompts/master_system.md` — v2 completo
 - [x] `engine/llm/prompts/combat.md`
-- [x] `engine/llm/prompts/social.md`
-- [x] `engine/llm/prompts/session_eval.md`
+- [x] `engine/llm/prompts/saves.md` — salvaguardas, injetado com combat.md
+- [x] `engine/llm/prompts/dice.md` — guia de rolagem (gated por regex de rolagem)
+- [x] `engine/llm/prompts/social.md` — camada social (gated: NPCs presentes, fora de combate)
+- [x] `engine/llm/prompts/session_eval.md` — usado como system no resumo (session_writer)
+- [x] `engine/llm/prompts/quests.md` — sinalização de quest
+- [x] `engine/llm/prompts/intro_system.md` — abertura (via _carregar_intro_system)
+- [x] `engine/llm/prompts/intro_fallback.md` — fallback de abertura (emergência)
+- [x] `engine/llm/prompts/recap.md` — recap de sessão continuada
+- [x] `engine/llm/prompts/fragments/{voz_dupla,markers_lista}.md` — fragmentos condicionais
 
 ### Sessão e Debug
 - [x] `engine/telemetry.py` — pub/sub JSONL para dashboard
