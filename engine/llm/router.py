@@ -246,6 +246,19 @@ class LLMRouter:
                 log.warning("llm_provider_stream_vazio", provider=p.nome)
                 continue
             except LLMRetriable as e:
+                # Defesa de contrato (CASCATA-1): se ESTE provider já emitiu tokens,
+                # NÃO cascateia — trocar de provider mid-frase concatenaria dois
+                # inícios de narração no ouvido do jogador. Honra a promessa do
+                # docstring desta função. Os providers atuais (ver groq.py:236) já
+                # propagam erro pós-emissão como exceção genérica (não-LLMRetriable),
+                # então este guard é defensivo contra um provider futuro que lance
+                # LLMRetriable tarde demais.
+                if emitiu:
+                    log.error(
+                        "llm_stream_retriable_pos_emissao_propagada",
+                        provider=p.nome, categoria=e.categoria,
+                    )
+                    raise
                 log.warning(
                     "llm_provider_fallback_stream",
                     provider=p.nome,
