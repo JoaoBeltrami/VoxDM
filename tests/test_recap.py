@@ -442,12 +442,24 @@ def test_cliffhanger_limpo_apos_uso_na_abertura():
 def test_abertura_envia_estado_de_combate():
     """A abertura (usada tambem ao CONTINUAR sessao) deve enviar o estado de
     combate. Bug da caca 02/06: continuar uma sessao parada EM combate abria sem
-    CombatTracker/InitiativeBar porque o payload da abertura omitia esses campos."""
-    import inspect
+    CombatTracker/InitiativeBar porque o payload da abertura omitia esses campos.
 
-    from api.websocket import _enviar_abertura
-    src = inspect.getsource(_enviar_abertura)
-    for campo in ("em_combate=", "inimigos_combate=", "rodada_combate=", "iniciativa_ordem="):
-        assert campo in src, (
-            f"abertura deve enviar {campo} para restaurar combate na continuacao"
+    Pos-refactor (08/06): os tres payloads `fim` (abertura, reconexao, fim de
+    turno) montam o estado via _snapshot_estado() — fonte unica. Validamos o
+    COMPORTAMENTO (o snapshot carrega os campos de combate populados) em vez de
+    inspecionar o source da funcao, que era fragil a refactors."""
+    from api.websocket import _snapshot_estado
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-cont")
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "intacto")
+
+    snap = _snapshot_estado(wm)
+    for campo in ("em_combate", "inimigos_combate", "rodada_combate", "iniciativa_ordem"):
+        assert campo in snap, (
+            f"snapshot deve conter {campo} para restaurar combate na continuacao"
         )
+    assert snap["em_combate"] is True
+    assert "goblin-1" in snap["inimigos_combate"]
+    assert len(snap["iniciativa_ordem"]) >= 1  # jogador + goblin na ordem

@@ -97,7 +97,7 @@ class EpisodicMemory:
 
             from config import settings
 
-            client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+            client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY, check_compatibility=False)
 
             import asyncio
             loop = asyncio.get_running_loop()
@@ -135,7 +135,7 @@ class EpisodicMemory:
 
             from config import settings
 
-            client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+            client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY, check_compatibility=False)
             loop = asyncio.get_running_loop()
 
             pontos, _ = await loop.run_in_executor(

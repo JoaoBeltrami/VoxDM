@@ -120,6 +120,7 @@ from api.turn_pipeline import (  # noqa: E402
     aplicar_afeto_npcs,
     aplicar_pos_turno,
     aplicar_xp_e_detectar_level_up,
+    reinferir_npcs_se_mudou_cena,
 )
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
@@ -686,6 +687,63 @@ async def _enviar_recap_sessao_anterior(
         )
 
 
+def _snapshot_estado(wm: Any) -> dict[str, Any]:
+    """Coleta o estado da sessão para os payloads `fim`.
+
+    Fonte ÚNICA dos ~32 campos de estado enviados em TODO payload tipo="fim"
+    (abertura, reconexão e fim de turno). Antes cada um dos três sítios montava
+    os campos à mão — adicionar um campo de estado exigia editar os três lugares
+    e era fácil esquecer um (foi a origem dos bugs ROB-1/ROB-2: `player_level` e
+    `iniciativa_ordem` faltavam só no ramo de reconexão). Os campos específicos
+    de cada sítio (latência, chunks RAG, iteração, quest_avancos) ficam no caller
+    via `**extras`.
+    """
+    return {
+        "quest_stages": wm.quest_stages,
+        "active_quest_hooks": wm.active_quest_hooks,
+        "inventory": wm.player_inventory,
+        "conditions": list(wm.player_conditions),
+        "location_nome": wm.location_nome,
+        "time_of_day": wm.time_of_day,
+        "npcs_trust": {npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
+        "spell_slots": wm.spell_slots,
+        "hit_dice_current": wm.hit_dice_current,
+        "player_hp": wm.player_hp,
+        "player_hp_max": wm.player_hp_max,
+        "player_level": wm.player_level,
+        "gold": wm.gold,
+        "xp": wm.xp,
+        "inspiration": wm.inspiration,
+        "death_saves_successes": wm.death_saves_successes,
+        "death_saves_failures": wm.death_saves_failures,
+        "death_saves_stable": wm.death_saves_stable,
+        "em_combate": wm.em_combate,
+        "inimigos_combate": dict(wm.inimigos_combate),
+        "rodada_combate": wm.rodada_combate,
+        "class_features": dict(wm.class_features),
+        "fios_soltos": list(wm.fios_soltos),
+        "consequencias": list(wm.log_consequencias),
+        "posicoes_combate": dict(wm.posicoes_combate),
+        "movimento_restante_ft": wm.movimento_restante_ft,
+        "movimento_total_ft": wm.movimento_total_ft,
+        "em_mercado": wm.em_mercado,
+        "companions": dict(wm.companions),
+        "rodada_esperada": wm.rodada_combate,
+        "pacing_nivel": wm.pacing_nivel,
+        "iniciativa_ordem": (
+            [
+                {
+                    "id": t.id, "nome": t.nome, "tipo": t.tipo,
+                    "iniciativa": t.iniciativa, "turno_atual": t.turno_atual,
+                    "morto": t.morto, "hp_atual": t.hp_atual, "hp_max": t.hp_max,
+                }
+                for t in wm.calcular_ordem_iniciativa()
+            ]
+            if wm.em_combate else []
+        ),
+    }
+
+
 async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     """
     Gera e transmite a mensagem de abertura do mestre quando iteracoes == 0.
@@ -817,61 +875,18 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         except Exception as exc:
             log.warning("bestiario_enriquecimento_falhou", erro=str(exc)[:120])
 
+    # Mudança de cena na intro: o LLM pode emitir [CENA] ao abrir numa localização
+    # diferente da default (ou ao retomar sessão que terminou noutro local) →
+    # re-infere NPCs antes de montar o `fim`. (Estado de combate em continuação já
+    # vem no snapshot — em sessão nova os campos são falsos/vazios, sem efeito.)
+    await reinferir_npcs_se_mudou_cena(wm, sessao.context_builder)
+
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await websocket.send_text(
         MensagemWS(
             tipo="fim",
             latencia_ms=latencia_ms,
-            quest_stages=wm.quest_stages,
-            active_quest_hooks=wm.active_quest_hooks,
-            inventory=wm.player_inventory,
-            conditions=list(wm.player_conditions),
-            location_nome=wm.location_nome,
-            time_of_day=wm.time_of_day,
-            npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
-            spell_slots=wm.spell_slots,
-            hit_dice_current=wm.hit_dice_current,
-            player_hp=wm.player_hp,
-            player_hp_max=wm.player_hp_max,
-            player_level=wm.player_level,
-            gold=wm.gold,
-            xp=wm.xp,
-            inspiration=wm.inspiration,
-            death_saves_successes=wm.death_saves_successes,
-            death_saves_failures=wm.death_saves_failures,
-            death_saves_stable=wm.death_saves_stable,
-            # Sincroniza class_features, fios_soltos e consequencias já na abertura
-            # para que a ficha mostre os recursos corretos antes do primeiro turno.
-            # Agora reflete o estado PÓS-pipeline (fios da intro já incluídos).
-            class_features=wm.class_features,
-            fios_soltos=wm.fios_soltos,
-            consequencias=list(wm.log_consequencias),
-            posicoes_combate=dict(wm.posicoes_combate),
-            movimento_restante_ft=wm.movimento_restante_ft,
-            movimento_total_ft=wm.movimento_total_ft,
-            em_mercado=wm.em_mercado,
-            companions=dict(wm.companions),
-            rodada_esperada=wm.rodada_combate,
-            pacing_nivel=wm.pacing_nivel,
-            # Bug de continuidade (caça 02/06): a abertura tambem roda ao CONTINUAR
-            # uma sessao. Se ela parou EM combate, o frontend abria sem saber —
-            # sem CombatTracker/InitiativeBar/vinheta, apesar de wm.em_combate=True.
-            # Estes 4 campos restauram o estado de combate na continuacao. (Em
-            # sessao nova sao falsos/vazios, sem efeito colateral.)
-            em_combate=wm.em_combate,
-            inimigos_combate=dict(wm.inimigos_combate),
-            rodada_combate=wm.rodada_combate,
-            iniciativa_ordem=(
-                [
-                    {
-                        "id": t.id, "nome": t.nome, "tipo": t.tipo,
-                        "iniciativa": t.iniciativa, "turno_atual": t.turno_atual,
-                        "morto": t.morto, "hp_atual": t.hp_atual, "hp_max": t.hp_max,
-                    }
-                    for t in wm.calcular_ordem_iniciativa()
-                ]
-                if wm.em_combate else []
-            ),
+            **_snapshot_estado(wm),
         ).model_dump_json()
     )
 
@@ -978,54 +993,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # ROB-2: incluir iniciativa_ordem para que InitiativeBar não desapareça
                     # quando o jogador reconecta no meio de um combate.
                     wm = sessao.working_mem
+                    # Reconexão rápida: reenvia o snapshot completo (mesmos campos
+                    # do fim de turno) com latência 0. O helper único garante que
+                    # nenhum campo (player_level, iniciativa_ordem…) fique de fora
+                    # aqui — origem histórica dos bugs ROB-1/ROB-2.
                     await websocket.send_text(
                         MensagemWS(
                             tipo="fim",
                             latencia_ms=0,
-                            quest_stages=wm.quest_stages,
-                            active_quest_hooks=wm.active_quest_hooks,
-                            inventory=wm.player_inventory,
-                            conditions=list(wm.player_conditions),
-                            location_nome=wm.location_nome,
-                            time_of_day=wm.time_of_day,
-                            npcs_trust={npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
-                            spell_slots=wm.spell_slots,
-                            hit_dice_current=wm.hit_dice_current,
-                            player_hp=wm.player_hp,
-                            player_hp_max=wm.player_hp_max,
-                            player_level=wm.player_level,
-                            gold=wm.gold,
-                            xp=wm.xp,
-                            inspiration=wm.inspiration,
-                            death_saves_successes=wm.death_saves_successes,
-                            death_saves_failures=wm.death_saves_failures,
-                            death_saves_stable=wm.death_saves_stable,
-                            em_combate=wm.em_combate,
-                            inimigos_combate=dict(wm.inimigos_combate),
-                            rodada_combate=wm.rodada_combate,
-                            class_features=wm.class_features,
-                            fios_soltos=wm.fios_soltos,
-                            consequencias=list(wm.log_consequencias),
-                            posicoes_combate=dict(wm.posicoes_combate),
-                            movimento_restante_ft=wm.movimento_restante_ft,
-                            movimento_total_ft=wm.movimento_total_ft,
-                            em_mercado=wm.em_mercado,
-                            companions=dict(wm.companions),
-                            rodada_esperada=wm.rodada_combate,
-                            pacing_nivel=wm.pacing_nivel,
-                            iniciativa_ordem=(
-                                [
-                                    {
-                                        "id": t.id, "nome": t.nome, "tipo": t.tipo,
-                                        "iniciativa": t.iniciativa,
-                                        "turno_atual": t.turno_atual,
-                                        "morto": t.morto,
-                                        "hp_atual": t.hp_atual, "hp_max": t.hp_max,
-                                    }
-                                    for t in wm.calcular_ordem_iniciativa()
-                                ]
-                                if wm.em_combate else []
-                            ),
+                            **_snapshot_estado(wm),
                         ).model_dump_json()
                     )
                     log.info("ws_reconectado_estado_reenviado", session_id=session_id,
@@ -1518,6 +1494,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
 
+            # CENA-1: se o turno trocou de local ([CENA: id|Nome|hora]), re-infere
+            # os NPCs do novo local via Neo4j (parte async do pipeline). Sem isto,
+            # os NPCs do local inicial permaneciam no prompt a sessão inteira e
+            # "perseguiam" o jogador pelo mapa. Falha silenciosa (Neo4j offline).
+            await reinferir_npcs_se_mudou_cena(
+                sessao.working_mem, sessao.context_builder
+            )
+
             # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
             # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a
             # ficha entra no prompt do próximo turno. Falha silenciosa.
@@ -1678,45 +1662,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 MensagemWS(
                     tipo="fim",
                     latencia_ms=latencia_ms,
+                    # Extras só do fim de turno (não pertencem ao snapshot comum):
                     chunks_lore=chunks_lore,
                     chunks_regras=chunks_regras,
                     relacoes_grafo=relacoes,
                     iteracao=sessao.iteracoes,
-                    quest_stages=sessao.working_mem.quest_stages,
-                    active_quest_hooks=sessao.working_mem.active_quest_hooks,
-                    inventory=sessao.working_mem.player_inventory,
-                    conditions=list(sessao.working_mem.player_conditions),
-                    location_nome=sessao.working_mem.location_nome,
-                    time_of_day=sessao.working_mem.time_of_day,
-                    npcs_trust={npc: sessao.working_mem.trust_levels.get(npc, 1) for npc in sessao.working_mem.npcs_apresentados},
-                    spell_slots=sessao.working_mem.spell_slots,
-                    hit_dice_current=sessao.working_mem.hit_dice_current,
-                    player_hp=sessao.working_mem.player_hp,
-                    player_hp_max=sessao.working_mem.player_hp_max,
-                    player_level=sessao.working_mem.player_level,
-                    gold=sessao.working_mem.gold,
-                    xp=sessao.working_mem.xp,
-                    inspiration=sessao.working_mem.inspiration,
-                    death_saves_successes=sessao.working_mem.death_saves_successes,
-                    death_saves_failures=sessao.working_mem.death_saves_failures,
-                    death_saves_stable=sessao.working_mem.death_saves_stable,
-                    em_combate=sessao.working_mem.em_combate,
-                    inimigos_combate=dict(sessao.working_mem.inimigos_combate),
-                    rodada_combate=sessao.working_mem.rodada_combate,
                     log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
-                    iniciativa_ordem=(
-                        [
-                            {
-                                "id": t.id, "nome": t.nome, "tipo": t.tipo,
-                                "iniciativa": t.iniciativa,
-                                "turno_atual": t.turno_atual,
-                                "morto": t.morto,
-                                "hp_atual": t.hp_atual, "hp_max": t.hp_max,
-                            }
-                            for t in sessao.working_mem.calcular_ordem_iniciativa()
-                        ]
-                        if sessao.working_mem.em_combate else []
-                    ),
                     quest_avancos=[
                         {
                             "quest_id": qid,
@@ -1725,16 +1676,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         }
                         for qid, sid in avanco_quests
                     ],
-                    fios_soltos=list(sessao.working_mem.fios_soltos),
-                    consequencias=list(sessao.working_mem.log_consequencias),
-                    class_features=dict(sessao.working_mem.class_features),
-                    posicoes_combate=dict(sessao.working_mem.posicoes_combate),
-                    movimento_restante_ft=sessao.working_mem.movimento_restante_ft,
-                    movimento_total_ft=sessao.working_mem.movimento_total_ft,
-                    em_mercado=sessao.working_mem.em_mercado,
-                    companions=dict(sessao.working_mem.companions),
-                    rodada_esperada=sessao.working_mem.rodada_combate,
-                    pacing_nivel=sessao.working_mem.pacing_nivel,
+                    **_snapshot_estado(sessao.working_mem),
                 ).model_dump_json()
             )
 

@@ -141,6 +141,21 @@ _RE_AFETO = re.compile(
     re.IGNORECASE,
 )
 
+# Mudança de cena: [CENA: local-id|Nome do Local|hora] (hora opcional).
+# Ex: "[CENA: mina-abandonada|Mina Abandonada|noite]".
+# Resolve CENA-1 (varredura 08/06): sem este marker o estado de cena
+# (location_id/nome, time_of_day, npcs_presentes) congelava no valor da criação
+# da sessão durante todo o jogo ao vivo — NPCs iniciais "perseguiam" o jogador
+# pelo mapa, SceneHeader/hora/imagem-de-cena ficavam estáticos, e o gating de
+# NARRATIVE_LIGHT nunca disparava (npcs_presentes nunca esvaziava). A engine
+# atualiza local/hora no pipeline sync e re-infere NPCs do novo local (Neo4j)
+# via reinferir_npcs_se_mudou_cena() no caller async.
+_RE_CENA = re.compile(
+    r"\[CENA:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*([^|\]]{1,40}?)\s*"
+    r"(?:\|\s*([^|\]]{1,20}?)\s*)?\]",
+    re.IGNORECASE,
+)
+
 # Feature 3: Consequências visíveis — LLM emite [CONSEQUÊNCIA: efeito duradouro no mundo]
 # Ex: "[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito]"
 # Efeitos válidos: NPC morto, aliança formada, local destruído, reputação alterada.
@@ -499,7 +514,7 @@ def aplicar_pos_turno(
         log.info("trust_atualizado", npc_id=npc_id, delta=delta,
                  novo_valor=working_mem.trust_levels.get(npc_id))
 
-    # 6. Auto-registra consequências: mortos neste turno + mudanças de trust
+    # 5b. Auto-registra consequências: mortos neste turno + mudanças de trust
     for dados in working_mem.inimigos_combate.values():
         if dados.get("estado") == "morto":
             c = f"{dados['nome']} foi abatido"
@@ -526,7 +541,7 @@ def aplicar_pos_turno(
         working_mem.sair_combate()
         log.info("combate_encerrado_fuga")
 
-    # 7. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync
+    # 7a. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync
     if working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
         working_mem.sair_combate()
         log.info("combate_encerrado_por_llm")
@@ -812,7 +827,56 @@ def aplicar_pos_turno(
                 rate_raw=rate_raw if rate != rate_raw else None,
             )
 
+    # 17. Mudança de cena (CENA-1) — [CENA: local-id|Nome|hora] atualiza local/hora
+    # (sync, sem I/O). A re-inferência de NPCs do novo local (Neo4j, async) é feita
+    # pelo caller via reinferir_npcs_se_mudou_cena() após este pipeline. Primeiro
+    # [CENA] do turno vence — um deslocamento por turno.
+    for m in _RE_CENA.finditer(resposta_completa):
+        novo_id = m.group(1).strip()
+        nome = m.group(2).strip()
+        hora = (m.group(3) or "").strip()
+        if working_mem.scene.aplicar_cena(novo_id, nome, hora):
+            log.info("cena_mudou", local=working_mem.location_id, nome=nome, hora=hora or None)
+            # Trocar de LOCAL encerra um combate em andamento — o encontro anterior
+            # ficou para trás. Evita inimigos/posições do local antigo vazarem para
+            # a nova cena. (Mudar só a hora no mesmo local não cai aqui.)
+            if working_mem.em_combate:
+                working_mem.sair_combate()
+                log.info("combate_encerrado_mudanca_cena")
+        break
+
     return mudancas_trust
+
+
+async def reinferir_npcs_se_mudou_cena(
+    working_mem: WorkingMemory,
+    context_builder: Any,
+) -> None:
+    """Re-infere os NPCs presentes via Neo4j quando o turno trocou de local.
+
+    Complemento async de `aplicar_pos_turno` (sync): a chamada de I/O ao grafo
+    fica aqui, invocada pelo WebSocket e pelo REST `/turn` logo após o pipeline.
+    Consome o flag one-shot setado por `SceneState.aplicar_cena()`.
+
+    Por que separado: o pipeline é síncrono (e tem 60+ testes que dependem disso);
+    a re-inferência precisa de await no Neo4j. Sem isto, os NPCs do local inicial
+    permaneciam no prompt a sessão inteira (CENA-1).
+
+    Armadilha: NUNCA lançar — Neo4j pode estar offline; o jogo segue com os NPCs
+        antigos (degradação graciosa) em vez de travar o turno.
+    """
+    if not working_mem.scene.consumir_cena_mudou():
+        return
+    try:
+        novos = await context_builder.inferir_npcs_presentes(working_mem.location_id)
+        working_mem.npcs_presentes = novos
+        log.info(
+            "npcs_reinferidos_mudanca_cena",
+            location=working_mem.location_id,
+            total=len(novos),
+        )
+    except Exception as e:
+        log.warning("reinferir_npcs_falhou", erro=str(e)[:120])
 
 
 async def aplicar_afeto_npcs(

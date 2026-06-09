@@ -56,7 +56,40 @@ class SceneState:
     # Janela deslizante de diálogo
     dialogo_recente: list[DialogueTurn] = field(default_factory=list)
 
+    # Flag transiente: True quando o último marcador [CENA] trocou o LOCAL.
+    # Lido-e-resetado pelo caller async (websocket / REST) para disparar a
+    # re-inferência de NPCs via Neo4j. NÃO é serializado — é sinal de turno.
+    cena_mudou_local: bool = False
+
     # ── Operações ────────────────────────────────────────────────────────────
+
+    def aplicar_cena(self, location_id: str, location_nome: str = "", time_of_day: str = "") -> bool:
+        """Atualiza local/nome/hora a partir do marcador [CENA: id|nome|hora].
+
+        Trocar de LOCAL (id diferente do atual) seta `cena_mudou_local` para que
+        o caller re-infira os NPCs do novo local. Mudar só nome ou hora (mesmo id,
+        ex.: anoiteceu no mesmo lugar) atualiza sem disparar re-inferência.
+
+        Retorna True se o LOCAL mudou (id diferente) — útil para log no caller.
+        """
+        novo_id = (location_id or "").strip().lower()
+        if not novo_id:
+            return False
+        mudou_local = novo_id != self.location_id
+        if mudou_local:
+            self.cena_mudou_local = True
+            self.location_id = novo_id
+        if location_nome.strip():
+            self.location_nome = location_nome.strip()
+        if time_of_day.strip():
+            self.time_of_day = time_of_day.strip()
+        return mudou_local
+
+    def consumir_cena_mudou(self) -> bool:
+        """Lê e reseta o flag de mudança de local (one-shot)."""
+        v = self.cena_mudou_local
+        self.cena_mudou_local = False
+        return v
 
     def registrar_fala(self, falante: str, texto: str) -> None:
         """Adiciona fala à janela deslizante."""

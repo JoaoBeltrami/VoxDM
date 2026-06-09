@@ -240,7 +240,7 @@ class SessionWriter:
         vetor: list[float] = vetor_array[0].tolist()
         dim = len(vetor)
 
-        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY, check_compatibility=False)
         loop = asyncio.get_running_loop()
 
         # Garantir que a coleção existe (idempotente)

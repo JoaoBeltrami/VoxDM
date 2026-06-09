@@ -34,7 +34,7 @@ from api.models.schemas import (
 )
 from api.rate_limit import limiter
 from api.state import MAX_SESSOES, SessaoAtiva, sessions
-from api.turn_pipeline import aplicar_pos_turno
+from api.turn_pipeline import aplicar_pos_turno, reinferir_npcs_se_mudou_cena
 from engine.auth.identity import Owner
 from engine.llm.groq_client import GroqClient
 from engine.llm.prompt_builder import montar_mensagens
@@ -479,6 +479,9 @@ async def processar_turno(
     # Pipeline pós-turno compartilhado — mesmo comportamento do WebSocket:
     # sync inimigos, iniciativa, trust, consequências, rodada, fim de combate.
     aplicar_pos_turno(sessao.working_mem, comando.texto, resposta_limpa)
+    # CENA-1: paridade com o WebSocket — se o turno trocou de local, re-infere
+    # os NPCs do novo local (async, Neo4j). Falha silenciosa.
+    await reinferir_npcs_se_mudou_cena(sessao.working_mem, sessao.context_builder)
     sessao.iteracoes += 1
     latencia_ms = int((time.perf_counter() - t0) * 1000)
 
