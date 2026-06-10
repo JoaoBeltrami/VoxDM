@@ -22,6 +22,7 @@ Instalação:
 """
 
 import asyncio
+import json
 import tempfile
 import threading
 from collections.abc import AsyncIterator
@@ -31,6 +32,48 @@ from typing import Any
 import structlog
 
 log = structlog.get_logger(__name__)
+
+
+# ── Vocabulário do módulo (hotwords pro Whisper) ─────────────────────────────
+# STT-NOMES-1 (teste ao vivo 09/06): Whisper transcrevia "Tharnvik" como
+# Trianvore/Tarvnick/Tavik/Tarvique — nomes próprios do módulo nunca batiam,
+# e o marker [CENA] não disparava pra cidade certa. O dicionário de pronúncia
+# (189 termos) é só TTS; o STT precisa receber os nomes via `hotwords`, que o
+# faster-whisper usa pra enviesar a decodificação em TODA janela de áudio.
+_VOCAB_MODULO: str | None = None
+
+
+def _vocabulario_modulo() -> str:
+    """Nomes próprios do módulo ativo (locations/NPCs/entidades), cacheado.
+
+    Falha silenciosa: módulo ausente/corrompido → string vazia (Whisper segue
+    sem viés, comportamento de hoje). Cap ~600 chars — hotwords muito longas
+    diluem o ganho e custam contexto do decoder.
+    """
+    global _VOCAB_MODULO
+    if _VOCAB_MODULO is not None:
+        return _VOCAB_MODULO
+    nomes: list[str] = []
+    try:
+        caminho = Path(_settings.DEFAULT_MODULE_PATH)
+        if not caminho.is_absolute():
+            caminho = Path(__file__).resolve().parents[2] / str(
+                _settings.DEFAULT_MODULE_PATH
+            ).lstrip("./")
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        for categoria in ("locations", "npcs", "companions", "entities", "factions"):
+            for elem in dados.get(categoria, []):
+                if isinstance(elem, dict):
+                    nome = str(elem.get("name") or "").strip()
+                    if nome:
+                        nomes.append(nome)
+    except Exception as e:
+        log.warning("stt_vocab_modulo_falhou", erro=str(e)[:100])
+    # dict.fromkeys dedupa preservando ordem (locations primeiro = mais críticos)
+    _VOCAB_MODULO = ", ".join(dict.fromkeys(nomes))[:600]
+    if _VOCAB_MODULO:
+        log.info("stt_vocab_modulo_carregado", termos=len(nomes), chars=len(_VOCAB_MODULO))
+    return _VOCAB_MODULO
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -104,6 +147,9 @@ async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
                 language=idioma,
                 beam_size=5,        # beam=5 — melhor acurácia PT-BR com latência aceitável na GPU
                 vad_filter=True,    # remove silêncio no início/fim
+                # STT-NOMES-1: nomes próprios do módulo enviesam o decoder —
+                # "Tharnvik" deixa de virar "Tarvnick/Tavik/para a tarde Nick".
+                hotwords=_vocabulario_modulo() or None,
             )
             return " ".join(seg.text.strip() for seg in segmentos).strip()
         finally:

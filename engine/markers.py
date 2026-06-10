@@ -36,7 +36,7 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     # Aliados
     "COMPANION_ADD", "COMPANION_HP", "COMPANION_REMOVE",
     # Cena e persistência
-    "DESCANSO", "VOZ", "AFETO", "CENA",
+    "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA",
 )
 
 

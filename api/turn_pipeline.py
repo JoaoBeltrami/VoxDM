@@ -29,6 +29,7 @@ from typing import Any
 
 import structlog
 
+from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
@@ -138,6 +139,15 @@ _RE_INIMIGO_REGISTRAR = re.compile(
 # Campos: afeto | medo | respeito | rancor. Delta: int com sinal (+/-).
 _RE_AFETO = re.compile(
     r"\[AFETO:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*(afeto|medo|respeito|rancor)\s*\|\s*([+\-]?\d+)\s*\]",
+    re.IGNORECASE,
+)
+
+# Gasto de class feature: [FEATURE_GASTA: feature-id] — LLM declara que o
+# jogador usou Action Surge/Second Wind/etc. e a engine decrementa usos_atual.
+# UI-FICHA (teste 09/06): "nem pedindo pro mestre aquilo gasta" — não existia
+# canal LLM→engine pra features; só o sync manual do frontend.
+_RE_FEATURE_GASTA = re.compile(
+    r"\[FEATURE_GASTA:\s*([a-z0-9][a-z0-9-]{0,48})\s*\]",
     re.IGNORECASE,
 )
 
@@ -576,11 +586,18 @@ def aplicar_pos_turno(
             # Combate ativo sem NENHUM inimigo registrado. Isso acontece em dois
             # casos: (a) combate fantasma de verdade (cena migrou pra fora), ou
             # (b) combate legítimo cujo alvo a regra _RE_ALVO_ATAQUE não capturou
-            # ("dei tapa em todo mundo"). Bug do teste 01/06: threshold=2 punia o
-            # caso (b) — combate encerrava na 1ª vantagem do jogador. Subido pra 4
-            # rodadas pra dar fôlego ao combate genérico/sem-alvo-nomeado. Combate
-            # fantasma real ainda encerra, só um pouco mais tarde (custo aceitável).
-            working_mem.rodadas_sem_acao_inimigo += 1
+            # ("dei tapa em todo mundo", "ataco ele" — pronome rejeitado).
+            # COMBAT-GHOST-2 (teste ao vivo 09/06): "Eu ataco ele e tento matar
+            # ele" não registrava inimigo → o contador chegou a 4 enquanto o
+            # jogador AINDA golpeava o cavaleiro, e o combate foi encerrado no
+            # meio da luta (XP veio com em_combate=False). Fix: se o turno tem
+            # ação de combate do jogador, ele está obviamente lutando — zera o
+            # contador. Combate fantasma real (jogador conversando/andando) não
+            # tem verbo de ataque e continua expirando em 4 rodadas.
+            if _RE_COMBATE_JOGADOR.search(texto_jogador):
+                working_mem.rodadas_sem_acao_inimigo = 0
+            else:
+                working_mem.rodadas_sem_acao_inimigo += 1
             if working_mem.rodadas_sem_acao_inimigo >= 4:
                 working_mem.sair_combate()
                 log.info("combate_encerrado_sem_inimigos_vivos")
@@ -629,11 +646,14 @@ def aplicar_pos_turno(
             # Combate eleva o pacing
             working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 1.5)
         elif working_mem.saiu_combate_recentemente:
-            # Logo após combate: reduz levemente (respiração pós-batalha)
-            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.5)
+            # Logo após combate: queda firme (respiração pós-batalha). Era -0.5;
+            # teste 09/06 mostrou pacing pinado em ~10 por 40min após o combate —
+            # markers_frag + roteamento CLIMAX ficaram ativos a sessão toda.
+            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 1.5)
         elif working_mem.turnos_sem_tensao > 3:
-            # Muitos turnos calmos: reduz pacing gradualmente
-            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.3)
+            # Muitos turnos calmos: reduz pacing gradualmente (era -0.3 — lento
+            # demais pra drenar um pico de 10 em sessão real)
+            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.6)
         else:
             # Turno normal de exploração/social: leve aumento
             working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
@@ -826,6 +846,16 @@ def aplicar_pos_turno(
                 pitch_raw=pitch_raw if pitch != pitch_raw else None,
                 rate_raw=rate_raw if rate != rate_raw else None,
             )
+
+    # 16b. Gasto de class feature — [FEATURE_GASTA: id] decrementa usos_atual.
+    # Só features com usos finitos (usos_max > 0); ilimitadas (-1) são noop.
+    for m in _RE_FEATURE_GASTA.finditer(resposta_completa):
+        fid = m.group(1).strip().lower()
+        feat = working_mem.class_features.get(fid)
+        if feat and feat.get("usos_max", 0) > 0 and feat.get("usos_atual", 0) > 0:
+            feat["usos_atual"] -= 1
+            feat["disponivel"] = feat["usos_atual"] > 0
+            log.info("feature_gasta_llm", feature=fid, usos_restantes=feat["usos_atual"])
 
     # 17. Mudança de cena (CENA-1) — [CENA: local-id|Nome|hora] atualiza local/hora
     # (sync, sem I/O). A re-inferência de NPCs do novo local (Neo4j, async) é feita

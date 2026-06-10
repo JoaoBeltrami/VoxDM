@@ -59,6 +59,24 @@ FRASES_PENSAMENTO: Final[tuple[str, ...]] = (
     "Hmm, deixa eu pensar.",
     "Olhe...",
     "Tá.",
+    # THINKING-VAR-1 (teste 09/06): pool ampliado — 20 frases repetiam em 75
+    # turnos. Mantém o registro "mestre de mesa brasileiro pensando alto".
+    "Certo, certo.",
+    "Peraí.",
+    "Deixa eu ver uma coisa.",
+    "Boa.",
+    "Hmm, gostei.",
+    "Olha só.",
+    "Entendi.",
+    "Sei...",
+    "É, faz sentido.",
+    "Calma aí.",
+    "Deixa comigo.",
+    "Vamos ver isso.",
+    "Ah, é mesmo?",
+    "Interessante...",
+    "Muito bem.",
+    "Hmm, ousado.",
 )
 
 # frase → bytes MP3. Populado por warmup(). Vazio se warmup falhou.

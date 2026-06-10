@@ -30,6 +30,28 @@ log = structlog.get_logger()
 # inimigos novos (cada lookup é uma ida ao Qdrant). Os já cacheados não contam.
 _MAX_LOOKUPS_POR_TURNO = 5
 
+# BESTIARY-PERF-1 (teste ao vivo 09/06): cada lookup criava um QdrantMemoryClient
+# NOVO, que recarregava o SentenceTransformer (~3s) — com 2 inimigos por turno de
+# combate, +6s/turno só de reload (turnos de 13-14s nos logs). Singleton elimina.
+_cliente_singleton: Any = None
+
+# BESTIARY-SRD-1: cache negativo. O LLM emitiu o índice LITERAL "srd" (copiou o
+# placeholder da doc do marker) e o lookup-miss repetia TODO turno. Misses entram
+# aqui e não são re-consultados (a coleção não muda durante o jogo).
+_indices_sem_ficha: set[str] = set()
+
+# Índices que NUNCA são válidos — placeholders que o LLM copia da documentação.
+_INDICES_INVALIDOS: frozenset[str] = frozenset({"srd", "id", "indice", "index", "none", "x"})
+
+
+def _obter_cliente() -> Any:
+    """Cliente Qdrant singleton (lazy) — evita reload do embedder por chamada."""
+    global _cliente_singleton
+    if _cliente_singleton is None:
+        from engine.memory.qdrant_client import QdrantMemoryClient
+        _cliente_singleton = QdrantMemoryClient()
+    return _cliente_singleton
+
 
 def _slugify(nome: str) -> str:
     """Converte nome livre em índice kebab-case candidato (ex: 'Goblin' → 'goblin')."""
@@ -50,13 +72,17 @@ async def buscar_ficha_monstro(srd_index: str = "", nome: str = "") -> str | Non
     Returns:
         O texto do stat block, ou None se não encontrado / erro de rede.
     """
-    indice = (srd_index or _slugify(nome)).strip().lower()
-    if not indice:
+    indice = (srd_index or "").strip().lower()
+    # BESTIARY-SRD-1: índice placeholder ("srd" etc.) cai pro slug do nome,
+    # que ainda pode bater num monstro real ("Goblin" → "goblin").
+    if not indice or indice in _INDICES_INVALIDOS:
+        indice = _slugify(nome)
+    if not indice or indice in _INDICES_INVALIDOS:
+        return None
+    if indice in _indices_sem_ficha:
         return None
     try:
-        from engine.memory.qdrant_client import QdrantMemoryClient
-
-        cliente = QdrantMemoryClient()
+        cliente = _obter_cliente()
         # query é só pra gerar o vetor exigido pelo query_points; o filtro exato
         # por source_id é quem decide o resultado. score_threshold=0 → não filtra.
         resultados = await cliente.buscar(
@@ -67,10 +93,13 @@ async def buscar_ficha_monstro(srd_index: str = "", nome: str = "") -> str | Non
             score_threshold=0.0,
         )
         if not resultados:
+            _indices_sem_ficha.add(indice)
             return None
         texto = str(resultados[0].get("text", "")).strip()
         if texto:
             log.info("bestiario_ficha_encontrada", indice=indice)
+        else:
+            _indices_sem_ficha.add(indice)
         return texto or None
     except Exception as exc:
         # Falha silenciosa — Qdrant fora, coleção ausente, etc. Combate segue.

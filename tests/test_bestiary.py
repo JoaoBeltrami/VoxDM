@@ -8,11 +8,29 @@ Cobre Fase 1 (ingestor.rules_loader._normalizar_monstro) e Fase 2
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from engine.bestiary.bestiary import (
     _slugify,
     buscar_ficha_monstro,
     enriquecer_fichas_inimigos,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_estado_bestiary():
+    """Singleton de cliente + cache negativo zerados entre testes.
+
+    Sem isto, o `_cliente_singleton` captura o mock do PRIMEIRO teste que
+    patcha QdrantMemoryClient e vaza pros seguintes (ficha errada/stale),
+    e um miss cacheado num teste esconderia a consulta no próximo.
+    """
+    from engine.bestiary import bestiary
+    bestiary._cliente_singleton = None
+    bestiary._indices_sem_ficha.clear()
+    yield
+    bestiary._cliente_singleton = None
+    bestiary._indices_sem_ficha.clear()
 from engine.memory.working_memory import WorkingMemory
 from ingestor.rules_loader import (
     _fmt_cr,

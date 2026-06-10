@@ -431,15 +431,18 @@ def test_combate_encerra_quando_sem_inimigos_vivos_por_quatro_rodadas():
 
     wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
     wm.entrar_combate()
-    # Combate ativo sem inimigos_combate registrados — 3 rodadas NÃO encerram.
-    aplicar_pos_turno(wm, "ataco todo mundo", "Você gira a lâmina.")
+    # Combate fantasma REAL: sem inimigos registrados E sem o jogador atacar
+    # (a cena migrou pra exploração). COMBAT-GHOST-2 (09/06): turnos com verbo
+    # de ataque agora ZERAM o contador — jogador lutando nunca expira combate —
+    # então o fantasma é simulado com ações neutras.
+    aplicar_pos_turno(wm, "olho ao redor procurando uma saída", "Você gira a lâmina.")
     assert wm.em_combate is True
     assert wm.rodadas_sem_acao_inimigo == 1
-    aplicar_pos_turno(wm, "continuo atacando", "A poeira sobe.")
+    aplicar_pos_turno(wm, "ando até a porta dos fundos", "A poeira sobe.")
     assert wm.em_combate is True
-    aplicar_pos_turno(wm, "avanço", "Gritos ecoam.")
+    aplicar_pos_turno(wm, "escuto com atenção", "Gritos ecoam.")
     assert wm.em_combate is True  # 3ª — ainda em combate
-    aplicar_pos_turno(wm, "sigo lutando", "Silêncio.")
+    aplicar_pos_turno(wm, "sigo pelo corredor", "Silêncio.")
     assert wm.em_combate is False  # encerrou na 4ª
 
 
@@ -537,12 +540,14 @@ def test_inimigo_marker_reseta_timeout_de_combate_fantasma():
 
     wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
     wm.entrar_combate()
-    aplicar_pos_turno(wm, "ataco todos", "Voce gira a lamina.")
-    aplicar_pos_turno(wm, "continuo", "A poeira sobe.")
+    # Ações neutras de propósito — COMBAT-GHOST-2 faz verbo de ataque também
+    # zerar o contador, o que mascararia o reset via [INIMIGO] validado aqui.
+    aplicar_pos_turno(wm, "olho ao redor", "Voce gira a lamina.")
+    aplicar_pos_turno(wm, "espero um instante", "A poeira sobe.")
     assert wm.rodadas_sem_acao_inimigo == 2
     aplicar_pos_turno(
         wm,
-        "avanco",
+        "me preparo",
         "Dois bandidos cercam voce. "
         "[INIMIGO: bandido-1|Bandido] [INIMIGO: bandido-2|Bandido Lider]",
     )

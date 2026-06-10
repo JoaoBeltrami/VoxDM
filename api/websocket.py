@@ -173,7 +173,11 @@ async def _sintetizar_com_timeout(
     label: str = "tts",
 ) -> bytes:
     """TTS com timeout — wrapper único pra call-sites com erro silencioso."""
-    if tts is None or not texto.strip():
+    # TTS-MIN-1 (teste 09/06): fragmento de 1 char ("…", "?") chegou ao Edge TTS,
+    # que devolveu NoAudioReceived → ativou o fallback Kokoro (15s de load) à toa.
+    # Texto sem pelo menos 2 chars E uma letra/dígito não vira fala — skip barato.
+    _t = texto.strip()
+    if tts is None or len(_t) < 2 or not re.search(r"[0-9A-Za-zÀ-ÿ]", _t):
         return b""
     kwargs: dict[str, Any] = {}
     if voice is not None: kwargs["voice"] = voice
@@ -839,12 +843,42 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         except Exception:
             pass
 
-    # Uma única síntese TTS do texto completo — sem fragmentação em sentenças
-    if tts:
-        await _sintetizar_e_enviar(
-            websocket, tts, resposta_intro, voice=wm.tts_voice,
-            npc_vozes=wm.npc_vozes,
-        )
+    # TTS-ABERTURA-1 (teste 09/06): a síntese single-shot de 600+ chars chegava
+    # ~3s depois do texto completo — "áudio BEM atrasado". Agora a abertura usa
+    # o mesmo padrão do turno: sentença a sentença, chunks enviados conforme
+    # ficam prontos. Primeiro áudio em ~0.6-1s (1ª sentença) em vez do bloco todo.
+    if tts and resposta_intro.strip():
+        _sentencas = [
+            s.strip()
+            for s in re.split(r"(?<=[.!?…])\s+", strip_marcadores(resposta_intro))
+            if s.strip()
+        ]
+        _seq = 0
+        _npc_foco_intro: str | None = None
+        for _s in _sentencas:
+            voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(_s)
+            if wm.npc_vozes:
+                _voz_npc = _detectar_voz_npc(_s, wm.npc_vozes, _npc_foco_intro)
+                if _voz_npc:
+                    pitch_s = _voz_npc.get("pitch", pitch_s) or pitch_s
+                    rate_s = _voz_npc.get("rate", rate_s) or rate_s
+                _atrib = _extrair_atribuicao(_s, wm.npc_vozes)
+                if _atrib:
+                    _npc_foco_intro = _atrib
+            _audio = await _sintetizar_com_timeout(
+                tts, _s, 12.0,
+                voice=voz_s, rate=rate_s, pitch=pitch_s, idioma=Idioma.PTBR,
+                label=f"abertura_seq{_seq}",
+            )
+            if _audio:
+                await websocket.send_text(
+                    MensagemWS(
+                        tipo="audio_chunk",
+                        conteudo_b64=base64.b64encode(_audio).decode("ascii"),
+                        sequencia=_seq,
+                    ).model_dump_json()
+                )
+                _seq += 1
 
     # Bug R4-5: o `fim` era enviado ANTES de aplicar_pos_turno, então quaisquer
     # [FIO:] / [CONSEQUÊNCIA:] / [XP:] emitidos pelo LLM na abertura não apareciam

@@ -474,8 +474,10 @@ class KokoroTTSEngine:
     }
 
     # Vozes disponíveis por idioma
+    # KOKORO-VOICE-1 (teste 09/06): "bf_emma" é INGLESA britânica — o fallback
+    # sintetizava PT-BR com fonética en-GB. "pf_dora" é a voz PT nativa do Kokoro.
     _VOZES: dict[str, str] = {
-        "p": "bf_emma",   # PT-BR feminina
+        "p": "pf_dora",   # PT feminina (nativa)
         "a": "am_adam",   # EN masculina
     }
 

@@ -12,7 +12,8 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 
 **Combate:**
 - `[COMBATE: iniciar]` — ação bélica fora de combate (sparring, "uso chama nele"). Engine ativa iniciativa e vinheta.
-- `[INIMIGO: id|nome|srd?]` — registra combatente (rastreador/iniciativa); use ao introduzir inimigos ou ataque sem alvo. `srd` opcional = índice SRD p/ ficha real. Ex: `[INIMIGO: g1|Goblin|goblin]`.
+- `[INIMIGO: id|nome|indice-srd]` — registra combatente (rastreador/iniciativa); use ao introduzir inimigos ou ataque sem alvo. 3º campo = índice SRD em inglês (goblin, orc, guard); omita se não souber — nunca escreva "srd". Ex: `[INIMIGO: g1|Goblin|goblin]`.
+- `[FEATURE_GASTA: feature-id]` — jogador usou feature de classe (action-surge, rage); engine desconta o uso.
 - `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura" se aplicável.
 - `[MOV: -N ft motivo]` — movimento do jogador. Padrão 30 ft/rodada.
 - `[INIMIGO_MORTO: id]` — id do "Inimigos:". Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
