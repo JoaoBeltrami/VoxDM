@@ -10,7 +10,7 @@
  * Refatorado 27/05: usa tokens semânticos vox-* + Cinzel pra display do número.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui";
 
 interface Props {
@@ -23,6 +23,16 @@ interface Props {
 export function DadoAnimado({ tipo, resultado, visivel, onTerminou }: Props) {
   const [exibido, setExibido] = useState<number | null>(null);
   const [animando, setAnimando] = useState(false);
+
+  // UI-DADO-1 (teste 09/06): onTerminou nas deps do efeito — call-sites passam
+  // arrow inline (nova referência a CADA render do page, que re-renderiza o
+  // tempo todo com o karaokê) → o efeito limpava e REINICIAVA a animação em
+  // loop infinito (o dado nunca parou de girar depois do crítico). Ref quebra
+  // a dependência sem exigir useCallback em todos os call-sites.
+  const onTerminouRef = useRef(onTerminou);
+  useEffect(() => {
+    onTerminouRef.current = onTerminou;
+  }, [onTerminou]);
 
   useEffect(() => {
     if (!visivel) {
@@ -45,12 +55,12 @@ export function DadoAnimado({ tipo, resultado, visivel, onTerminou }: Props) {
         setExibido(resultado);
         setAnimando(false);
         clearInterval(interval);
-        setTimeout(() => onTerminou?.(), 800);
+        setTimeout(() => onTerminouRef.current?.(), 800);
       }
     }, 67);
 
     return () => clearInterval(interval);
-  }, [visivel, resultado, tipo, onTerminou]);
+  }, [visivel, resultado, tipo]);
 
   if (!visivel && exibido === null) return null;
 

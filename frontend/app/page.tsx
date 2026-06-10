@@ -5,6 +5,7 @@ import { useGameSession } from "@/hooks/useGameSession";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useSceneMood } from "@/hooks/useSceneMood";
 import { DadoAnimado } from "@/components/DadoAnimado";
+import { ErrorBoundary } from "@/components/system/ErrorBoundary";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
@@ -466,10 +467,42 @@ export default function Home() {
   // Gamificação: save mais recente, pra oferecer "Continuar" em destaque no menu.
   // Carregado na montagem; null = jogador sem save (menu mostra só Nova Aventura).
   const [saveRecente, setSaveRecente] = useState<PersonagemSalvoItem | null>(null);
-  useEffect(() => {
+  const recarregarSaveRecente = useCallback(() => {
     listarPersonagensSalvos()
-      .then(lista => { if (lista.length > 0) setSaveRecente(lista[0]); })
+      .then(lista => setSaveRecente(lista.length > 0 ? lista[0] : null))
       .catch(() => {});
+  }, []);
+  useEffect(() => {
+    recarregarSaveRecente();
+  }, [recarregarSaveRecente]);
+  // UI-LOAD-1 (teste 09/06): após encerrar a sessão, o menu voltava com o
+  // saveRecente do BOOT — o save recém-gravado no encerramento não aparecia e
+  // o jogador achou que perdeu 1h de jogo (os dados estavam no SQLite/Qdrant).
+  // Refetch sempre que o menu reaparece desconectado.
+  useEffect(() => {
+    if (tela === "menu" && !conectado) recarregarSaveRecente();
+  }, [tela, conectado, recarregarSaveRecente]);
+
+  // Palco-lite (F1, validado pelo veredito "nada da HUD é utilizável tirando
+  // falar e rolar"): painéis laterais ocultáveis individualmente, persistido.
+  // Cinema mode continua sendo o modo "tudo escondido"; estes são o meio-termo.
+  const [painelEsqOculto, setPainelEsqOculto] = useState<boolean>(
+    () => typeof window !== "undefined" && localStorage.getItem("voxdm_painel_esq_oculto") === "1",
+  );
+  const [painelDirOculto, setPainelDirOculto] = useState<boolean>(
+    () => typeof window !== "undefined" && localStorage.getItem("voxdm_painel_dir_oculto") === "1",
+  );
+  const togglePainelEsq = useCallback(() => {
+    setPainelEsqOculto(v => {
+      localStorage.setItem("voxdm_painel_esq_oculto", v ? "0" : "1");
+      return !v;
+    });
+  }, []);
+  const togglePainelDir = useCallback(() => {
+    setPainelDirOculto(v => {
+      localStorage.setItem("voxdm_painel_dir_oculto", v ? "0" : "1");
+      return !v;
+    });
   }, []);
 
   // Quando o servidor restaura a identidade de uma sessão anterior, aplica no estado
@@ -783,7 +816,10 @@ export default function Home() {
     // Sem isso, cada token de streaming yanks o jogador que está relendo uma fala.
     const distanciaDoFundo = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distanciaDoFundo < 150) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      // UI-TEXT-VANISH-1: scrollIntoView rola TODOS os ancestrais scrolláveis
+      // (havia scroll aninhado com o MasterResponse) e "engolia" os balões da
+      // viewport. Rolar o PRÓPRIO container não tem efeito colateral nenhum.
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     }
   }, [historico, respostaAtual]);
 
@@ -1541,14 +1577,41 @@ export default function Home() {
         <AppShell
           backgroundUrl={sceneImageUrl}
           topBar={topBarSlot}
-          left={cinemaMode ? undefined : leftSlot}
-          center={centerSlot}
-          right={rightSlot}
+          left={cinemaMode || painelEsqOculto ? undefined : (
+            <ErrorBoundary nome="painel esquerdo">{leftSlot}</ErrorBoundary>
+          )}
+          center={<ErrorBoundary nome="narração">{centerSlot}</ErrorBoundary>}
+          right={painelDirOculto ? undefined : (
+            <ErrorBoundary nome="ficha">{rightSlot}</ErrorBoundary>
+          )}
           dock={dockSlot}
-          overlays={overlaysSlot}
+          overlays={<ErrorBoundary nome="overlays">{overlaysSlot}</ErrorBoundary>}
         />
 
         {/* ── Overlays interativos — irmãos do AppShell (recebem cliques) ──── */}
+
+        {/* Palco-lite: toggles dos painéis laterais (persistidos). Escondidos
+            em cinema mode — lá a HUD inteira já some. */}
+        {!cinemaMode && (
+          <>
+            <button
+              onClick={togglePainelEsq}
+              title={painelEsqOculto ? "Mostrar painel esquerdo" : "Ocultar painel esquerdo"}
+              aria-label={painelEsqOculto ? "Mostrar painel esquerdo" : "Ocultar painel esquerdo"}
+              className="fixed left-0 top-1/2 z-40 -translate-y-1/2 rounded-r-vox-md border border-l-0 border-vox-border-soft bg-vox-bg-floating px-1 py-3 text-xs text-vox-text-muted transition hover:text-vox-accent-glow"
+            >
+              {painelEsqOculto ? "›" : "‹"}
+            </button>
+            <button
+              onClick={togglePainelDir}
+              title={painelDirOculto ? "Mostrar ficha" : "Ocultar ficha"}
+              aria-label={painelDirOculto ? "Mostrar ficha" : "Ocultar ficha"}
+              className="fixed right-0 top-1/2 z-40 -translate-y-1/2 rounded-l-vox-md border border-r-0 border-vox-border-soft bg-vox-bg-floating px-1 py-3 text-xs text-vox-text-muted transition hover:text-vox-accent-glow"
+            >
+              {painelDirOculto ? "‹" : "›"}
+            </button>
+          </>
+        )}
 
         {/* Feature 1: Tela de encerramento de sessão — 8s ou clique */}
         {sessionEndStats && (
@@ -1735,12 +1798,24 @@ export default function Home() {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => setTela("nova-sessao")}
-              className="w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95"
-            >
-              Nova Aventura
-            </button>
+            <>
+              <button
+                onClick={() => setTela("nova-sessao")}
+                className="w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95"
+              >
+                Nova Aventura
+              </button>
+              {/* UI-LOAD-1: o botão de carregar TEM que existir mesmo sem
+                  saveRecente — o picker lista sessões do Qdrant/SQLite que o
+                  destaque "Continuar" pode não cobrir (fetch falhou, owner
+                  trocou, etc.). Sem ele, o jogador acha que perdeu tudo. */}
+              <button
+                onClick={() => setTela("carregar-sessao")}
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 active:scale-95"
+              >
+                Carregar sessão
+              </button>
+            </>
           )}
           <button
             onClick={() => setTela("opcoes")}

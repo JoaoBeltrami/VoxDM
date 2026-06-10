@@ -380,7 +380,27 @@ export function useGameSession() {
     };
 
     ws.onmessage = (ev) => {
-      const msg: MensagemWS = JSON.parse(ev.data);
+      // F0 (robustez): fronteira WS validada — payload malformado NUNCA pode
+      // derrubar a UI. Era `JSON.parse` com cast cego; um server bugado/versão
+      // velha crashava a sessão inteira. (Schema zod completo com inferência
+      // de tipos fica pro F2 — este guard cobre o caso catastrófico hoje.)
+      let msg: MensagemWS;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        console.warn("[VoxDM] mensagem WS não-JSON descartada");
+        return;
+      }
+      if (!msg || typeof msg.tipo !== "string") {
+        console.warn("[VoxDM] mensagem WS sem 'tipo' descartada");
+        return;
+      }
+      // Cap de áudio: ~2.8M chars de base64 ≈ 2MB de MP3 ≈ minutos de fala.
+      // Acima disso é bug ou abuso — decodificar congelaria a aba.
+      if (msg.conteudo_b64 && msg.conteudo_b64.length > 2_800_000) {
+        console.warn("[VoxDM] audio_chunk acima do teto (2MB) descartado");
+        return;
+      }
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
         // CRIT-2: passa narrativo=false em chunks de thinking ("Hmm...") para

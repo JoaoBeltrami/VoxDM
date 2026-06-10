@@ -59,7 +59,11 @@ export function MasterResponse({
   };
 
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto px-4 py-6">
+    /* UI-TEXT-VANISH-1: SEM overflow próprio — o scroll é responsabilidade
+       única do scrollContainerRef no page.tsx. O overflow-y-auto duplicado
+       criava scroll aninhado: o scrollIntoView rolava o contêiner externo e
+       os balões "sumiam" da viewport ao interagir com a ficha. */
+    <div className="flex flex-col gap-4 px-4 py-6">
       {historico.map((turno, idx) => (
         <div
           key={turno.id}

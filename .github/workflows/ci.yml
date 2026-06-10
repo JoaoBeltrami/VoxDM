@@ -67,6 +67,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Auditoria de dependências (npm audit)
+        # F0 do Palco: o CI já roda pip-audit no backend (security.yml); o
+        # frontend não tinha nada. high+ bloqueia — moderate vira ruído.
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Build (tsc + lint + compile)
         # next build inclui tsc + ESLint + compilacao. Pega rules-of-hooks que
         # o `tsc --noEmit` sozinho NAO pega (foi o debito que quebrou producao
