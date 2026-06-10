@@ -504,6 +504,17 @@ export default function Home() {
       return !v;
     });
   }, []);
+  // Palco F1 — modo roteiro (default): a narrativa lê como livro/script, não
+  // como chat. "0" explícito no localStorage = jogador preferiu o modo Mesa.
+  const [modoRoteiro, setModoRoteiro] = useState<boolean>(
+    () => typeof window === "undefined" || localStorage.getItem("voxdm_modo_roteiro") !== "0",
+  );
+  const toggleModoRoteiro = useCallback(() => {
+    setModoRoteiro(v => {
+      localStorage.setItem("voxdm_modo_roteiro", v ? "0" : "1");
+      return !v;
+    });
+  }, []);
 
   // Quando o servidor restaura a identidade de uma sessão anterior, aplica no estado
   // local para que CharacterSheet, magias e nome no header apareçam corretamente
@@ -1273,6 +1284,7 @@ export default function Home() {
           respostaAtual={textoSincronizado}
           playerName={playerName}
           mestrePensando={isProcessing}
+          modoRoteiro={modoRoteiro}
         />
         <div ref={bottomRef} />
       </div>
@@ -1609,6 +1621,16 @@ export default function Home() {
               className="fixed right-0 top-1/2 z-40 -translate-y-1/2 rounded-l-vox-md border border-r-0 border-vox-border-soft bg-vox-bg-floating px-1 py-3 text-xs text-vox-text-muted transition hover:text-vox-accent-glow"
             >
               {painelDirOculto ? "‹" : "›"}
+            </button>
+            {/* Palco F1: roteiro (livro) ⇄ Mesa (balões) — espelha o botão de
+                cinema do canto direito. */}
+            <button
+              onClick={toggleModoRoteiro}
+              title={modoRoteiro ? "Modo Mesa (balões de chat)" : "Modo Palco (roteiro)"}
+              aria-label={modoRoteiro ? "Trocar para modo Mesa" : "Trocar para modo Palco"}
+              className="fixed bottom-4 left-4 z-40 rounded-vox-md border border-vox-border-soft bg-vox-bg-floating px-2.5 py-1.5 text-sm text-vox-text-muted transition hover:text-vox-accent-glow"
+            >
+              {modoRoteiro ? "✒" : "💬"}
             </button>
           </>
         )}

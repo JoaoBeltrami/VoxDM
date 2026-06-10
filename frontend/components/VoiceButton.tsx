@@ -96,7 +96,13 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
         stream.getTracks().forEach(t => t.stop());
         _setOuvindo(false);
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        if (blob.size < 1000) { setPreview(""); return; } // muito curto, provavelmente silêncio
+        // STT-SILENCIO-1 (teste 09/06): silêncio era engolido sem feedback —
+        // "falei e nada aconteceu". Aviso efêmero no preview resolve.
+        const avisarVazio = () => {
+          setPreview("🎤 Não captei nada — tenta de novo");
+          setTimeout(() => setPreview(p => (p.startsWith("🎤") ? "" : p)), 2500);
+        };
+        if (blob.size < 1000) { avisarVazio(); return; } // muito curto, provavelmente silêncio
         setPreview("Transcrevendo…");
         setTranscrevendo(true);
         try {
@@ -105,6 +111,8 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           if (transcrito.trim()) {
             const processado = processarComandoVoz(transcrito.trim());
             onEnviar(modoOOC ? `[OOC] ${processado}` : processado);
+          } else {
+            avisarVazio(); // VAD removeu tudo no servidor
           }
         } catch {
           // Falha na transcrição — fallback silencioso (texto ainda disponível)

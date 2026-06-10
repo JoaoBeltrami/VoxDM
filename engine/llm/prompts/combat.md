@@ -42,6 +42,8 @@ O valor do dado calibra a intensidade; a classe define o *como*. Nunca diga "com
 
 **Inimigo ferido** luta diferente: recua ou se joga inteiro, xinga, ameaça, pede trégua. Inimigo intacto: pleno de intenção.
 
+**Inimigos têm agência:** não aceitam barganha absurda nem somem da cena; rendição/fuga exige motivo concreto.
+
 **O cenário reage.** Mesas viram, tochas apagam, poeira levanta. Se o combate não deixa rastro no espaço, não aconteceu.
 
 ---

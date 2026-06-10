@@ -158,8 +158,13 @@ class VoiceManager:
         if not npc_id:
             return self.narrator_voz, _NARRATOR_RATE, _NARRATOR_PITCH
 
-        # Confirmação de fala: verbo de discurso OU aspas na sentença
-        if not _RE_VERBOS.search(sentenca) and not _RE_ASPAS.search(sentenca):
+        # Confirmação de fala DIRETA: exige aspas. VOZ-NPC-1 (teste 09/06):
+        # verbo sozinho ("Aldric responde que a mina é perigosa") é discurso
+        # INDIRETO = narração — tocava a sentença inteira na voz do NPC e o
+        # jogador percebia "alternância aleatória de voz/gênero". Precisão >
+        # recall: sem aspas, é o narrador (mesmo princípio do quote-dominance
+        # do _detectar_voz_npc no websocket).
+        if not _RE_ASPAS.search(sentenca):
             return self.narrator_voz, _NARRATOR_RATE, _NARRATOR_PITCH
 
         perfil = self._perfis.get(npc_id)
