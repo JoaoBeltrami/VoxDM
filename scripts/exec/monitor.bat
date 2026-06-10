@@ -25,18 +25,16 @@ if not exist "%ROOT%\.env" (
 )
 
 :: ── Dashboard Streamlit ───────────────────────────────────────────────────────
+:: Porta FIXA 8501. Sem --server.port, o Streamlit pula pra 8502/8503 se a 8501
+:: estiver ocupada (instancia presa de sessao anterior) e o start abaixo abria
+:: o browser na porta errada. O proprio Streamlit abre o browser quando estiver
+:: pronto (sem timeout cego de 6s — eliminava a corrida de boot lento).
 echo Iniciando Dashboard ^(porta 8501^)...
-start "VoxDM Dashboard" /d "%ROOT%" cmd /k "%ROOT%\.venv\Scripts\streamlit.exe run dashboard.py"
+start "VoxDM Dashboard" /d "%ROOT%" cmd /k "%ROOT%\.venv\Scripts\streamlit.exe run dashboard.py --server.port 8501"
 
 :: ── Watch (tail inteligente do telemetry.jsonl) ──────────────────────────────
 echo Iniciando watch_teste...
 start "VoxDM Watch" /d "%ROOT%" cmd /k "%ROOT%\.venv\Scripts\python.exe scripts\watch_teste.py"
-
-:: ── Aguarda o Streamlit subir e abre o browser na aba certa ──────────────────
-echo Aguardando o dashboard subir...
-timeout /t 6 /nobreak >nul
-
-start "" "http://localhost:8501"
 
 echo.
 echo Pronto. Dashboard: http://localhost:8501  ^|  Watch: janela "VoxDM Watch".
