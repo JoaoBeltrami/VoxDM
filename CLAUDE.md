@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 24 de maio de 2026 — Fix crítico de hang de TTS em sessões longas (asyncio.wait_for timeout em todos os 4 call-sites de tts.sintetizar()). 718/718 testes. tsc clean.
+> Atualizado: 11 de junho de 2026 — **Pilares do Mestre Virtual (4 pacotes shipped na madrugada)**: P1 Perigo ([DANO]/[CURA] autoritativos, death_policy narrativo|mortal, [CICATRIZ], beat de turno inimigo) + Relógios de Ameaça + modo episódio; P2 NPC toma iniciativa + ecos de local + perfil do jogador; P3 Session Zero por voz ([FICHA] + engine/chargen.py + session_zero.md); P4 retratos de NPC (Pollinations seed/id), crônica da sessão, SFX por evento (useEventSounds.ts), nudge de silêncio ([IDLE]). 1054/1054 testes, build verde. ⚠️ Pendente: 3º teste ao vivo valida os 4 pacotes de uma vez. Histórico detalhado: memória `roadmap_mestre_virtual_pilares` + `.internal/ESTADO.md`.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -1081,6 +1081,21 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 | `frontend/hooks/useGameSession.ts` | `rodadaCombate` IIFE no handler `tipo="fim"`: retorna `msg.rodada_esperada` quando drift detectado (re-sync ativo em vez de apenas logging) | ✅ Atualizado |
 | `tests/test_character_store.py` | +4 testes `listar_por_owner`: empty, sem player_name, campos corretos, isolamento por owner | ✅ Atualizado |
 | **Total testes** | | **699/699 passed**; `tsc --noEmit` clean |
+
+### Pilares do Mestre Virtual — 4 pacotes (Sessão 10-11/06)
+
+> Roadmap decidido com Beltrami: Perigo real / Mundo Vivo / Ritual de mesa / Imersão.
+> Detalhe completo na memória `roadmap_mestre_virtual_pilares` + mensagens dos commits
+> `580d93e`, `d839333`, `be41190`, `3662e80`, `3c426d1`. Arquivos NOVOS:
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/chargen.py` | Geração de personagem server-side (Session Zero): Standard Array por prioridade de classe (espelho do CharacterForm), `normalizar_classe()` com aliases de transcrição, `hp_nivel()` SRD, `hit_die()` | ✅ Criado |
+| `engine/llm/prompts/session_zero.md` | Entrevista de criação por voz — 1 pergunta por vez, mapeia fala→classe, fecha com `[FICHA: Nome\|Raça\|Classe\|background\|traço]` em ≤7 trocas | ✅ Criado |
+| `frontend/hooks/useEventSounds.ts` | SFX synth por evento: aço (morte de inimigo), moedas (ouro), sino grave (cicatriz). Mesmo toggle de sons das Opções; refs iniciam em silêncio | ✅ Criado |
+| `tests/test_pilares_mestre.py` | 61 testes dos 4 pacotes (DANO/CURA/CICATRIZ/0 PV, beat inimigo, relógios, episódio, iniciativa NPC, ecos, perfil, FICHA/chargen, crônica, retratos) | ✅ Criado |
+
+Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,character}.py` (relógios+crônica+perfil / locais visitados+ecos / cicatrizes+dano/cura), `api/turn_pipeline.py` (steps 0, 9a-c, 16c-e, ticks), `api/websocket.py` (beat `_beat_turno_inimigo`, `_enviar_retratos_npcs`, intercept `[IDLE]`, `ficha_criada`), `engine/llm/prompt_builder.py` (branch Session Zero + blocos relógios/cicatrizes/0 PV/iniciativa NPC/ecos/perfil/fecho), markers novos: DANO, CURA, CICATRIZ, RELOGIO, RELOGIO_AVANCA, NPC, FICHA.
 
 ---
 
