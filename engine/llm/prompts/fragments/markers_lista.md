@@ -7,21 +7,23 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[CLIFFHANGER: texto]` — cena guardada pra encerrar sessão.
 - `[AGENDA: npc-id → texto]` — plano de fundo de NPC.
 - `[CONSEQUÊNCIA: texto]` — efeito duradouro além da cena atual. Máx 1-2/turno.
-- `[ANCORA: texto]` — fato já narrado, não repetir. Ex: `[ANCORA: Valdrek está vivo]`.
+- `[ANCORA: texto]` — fato já narrado, não repetir.
+- `[RELOGIO_AVANCA: id]` — ameaça do relógio listado ganha força (jogador ignorou, vilão agiu).
 - `[XP: +N motivo]` — CR≤¼=25 | CR½=50 | CR1=100 | CR2=200 | quest/diplomacia=50–300.
 
 **Combate:**
 - `[COMBATE: iniciar]` — ação bélica fora de combate (sparring, "uso chama nele"). Engine ativa iniciativa e vinheta.
-- `[INIMIGO: id|nome|indice-srd]` — registra combatente (rastreador/iniciativa); use ao introduzir inimigos ou ataque sem alvo. 3º campo = índice SRD em inglês (goblin, orc, guard); omita se não souber — nunca escreva "srd". Ex: `[INIMIGO: g1|Goblin|goblin]`.
+- `[INIMIGO: id|nome|indice-srd]` — registra combatente; 3º campo = índice SRD em inglês (goblin, orc, guard), omita se não souber. Ex: `[INIMIGO: g1|Goblin|goblin]`.
+- `[DANO: -N motivo]` / `[CURA: +N]` — HP do jogador SÓ muda por estes markers. Inimigo acertou? `[DANO]` é OBRIGATÓRIO — sem ele o golpe não machuca.
 - `[FEATURE_GASTA: feature-id]` — jogador usou feature de classe (action-surge, rage); engine desconta o uso.
-- `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura" se aplicável.
+- `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura".
 - `[MOV: -N ft motivo]` — movimento do jogador. Padrão 30 ft/rodada.
-- `[INIMIGO_MORTO: id]` — id do "Inimigos:". Ex: `[INIMIGO_MORTO: goblin-arqueiro]`.
+- `[INIMIGO_MORTO: id]` — id do "Inimigos:".
 
 **Economia (use só em [MERCADO] ativo ou loot legítimo):**
-- `[OURO: ±N motivo]` — sinal explícito obrigatório, engine clampa em 0.
+- `[OURO: ±N motivo]` — sinal obrigatório.
 - `[LOOT: item]` — adiciona ao inventário, sem duplicar.
-- `[PERDEU: item]` — remove (vendido/gasto/roubado/quebrado), case-insensitive.
+- `[PERDEU: item]` — remove do inventário.
 - `[MERCADO]` / `[FIM_MERCADO]` — toggle de contexto comercial.
 
 **Aliados:**
@@ -30,7 +32,8 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[COMPANION_REMOVE: id]` — morte, dispensa, fim de summon.
 
 **Cena e persistência:**
+- `[CICATRIZ: texto]` — marca permanente ao sobreviver a 0 PV ou custo físico dramático. NPCs notam.
 - `[DESCANSO: curto|longo]` — engine restaura slots e features.
 - `[VOZ: npc-id|pitch|rate]` — assinatura TTS na 1ª fala. Ex: `[VOZ: lyssa|+5Hz|-10%]`.
-- `[AFETO: npc-id|campo|delta]` — afeto|medo|respeito|rancor. Persiste entre sessões.
-- `[LAMPEJO: texto]` — visão dramática em natural 20/1, NPC com peso, local simbólico. 1-3 frases, tom etéreo.
+- `[AFETO: npc-id|campo|delta]` — afeto|medo|respeito|rancor.
+- `[LAMPEJO: texto]` — visão dramática (nat 20/1, NPC com peso). 1-3 frases, tom etéreo.

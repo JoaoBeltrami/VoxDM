@@ -66,6 +66,13 @@ class SessaoConfig(BaseModel):
     # "result_only" → só o número sem animação (padrão)
     # "narrated"    → mestre narra sem marker, sem número visível
     roll_visibility: str = Field(default="result_only", pattern=r"^(open|result_only|narrated)$")
+    # Política de morte (Pilar Perigo, 10/06):
+    # "narrativo" → derrota tem custo real (captura, perda, cicatriz) mas nunca
+    #               apaga o personagem; "mortal" → death saves e morte de verdade.
+    death_policy: str = Field(default="narrativo", pattern=r"^(narrativo|mortal)$")
+    # Modo episódio (Ritual de mesa, 10/06): mestre propõe fecho pós-clímax
+    # com cliffhanger + epílogo. Default off = sessão livre.
+    modo_episodio: bool = False
     # Atributos D&D 5e (Standard Array padrão)
     str_score: int = Field(default=10, ge=3, le=20)
     dex_score: int = Field(default=10, ge=3, le=20)
@@ -213,6 +220,10 @@ class MensagemWS(BaseModel):
     death_saves_successes: int = 0
     death_saves_failures: int = 0
     death_saves_stable: bool = False
+    # Pilar Perigo (10/06) — cicatrizes permanentes do personagem (ficha)
+    cicatrizes: list[str] = Field(default_factory=list)
+    # Mundo Vivo (10/06) — relógios de ameaça: id → {nome, atual, max}
+    relogios: dict[str, dict] = Field(default_factory=dict)
     # Estado de combate — enviado no "fim" para sincronizar CombatTracker
     em_combate: bool = False
     # inimigo_id → {nome, estado, hp_rel} — espelha working_mem.inimigos_combate

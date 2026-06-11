@@ -31,12 +31,14 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     "XP", "LAMPEJO",
     # Combate
     "POSICAO", "MOV", "INIMIGO_MORTO", "INIMIGO", "FUGIU", "COMBATE",
+    "DANO", "CURA",
     # Economia
     "OURO", "LOOT", "PERDEU", "MERCADO", "FIM_MERCADO",
     # Aliados
     "COMPANION_ADD", "COMPANION_HP", "COMPANION_REMOVE",
     # Cena e persistência
     "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA", "NPC",
+    "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA",
 )
 
 

@@ -19,8 +19,7 @@ Após o ataque acertar, uma linha de impacto — pause. Aguarde `[Rolagem: dX = 
 
 **Salvaguardas em combate.** Ver `saves.md` (carregado junto) — 6 atributos, sequência obrigatória de 4 passos.
 
-**Ataques de inimigos contra o jogador.**
-Resolva internamente: compare o ataque do inimigo com a CA do personagem (no contexto). Se acertou → narre no corpo sem pedir rolagem. Se errou → mostre o quase (o vento da lâmina passou rente).
+**Turno dos inimigos é da ENGINE.** Resolva SÓ a ação do jogador — a engine conduz o turno inimigo num beat separado. Exceção: reação imediata (oportunidade) — resolva vs CA e emita `[DANO: -N]`.
 
 ---
 

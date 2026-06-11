@@ -82,6 +82,10 @@ class PlayerCharacter:
     # Features de classe — feature_id → {nome, disponivel, usos_max, usos_atual, restaura}
     class_features: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    # Cicatrizes narrativas — marcas permanentes de quase-morte (Pilar Perigo
+    # 10/06). NPCs reagem a elas; persistem entre sessões via dm_state. Cap 5.
+    cicatrizes: list[str] = field(default_factory=list)
+
     # ── Properties D&D 5e (single source of truth) ───────────────────────────
 
     @property
@@ -127,6 +131,39 @@ class PlayerCharacter:
         """Remove item se presente."""
         if item_id in self.player_inventory:
             self.player_inventory.remove(item_id)
+
+    def aplicar_dano(self, quantidade: int) -> int:
+        """Aplica dano do marker [DANO] com clamps. Retorna HP resultante.
+
+        Cap por aplicação = hp_max: um único golpe pode no máximo derrubar
+        de full pra 0 — guarda contra alucinação tipo [DANO: -999].
+        """
+        quantidade = max(0, min(int(quantidade), self.hp_max))
+        self.hp_current = max(0, self.hp_current - quantidade)
+        return self.hp_current
+
+    def aplicar_cura(self, quantidade: int) -> int:
+        """Aplica cura do marker [CURA] com clamp em hp_max. Retorna HP.
+
+        Voltar a >0 reseta death saves (regra 5e: qualquer cura estabiliza).
+        """
+        quantidade = max(0, min(int(quantidade), self.hp_max))
+        self.hp_current = min(self.hp_max, self.hp_current + quantidade)
+        if self.hp_current > 0:
+            self.death_saves_successes = 0
+            self.death_saves_failures = 0
+            self.death_saves_stable = False
+        return self.hp_current
+
+    def registrar_cicatriz(self, texto: str) -> bool:
+        """Registra cicatriz permanente (dedup, trunca 120 chars, cap 5)."""
+        texto = texto.strip()[:120]
+        if not texto or texto in self.cicatrizes:
+            return False
+        self.cicatrizes.append(texto)
+        if len(self.cicatrizes) > 5:
+            self.cicatrizes.pop(0)
+        return True
 
     def atualizar_quest_stage(self, quest_id: str, stage_id: str) -> None:
         """Avança quest com cap de 15 active_quest_hooks (eviction oldest)."""

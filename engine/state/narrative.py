@@ -45,6 +45,14 @@ class NarrativeState:
     pacing_nivel: float = 3.0
     turnos_sem_tensao: int = 0
 
+    # Modo episódio (Ritual de mesa, 10/06): rastreia o arco da sessão.
+    # pico_pacing = maior pacing já atingido; fecho_sugerido = one-shot (o
+    # mestre só propõe encerrar UMA vez por sessão); turnos_total = contador
+    # de turnos reais (ajustar_pacing roda 1×/turno de jogador).
+    pico_pacing: float = 3.0
+    fecho_sugerido: bool = False
+    turnos_total: int = 0
+
     # Quantos turnos narrativos seguidos foram roteados para o 8B (LIGHT).
     # Usado pelo cap anti-robô: o 8B encadeado repete estruturas ("X diz",
     # clichês), então um 70B periódico reseta o estilo. Ver
@@ -53,6 +61,14 @@ class NarrativeState:
 
     # Repetition guard — fatos já narrados
     fatos_ancora: list[str] = field(default_factory=list)
+
+    # Relógios de Ameaça (fronts) — id → {nome, atual, max}. O mundo anda
+    # sem o jogador: engine avança em descanso longo e viagem; LLM avança
+    # por drama via [RELOGIO_AVANCA]. Cheio → evento irrompe (one-shot).
+    relogios: dict[str, dict] = field(default_factory=dict)
+    # Irrupção pendente (one-shot): nome do relógio que encheu, consumido
+    # pelo prompt_builder no próximo turno.
+    relogio_irrompido: str = ""
 
     # Log de consequências (max 5, rolling)
     log_consequencias: list[str] = field(default_factory=list)
@@ -106,6 +122,57 @@ class NarrativeState:
         self.cliffhanger_pendente = ""
         return ch
 
+    # ── Relógios de Ameaça (fronts) ──────────────────────────────────────────
+
+    def criar_relogio(self, relogio_id: str, nome: str, segmentos: int = 6) -> bool:
+        """Cria relógio de ameaça (idempotente por id; máx 4 relógios ativos).
+
+        Segmentos clampados em [3, 8] — abaixo de 3 estoura rápido demais,
+        acima de 8 o jogador nunca vê a ameaça se concretizar.
+        """
+        relogio_id = relogio_id.strip().lower()
+        if not relogio_id or relogio_id in self.relogios:
+            return False
+        if len(self.relogios) >= 4:
+            return False
+        self.relogios[relogio_id] = {
+            "nome": nome.strip()[:60] or relogio_id,
+            "atual": 0,
+            "max": max(3, min(8, int(segmentos))),
+        }
+        return True
+
+    def avancar_relogio(self, relogio_id: str, passos: int = 1) -> bool:
+        """Avança relógio. Retorna True se ENCHEU agora (irrupção pendente).
+
+        Relógio cheio é removido e seu nome vai pra `relogio_irrompido` —
+        o prompt_builder consome (one-shot) instruindo o evento a irromper.
+        """
+        rel = self.relogios.get(relogio_id.strip().lower())
+        if rel is None:
+            return False
+        rel["atual"] = min(rel["max"], rel["atual"] + max(1, int(passos)))
+        if rel["atual"] >= rel["max"]:
+            self.relogio_irrompido = rel["nome"]
+            del self.relogios[relogio_id.strip().lower()]
+            return True
+        return False
+
+    def avancar_todos_relogios(self, passos: int = 1) -> list[str]:
+        """Tick global (descanso longo / viagem). Retorna nomes que encheram."""
+        estourados: list[str] = []
+        for rid in list(self.relogios.keys()):
+            nome = self.relogios[rid]["nome"]
+            if self.avancar_relogio(rid, passos):
+                estourados.append(nome)
+        return estourados
+
+    def consumir_relogio_irrompido(self) -> str:
+        """Retorna e limpa a irrupção pendente (one-shot)."""
+        nome = self.relogio_irrompido
+        self.relogio_irrompido = ""
+        return nome
+
     def decay_cartas(self) -> bool:
         """Incrementa contador e descarta cartas se ≥5 turnos sem uso. True se descartou."""
         if not self.cartas_improviso:
@@ -121,6 +188,8 @@ class NarrativeState:
 
     def ajustar_pacing(self, em_combate: bool, saiu_combate_recentemente: bool, trust_mudou: bool) -> None:
         """Aplica regras de pacing baseado no estado do turno."""
+        # Arco da sessão (modo episódio): turno real contado + pico registrado
+        self.turnos_total += 1
         # Tensão narrativa
         if em_combate or trust_mudou:
             self.turnos_sem_tensao = 0
@@ -136,6 +205,24 @@ class NarrativeState:
             self.pacing_nivel = max(0.0, self.pacing_nivel - 0.3)
         else:
             self.pacing_nivel = min(10.0, self.pacing_nivel + 0.2)
+        self.pico_pacing = max(self.pico_pacing, self.pacing_nivel)
+
+    def momento_de_fecho(self) -> bool:
+        """Modo episódio: hora de propor encerrar? (one-shot)
+
+        True quando o arco fechou — a sessão teve um clímax real (pico ≥ 7),
+        o ritmo assentou de volta (pacing ≤ 3), já há substância (≥ 20 turnos)
+        e o fecho ainda não foi proposto. Consome o one-shot.
+        """
+        if (
+            self.fecho_sugerido
+            or self.turnos_total < 20
+            or self.pico_pacing < 7.0
+            or self.pacing_nivel > 3.0
+        ):
+            return False
+        self.fecho_sugerido = True
+        return True
 
     def registrar_task_narrativo(self, foi_light: bool) -> None:
         """Atualiza o contador de turnos LIGHT consecutivos.

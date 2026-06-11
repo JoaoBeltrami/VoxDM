@@ -166,6 +166,32 @@ _RE_CENA = re.compile(
     re.IGNORECASE,
 )
 
+# Pilar Perigo (10/06): HP do jogador é autoridade da engine.
+# [DANO: -N motivo] reduz; [CURA: +N motivo] restaura (e reseta death saves).
+# Antes destes markers NÃO existia canal de dano ao jogador — ataque inimigo
+# narrado nunca tirava HP de verdade, e o subconsciente do jogador percebia
+# que era imortal. Clamp por aplicação em hp_max (anti [DANO: -999]).
+_RE_DANO = re.compile(r"\[DANO:\s*-?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+_RE_CURA = re.compile(r"\[CURA:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+
+# Cicatriz permanente — emitida quando o personagem sobrevive a 0 PV (ou a
+# um custo físico dramático). Persiste via dm_state; NPCs reagem.
+_RE_CICATRIZ = re.compile(r"\[CICATRIZ:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+
+# Relógios de Ameaça (Mundo Vivo, 10/06) — fronts à la Apocalypse World.
+# [RELOGIO: id|Nome|segmentos] cria (segmentos opcional, default 6, clamp 3-8);
+# [RELOGIO_AVANCA: id] avança 1 por decisão dramática do LLM. A engine também
+# avança TODOS em descanso longo e em viagem (mudança de local) — o mundo
+# anda sem o jogador. Cheio → irrupção one-shot no próximo prompt.
+_RE_RELOGIO = re.compile(
+    r"\[RELOGIO:\s*([a-z0-9][a-z0-9-]{0,48})\s*\|\s*([^|\]]{1,60}?)\s*"
+    r"(?:\|\s*(\d)\s*)?\]",
+    re.IGNORECASE,
+)
+_RE_RELOGIO_AVANCA = re.compile(
+    r"\[RELOGIO_AVANCA:\s*([a-z0-9][a-z0-9-]{0,48})\s*\]", re.IGNORECASE
+)
+
 # Entrada de NPC na cena: [NPC: npc-id|Nome] (nome opcional).
 # Teste ao vivo 10/06: o mestre apresentou um viajante novo ("Aldric se aproxima
 # e se apresenta") mas npcs_presentes só era populado pela inferência Neo4j na
@@ -527,6 +553,12 @@ def aplicar_pos_turno(
         working_mem.restaurar_features(tipo_descanso)
         if restaurados > 0:
             log.info("slots_restaurados", tipo=tipo_descanso, quantidade=restaurados)
+        # Mundo Vivo: o tempo do descanso longo NÃO é grátis — relógios de
+        # ameaça avançam (a noite passa, os vilões agem). Descanso curto não tica.
+        if tipo_descanso == "longo":
+            estourados = working_mem.narrative.avancar_todos_relogios(1)
+            if working_mem.narrative.relogios or estourados:
+                log.info("relogios_tick_descanso", estourados=estourados or None)
 
     # 5. Trust com base em ações do jogador
     mudancas_trust = detectar_mudancas_trust(texto_jogador, working_mem.npcs_presentes)
@@ -868,6 +900,43 @@ def aplicar_pos_turno(
             feat["disponivel"] = feat["usos_atual"] > 0
             log.info("feature_gasta_llm", feature=fid, usos_restantes=feat["usos_atual"])
 
+    # 16c. Dano/cura no jogador — [DANO: -N] / [CURA: +N] (Pilar Perigo).
+    # Soma todas as ocorrências do turno; clamps no substate. A 0 PV o
+    # prompt_builder injeta o protocolo da death_policy no próximo turno.
+    for m in _RE_DANO.finditer(resposta_completa):
+        antes = working_mem.player_hp
+        depois = working_mem.character.aplicar_dano(int(m.group(1)))
+        log.info(
+            "dano_jogador",
+            dano=int(m.group(1)),
+            hp=f"{antes}->{depois}",
+            motivo=m.group(2).strip()[:60] or None,
+        )
+        if depois == 0:
+            log.warning("jogador_a_zero_hp", policy=working_mem.death_policy)
+    for m in _RE_CURA.finditer(resposta_completa):
+        antes = working_mem.player_hp
+        depois = working_mem.character.aplicar_cura(int(m.group(1)))
+        log.info("cura_jogador", cura=int(m.group(1)), hp=f"{antes}->{depois}")
+
+    # 16d. Cicatriz permanente — [CICATRIZ: texto] (dedup + cap no substate).
+    for m in _RE_CICATRIZ.finditer(resposta_completa):
+        if working_mem.character.registrar_cicatriz(m.group(1)):
+            log.info("cicatriz_registrada", cicatriz=m.group(1).strip()[:60])
+
+    # 16e. Relógios de Ameaça — criação e avanço dramático pelo LLM.
+    for m in _RE_RELOGIO.finditer(resposta_completa):
+        rid = m.group(1).strip().lower()
+        seg = int(m.group(3)) if m.group(3) else 6
+        if working_mem.narrative.criar_relogio(rid, m.group(2), seg):
+            log.info("relogio_criado", relogio=rid, nome=m.group(2).strip()[:40], max=seg)
+    for m in _RE_RELOGIO_AVANCA.finditer(resposta_completa):
+        rid = m.group(1).strip().lower()
+        if working_mem.narrative.avancar_relogio(rid):
+            log.info("relogio_estourou", relogio=rid)
+        else:
+            log.info("relogio_avancou", relogio=rid)
+
     # 17. Mudança de cena (CENA-1) — [CENA: local-id|Nome|hora] atualiza local/hora
     # (sync, sem I/O). A re-inferência de NPCs do novo local (Neo4j, async) é feita
     # pelo caller via reinferir_npcs_se_mudou_cena() após este pipeline. Primeiro
@@ -884,6 +953,10 @@ def aplicar_pos_turno(
             if working_mem.em_combate:
                 working_mem.sair_combate()
                 log.info("combate_encerrado_mudanca_cena")
+            # Mundo Vivo: viagem custa tempo — relógios de ameaça avançam.
+            estourados = working_mem.narrative.avancar_todos_relogios(1)
+            if estourados:
+                log.info("relogios_tick_viagem", estourados=estourados)
         break
 
     # 17b. Entrada de NPC na cena — [NPC: id|Nome] adiciona a presentes +

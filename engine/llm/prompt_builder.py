@@ -538,6 +538,69 @@ def montar_mensagens(
             "personagens com textura. Pode haver silêncio significativo."
         )
 
+    # Mundo Vivo — Relógios de Ameaça: o mundo anda sem o jogador. Invisíveis
+    # pra ele; o LLM usa pra dosar presságios e urgência. Irrupção é one-shot.
+    narrative = getattr(contexto.working_memory, "narrative", None)
+    if narrative is not None:
+        # Ritual de mesa — modo episódio: pós-clímax com ritmo assentado, o
+        # mestre propõe encerrar UMA vez (one-shot consumido aqui).
+        if getattr(contexto.working_memory, "modo_episodio", False) and narrative.momento_de_fecho():
+            secoes.append(
+                "\n=== MOMENTO DE FECHO (modo episódio) ===\n"
+                "O clímax passou e o ritmo assentou — ponto clássico de encerrar. "
+                "Proponha ao jogador, na voz do mestre, encerrar o episódio aqui; "
+                "plante o gancho do próximo ([CLIFFHANGER: texto]). Se ele aceitar, "
+                "narre um epílogo de 2-3 frases. Se recusar, siga o jogo sem insistir."
+            )
+        irrompido = narrative.consumir_relogio_irrompido()
+        if irrompido:
+            secoes.append(
+                f"\n=== RELÓGIO ESTOUROU: {irrompido} ===\n"
+                "A ameaça se concretiza AGORA — irrompa o evento nesta cena "
+                "(chegada, ataque, notícia, consequência visível). Sem adiar."
+            )
+        if narrative.relogios:
+            linhas_rel = "\n".join(
+                f"• {r['nome']}: {'▓' * r['atual']}{'░' * (r['max'] - r['atual'])} {r['atual']}/{r['max']}"
+                for r in narrative.relogios.values()
+            )
+            secoes.append(
+                f"\n=== RELÓGIOS DE AMEAÇA (invisíveis ao jogador) ===\n{linhas_rel}\n"
+                "Avançam com o tempo (engine). Use [RELOGIO_AVANCA: id] quando o "
+                "jogador ignora a ameaça ou ela ganha força. Semeie presságios "
+                "proporcionais ao preenchimento — quase cheio = sinais urgentes."
+            )
+
+    # Pilar Perigo — cicatrizes permanentes: NPCs notam e reagem a elas.
+    cicatrizes = getattr(contexto.working_memory, "cicatrizes", [])
+    if cicatrizes:
+        lista_cic = "; ".join(cicatrizes)
+        secoes.append(
+            f"\n=== CICATRIZES DO PERSONAGEM ===\n{lista_cic}\n"
+            "Marcas permanentes de quase-morte. NPCs atentos notam e reagem "
+            "(respeito, medo, curiosidade) — referencie quando fizer sentido."
+        )
+
+    # Pilar Perigo — protocolo de 0 PV conforme a política de morte da sessão.
+    # Injetado SÓ quando o jogador está caído: instrução de maior prioridade.
+    if getattr(contexto.working_memory, "player_hp", 1) <= 0:
+        if getattr(contexto.working_memory, "death_policy", "narrativo") == "mortal":
+            secoes.append(
+                "\n=== O PERSONAGEM ESTÁ A 0 PV — PROTOCOLO MORTAL ===\n"
+                "Conduza salvaguardas contra a morte: peça d20 ao jogador "
+                "(10+ = sucesso; 3 sucessos estabiliza, 3 falhas = MORTE REAL). "
+                "Narre com peso e finalidade — sem milagre barato. Inimigos podem "
+                "ignorá-lo caído ou tentar executá-lo (1 falha automática por golpe)."
+            )
+        else:
+            secoes.append(
+                "\n=== O PERSONAGEM CAIU A 0 PV — DERROTA COM CUSTO ===\n"
+                "NÃO o mate. Narre a derrota com custo CONCRETO: captura, perda de "
+                "item ([PERDEU: item]), resgate por aliado com dívida, ou cicatriz "
+                "permanente ([CICATRIZ: texto]). Aplique [CURA: +1] ao retomar a "
+                "consciência e mova a história adiante — derrota também é enredo."
+            )
+
     # Repetition Guard — fatos âncora: o que JÁ foi narrado nesta sessão.
     # Injetado para evitar que o LLM re-narre descobertas do início da sessão
     # em ~40-50 turnos (sintoma clássico de janela de contexto curta).

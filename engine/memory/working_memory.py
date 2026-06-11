@@ -72,6 +72,11 @@ class WorkingMemory:
     dm_profile: str = "equilibrado"
     roll_visibility: str = "result_only"
     quests_modulo: str = ""
+    # Pilar Perigo (10/06): "narrativo" = derrota tem custo mas nunca apaga o
+    # personagem; "mortal" = morte real com death saves. Default narrativo.
+    death_policy: str = "narrativo"
+    # Ritual de mesa (10/06): mestre propõe fecho de episódio pós-clímax.
+    modo_episodio: bool = False
 
     # Mercado/economia: flag de UI, não domínio independente
     em_mercado: bool = False
@@ -365,6 +370,11 @@ class WorkingMemory:
     @class_features.setter
     def class_features(self, v: dict) -> None: self.character.class_features = v
 
+    @property
+    def cicatrizes(self) -> list[str]: return self.character.cicatrizes
+    @cicatrizes.setter
+    def cicatrizes(self, v: list[str]) -> None: self.character.cicatrizes = v
+
     # Properties derivadas D&D 5e (read-only — não fazem sentido setar)
     @property
     def prof_bonus(self) -> int: return self.character.prof_bonus
@@ -486,6 +496,8 @@ class WorkingMemory:
         xp: int = 0,
         inspiration: bool = False,
         player_spells: list[str] | None = None,
+        death_policy: str = "narrativo",
+        modo_episodio: bool = False,
     ) -> "WorkingMemory":
         """Cria WorkingMemory com substates inicializados."""
         _HIT_DICE_TIPO: dict[str, int] = {
@@ -541,6 +553,8 @@ class WorkingMemory:
             tts_voice=tts_voice,
             dm_profile=dm_profile if dm_profile in {"rigoroso", "equilibrado", "tranquilo", "rule_of_cool"} else "equilibrado",
             roll_visibility=roll_visibility if roll_visibility in {"open", "result_only", "narrated"} else "result_only",
+            death_policy=death_policy if death_policy in {"narrativo", "mortal"} else "narrativo",
+            modo_episodio=bool(modo_episodio),
         )
         return wm
 
@@ -741,6 +755,16 @@ class WorkingMemory:
                 # Só restaura se diferente do default — evita sobrescrever valor
                 # válido com persistência "vazia" de sessões antigas.
                 self.narrative.pacing_nivel = float(pacing)
+            # Pilar Perigo: cicatrizes são permanentes — sobrevivem a qualquer
+            # restart. Merge defensivo (não sobrescreve as da memória ativa).
+            for cic in dm_state.get("cicatrizes", []):
+                self.character.registrar_cicatriz(str(cic))
+            # Mundo Vivo: relógios de ameaça restaurados (substituição só se vazio)
+            relogios = dm_state.get("relogios", {})
+            if relogios and not self.narrative.relogios:
+                self.narrative.relogios = {
+                    str(k): dict(v) for k, v in relogios.items() if isinstance(v, dict)
+                }
 
     # ── Delegations: PartyState ──────────────────────────────────────────────
 

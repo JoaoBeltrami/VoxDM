@@ -1,0 +1,373 @@
+"""Testes do Pacote 1 dos Pilares do Mestre Virtual (10/06).
+
+Pilar Perigo: [DANO]/[CURA] (HP autoritativo na engine), death_policy
+    (narrativo|mortal) com protocolo de 0 PV no prompt, [CICATRIZ] permanente,
+    e o beat de turno inimigo (engine conduz a resposta dos inimigos).
+Pilar Mundo Vivo: Relógios de Ameaça — criação via [RELOGIO], avanço dramático
+    via [RELOGIO_AVANCA], ticks da engine (descanso longo, viagem), irrupção
+    one-shot no prompt quando enchem.
+Ritual de mesa: modo episódio — momento_de_fecho() pós-clímax, one-shot.
+
+Offline — sem Qdrant/Neo4j/Groq/Edge TTS reais.
+"""
+
+from types import SimpleNamespace
+
+import pytest
+
+from api.turn_pipeline import (
+    _RE_CICATRIZ,
+    _RE_CURA,
+    _RE_DANO,
+    _RE_RELOGIO,
+    _RE_RELOGIO_AVANCA,
+    aplicar_pos_turno,
+)
+from engine.llm.prompt_builder import montar_mensagens
+from engine.llm.types import ContextoMontado
+from engine.memory.working_memory import WorkingMemory
+
+
+def _wm(**kw) -> WorkingMemory:
+    return WorkingMemory.nova_sessao("vila", "Vila", "sess-test", **kw)
+
+
+def _ctx(wm, transcricao="o que eu vejo?") -> ContextoMontado:
+    return ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[],
+        chunks_episodicos=[],
+        chunks_regras=[],
+        relacoes_grafo=[],
+        secrets_visiveis=[],
+        transcricao_atual=transcricao,
+    )
+
+
+# ══ Pilar Perigo — [DANO] / [CURA] ════════════════════════════════════════════
+
+
+def test_regex_dano_e_cura():
+    m = _RE_DANO.search("A lâmina abre seu ombro. [DANO: -7 lança do goblin]")
+    assert m is not None and m.group(1) == "7"
+    m2 = _RE_CURA.search("O calor se espalha. [CURA: +5 poção]")
+    assert m2 is not None and m2.group(1) == "5"
+
+
+def test_dano_reduz_hp_do_jogador():
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "Avanço!", "O golpe acerta em cheio. [DANO: -7 maça]")
+    assert wm.player_hp == 13
+
+
+def test_dano_alucinado_clampa_em_hp_max_por_aplicacao():
+    """[DANO: -999] não pode tirar mais que hp_max num golpe só."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "Avanço!", "Tudo escurece. [DANO: -999 meteoro]")
+    assert wm.player_hp == 0  # floor em 0, nunca negativo
+
+
+def test_cura_clampa_em_hp_max_e_reseta_death_saves():
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.character.hp_current = 0
+    wm.character.death_saves_failures = 2
+    aplicar_pos_turno(wm, "", "Você volta a si. [CURA: +50 milagre]")
+    assert wm.player_hp == 20
+    assert wm.death_saves_failures == 0
+
+
+def test_dano_e_cura_no_mesmo_turno_em_ordem():
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "", "Dói, mas a poção age. [DANO: -8 flecha] [CURA: +3 poção]")
+    assert wm.player_hp == 15
+
+
+# ══ Pilar Perigo — [CICATRIZ] ═════════════════════════════════════════════════
+
+
+def test_regex_cicatriz():
+    m = _RE_CICATRIZ.search("[CICATRIZ: queimadura ácida no antebraço esquerdo]")
+    assert m is not None and "queimadura" in m.group(1)
+
+
+def test_cicatriz_registrada_com_dedup_e_cap():
+    wm = _wm()
+    for _ in range(2):
+        aplicar_pos_turno(wm, "", "Sobrou marca. [CICATRIZ: corte no rosto]")
+    assert wm.cicatrizes == ["corte no rosto"]
+    for i in range(6):
+        wm.character.registrar_cicatriz(f"marca {i}")
+    assert len(wm.cicatrizes) == 5  # cap
+
+
+def test_cicatriz_persiste_no_dm_state_roundtrip():
+    from api.routes.session import _wm_para_dm_state
+
+    wm = _wm()
+    wm.character.registrar_cicatriz("olho leitoso pós-ritual")
+    wm.narrative.criar_relogio("ritual", "O ritual de Valdrek", 6)
+    dm_state = _wm_para_dm_state(wm)
+    assert "olho leitoso pós-ritual" in dm_state["cicatrizes"]
+    assert "ritual" in dm_state["relogios"]
+
+    wm2 = _wm()
+    wm2.aplicar_character_state(SimpleNamespace(dm_state=dm_state))
+    assert "olho leitoso pós-ritual" in wm2.cicatrizes
+    assert wm2.narrative.relogios["ritual"]["nome"] == "O ritual de Valdrek"
+
+
+def test_cicatrizes_aparecem_no_prompt():
+    wm = _wm()
+    wm.character.registrar_cicatriz("três garras no peito")
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "CICATRIZES" in system and "três garras no peito" in system
+
+
+# ══ Pilar Perigo — death_policy + protocolo 0 PV ══════════════════════════════
+
+
+def test_death_policy_invalida_cai_no_default():
+    wm = _wm(death_policy="hardcore-inventado")
+    assert wm.death_policy == "narrativo"
+
+
+def test_protocolo_zero_pv_narrativo():
+    wm = _wm(death_policy="narrativo")
+    wm.character.hp_current = 0
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "DERROTA COM CUSTO" in system
+    assert "NÃO o mate" in system
+
+
+def test_protocolo_zero_pv_mortal():
+    wm = _wm(death_policy="mortal")
+    wm.character.hp_current = 0
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "PROTOCOLO MORTAL" in system
+    assert "MORTE REAL" in system
+
+
+def test_protocolo_zero_pv_ausente_com_hp_positivo():
+    wm = _wm(death_policy="mortal")
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "PROTOCOLO MORTAL" not in system
+    assert "DERROTA COM CUSTO" not in system
+
+
+# ══ Mundo Vivo — Relógios de Ameaça ═══════════════════════════════════════════
+
+
+def test_regex_relogio_e_avanca():
+    m = _RE_RELOGIO.search("[RELOGIO: ritual-valdrek|O ritual dos Filhos|6]")
+    assert m is not None and m.group(1) == "ritual-valdrek" and m.group(3) == "6"
+    m2 = _RE_RELOGIO.search("[RELOGIO: cacada|A caçada começa]")
+    assert m2 is not None and m2.group(1) == "cacada" and m2.group(3) is None
+    m3 = _RE_RELOGIO_AVANCA.search("[RELOGIO_AVANCA: ritual-valdrek]")
+    assert m3 is not None and m3.group(1) == "ritual-valdrek"
+
+
+def test_criar_relogio_idempotente_com_cap_e_clamp():
+    wm = _wm()
+    assert wm.narrative.criar_relogio("a", "Ameaça A", 2) is True
+    assert wm.narrative.relogios["a"]["max"] == 3  # clamp mínimo
+    assert wm.narrative.criar_relogio("a", "Duplicado", 6) is False  # idempotente
+    for rid in ("b", "c", "d"):
+        wm.narrative.criar_relogio(rid, rid.upper(), 6)
+    assert wm.narrative.criar_relogio("e", "Quinto", 6) is False  # cap 4
+
+
+def test_relogio_enche_e_gera_irrupcao_one_shot():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual", 3)
+    assert wm.narrative.avancar_relogio("ritual") is False
+    assert wm.narrative.avancar_relogio("ritual") is False
+    assert wm.narrative.avancar_relogio("ritual") is True  # encheu
+    assert "ritual" not in wm.narrative.relogios  # removido
+    assert wm.narrative.consumir_relogio_irrompido() == "O ritual"
+    assert wm.narrative.consumir_relogio_irrompido() == ""  # one-shot
+
+
+def test_pipeline_cria_e_avanca_relogio():
+    wm = _wm()
+    aplicar_pos_turno(wm, "Aceito a missão.", "Que assim seja. [RELOGIO: cacada|A caçada|4]")
+    assert wm.narrative.relogios["cacada"]["atual"] == 0
+    aplicar_pos_turno(wm, "Continuo bebendo na taverna.", "Você ignora os uivos lá fora. [RELOGIO_AVANCA: cacada]")
+    assert wm.narrative.relogios["cacada"]["atual"] == 1
+
+
+def test_descanso_longo_tica_todos_os_relogios():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual", 6)
+    aplicar_pos_turno(wm, "Vamos descansar.", "A noite passa. [DESCANSO: longo]")
+    assert wm.narrative.relogios["ritual"]["atual"] == 1
+
+
+def test_viagem_tica_todos_os_relogios():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual", 6)
+    aplicar_pos_turno(wm, "Sigo pra estrada.", "Vocês partem. [CENA: estrada|Estrada|dia]")
+    assert wm.narrative.relogios["ritual"]["atual"] == 1
+
+
+def test_relogios_aparecem_no_prompt_com_segmentos():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual", 4)
+    wm.narrative.avancar_relogio("ritual")
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "RELÓGIOS DE AMEAÇA" in system
+    assert "▓░░░ 1/4" in system
+
+
+def test_irrupcao_injetada_uma_vez_no_prompt():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 3)
+    wm.narrative.avancar_relogio("ritual", passos=3)
+    system1 = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "RELÓGIO ESTOUROU: O ritual sombrio" in system1
+    system2 = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "RELÓGIO ESTOUROU" not in system2  # one-shot consumido
+
+
+# ══ Pilar Perigo — beat do turno inimigo ══════════════════════════════════════
+
+
+class _GroqNuncaChamado:
+    async def completar(self, *a, **kw):  # pragma: no cover - falha se chamado
+        raise AssertionError("beat não devia ter chamado o LLM")
+
+
+class _GroqSoMarkers:
+    """Retorna resposta só-markers: pipeline aplica, mas nada vai pro frontend."""
+
+    def __init__(self) -> None:
+        self.chamadas = 0
+
+    async def completar(self, *a, **kw) -> str:
+        self.chamadas += 1
+        return "[DANO: -5 lança do guarda]"
+
+
+class _WsNuncaUsado:
+    async def send_text(self, *a, **kw):  # pragma: no cover - falha se chamado
+        raise AssertionError("beat só-markers não devia enviar nada ao frontend")
+
+
+def _sessao_fake(wm, groq) -> SimpleNamespace:
+    return SimpleNamespace(working_mem=wm, groq=groq)
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_fora_de_combate():
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm()
+    await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()), "Ataco o goblin!")
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_sem_inimigos_vivos():
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "morto")
+    await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()), "Ataco!")
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_sem_acao_de_combate():
+    """Fala social em combate não cede o turno aos inimigos."""
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    await _beat_turno_inimigo(
+        _WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()), "Esperem! Podemos conversar!"
+    )
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_com_jogador_a_zero():
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.character.hp_current = 0
+    await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()), "Ataco!")
+
+
+@pytest.mark.asyncio
+async def test_beat_aplica_dano_do_turno_inimigo():
+    """Ataque do jogador → beat roda → [DANO] do LLM reduz HP de verdade."""
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    groq = _GroqSoMarkers()
+    await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, groq), "Ataco o guarda!")
+    assert groq.chamadas == 1
+    assert wm.player_hp == 15
+
+
+@pytest.mark.asyncio
+async def test_beat_roda_apos_rolagem_resolvida():
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    groq = _GroqSoMarkers()
+    await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, groq), "[Rolagem: d20+5 = 18]")
+    assert groq.chamadas == 1
+
+
+# ══ Ritual de mesa — modo episódio ════════════════════════════════════════════
+
+
+def _narrative_pronto_pra_fecho(wm):
+    wm.narrative.turnos_total = 25
+    wm.narrative.pico_pacing = 8.0
+    wm.narrative.pacing_nivel = 2.0
+    return wm.narrative
+
+
+def test_momento_de_fecho_exige_todas_as_condicoes():
+    wm = _wm()
+    n = wm.narrative
+    n.turnos_total, n.pico_pacing, n.pacing_nivel = 25, 8.0, 2.0
+    n.turnos_total = 10
+    assert n.momento_de_fecho() is False  # poucos turnos
+    n.turnos_total, n.pico_pacing = 25, 5.0
+    assert n.momento_de_fecho() is False  # sem clímax real
+    n.pico_pacing, n.pacing_nivel = 8.0, 6.0
+    assert n.momento_de_fecho() is False  # ritmo ainda alto
+
+
+def test_momento_de_fecho_e_one_shot():
+    wm = _wm()
+    n = _narrative_pronto_pra_fecho(wm)
+    assert n.momento_de_fecho() is True
+    assert n.momento_de_fecho() is False  # já sugerido
+
+
+def test_fecho_injetado_no_prompt_so_em_modo_episodio():
+    wm = _wm(modo_episodio=True)
+    _narrative_pronto_pra_fecho(wm)
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "MOMENTO DE FECHO" in system
+
+    wm2 = _wm(modo_episodio=False)
+    _narrative_pronto_pra_fecho(wm2)
+    system2 = montar_mensagens(_ctx(wm2))[0]["content"]
+    assert "MOMENTO DE FECHO" not in system2
+
+
+def test_pico_pacing_acompanha_ajustes():
+    wm = _wm()
+    for _ in range(4):
+        wm.narrative.ajustar_pacing(em_combate=True, saiu_combate_recentemente=False, trust_mudou=False)
+    assert wm.narrative.pico_pacing >= 8.0
+    assert wm.narrative.turnos_total == 4

@@ -13,8 +13,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from engine.memory.working_memory import WorkingMemory
 
-# Detecta o formato [Rolagem: dX = Y] enviado pelo CharacterSheet
-RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
+# Detecta o formato [Rolagem: ... dX ... = Y] enviado pelo frontend.
+# Bug latente (achado 10/06 ao testar o beat): o frontend envia modificador
+# e label — "[Rolagem: FOR (+3) d20+3 = 15 vs CD 12]" — e a regex antiga
+# exigia "d20 =" colado, então rolagem COM modificador nunca injetava dice.md.
+RE_ROLAGEM = re.compile(r"\[Rolagem:[^\]]*?d\d+[^\]]*?=\s*-?\d+", re.IGNORECASE)
 
 # Detecta ação de combate no texto do jogador.
 #

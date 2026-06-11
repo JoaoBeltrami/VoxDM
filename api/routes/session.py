@@ -182,6 +182,8 @@ async def iniciar_sessao(
         skill_profs=list(config.skill_profs),
         save_profs=list(config.save_profs),
         player_spells=list(config.player_spells) if config.player_spells else None,
+        death_policy=config.death_policy,
+        modo_episodio=config.modo_episodio,
     )
 
     context_builder = ContextBuilder()
@@ -783,6 +785,10 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "fatos_ancora":         list(wm.fatos_ancora),
         # Pacing meter — drift do ritmo é caro de re-construir
         "pacing_nivel":         float(wm.pacing_nivel),
+        # Pilar Perigo — cicatrizes são permanentes por definição
+        "cicatrizes":           list(wm.cicatrizes),
+        # Mundo Vivo — relógios de ameaça continuam andando entre sessões
+        "relogios":             {k: dict(v) for k, v in wm.narrative.relogios.items()},
     }
 
 

@@ -699,6 +699,95 @@ async def _enviar_recap_sessao_anterior(
         )
 
 
+async def _beat_turno_inimigo(
+    websocket: WebSocket, sessao: Any, texto_jogador: str
+) -> None:
+    """Turno dos inimigos como beat separado (Pilar Perigo, 10/06).
+
+    Teste ao vivo: "ele deixa eu atacar sem parar, não tem turno" — o protocolo
+    de combate era só prompt e o LLM raramente fazia os inimigos agirem. Agora a
+    ENGINE conduz: após ação de combate do jogador, uma 2ª chamada curta narra
+    APENAS o turno dos inimigos, com dano real via [DANO]. O jogador sente a
+    alternância de mesa: você age → eles respondem → "o que você faz?".
+
+    Armadilha: NUNCA lançar — qualquer falha pula o beat em silêncio e o jogo
+    segue no fluxo antigo (inimigos via prompt principal).
+    """
+    wm = sessao.working_mem
+    if not wm.em_combate or wm.player_hp <= 0:
+        return
+    vivos = {
+        iid: d for iid, d in wm.inimigos_combate.items() if d.get("estado") != "morto"
+    }
+    if not vivos:
+        return
+    # Só após ação ofensiva ou resolução de rolagem — declarar defesa/fala
+    # social em combate não cede o turno (o LLM resolve no fluxo principal).
+    from engine.llm.types import RE_ROLAGEM
+    if not (_RE_COMBATE.search(texto_jogador) or RE_ROLAGEM.search(texto_jogador)):
+        return
+    try:
+        from engine.llm.tasks import TaskType
+
+        system = (
+            "Você é o Mestre conduzindo APENAS o turno dos INIMIGOS — o jogador "
+            "já agiu; NÃO aja nem fale por ele.\n"
+            f"{wm.para_texto()}\n"
+            f"CA do jogador: {wm.ca}. HP do jogador: {wm.player_hp}/{wm.player_hp_max}.\n"
+            "Cada inimigo vivo age UMA vez: ataque (rolagem interna vs CA), "
+            "reposicionamento ou manobra coerente com a ficha. Acertou → narre o "
+            "golpe e emita [DANO: -N motivo]; errou → narre o quase. Use "
+            "[POSICAO]/[INIMIGO_MORTO] se aplicável. PT-BR falado, 2-4 frases, "
+            "máximo 70 palavras, sem markdown. Termine devolvendo a iniciativa "
+            "ao jogador — tensão, não pergunta retórica."
+        )
+        texto_beat = await asyncio.wait_for(
+            sessao.groq.completar(
+                [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": "Turno dos inimigos."},
+                ],
+                max_tokens=220,
+                task=TaskType.NARRATIVE,
+            ),
+            timeout=25.0,
+        )
+        texto_beat = (texto_beat or "").strip()
+        if not texto_beat:
+            return
+        # Markers do beat valem de verdade: [DANO] reduz HP, mortes e posições
+        # sincronizam. texto_jogador="" mantém pacing/rodada intocados (CRIT-4).
+        aplicar_pos_turno(wm, "", texto_beat)
+        texto_limpo = strip_marcadores(texto_beat).strip()
+        if not texto_limpo:
+            return
+        # Pseudo-stream por sentença — frontend/karaokê tratam como turno normal
+        for sent in re.split(r"(?<=[.!?…])\s+", texto_limpo):
+            if sent.strip():
+                await websocket.send_text(
+                    MensagemWS(tipo="token", conteudo=sent + " ").model_dump_json()
+                )
+        tts = _obter_tts()
+        await _sintetizar_e_enviar(
+            websocket,
+            tts,
+            texto_limpo,
+            voice=wm.tts_voice or None,
+            npc_vozes=wm.npc_vozes or None,
+        )
+        await websocket.send_text(
+            MensagemWS(tipo="fim", **_snapshot_estado(wm)).model_dump_json()
+        )
+        log.info(
+            "beat_turno_inimigo",
+            session_id=wm.session_id,
+            inimigos=len(vivos),
+            chars=len(texto_limpo),
+        )
+    except Exception as e:
+        log.warning("beat_turno_inimigo_falhou", erro=str(e)[:120])
+
+
 def _snapshot_estado(wm: Any) -> dict[str, Any]:
     """Coleta o estado da sessão para os payloads `fim`.
 
@@ -736,6 +825,9 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "death_saves_successes": wm.death_saves_successes,
         "death_saves_failures": wm.death_saves_failures,
         "death_saves_stable": wm.death_saves_stable,
+        # Pilar Perigo + Mundo Vivo (10/06)
+        "cicatrizes": list(wm.cicatrizes),
+        "relogios": {k: dict(v) for k, v in wm.narrative.relogios.items()},
         "em_combate": wm.em_combate,
         "inimigos_combate": dict(wm.inimigos_combate),
         "rodada_combate": wm.rodada_combate,
@@ -1757,6 +1849,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Aftermath dura exatamente um turno — reset após o "fim" ser enviado
             if sessao.working_mem.saiu_combate_recentemente:
                 sessao.working_mem.saiu_combate_recentemente = False
+
+            # Pilar Perigo: turno dos inimigos como beat separado. Roda DEPOIS
+            # do "fim" (frontend já sincronizou) e ANTES do rolling summary —
+            # o áudio do beat chega enquanto o TTS principal ainda toca.
+            await _beat_turno_inimigo(websocket, sessao, texto_jogador)
 
             # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
             # O contador é incrementado dentro de aplicar_pos_turno (só turnos
