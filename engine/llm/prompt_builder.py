@@ -46,6 +46,7 @@ _SOCIAL_PATH        = Path(__file__).parent / "prompts" / "social.md"
 _RECAP_PATH         = Path(__file__).parent / "prompts" / "recap.md"
 _INTRO_SYSTEM_PATH  = Path(__file__).parent / "prompts" / "intro_system.md"
 _INTRO_FALLBACK_PATH = Path(__file__).parent / "prompts" / "intro_fallback.md"
+_SESSION_ZERO_PATH  = Path(__file__).parent / "prompts" / "session_zero.md"
 _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
 # Fragmentos condicionais (Frente B — gating contextual, 27/05)
 # Injetados só quando a cena pede, não em todo turno. Economia: ~200-300
@@ -333,6 +334,22 @@ def montar_mensagens(
         Lista de dicts {role, content} prontos para o Groq/Ollama.
         Estrutura: [system, user?, assistant?, ..., user_atual]
     """
+    # ── Session Zero (Ritual P3): entrevista de criação substitui TUDO ───────
+    # Sem RAG, sem combate, sem markers — só o entrevistador + diálogo. O
+    # [FICHA] no pipeline desliga o flag e o próximo turno volta ao normal.
+    if getattr(contexto.working_memory, "session_zero_ativa", False):
+        sz = _ler_prompt(_SESSION_ZERO_PATH)
+        if sz:
+            mensagens_sz: list[dict[str, str]] = [{"role": "system", "content": sz}]
+            turnos_sz = contexto.working_memory.dialogo_recente
+            for turno in (turnos_sz[:-1] if turnos_sz else []):
+                role = "user" if turno.falante == "player" else "assistant"
+                mensagens_sz.append({"role": role, "content": turno.texto})
+            mensagens_sz.append({"role": "user", "content": contexto.transcricao_atual})
+            log.info("prompt_session_zero", chars_system=len(sz), turnos=len(turnos_sz))
+            return mensagens_sz
+        # session_zero.md ausente/corrompido → degrada pro fluxo normal
+
     master_system = master_system_override or _carregar_master_system()
 
     # ── System message: identidade + estado da cena (sem diálogo) ────────────

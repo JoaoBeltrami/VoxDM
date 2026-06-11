@@ -73,6 +73,10 @@ class SessaoConfig(BaseModel):
     # Modo episódio (Ritual de mesa, 10/06): mestre propõe fecho pós-clímax
     # com cliffhanger + epílogo. Default off = sessão livre.
     modo_episodio: bool = False
+    # Session Zero por voz (Ritual P3, 11/06): a sessão abre como entrevista
+    # de criação de personagem — o mestre pergunta, o jogador responde por voz,
+    # e o marker [FICHA] fecha a criação (atributos/HP gerados pela engine).
+    session_zero: bool = False
     # Atributos D&D 5e (Standard Array padrão)
     str_score: int = Field(default=10, ge=3, le=20)
     dex_score: int = Field(default=10, ge=3, le=20)
@@ -220,6 +224,8 @@ class MensagemWS(BaseModel):
     death_saves_successes: int = 0
     death_saves_failures: int = 0
     death_saves_stable: bool = False
+    # Session Zero (P3): ficha criada por conversa — enviada em tipo="ficha_criada"
+    ficha: dict | None = None
     # Pilar Perigo (10/06) — cicatrizes permanentes do personagem (ficha)
     cicatrizes: list[str] = Field(default_factory=list)
     # Mundo Vivo (10/06) — relógios de ameaça: id → {nome, atual, max}

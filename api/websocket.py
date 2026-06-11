@@ -914,6 +914,21 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         {"role": "user", "content": intro_user},
     ]
 
+    # Session Zero (P3): a abertura é a 1ª pergunta da entrevista de criação —
+    # não há mundo ainda. Troca o system pelo session_zero.md; o resto do
+    # fluxo (stream, TTS, fim) é idêntico.
+    if wm.session_zero_ativa:
+        from engine.llm.prompt_builder import _SESSION_ZERO_PATH, _ler_prompt
+        sz = _ler_prompt(_SESSION_ZERO_PATH)
+        if sz:
+            mensagens_intro = [
+                {"role": "system", "content": sz},
+                {"role": "user", "content": (
+                    "Inicie a Sessão Zero: uma saudação curta de mestre de mesa "
+                    "e a primeira pergunta (o nome do personagem)."
+                )},
+            ]
+
     resposta_intro = ""
     tts = _obter_tts()
 
@@ -1645,9 +1660,38 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Imports estão no topo do arquivo — sem lazy redundante.
             # aplicar_pos_turno retorna mudanças de trust (útil p/ telemetria),
             # mas o WS não as consome — não atribui pra não deixar var órfã.
+            era_session_zero = sessao.working_mem.session_zero_ativa
             aplicar_pos_turno(
                 sessao.working_mem, texto_jogador, resposta_limpa
             )
+
+            # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
+            # ficha pro frontend popular a CharacterSheet e persiste no SQLite
+            # (o "Continuar como…" passa a listar o personagem). Falha = só log.
+            if era_session_zero and not sessao.working_mem.session_zero_ativa:
+                try:
+                    _ch = sessao.working_mem.character
+                    ficha_payload = {
+                        "player_name": _ch.player_name,
+                        "player_race": _ch.player_race,
+                        "player_class": _ch.player_class,
+                        "player_background": _ch.player_background,
+                        "player_description": _ch.player_description,
+                        "player_level": _ch.player_level,
+                        "player_hp": _ch.hp_current,
+                        "player_hp_max": _ch.hp_max,
+                        "str_score": _ch.str_score, "dex_score": _ch.dex_score,
+                        "con_score": _ch.con_score, "int_score": _ch.int_score,
+                        "wis_score": _ch.wis_score, "cha_score": _ch.cha_score,
+                    }
+                    await websocket.send_text(
+                        MensagemWS(tipo="ficha_criada", ficha=ficha_payload).model_dump_json()
+                    )
+                    _criar_background_task(_auto_checkpoint(sessao))
+                    log.info("session_zero_concluida", session_id=session_id,
+                             nome=_ch.player_name, classe=_ch.player_class)
+                except Exception as exc:
+                    log.warning("ficha_criada_envio_falhou", erro=str(exc)[:120])
 
             # CENA-1: se o turno trocou de local ([CENA: id|Nome|hora]), re-infere
             # os NPCs do novo local via Neo4j (parte async do pipeline). Sem isto,

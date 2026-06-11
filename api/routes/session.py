@@ -184,6 +184,7 @@ async def iniciar_sessao(
         player_spells=list(config.player_spells) if config.player_spells else None,
         death_policy=config.death_policy,
         modo_episodio=config.modo_episodio,
+        session_zero=config.session_zero,
     )
 
     context_builder = ContextBuilder()

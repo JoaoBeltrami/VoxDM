@@ -116,6 +116,9 @@ interface EstadoSessao {
   rolagens: RolagemLog[];
   // DM Feat 1: Fios Soltos — threads narrativas em aberto (máx 5)
   fiosSoltos: string[];
+  // Session Zero (P3): ficha criada pela entrevista por voz (one-shot até
+  // page.tsx consumir e aplicar no personagem local)
+  fichaCriada: (Partial<import("@/lib/api").PersonagemConfig> & { player_hp?: number; player_hp_max?: number }) | null;
   // Pilar Perigo (10/06): cicatrizes permanentes do personagem
   cicatrizes: string[];
   // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
@@ -210,6 +213,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   questNotificacao: null,
   rolagens: [],
   fiosSoltos: [],
+  fichaCriada: null,
   cicatrizes: [],
   relogios: {},
   classFeatures: {},
@@ -426,6 +430,12 @@ export function useGameSession() {
           levelUp: msg.level_up as EstadoSessao["levelUp"],
           playerLevel: (msg.level_up as { nivel_novo?: number })?.nivel_novo ?? s.playerLevel,
         }));
+      }
+
+      if (msg.tipo === "ficha_criada" && msg.ficha) {
+        // Session Zero (P3): a entrevista fechou — page.tsx aplica a ficha
+        // no personagem local (CharacterSheet passa a refletir o criado).
+        setEstado(s => ({ ...s, fichaCriada: msg.ficha as EstadoSessao["fichaCriada"] }));
       }
 
       if (msg.tipo === "recap" && msg.conteudo) {

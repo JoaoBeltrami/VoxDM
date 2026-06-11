@@ -38,7 +38,7 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     "COMPANION_ADD", "COMPANION_HP", "COMPANION_REMOVE",
     # Cena e persistência
     "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA", "NPC",
-    "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA",
+    "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA", "FICHA",
 )
 
 

@@ -318,7 +318,7 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions,
-    iniciativaOrdem, fiosSoltos, cicatrizes, relogios, classFeatures, sceneImageUrl,
+    iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
@@ -915,6 +915,26 @@ export default function Home() {
     // foi removido da UI na gamificação — passamos "" explicitamente.
     conectar("", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility, death_policy: deathPolicy, modo_episodio: modoEpisodio });
   }, [conectar, personagem, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
+
+  // Session Zero (P3) — criação por voz: bypassa o CharacterForm; o mestre
+  // entrevista e a engine monta a ficha ([FICHA] → tipo="ficha_criada").
+  const handleSessionZero = useCallback(() => {
+    conectar("", {
+      session_zero: true,
+      tts_voice: vozSelecionada,
+      dm_profile: dmProfile,
+      roll_visibility: rollVisibility,
+      death_policy: deathPolicy,
+      modo_episodio: modoEpisodio,
+    });
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
+
+  // Aplica a ficha criada na entrevista ao personagem local — CharacterSheet
+  // e bolhas passam a usar nome/classe reais a partir deste turno.
+  useEffect(() => {
+    if (!fichaCriada) return;
+    setPersonagem(p => ({ ...p, ...fichaCriada }));
+  }, [fichaCriada]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
     if (!sessaoSelecionada) return;
@@ -1963,6 +1983,21 @@ export default function Home() {
               ← Voltar
             </button>
             <h2 className="text-lg font-bold text-violet-400">Nova Sessão</h2>
+          </div>
+
+          {/* Session Zero (P3) — criação conversada, 100% por voz */}
+          <button
+            onClick={handleSessionZero}
+            disabled={carregando}
+            className="w-full rounded-xl border border-violet-700/60 bg-violet-950/30 py-3 text-sm font-semibold text-violet-300 transition hover:bg-violet-900/40 disabled:opacity-40"
+          >
+            🎙 Criar conversando com o Mestre
+            <span className="block text-[10px] font-normal text-zinc-500">
+              Sessão Zero por voz — sem formulário; o mestre pergunta, você responde
+            </span>
+          </button>
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-600">
+            <span className="h-px flex-1 bg-zinc-800" /> ou preencha a ficha <span className="h-px flex-1 bg-zinc-800" />
           </div>
 
           <CharacterForm onChange={setPersonagem} />

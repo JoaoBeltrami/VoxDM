@@ -535,3 +535,97 @@ def test_perfil_e_locais_persistem_no_dm_state():
     wm2.aplicar_character_state(SimpleNamespace(dm_state=dm_state))
     assert wm2.narrative.estilo_jogador == {"social": 7}
     assert "mina-abandonada" in wm2.scene.locais_visitados
+
+
+# ══ PACOTE 3 — Session Zero por voz ══════════════════════════════════════════
+
+
+def test_chargen_atributos_por_classe():
+    from engine.chargen import gerar_atributos
+
+    mago = gerar_atributos("Mago")
+    assert mago["int_score"] == 15 and mago["con_score"] == 14 and mago["str_score"] == 8
+    barbaro = gerar_atributos("Bárbaro")
+    assert barbaro["str_score"] == 15 and barbaro["int_score"] == 8
+    desconhecida = gerar_atributos("Cavaleiro do Caos")
+    assert desconhecida["str_score"] == 15  # ordem genérica
+
+
+def test_chargen_normalizar_classe():
+    from engine.chargen import normalizar_classe
+
+    assert normalizar_classe("guerreira") == "Guerreiro"
+    assert normalizar_classe("LADRÃO") == "Ladino"
+    assert normalizar_classe("patrulheiro") == "Ranger"
+    assert normalizar_classe("clerigo") == "Clérigo"
+    assert normalizar_classe("necromante") == ""
+
+
+def test_chargen_hp_nivel():
+    from engine.chargen import hp_nivel
+
+    # Guerreiro (d10) nv3, CON +2: 10+2 + 2×(6+2) = 28
+    assert hp_nivel("Guerreiro", 3, 2) == 28
+    # Mago (d6) nv1, CON 0: 6
+    assert hp_nivel("Mago", 1, 0) == 6
+    # CON muito negativa nunca zera
+    assert hp_nivel("Mago", 3, -5) >= 3
+
+
+def test_regex_ficha_com_e_sem_traco():
+    from api.turn_pipeline import _RE_FICHA
+
+    m = _RE_FICHA.search("[FICHA: Kael|Meio-orc|Guerreiro|soldado desertor|procura o irmão]")
+    assert m is not None
+    assert m.group(1) == "Kael" and m.group(3) == "Guerreiro"
+    assert m.group(5) == "procura o irmão"
+    m2 = _RE_FICHA.search("[FICHA: Mira|Humana|maga|aprendiz expulsa]")
+    assert m2 is not None and m2.group(5) is None
+
+
+def test_ficha_aplica_personagem_completo_e_desliga_modo():
+    wm = _wm(session_zero=True)
+    assert wm.session_zero_ativa is True
+    aplicar_pos_turno(
+        wm, "Sou a Mira, uma maga.",
+        "Então é assim que Mira entra na história. [FICHA: Mira|Humana|maga|aprendiz expulsa|provar seu valor]",
+    )
+    assert wm.session_zero_ativa is False
+    ch = wm.character
+    assert ch.player_name == "Mira"
+    assert ch.player_class == "Mago"          # alias normalizado
+    assert ch.int_score == 15                  # standard array priorizado
+    assert ch.hp_max == ch.hp_current > 0
+    assert ch.hit_dice_type == 6               # d6 de Mago
+    assert ch.spell_slots, "Mago nível 3 precisa de spell slots"
+    assert "provar seu valor" in ch.player_description
+
+
+def test_ficha_ignorada_fora_da_session_zero():
+    wm = _wm()  # session_zero=False
+    aplicar_pos_turno(wm, "Oi.", "Beleza. [FICHA: Hacker|Robô|Mago|invasor|caos]")
+    assert wm.player_name == ""  # não aplicou
+
+
+def test_session_zero_sem_ficha_continua_ativa():
+    wm = _wm(session_zero=True)
+    aplicar_pos_turno(wm, "Meu nome é Kael.", "Kael... bom nome. E como você luta?")
+    assert wm.session_zero_ativa is True
+
+
+def test_prompt_session_zero_substitui_o_sistema_normal():
+    wm = _wm(session_zero=True)
+    wm.narrative.criar_relogio("ritual", "O ritual", 6)  # não pode vazar
+    mensagens = montar_mensagens(_ctx(wm, "meu nome é Kael"))
+    system = mensagens[0]["content"]
+    assert "Sessão Zero" in system
+    assert "FICHA:" in system
+    assert "RELÓGIOS" not in system  # nada do fluxo narrativo entra
+    assert mensagens[-1]["content"] == "meu nome é Kael"
+
+
+def test_prompt_volta_ao_normal_apos_ficha():
+    wm = _wm(session_zero=True)
+    aplicar_pos_turno(wm, "Tudo isso.", "Fechado. [FICHA: Kael|Anão|Guerreiro|ferreiro]")
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "Sessão Zero" not in system

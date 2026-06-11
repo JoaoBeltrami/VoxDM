@@ -77,6 +77,10 @@ class WorkingMemory:
     death_policy: str = "narrativo"
     # Ritual de mesa (10/06): mestre propõe fecho de episódio pós-clímax.
     modo_episodio: bool = False
+    # Session Zero por voz (P3): True enquanto a entrevista de criação roda.
+    # O prompt_builder troca o system pelo session_zero.md; o marker [FICHA]
+    # aplica o personagem e desliga o flag (jogo normal começa).
+    session_zero_ativa: bool = False
 
     # Mercado/economia: flag de UI, não domínio independente
     em_mercado: bool = False
@@ -498,6 +502,7 @@ class WorkingMemory:
         player_spells: list[str] | None = None,
         death_policy: str = "narrativo",
         modo_episodio: bool = False,
+        session_zero: bool = False,
     ) -> "WorkingMemory":
         """Cria WorkingMemory com substates inicializados."""
         _HIT_DICE_TIPO: dict[str, int] = {
@@ -555,6 +560,7 @@ class WorkingMemory:
             roll_visibility=roll_visibility if roll_visibility in {"open", "result_only", "narrated"} else "result_only",
             death_policy=death_policy if death_policy in {"narrativo", "mortal"} else "narrativo",
             modo_episodio=bool(modo_episodio),
+            session_zero_ativa=bool(session_zero),
         )
         return wm
 

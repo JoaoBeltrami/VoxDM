@@ -59,7 +59,7 @@ export interface CharacterStateClient {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada";
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
@@ -102,6 +102,8 @@ export interface MensagemWS {
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
   // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
   fios_soltos?: string[];
+  // Session Zero (P3): ficha criada por conversa — tipo="ficha_criada"
+  ficha?: Partial<PersonagemConfig> & { player_hp?: number; player_hp_max?: number };
   // Pilar Perigo (10/06): cicatrizes permanentes do personagem
   cicatrizes?: string[];
   // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
@@ -196,6 +198,8 @@ export interface PersonagemConfig {
   death_policy?: "narrativo" | "mortal";
   // Ritual de mesa (10/06): mestre propõe fecho de episódio pós-clímax
   modo_episodio?: boolean;
+  // Session Zero (P3): abre a sessão como entrevista de criação por voz
+  session_zero?: boolean;
 }
 
 export async function criarSessao(

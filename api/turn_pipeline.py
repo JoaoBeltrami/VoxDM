@@ -178,6 +178,15 @@ _RE_CURA = re.compile(r"\[CURA:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 # um custo físico dramático). Persiste via dm_state; NPCs reagem.
 _RE_CICATRIZ = re.compile(r"\[CICATRIZ:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Session Zero (Ritual P3) — o mestre fecha a entrevista de criação com
+# [FICHA: Nome|Raça|Classe|background|traço] (traço opcional). A engine gera
+# atributos/HP/slots/features — o jogador nunca fala de números.
+_RE_FICHA = re.compile(
+    r"\[FICHA:\s*([^|\]]{1,40}?)\s*\|\s*([^|\]]{1,30}?)\s*\|\s*([^|\]]{1,20}?)\s*"
+    r"\|\s*([^|\]]{1,60}?)\s*(?:\|\s*([^|\]]{1,120}?)\s*)?\]",
+    re.IGNORECASE,
+)
+
 # Ações sociais explícitas no texto do jogador (Ritual P2 — perfil do
 # jogador). Não precisa ser exaustivo: é contador de tendência, não gate.
 _RE_ACAO_SOCIAL = re.compile(
@@ -449,6 +458,39 @@ def aplicar_pos_turno(
         Lista de mudanças de trust aplicadas: [(npc_id, delta), ...].
         Útil para o caller emitir eventos / telemetria.
     """
+    # 0. Session Zero (Ritual P3) — [FICHA] fecha a entrevista de criação:
+    # aplica identidade, gera atributos (standard array por classe), HP/hit
+    # dice/slots/features de nível, e desliga o modo entrevista. O caller
+    # (websocket) detecta a transição e envia tipo="ficha_criada" + checkpoint.
+    if working_mem.session_zero_ativa:
+        m_ficha = _RE_FICHA.search(resposta_completa)
+        if m_ficha:
+            from engine.chargen import gerar_atributos, hit_die, hp_nivel, normalizar_classe
+            from engine.magic.spell_list import slots_padrao
+
+            ch = working_mem.character
+            ch.player_name = m_ficha.group(1).strip()[:40]
+            ch.player_race = m_ficha.group(2).strip()[:30]
+            classe = normalizar_classe(m_ficha.group(3)) or m_ficha.group(3).strip().title()[:20]
+            ch.player_class = classe
+            ch.player_background = m_ficha.group(4).strip()[:60]
+            ch.player_description = (m_ficha.group(5) or "").strip()[:200]
+            for campo, valor in gerar_atributos(classe).items():
+                setattr(ch, campo, valor)
+            ch.hp_max = hp_nivel(classe, ch.player_level, ch.mod_con)
+            ch.hp_current = ch.hp_max
+            ch.hit_dice_type = hit_die(classe)
+            ch.hit_dice_max = ch.player_level
+            ch.hit_dice_current = ch.player_level
+            ch.spell_slots = slots_padrao(classe, ch.player_level)
+            ch.inicializar_features_classe(classe, "")
+            working_mem.session_zero_ativa = False
+            log.info(
+                "ficha_criada_session_zero",
+                nome=ch.player_name, raca=ch.player_race,
+                classe=classe, hp=ch.hp_max,
+            )
+
     # 1. Registra fala do mestre + apresenta NPCs mencionados.
     # Strips marcadores internos ([FIO:], [CONSEQUÊNCIA:], [XP:], etc.) ANTES de
     # armazenar em dialogo_recente — o histórico enviado ao LLM como "assistant"
