@@ -794,6 +794,8 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "estilo_jogador":       dict(wm.narrative.estilo_jogador),
         # Mundo Vivo P2 — ecos: locais por onde o jogador já passou
         "locais_visitados":     sorted(wm.scene.locais_visitados),
+        # Imersão P4 — crônica da sessão (timeline de eventos-chave)
+        "cronica":              list(wm.narrative.cronica),
     }
 
 

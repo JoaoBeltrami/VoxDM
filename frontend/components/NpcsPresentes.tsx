@@ -10,12 +10,15 @@
  *   um campo dedicated `nome`. Se quiser nome completo, expor working_mem.npc_nomes.
  *
  * Refatorado 27/05: usa primitiva Chip do design system unificado.
+ * Imersão P4 (11/06): avatar Pollinations (retratos) no chip quando disponível.
  */
 
 import { Chip } from "@/components/ui";
 
 interface Props {
   npcsTrust: Record<string, number>;
+  /** Imersão P4: npc_id → URL do retrato (Pollinations, seed por id) */
+  retratos?: Record<string, string>;
 }
 
 // trust_level → (tone do Chip, ícone, label legível)
@@ -36,7 +39,7 @@ function idParaNome(id: string): string {
     .join(" ");
 }
 
-export function NpcsPresentes({ npcsTrust }: Props) {
+export function NpcsPresentes({ npcsTrust, retratos }: Props) {
   const ids = Object.keys(npcsTrust);
   if (ids.length === 0) return null;
 
@@ -50,11 +53,25 @@ export function NpcsPresentes({ npcsTrust }: Props) {
         const { tone, icone, label } = TRUST_VISUAL[trust];
         const nome = idParaNome(npcId);
         const nomeCurto = nome.length > 18 ? nome.slice(0, 17) + "…" : nome;
+        const retrato = retratos?.[npcId];
         return (
           <Chip
             key={npcId}
             tone={tone}
-            icon={<span aria-hidden className="text-[10px]">{icone}</span>}
+            icon={
+              retrato ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={retrato}
+                  alt=""
+                  aria-hidden
+                  loading="lazy"
+                  className="h-4 w-4 rounded-full object-cover ring-1 ring-black/40"
+                />
+              ) : (
+                <span aria-hidden className="text-[10px]">{icone}</span>
+              )
+            }
             title={`${nome} — ${label} (confiança: ${trust}/3)`}
             className="animate-slide-in-right font-display tracking-wide"
           >

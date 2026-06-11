@@ -123,6 +123,9 @@ interface EstadoSessao {
   cicatrizes: string[];
   // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
   relogios: Record<string, { nome: string; atual: number; max: number }>;
+  // Imersão P4: crônica (timeline) + retratos de NPC por id
+  cronica: string[];
+  npcRetratos: Record<string, string>;
   // Class features — chips interativos de recursos de classe (Fase 6)
   classFeatures: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
   // Fase 5.7: dado do mestre ativo — exibido como animação no frontend.
@@ -216,6 +219,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   fichaCriada: null,
   cicatrizes: [],
   relogios: {},
+  cronica: [],
+  npcRetratos: {},
   classFeatures: {},
   dadoAtivo: null,
   sceneImageUrl: "",
@@ -438,6 +443,13 @@ export function useGameSession() {
         setEstado(s => ({ ...s, fichaCriada: msg.ficha as EstadoSessao["fichaCriada"] }));
       }
 
+      if (msg.tipo === "npc_retrato" && msg.npc_id && msg.conteudo) {
+        // Imersão P4: retrato Pollinations do NPC — avatar no chip do HUD.
+        const npcId = msg.npc_id;
+        const url = msg.conteudo;
+        setEstado(s => ({ ...s, npcRetratos: { ...s.npcRetratos, [npcId]: url } }));
+      }
+
       if (msg.tipo === "recap" && msg.conteudo) {
         // Popula textoRecap para exibição em destaque com fade-out de 30s,
         // e adiciona ao histórico como item permanente para o log de exportação.
@@ -593,6 +605,7 @@ export function useGameSession() {
           classFeatures: (msg.class_features ?? {}) as Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>,
           cicatrizes: msg.cicatrizes ?? [],
           relogios: (msg.relogios ?? {}) as Record<string, { nome: string; atual: number; max: number }>,
+          cronica: msg.cronica ?? [],
         };
 
         const novoTurnoBase = {
@@ -782,6 +795,7 @@ export function useGameSession() {
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
             cicatrizes: rpgUpdate.cicatrizes.length ? rpgUpdate.cicatrizes : s.cicatrizes,
+            cronica: rpgUpdate.cronica.length ? rpgUpdate.cronica : s.cronica,
             // Relógios: payload presente substitui SEMPRE (relógio que estourou
             // sai do dict — manter o antigo mostraria ameaça já consumida).
             relogios: rpgUpdate.relogios,
@@ -938,6 +952,19 @@ export function useGameSession() {
     wsRef.current.send(JSON.stringify({ tipo, ...payload }));
   }, []);
 
+  // Imersão P4: nudge de silêncio — pede ao mestre um empurrão atmosférico.
+  // Sem balão do jogador (turnoAtualRef=null, como a abertura): o backend
+  // intercepta "[IDLE]" e transforma em instrução parentética.
+  const enviarIdle = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (isProcessingRef.current) return;
+    _flushTurnoPendente();
+    turnoAtualRef.current = null;
+    textoAtualRef.current = "";
+    setIsProcessing(true);
+    wsRef.current.send(JSON.stringify({ texto: "[IDLE]" }));
+  }, [_flushTurnoPendente]);
+
   const registrarRolagem = useCallback(
     (tipo: string, resultado: number, motivo?: string) => {
       setEstado(s => ({
@@ -1033,6 +1060,7 @@ export function useGameSession() {
     ...estado,
     conectar,
     enviarComando,
+    enviarIdle,
     desconectar,
     sincronizarEstado,
     registrarRolagem,

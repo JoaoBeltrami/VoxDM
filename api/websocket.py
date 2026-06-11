@@ -370,6 +370,46 @@ async def _enviar_imagem_cena(websocket: WebSocket, sessao: SessaoAtiva) -> None
         log.debug("scene_image_ignorada", erro=str(e))
 
 
+async def _enviar_retratos_npcs(websocket: WebSocket, sessao: SessaoAtiva) -> None:
+    """Retrato Pollinations 1× por NPC apresentado (Imersão P4).
+
+    Seed determinístico derivado do npc_id (sha1) — o mesmo NPC tem sempre o
+    mesmo rosto, na sessão e entre sessões. Máx 3 por turno pra não floodar
+    o WS. Fire-and-forget: o frontend mostra o avatar no chip do HUD.
+
+    Armadilha: nunca lançar — jogo segue sem retrato se Pollinations falhar.
+    """
+    try:
+        import hashlib
+        from urllib.parse import quote
+
+        from engine.memory.working_memory import _id_para_nome
+
+        wm = sessao.working_mem
+        apresentados = set(wm.npcs_presentes) & wm.npcs_apresentados
+        novos = [n for n in apresentados if n not in sessao.retratos_enviados]
+        if not novos:
+            return
+        for npc_id in novos[:3]:
+            nome = _id_para_nome(npc_id)
+            seed = int(hashlib.sha1(npc_id.encode()).hexdigest()[:8], 16) % 100_000
+            prompt = (
+                f"fantasy RPG character portrait of {nome}, medieval, close-up face, "
+                "dark fantasy oil painting, detailed, no text, no watermark"
+            )
+            url = (
+                f"https://image.pollinations.ai/prompt/{quote(prompt)}"
+                f"?width=256&height=256&model=flux&nologo=true&seed={seed}"
+            )
+            await websocket.send_json(
+                {"tipo": "npc_retrato", "npc_id": npc_id, "conteudo": url}
+            )
+            sessao.retratos_enviados.add(npc_id)
+        log.info("npc_retratos_enviados", total=min(len(novos), 3))
+    except Exception as e:
+        log.debug("npc_retrato_ignorado", erro=str(e))
+
+
 # ---------------------------------------------------------------------------
 # TTS — singleton lazy, graceful se edge_tts não estiver instalado
 # ---------------------------------------------------------------------------
@@ -828,6 +868,8 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         # Pilar Perigo + Mundo Vivo (10/06)
         "cicatrizes": list(wm.cicatrizes),
         "relogios": {k: dict(v) for k, v in wm.narrative.relogios.items()},
+        # Imersão P4 — timeline da sessão
+        "cronica": list(wm.narrative.cronica),
         "em_combate": wm.em_combate,
         "inimigos_combate": dict(wm.inimigos_combate),
         "rodada_combate": wm.rodada_combate,
@@ -1051,6 +1093,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     # (asyncio.create_task direto não retém referência forte — risco real em
     # turnos com janela curta de execução).
     _criar_background_task(_enviar_imagem_cena(websocket, sessao))
+    _criar_background_task(_enviar_retratos_npcs(websocket, sessao))
 
     log.info("ws_abertura_enviada", session_id=sessao.session_id, latencia_ms=latencia_ms)
 
@@ -1310,6 +1353,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             t0 = time.perf_counter()
             sessao.ultima_atividade = time.time()
 
+            # Idle nudge (P4): "[IDLE]" chega do frontend após ~75s de silêncio.
+            # Vira instrução parentética — empurrão atmosférico sem avançar a
+            # história. Não conta como turno (pacing/estilo/arco intocados).
+            idle_nudge = texto_jogador.strip().upper() == "[IDLE]"
+            if idle_nudge:
+                log.info("idle_nudge", session_id=session_id)
+                texto_jogador = (
+                    "(O jogador está em silêncio, pensando. Dê um leve empurrão "
+                    "atmosférico de 1-2 frases no presente da cena — um detalhe "
+                    "sensorial, um NPC que se mexe — SEM avançar eventos nem agir "
+                    "pelo personagem. Termine com uma pergunta aberta curta.)"
+                )
+
             # OOC-IC auto (teste 10/06: prompt-side não bastou): vocativo
             # "mestre" no INÍCIO da fala = jogador falando com o DM, não com
             # NPC. Prepend [OOC] — o master_system já trata o resto.
@@ -1317,7 +1373,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 texto_jogador = f"[OOC] {texto_jogador}"
                 log.info("ooc_auto_vocativo", session_id=session_id)
 
-            sessao.working_mem.registrar_fala("player", texto_jogador)
+            sessao.working_mem.registrar_fala(
+                "player",
+                "(o jogador permanece em silêncio)" if idle_nudge else texto_jogador,
+            )
 
             # Captura location e estado de combate ANTES do turno para detectar mudanças.
             # Usado ao final do turno para disparar imagem de cena quando necessário.
@@ -1662,7 +1721,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # mas o WS não as consome — não atribui pra não deixar var órfã.
             era_session_zero = sessao.working_mem.session_zero_ativa
             aplicar_pos_turno(
-                sessao.working_mem, texto_jogador, resposta_limpa
+                sessao.working_mem,
+                # Idle nudge não é turno do jogador — "" pula pacing/estilo/
+                # rodada/arco (mesmos guards da abertura).
+                "" if idle_nudge else texto_jogador,
+                resposta_limpa,
             )
 
             # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
@@ -1711,6 +1774,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         sessao.voice_manager.registrar_npc(_npc_id)
             except Exception as exc:
                 log.warning("registro_voz_npcs_falhou", erro=str(exc)[:120])
+
+            # Imersão P4: retrato 1× por NPC apresentado (fire-and-forget)
+            _criar_background_task(_enviar_retratos_npcs(websocket, sessao))
 
             # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
             # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a

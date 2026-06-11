@@ -781,6 +781,10 @@ class WorkingMemory:
             # Mundo Vivo P2: locais visitados — união (ecos sobrevivem a restart)
             for loc in dm_state.get("locais_visitados", []):
                 self.scene.locais_visitados.add(str(loc))
+            # Imersão P4: crônica restaurada (substituição só se vazia)
+            cronica = dm_state.get("cronica", [])
+            if cronica and not self.narrative.cronica:
+                self.narrative.cronica = [str(c)[:140] for c in cronica][-40:]
 
     # ── Delegations: PartyState ──────────────────────────────────────────────
 

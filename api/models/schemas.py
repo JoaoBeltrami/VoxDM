@@ -230,6 +230,8 @@ class MensagemWS(BaseModel):
     cicatrizes: list[str] = Field(default_factory=list)
     # Mundo Vivo (10/06) — relógios de ameaça: id → {nome, atual, max}
     relogios: dict[str, dict] = Field(default_factory=dict)
+    # Imersão P4 — crônica: timeline de eventos-chave da sessão (cap 40)
+    cronica: list[str] = Field(default_factory=list)
     # Estado de combate — enviado no "fim" para sincronizar CombatTracker
     em_combate: bool = False
     # inimigo_id → {nome, estado, hp_rel} — espelha working_mem.inimigos_combate

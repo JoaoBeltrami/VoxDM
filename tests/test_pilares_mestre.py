@@ -629,3 +629,99 @@ def test_prompt_volta_ao_normal_apos_ficha():
     aplicar_pos_turno(wm, "Tudo isso.", "Fechado. [FICHA: Kael|Anão|Guerreiro|ferreiro]")
     system = montar_mensagens(_ctx(wm))[0]["content"]
     assert "Sessão Zero" not in system
+
+
+# ══ PACOTE 4 — Imersão: crônica, retratos, idle ══════════════════════════════
+
+
+def test_cronica_registra_com_dedup_e_cap():
+    wm = _wm()
+    n = wm.narrative
+    n.registrar_cronica("Chegada à vila")
+    n.registrar_cronica("Chegada à vila")  # dedup consecutivo
+    assert n.cronica == ["Chegada à vila"]
+    for i in range(45):
+        n.registrar_cronica(f"evento {i}")
+    assert len(n.cronica) == 40  # cap
+
+
+def test_consequencia_espelha_na_cronica():
+    wm = _wm()
+    wm.registrar_consequencia("A guarda desconfia do jogador")
+    assert "A guarda desconfia do jogador" in wm.narrative.cronica
+
+
+def test_relogio_estourado_entra_na_cronica():
+    wm = _wm()
+    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 3)
+    wm.narrative.avancar_relogio("ritual", passos=3)
+    assert any("O ritual sombrio" in e for e in wm.narrative.cronica)
+
+
+def test_cicatriz_e_chegada_entram_na_cronica_via_pipeline():
+    wm = _wm()
+    aplicar_pos_turno(wm, "Sigo em frente.", "Vocês chegam. [CENA: mina|Mina Abandonada]")
+    aplicar_pos_turno(wm, "", "Sobra a marca. [CICATRIZ: queimadura na mão]")
+    eventos = " | ".join(wm.narrative.cronica)
+    assert "Mina Abandonada" in eventos
+    assert "queimadura na mão" in eventos
+
+
+def test_cronica_persiste_no_dm_state():
+    from api.routes.session import _wm_para_dm_state
+
+    wm = _wm()
+    wm.narrative.registrar_cronica("⬆ Nível 4 alcançado")
+    dm_state = _wm_para_dm_state(wm)
+    assert "⬆ Nível 4 alcançado" in dm_state["cronica"]
+
+    wm2 = _wm()
+    wm2.aplicar_character_state(SimpleNamespace(dm_state=dm_state))
+    assert "⬆ Nível 4 alcançado" in wm2.narrative.cronica
+
+
+# ── Retratos de NPC (Pollinations 1× por id, seed determinística) ────────────
+
+
+class _WsColetor:
+    def __init__(self) -> None:
+        self.enviados: list[dict] = []
+
+    async def send_json(self, payload: dict) -> None:
+        self.enviados.append(payload)
+
+
+@pytest.mark.asyncio
+async def test_retrato_enviado_uma_vez_por_npc():
+    from api.websocket import _enviar_retratos_npcs
+
+    wm = _wm()
+    wm.npcs_presentes = ["mira", "figurante-anonimo"]
+    wm.apresentar_npc("mira")  # só apresentados ganham rosto
+    sessao = SimpleNamespace(working_mem=wm, retratos_enviados=set())
+
+    ws = _WsColetor()
+    await _enviar_retratos_npcs(ws, sessao)
+    assert len(ws.enviados) == 1
+    msg = ws.enviados[0]
+    assert msg["tipo"] == "npc_retrato" and msg["npc_id"] == "mira"
+    assert "image.pollinations.ai" in msg["conteudo"] and "seed=" in msg["conteudo"]
+
+    # Segunda chamada: cache impede reenvio
+    await _enviar_retratos_npcs(ws, sessao)
+    assert len(ws.enviados) == 1
+
+
+@pytest.mark.asyncio
+async def test_retrato_url_deterministica_por_npc():
+    from api.websocket import _enviar_retratos_npcs
+
+    urls: list[str] = []
+    for _ in range(2):
+        wm = _wm()
+        wm.npcs_presentes = ["mira"]
+        wm.apresentar_npc("mira")
+        ws = _WsColetor()
+        await _enviar_retratos_npcs(ws, SimpleNamespace(working_mem=wm, retratos_enviados=set()))
+        urls.append(ws.enviados[0]["conteudo"])
+    assert urls[0] == urls[1]  # mesmo NPC = mesmo rosto, sempre

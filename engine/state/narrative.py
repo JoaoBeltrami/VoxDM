@@ -82,6 +82,11 @@ class NarrativeState:
     # entre sessões.
     estilo_jogador: dict[str, int] = field(default_factory=dict)
 
+    # Imersão P4: crônica da sessão — timeline de eventos-chave em ordem
+    # (consequências, chegadas, level ups, cicatrizes, relógios estourados).
+    # Cap 40, dedup consecutivo. Persiste via dm_state; painel 📜 no frontend.
+    cronica: list[str] = field(default_factory=list)
+
     # Log de consequências (max 5, rolling)
     log_consequencias: list[str] = field(default_factory=list)
 
@@ -116,10 +121,22 @@ class NarrativeState:
         return True
 
     def registrar_consequencia(self, texto: str) -> None:
-        """Adiciona consequência ao log rolling."""
+        """Adiciona consequência ao log rolling (e espelha na crônica)."""
         self.log_consequencias.append(texto)
         if len(self.log_consequencias) > _MAX_CONSEQUENCIAS:
             self.log_consequencias.pop(0)
+        self.registrar_cronica(texto)
+
+    def registrar_cronica(self, evento: str) -> None:
+        """Acrescenta evento à timeline da sessão (cap 40, dedup consecutivo)."""
+        evento = evento.strip()[:140]
+        if not evento:
+            return
+        if self.cronica and self.cronica[-1] == evento:
+            return
+        self.cronica.append(evento)
+        if len(self.cronica) > 40:
+            self.cronica.pop(0)
 
     def atualizar_agenda(self, npc_id: str, plano: str) -> None:
         """Atualiza agenda de NPC com cap de 8 (eviction oldest)."""
@@ -167,6 +184,7 @@ class NarrativeState:
         if rel["atual"] >= rel["max"]:
             self.relogio_irrompido = rel["nome"]
             del self.relogios[relogio_id.strip().lower()]
+            self.registrar_cronica(f"⏳ A ameaça se concretizou: {rel['nome']}")
             return True
         return False
 

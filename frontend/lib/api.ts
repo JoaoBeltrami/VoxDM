@@ -59,7 +59,7 @@ export interface CharacterStateClient {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato";
   conteudo?: string;
   conteudo_b64?: string;
   sequencia?: number;
@@ -108,6 +108,9 @@ export interface MensagemWS {
   cicatrizes?: string[];
   // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
   relogios?: Record<string, { nome: string; atual: number; max: number }>;
+  // Imersão P4: crônica da sessão (timeline) + retrato de NPC (tipo="npc_retrato")
+  cronica?: string[];
+  npc_id?: string;
   // Feature 3: Consequências visíveis — efeitos duradouros no mundo (máx 5)
   consequencias?: string[];
   // Class features — sincronizadas no "fim" para atualizar chips na ficha

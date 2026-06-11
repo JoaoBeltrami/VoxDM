@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
+import { useEventSounds } from "@/hooks/useEventSounds";
 import { useSceneMood } from "@/hooks/useSceneMood";
 import { DadoAnimado } from "@/components/DadoAnimado";
 import { ErrorBoundary } from "@/components/system/ErrorBoundary";
@@ -318,11 +319,11 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions,
-    iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, classFeatures, sceneImageUrl,
+    iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, npcRetratos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
-    conectar, enviarComando, desconectar, sincronizarEstado,
+    conectar, enviarComando, enviarIdle, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
     rolagens, registrarRolagem,
@@ -741,6 +742,35 @@ export default function Home() {
     setModoEpisodio(v);
     try { localStorage.setItem("voxdm_modo_episodio", v ? "1" : "0"); } catch { /* SSR-safe */ }
   }, []);
+
+  // Imersão P4 — nudge de silêncio: 75s sem áudio/processamento/fala → o
+  // mestre quebra o silêncio (1 nudge; cooldown 3min). Toggle nas Opções.
+  const [idleNudgeAtivo, setIdleNudgeAtivo] = useState(true);
+  useEffect(() => {
+    try { setIdleNudgeAtivo(localStorage.getItem("voxdm_idle_nudge") !== "0"); } catch { /* SSR */ }
+  }, []);
+  const handleToggleIdleNudge = useCallback((v: boolean) => {
+    setIdleNudgeAtivo(v);
+    try { localStorage.setItem("voxdm_idle_nudge", v ? "1" : "0"); } catch { /* SSR */ }
+  }, []);
+  const ultimoNudgeRef = useRef(0);
+
+  // SFX por evento (morte de inimigo / ouro / cicatriz) — mesmo toggle dos
+  // sons de combate nas Opções.
+  useEventSounds({ inimigos, gold, cicatrizes });
+
+  // Timer do nudge: re-arma a cada atividade (deps); dispara após 75s de
+  // silêncio total (sem voz do mestre, sem turno processando).
+  useEffect(() => {
+    if (!conectado || !idleNudgeAtivo || audioTocando || isProcessing) return;
+    const t = setTimeout(() => {
+      const agora = Date.now();
+      if (agora - ultimoNudgeRef.current < 180_000) return; // cooldown 3min
+      ultimoNudgeRef.current = agora;
+      enviarIdle();
+    }, 75_000);
+    return () => clearTimeout(t);
+  }, [conectado, idleNudgeAtivo, audioTocando, isProcessing, historico.length, enviarIdle]);
 
   // Fase 5.7 — dado do jogador em animação (mostra antes de enviar o comando)
   // Apenas quando roll_visibility != "narrated" (para simetria visual)
@@ -1237,7 +1267,7 @@ export default function Home() {
         </header>
 
         <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
-        <NpcsPresentes npcsTrust={npcsTrust} />
+        <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} />
       </>
     );
 
@@ -1554,6 +1584,27 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
+            </details>
+          </div>
+        )}
+
+        {/* Imersão P4 — Crônica: timeline de eventos-chave da sessão */}
+        {!cinemaMode && cronica.length > 0 && (
+          <div className="max-w-sm w-full">
+            <details className="group">
+              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-amber-400/70 hover:text-amber-300 transition-colors list-none">
+                <span className="text-amber-500">📜</span>
+                Crônica ({cronica.length})
+                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+              </summary>
+              <ol className="mt-1.5 space-y-1 pl-3.5 border-l border-amber-900/40 max-h-48 overflow-y-auto">
+                {cronica.map((evento, i) => (
+                  <li key={i} className="text-[10px] text-zinc-500 leading-snug">
+                    {evento}
+                  </li>
+                ))}
+              </ol>
             </details>
           </div>
         )}
@@ -2249,6 +2300,27 @@ export default function Home() {
           <p className="text-[10px] text-zinc-600">
             Desligado = sessão livre, o mestre nunca sugere parar.
           </p>
+        </div>
+
+        {/* Imersão P4 — nudge de silêncio */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Silêncio na Mesa</p>
+          <button
+            onClick={() => handleToggleIdleNudge(!idleNudgeAtivo)}
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+              idleNudgeAtivo
+                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+            }`}
+          >
+            <span>
+              🤫 Mestre quebra o silêncio
+              <span className="ml-2 text-[10px] text-zinc-500">empurrão atmosférico após ~75s parado</span>
+            </span>
+            <span className={`text-xs font-semibold ${idleNudgeAtivo ? "text-violet-400" : "text-zinc-600"}`}>
+              {idleNudgeAtivo ? "ON" : "OFF"}
+            </span>
+          </button>
         </div>
 
         {/* Toggle de som em natural 20 / natural 1 */}

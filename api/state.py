@@ -72,6 +72,8 @@ class SessaoAtiva:
     # Chave da última imagem de cena enviada ao frontend — "{location}|{combate}".
     # Evita reenviar a mesma URL quando o estado de cena não mudou.
     ultima_imagem_chave: str = ""
+    # Imersão P4: retratos de NPC já enviados (1× por npc_id por sessão).
+    retratos_enviados: set[str] = field(default_factory=set)
     # CRIT-1: spell slot pending — guarda (nome_magia, nivel) detectado no texto
     # do jogador. O decremento ACONTECE só após o LLM narrar o cast com sucesso
     # (no fim do pipeline). Se o turno falhar, o slot não é perdido.

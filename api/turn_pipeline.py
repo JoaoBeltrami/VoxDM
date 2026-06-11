@@ -998,6 +998,7 @@ def aplicar_pos_turno(
     # 16d. Cicatriz permanente — [CICATRIZ: texto] (dedup + cap no substate).
     for m in _RE_CICATRIZ.finditer(resposta_completa):
         if working_mem.character.registrar_cicatriz(m.group(1)):
+            working_mem.narrative.registrar_cronica(f"🩸 Cicatriz: {m.group(1).strip()[:80]}")
             log.info("cicatriz_registrada", cicatriz=m.group(1).strip()[:60])
 
     # 16e. Relógios de Ameaça — criação e avanço dramático pelo LLM.
@@ -1022,6 +1023,7 @@ def aplicar_pos_turno(
         nome = m.group(2).strip()
         hora = (m.group(3) or "").strip()
         if working_mem.scene.aplicar_cena(novo_id, nome, hora):
+            working_mem.narrative.registrar_cronica(f"📍 Chegada: {nome or novo_id}")
             log.info("cena_mudou", local=working_mem.location_id, nome=nome, hora=hora or None)
             # Trocar de LOCAL encerra um combate em andamento — o encontro anterior
             # ficou para trás. Evita inimigos/posições do local antigo vazarem para
@@ -1150,5 +1152,7 @@ def aplicar_xp_e_detectar_level_up(
 
     novo_nivel = calcular_novo_nivel(working_mem.xp, working_mem.player_level)
     if novo_nivel > working_mem.player_level:
+        # Imersão P4: level up é marco da crônica da sessão
+        working_mem.narrative.registrar_cronica(f"⬆ Nível {novo_nivel} alcançado")
         return aplicar_level_up(working_mem, novo_nivel)
     return None
