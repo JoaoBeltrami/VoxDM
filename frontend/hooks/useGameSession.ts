@@ -116,6 +116,10 @@ interface EstadoSessao {
   rolagens: RolagemLog[];
   // DM Feat 1: Fios Soltos — threads narrativas em aberto (máx 5)
   fiosSoltos: string[];
+  // Pilar Perigo (10/06): cicatrizes permanentes do personagem
+  cicatrizes: string[];
+  // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
+  relogios: Record<string, { nome: string; atual: number; max: number }>;
   // Class features — chips interativos de recursos de classe (Fase 6)
   classFeatures: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
   // Fase 5.7: dado do mestre ativo — exibido como animação no frontend.
@@ -206,6 +210,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   questNotificacao: null,
   rolagens: [],
   fiosSoltos: [],
+  cicatrizes: [],
+  relogios: {},
   classFeatures: {},
   dadoAtivo: null,
   sceneImageUrl: "",
@@ -575,6 +581,8 @@ export function useGameSession() {
           iniciativaOrdem: (msg.iniciativa_ordem ?? []) as TokenIniciativa[],
           fiosSoltos: msg.fios_soltos ?? [],
           classFeatures: (msg.class_features ?? {}) as Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>,
+          cicatrizes: msg.cicatrizes ?? [],
+          relogios: (msg.relogios ?? {}) as Record<string, { nome: string; atual: number; max: number }>,
         };
 
         const novoTurnoBase = {
@@ -763,6 +771,10 @@ export function useGameSession() {
             iniciativaOrdem: rpgUpdate.iniciativaOrdem,
             fiosSoltos: rpgUpdate.fiosSoltos.length ? rpgUpdate.fiosSoltos : s.fiosSoltos,
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
+            cicatrizes: rpgUpdate.cicatrizes.length ? rpgUpdate.cicatrizes : s.cicatrizes,
+            // Relógios: payload presente substitui SEMPRE (relógio que estourou
+            // sai do dict — manter o antigo mostraria ameaça já consumida).
+            relogios: rpgUpdate.relogios,
             condicoesDetectadas: novasCondicoes,
             questNotificacao: questNotificacao ?? s.questNotificacao,
             pacingNivel: msg.pacing_nivel ?? s.pacingNivel,

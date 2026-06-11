@@ -318,7 +318,7 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions,
-    iniciativaOrdem, fiosSoltos, classFeatures, sceneImageUrl,
+    iniciativaOrdem, fiosSoltos, cicatrizes, relogios, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
@@ -722,6 +722,26 @@ export default function Home() {
     try { localStorage.setItem(LS_ROLL_VIS_KEY, v); } catch { /* SSR-safe */ }
   }, []);
 
+  // Pilar Perigo (10/06) — política de morte (narrativo default) + modo episódio,
+  // ambos persistidos em localStorage e enviados na criação da sessão.
+  const [deathPolicy, setDeathPolicy] = useState<"narrativo" | "mortal">("narrativo");
+  const [modoEpisodio, setModoEpisodio] = useState(false);
+  useEffect(() => {
+    try {
+      const dp = localStorage.getItem("voxdm_death_policy");
+      if (dp === "mortal" || dp === "narrativo") setDeathPolicy(dp);
+      setModoEpisodio(localStorage.getItem("voxdm_modo_episodio") === "1");
+    } catch { /* SSR-safe */ }
+  }, []);
+  const handleSalvarDeathPolicy = useCallback((v: "narrativo" | "mortal") => {
+    setDeathPolicy(v);
+    try { localStorage.setItem("voxdm_death_policy", v); } catch { /* SSR-safe */ }
+  }, []);
+  const handleToggleModoEpisodio = useCallback((v: boolean) => {
+    setModoEpisodio(v);
+    try { localStorage.setItem("voxdm_modo_episodio", v ? "1" : "0"); } catch { /* SSR-safe */ }
+  }, []);
+
   // Fase 5.7 — dado do jogador em animação (mostra antes de enviar o comando)
   // Apenas quando roll_visibility != "narrated" (para simetria visual)
   const [dadoJogadorAtivo, setDadoJogadorAtivo] = useState<{ tipo: string; resultado: number; id: number } | null>(null);
@@ -872,8 +892,10 @@ export default function Home() {
       tts_voice: vozSelecionada,
       dm_profile: dmProfile,
       roll_visibility: rollVisibility,
+      death_policy: deathPolicy,
+      modo_episodio: modoEpisodio,
     });
-  }, [conectar, vozSelecionada, dmProfile, rollVisibility]);
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
 
   const handleContinuarPersonagem = useCallback((sessionId: string) => {
     // Bypass total do CharacterForm via SQLite: personagem_config é restaurado
@@ -883,14 +905,16 @@ export default function Home() {
       tts_voice: vozSelecionada,
       dm_profile: dmProfile,
       roll_visibility: rollVisibility,
+      death_policy: deathPolicy,
+      modo_episodio: modoEpisodio,
     });
-  }, [conectar, vozSelecionada, dmProfile, rollVisibility]);
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
 
   const handleConectar = useCallback(() => {
     // 1º arg ignorado pelo conectar (servidor gera o UUID). Campo manual de ID
     // foi removido da UI na gamificação — passamos "" explicitamente.
-    conectar("", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility });
-  }, [conectar, personagem, vozSelecionada, dmProfile, rollVisibility]);
+    conectar("", { ...personagem, tts_voice: vozSelecionada, dm_profile: dmProfile, roll_visibility: rollVisibility, death_policy: deathPolicy, modo_episodio: modoEpisodio });
+  }, [conectar, personagem, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
     if (!sessaoSelecionada) return;
@@ -900,8 +924,10 @@ export default function Home() {
       tts_voice: vozSelecionada,
       dm_profile: dmProfile,
       roll_visibility: rollVisibility,
+      death_policy: deathPolicy,
+      modo_episodio: modoEpisodio,
     });
-  }, [conectar, sessaoSelecionada, personagem, vozSelecionada, dmProfile, rollVisibility]);
+  }, [conectar, sessaoSelecionada, personagem, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
 
   // 3º arg "mestreFalando" ativa ducking: ambiente abaixa enquanto há resposta
   // sendo lida, volta no silêncio. Replica como uma mesa real soa.
@@ -1460,6 +1486,51 @@ export default function Home() {
                 {fiosSoltos.map((fio, i) => (
                   <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
                     {fio}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )}
+
+        {/* Mundo Vivo (10/06) — Relógios de Ameaça: o jogador VÊ que o mundo anda */}
+        {!cinemaMode && Object.keys(relogios).length > 0 && (
+          <div className="max-w-sm w-full">
+            <details className="group">
+              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-red-400/70 hover:text-red-300 transition-colors list-none">
+                <span className="text-red-500">⏳</span>
+                Ameaças ({Object.keys(relogios).length})
+                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1.5 pl-3.5 border-l border-red-900/40">
+                {Object.entries(relogios).map(([id, rel]) => (
+                  <li key={id} className="text-[10px] text-zinc-500 leading-snug">
+                    <span className="italic">{rel.nome}</span>
+                    <span className="ml-2 font-mono tracking-tighter text-red-400/80">
+                      {"▓".repeat(rel.atual)}{"░".repeat(Math.max(0, rel.max - rel.atual))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )}
+
+        {/* Pilar Perigo (10/06) — cicatrizes permanentes */}
+        {!cinemaMode && cicatrizes.length > 0 && (
+          <div className="max-w-sm w-full">
+            <details className="group">
+              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-rose-400/70 hover:text-rose-300 transition-colors list-none">
+                <span className="text-rose-500">🩸</span>
+                Cicatrizes ({cicatrizes.length})
+                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
+                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-rose-900/40">
+                {cicatrizes.map((cic, i) => (
+                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                    {cic}
                   </li>
                 ))}
               </ul>
@@ -2091,6 +2162,57 @@ export default function Home() {
           </div>
           <p className="text-[10px] text-zinc-600">
             Controla o que você vê quando o mestre rola dados internamente.
+          </p>
+        </div>
+
+        {/* Pilar Perigo (10/06) — política de morte */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Política de Morte</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { id: "narrativo" as const, label: "🛡 Narrativo", desc: "derrota tem custo, nunca apaga o personagem" },
+              { id: "mortal" as const, label: "💀 Mortal", desc: "death saves reais — dá pra morrer de verdade" },
+            ]).map(o => (
+              <button
+                key={o.id}
+                onClick={() => handleSalvarDeathPolicy(o.id)}
+                className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                  deathPolicy === o.id
+                    ? "border-red-700 bg-red-950/30 text-red-300"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                }`}
+              >
+                <span className="font-semibold">{o.label}{deathPolicy === o.id && " ✓"}</span>
+                <span className="text-[10px] text-zinc-500">{o.desc}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600">
+            Vale pra próxima sessão criada. A 0 PV: narrativo = captura/perda/cicatriz; mortal = salvaguardas contra a morte.
+          </p>
+        </div>
+
+        {/* Ritual de mesa (10/06) — modo episódio */}
+        <div className="space-y-2 border-t border-zinc-800 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Formato de Sessão</p>
+          <button
+            onClick={() => handleToggleModoEpisodio(!modoEpisodio)}
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+              modoEpisodio
+                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+            }`}
+          >
+            <span>
+              🎬 Modo episódio
+              <span className="ml-2 text-[10px] text-zinc-500">mestre propõe fecho pós-clímax + gancho</span>
+            </span>
+            <span className={`text-xs font-semibold ${modoEpisodio ? "text-violet-400" : "text-zinc-600"}`}>
+              {modoEpisodio ? "ON" : "OFF"}
+            </span>
+          </button>
+          <p className="text-[10px] text-zinc-600">
+            Desligado = sessão livre, o mestre nunca sugere parar.
           </p>
         </div>
 

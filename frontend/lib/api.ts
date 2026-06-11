@@ -102,6 +102,10 @@ export interface MensagemWS {
   quest_avancos?: { quest_id: string; stage_id: string; recompensas?: string[] }[];
   // DM Feat 1: Fios Soltos — threads narrativas abertas (máx 5)
   fios_soltos?: string[];
+  // Pilar Perigo (10/06): cicatrizes permanentes do personagem
+  cicatrizes?: string[];
+  // Mundo Vivo (10/06): relógios de ameaça — id → {nome, atual, max}
+  relogios?: Record<string, { nome: string; atual: number; max: number }>;
   // Feature 3: Consequências visíveis — efeitos duradouros no mundo (máx 5)
   consequencias?: string[];
   // Class features — sincronizadas no "fim" para atualizar chips na ficha
@@ -188,6 +192,10 @@ export interface PersonagemConfig {
   player_spells?: string[];
   // Visibilidade das rolagens do mestre (Fase 5.7)
   roll_visibility?: "open" | "result_only" | "narrated";
+  // Pilar Perigo (10/06): política de morte — narrativo (default) ou mortal
+  death_policy?: "narrativo" | "mortal";
+  // Ritual de mesa (10/06): mestre propõe fecho de episódio pós-clímax
+  modo_episodio?: boolean;
 }
 
 export async function criarSessao(
