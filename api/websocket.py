@@ -34,6 +34,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
+from config import settings
 from engine.llm.prompt_builder import (
     _LEMBRETE_SAIDA,
     _RE_COMBATE,
@@ -753,6 +754,8 @@ async def _beat_turno_inimigo(
     Armadilha: NUNCA lançar — qualquer falha pula o beat em silêncio e o jogo
     segue no fluxo antigo (inimigos via prompt principal).
     """
+    if not settings.BEAT_INIMIGO_ATIVO:
+        return  # kill-switch .env — combate volta ao fluxo prompt-only
     wm = sessao.working_mem
     if not wm.em_combate or wm.player_hp <= 0:
         return
@@ -1358,13 +1361,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # história. Não conta como turno (pacing/estilo/arco intocados).
             idle_nudge = texto_jogador.strip().upper() == "[IDLE]"
             if idle_nudge:
-                log.info("idle_nudge", session_id=session_id)
-                texto_jogador = (
-                    "(O jogador está em silêncio, pensando. Dê um leve empurrão "
-                    "atmosférico de 1-2 frases no presente da cena — um detalhe "
-                    "sensorial, um NPC que se mexe — SEM avançar eventos nem agir "
-                    "pelo personagem. Termine com uma pergunta aberta curta.)"
-                )
+                log.info("idle_nudge", session_id=session_id,
+                         session_zero=sessao.working_mem.session_zero_ativa)
+                if sessao.working_mem.session_zero_ativa:
+                    # Na entrevista, o silêncio é indecisão — reformular ajuda
+                    # mais que atmosfera de cena (que ainda nem existe).
+                    texto_jogador = (
+                        "(O jogador está pensando na resposta. Reformule sua "
+                        "última pergunta com gentileza, em 1-2 frases, oferecendo "
+                        "dois exemplos concretos para destravar.)"
+                    )
+                else:
+                    texto_jogador = (
+                        "(O jogador está em silêncio, pensando. Dê um leve empurrão "
+                        "atmosférico de 1-2 frases no presente da cena — um detalhe "
+                        "sensorial, um NPC que se mexe — SEM avançar eventos nem agir "
+                        "pelo personagem. Termine com uma pergunta aberta curta.)"
+                    )
 
             # OOC-IC auto (teste 10/06: prompt-side não bastou): vocativo
             # "mestre" no INÍCIO da fala = jogador falando com o DM, não com
@@ -1386,8 +1399,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Detecta entrada/saída de combate pelo texto do jogador.
             # Condicional ("ataco SE aparecerem") NÃO entra — teste 10/06 virou
             # 4 turnos de "combate-conversa"; o LLM decide via [COMBATE: iniciar].
+            # Session Zero: "luto com machado" na ENTREVISTA é descrição de
+            # personagem, não ação — a ficha nasceria em combate fantasma.
             from engine.llm.types import RE_COMBATE_CONDICIONAL
-            if _RE_COMBATE.search(texto_jogador):
+            if sessao.working_mem.session_zero_ativa:
+                pass  # entrevista de criação — nenhuma fala é ação de combate
+            elif _RE_COMBATE.search(texto_jogador):
                 if RE_COMBATE_CONDICIONAL.search(texto_jogador):
                     log.info("combate_condicional_ignorado", session_id=session_id)
                 else:
@@ -1401,19 +1418,34 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             erros_turno: list[str] = []
             try:
                 t_ctx = time.perf_counter()
-                contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
-                context_ms = int((time.perf_counter() - t_ctx) * 1000)
+                if sessao.working_mem.session_zero_ativa:
+                    # Session Zero: a entrevista não usa lore/regras/grafo — o
+                    # montar_mensagens troca o system inteiro pelo session_zero.md.
+                    # Pular Qdrant+Neo4j corta 2-4s de latência por troca e
+                    # elimina dependência externa da feature mais nova.
+                    from engine.llm.types import ContextoMontado
+                    contexto = ContextoMontado(
+                        working_memory=sessao.working_mem,
+                        chunks_semanticos=[], chunks_episodicos=[],
+                        chunks_regras=[], relacoes_grafo=[],
+                        secrets_visiveis=[], transcricao_atual=texto_jogador,
+                    )
+                else:
+                    contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
+                    context_ms = int((time.perf_counter() - t_ctx) * 1000)
 
                 # Spell detector — injeta dados mecânicos de magia no contexto antes do LLM.
                 # Falha silenciosa: se Qdrant estiver fora ou a magia não for encontrada,
                 # o jogo segue com narração pura (sem dados mecânicos).
+                # Gated na Session Zero: "lanço magias de fogo" na entrevista é
+                # descrição de personagem, não um cast.
                 from engine.magic.spell_detector import (
                     _RE_CASTING,
                     buscar_dados_magia,
                     extrair_nome_magia,
                     formatar_bloco_magia,
                 )
-                if _RE_CASTING.search(texto_jogador):
+                if not sessao.working_mem.session_zero_ativa and _RE_CASTING.search(texto_jogador):
                     nome_magia = extrair_nome_magia(texto_jogador)
                     if nome_magia:
                         # Bug #5: valida ANTES de decrementar slot. Se o jogador grita

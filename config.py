@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
     LLM_PROVIDER_TIMEOUT: float = 30.0
 
+    # ── Beat de turno inimigo (Pilar Perigo, 11/06) ──────────────────────
+    # Kill-switch da feature mais nova de combate: a 2ª chamada LLM que
+    # narra o turno dos inimigos após a ação do jogador. Se atrapalhar a
+    # sessão ao vivo (latência, duplicação), desligar via .env sem rollback:
+    # BEAT_INIMIGO_ATIVO=false → combate volta ao fluxo antigo (prompt-only).
+    BEAT_INIMIGO_ATIVO: bool = True
+
     # ── Rolling summary (resumo contínuo intra-sessão) ───────────────────
     # Resumo incremental do que já aconteceu NESTA sessão, injetado no
     # system prompt como memória interna do mestre. Economiza tokens em

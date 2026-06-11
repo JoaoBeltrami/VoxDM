@@ -725,3 +725,69 @@ async def test_retrato_url_deterministica_por_npc():
         await _enviar_retratos_npcs(ws, SimpleNamespace(working_mem=wm, retratos_enviados=set()))
         urls.append(ws.enviados[0]["conteudo"])
     assert urls[0] == urls[1]  # mesmo NPC = mesmo rosto, sempre
+
+
+# ══ HARDENING pré-validação (11/06) ══════════════════════════════════════════
+
+
+def test_session_zero_nao_entra_em_combate_pela_fala():
+    """'Luto com machado' na ENTREVISTA é descrição de personagem, não ação.
+    Replica o guard dos dois call-sites (WS + REST)."""
+    from engine.llm.types import RE_COMBATE, RE_COMBATE_CONDICIONAL
+
+    wm = _wm(session_zero=True)
+    texto = "Eu luto com meu machado e ataco quem ameaçar os fracos."
+    # O guard real: session_zero_ativa curto-circuita ANTES do regex
+    if not wm.session_zero_ativa and RE_COMBATE.search(texto) and not RE_COMBATE_CONDICIONAL.search(texto):
+        wm.entrar_combate()
+    assert wm.em_combate is False
+    # Sanidade: fora da session zero o mesmo texto ENTRA em combate
+    wm2 = _wm()
+    if not wm2.session_zero_ativa and RE_COMBATE.search(texto) and not RE_COMBATE_CONDICIONAL.search(texto):
+        wm2.entrar_combate()
+    assert wm2.em_combate is True
+
+
+@pytest.mark.asyncio
+async def test_beat_respeita_kill_switch():
+    """BEAT_INIMIGO_ATIVO=false desliga o beat sem rollback (guard de sessão ao vivo)."""
+    from api.websocket import _beat_turno_inimigo
+    from config import settings
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    original = settings.BEAT_INIMIGO_ATIVO
+    try:
+        settings.BEAT_INIMIGO_ATIVO = False
+        await _beat_turno_inimigo(
+            _WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()), "Ataco o guarda!"
+        )
+    finally:
+        settings.BEAT_INIMIGO_ATIVO = original
+    assert wm.player_hp == 20  # nada aconteceu
+
+
+def test_budget_kitchen_sink_combate_com_tudo_ligado():
+    """Pior caso de prompt: combate + relógios + cicatrizes + consequências +
+    fios + agenda. Os blocos dinâmicos dos Pilares não podem empurrar o system
+    além do teto de warning (20k) — senão o 8B (413 em ~17.5k) sai da cascata
+    e até o 70B aperta. Mede o cenário que o budget test padrão não cobre."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    for i in range(3):
+        wm.registrar_inimigo(f"guarda-{i}", f"Guarda {i}", "intacto")
+    for i in range(4):
+        wm.narrative.criar_relogio(f"ameaca-{i}", f"Ameaça número {i} muito perigosa", 8)
+        wm.narrative.avancar_relogio(f"ameaca-{i}")
+    for i in range(5):
+        wm.character.registrar_cicatriz(f"cicatriz dramática número {i} no corpo")
+        wm.fios_soltos.append(f"fio narrativo em aberto número {i} com detalhes")
+        wm.registrar_consequencia(f"consequência duradoura número {i} no mundo")
+    for i in range(8):
+        wm.narrative.atualizar_agenda(f"npc-{i}", f"plano de fundo elaborado número {i}")
+    system = montar_mensagens(_ctx(wm, "ataco o guarda zero com minha espada"))[0]["content"]
+    assert len(system) <= 20_500, (
+        f"Kitchen sink: system com {len(system)} chars — blocos dos Pilares "
+        "estouraram o teto; cortar gordura nos blocos dinâmicos"
+    )

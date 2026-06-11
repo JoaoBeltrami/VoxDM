@@ -963,7 +963,15 @@ export function useGameSession() {
     textoAtualRef.current = "";
     setIsProcessing(true);
     wsRef.current.send(JSON.stringify({ texto: "[IDLE]" }));
-  }, [_flushTurnoPendente]);
+    // Mesmo guard de half-open do enviarComando: sem ele, um WS morto durante
+    // o nudge deixaria isProcessing=true PARA SEMPRE — mic morto até o refresh.
+    if (turnTimeoutRef.current) clearTimeout(turnTimeoutRef.current);
+    turnTimeoutRef.current = setTimeout(() => {
+      turnTimeoutRef.current = null;
+      console.warn("[VoxDM] timeout no nudge de silêncio — fechando WS para reconectar");
+      wsRef.current?.close();
+    }, TURN_TIMEOUT_MS);
+  }, [TURN_TIMEOUT_MS, _flushTurnoPendente]);
 
   const registrarRolagem = useCallback(
     (tipo: string, resultado: number, motivo?: string) => {
