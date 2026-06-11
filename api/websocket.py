@@ -83,6 +83,14 @@ _MAX_SS_QTD   = 20                 # absurdamente alto pra cobrir multiclass
 # Detecta declaração EXPLÍCITA do jogador de encerrar combate.
 # "paz" removido — falso positivo catastrófico ("deixo você em paz", "estamos em paz").
 # "morreu/caiu/fugiu" removidos — descrevem NPCs, não intenção do jogador de parar.
+# OOC-IC auto: vocativo "mestre" no início da fala ("mestre, posso...?",
+# "ok mestre", "ei mestre") = jogador falando com o DM. Conservador de
+# propósito: SÓ no início — "pergunto ao mestre da guilda" no meio é IC.
+_RE_VOCATIVO_MESTRE = re.compile(
+    r"^\s*(?:ok\b[,!.\s]*|ei\b[,!.\s]*|hey\b[,!.\s]*)?mestre\b[,!.:?\s]",
+    re.IGNORECASE,
+)
+
 _RE_FIM_COMBATE_JOGADOR = re.compile(
     r"\b("
     r"me rendo|nos rendemos|rendemos|capitulo|"
@@ -709,7 +717,14 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "conditions": list(wm.player_conditions),
         "location_nome": wm.location_nome,
         "time_of_day": wm.time_of_day,
-        "npcs_trust": {npc: wm.trust_levels.get(npc, 1) for npc in wm.npcs_apresentados},
+        # Só quem está NA CENA (presentes∩apresentados) — npcs_apresentados é
+        # cumulativo da sessão inteira e fazia o HUD mostrar NPCs de 3 locais
+        # atrás como "presentes" (teste ao vivo 10/06).
+        "npcs_trust": {
+            npc: wm.trust_levels.get(npc, 1)
+            for npc in wm.npcs_apresentados
+            if npc in set(wm.npcs_presentes)
+        },
         "spell_slots": wm.spell_slots,
         "hit_dice_current": wm.hit_dice_current,
         "player_hp": wm.player_hp,
@@ -1187,6 +1202,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
             t0 = time.perf_counter()
             sessao.ultima_atividade = time.time()
+
+            # OOC-IC auto (teste 10/06: prompt-side não bastou): vocativo
+            # "mestre" no INÍCIO da fala = jogador falando com o DM, não com
+            # NPC. Prepend [OOC] — o master_system já trata o resto.
+            if _RE_VOCATIVO_MESTRE.match(texto_jogador) and not texto_jogador.startswith("[OOC]"):
+                texto_jogador = f"[OOC] {texto_jogador}"
+                log.info("ooc_auto_vocativo", session_id=session_id)
+
             sessao.working_mem.registrar_fala("player", texto_jogador)
 
             # Captura location e estado de combate ANTES do turno para detectar mudanças.
@@ -1194,9 +1217,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             _location_antes = sessao.working_mem.location_id
             _combate_antes = sessao.working_mem.em_combate
 
-            # Detecta entrada/saída de combate pelo texto do jogador
+            # Detecta entrada/saída de combate pelo texto do jogador.
+            # Condicional ("ataco SE aparecerem") NÃO entra — teste 10/06 virou
+            # 4 turnos de "combate-conversa"; o LLM decide via [COMBATE: iniciar].
+            from engine.llm.types import RE_COMBATE_CONDICIONAL
             if _RE_COMBATE.search(texto_jogador):
-                sessao.working_mem.entrar_combate()
+                if RE_COMBATE_CONDICIONAL.search(texto_jogador):
+                    log.info("combate_condicional_ignorado", session_id=session_id)
+                else:
+                    sessao.working_mem.entrar_combate()
             elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
                 sessao.working_mem.sair_combate()
 
@@ -1535,6 +1564,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             await reinferir_npcs_se_mudou_cena(
                 sessao.working_mem, sessao.context_builder
             )
+
+            # Voz pros NPCs novos da cena: sem registro, voz_para_sentenca cai
+            # no narrador e o NPC "perde a voz" (teste 10/06: só os NPCs do local
+            # inicial — registrados na abertura — alternavam voz). Idempotente.
+            try:
+                _ja = set(sessao.voice_manager.npcs_registrados())
+                for _npc_id in sessao.working_mem.npcs_presentes:
+                    if _npc_id not in _ja:
+                        sessao.voice_manager.registrar_npc(_npc_id)
+            except Exception as exc:
+                log.warning("registro_voz_npcs_falhou", erro=str(exc)[:120])
 
             # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
             # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a

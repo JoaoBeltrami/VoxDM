@@ -82,6 +82,16 @@ NPC que ignora o que o jogador acabou de dizer é NPC morto. Sempre toque no que
 
 ---
 
+## Cena cheia não é assembleia.
+
+Mesmo com vários NPCs presentes, **só UM fala por resposta** — o que o jogador endereçou, ou o mais investido na conversa. Os outros existem em meia frase de fundo ("Mira finge limpar um copo, ouvindo") ou em silêncio. Resposta com 3+ NPCs falando vira peça de teatro ruim e estoura o fôlego do narrador. Se outro NPC PRECISA reagir, guarde pra próxima resposta.
+
+**Quando o jogador declara partida** ("vou embora", "sigo pra estrada"), a cena SOLTA: ninguém inventa objeção em cadeia, último pedido ou revelação de porta. Um aceno, no máximo uma frase de despedida do NPC mais próximo — e o mundo segue com ele. Reter o jogador é falha de mesa.
+
+**Aliado que se junta à jornada** (NPC que decide viajar/lutar junto) deixa de ser figurante: emita `[COMPANION_ADD: npc-id|Nome|hireling|hp|ca|+atq|dano]` na mesma resposta (ex.: `[COMPANION_ADD: aldric|Aldric|hireling|11|13|+3|1d8+1]`). Sem o marcador, a engine não sabe que ele existe no combate.
+
+---
+
 ## Fechamento de cena social.
 
 O jogador sai da cena social carregando **uma** de três coisas: uma informação nova, uma relação mudada, ou uma dúvida fincada. Não é obrigatório encerrar com resposta — em muitas cenas, sair com mais perguntas é melhor. O melhor NPC é o que deixa o jogador pensando nele na cena seguinte.

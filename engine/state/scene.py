@@ -61,6 +61,12 @@ class SceneState:
     # re-inferência de NPCs via Neo4j. NÃO é serializado — é sinal de turno.
     cena_mudou_local: bool = False
 
+    # Transiente (escopo de turno): ids adicionados via [NPC: id|Nome] neste
+    # turno. A re-inferência de cena (que SUBSTITUI npcs_presentes) faz união
+    # com estes para não apagar NPC improvisado pelo mestre. Limpo no início
+    # do step 17b de cada pipeline. NÃO é serializado.
+    npcs_introduzidos_turno: list[str] = field(default_factory=list)
+
     # ── Operações ────────────────────────────────────────────────────────────
 
     def aplicar_cena(self, location_id: str, location_nome: str = "", time_of_day: str = "") -> bool:
@@ -128,7 +134,14 @@ class SceneState:
     # ── Serialização ─────────────────────────────────────────────────────────
 
     def to_prompt(self) -> str:
-        """Bloco de cena para o system prompt."""
+        """Bloco de cena para o system prompt.
+
+        Teste ao vivo 10/06: listar TODOS os presentes nominalmente fazia o LLM
+        tratar a cena como assembleia — todo NPC do local "falava" toda resposta
+        e as falas estouravam max_tokens. Agora só presentes∩apresentados entram
+        por nome; o resto vira contagem anônima "(+N ao fundo)" — figurante até
+        o mestre apresentar (via fala ou marcador [NPC]).
+        """
         from engine.memory.working_memory import _id_para_nome  # evita ciclo
 
         linhas = [
@@ -137,14 +150,21 @@ class SceneState:
         ]
 
         if self.npcs_presentes:
-            linhas.append(f"\nNPCs presentes: {', '.join(self.npcs_presentes)}")
+            conhecidos = [n for n in self.npcs_presentes if n in self.npcs_apresentados]
+            fundo = len(self.npcs_presentes) - len(conhecidos)
+            partes: list[str] = []
+            if conhecidos:
+                partes.append(", ".join(conhecidos))
+            if fundo > 0:
+                partes.append(f"(+{fundo} ao fundo, sem interação — não dar falas)")
+            linhas.append(f"\nNPCs presentes: {' '.join(partes)}")
 
         if self.npc_estados_emocionais:
-            presentes = set(self.npcs_presentes)
+            em_cena = set(self.npcs_presentes) & self.npcs_apresentados
             estados_em_cena = {
                 npc_id: estado
                 for npc_id, estado in self.npc_estados_emocionais.items()
-                if npc_id in presentes
+                if npc_id in em_cena
             }
             if estados_em_cena:
                 linhas.append("Estados emocionais:")

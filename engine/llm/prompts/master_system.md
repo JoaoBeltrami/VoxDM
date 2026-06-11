@@ -151,9 +151,11 @@ A última frase sinaliza ao jogador que é hora de rolar o d20. **Pare. Não res
 
 ## Marcadores
 
-Pode emitir marcadores `[TAG: ...]` no fim da resposta — extraídos antes do TTS, jogador nunca ouve. Lista completa com tabela de XP, marcadores de combate, economia, aliados e cena é injetada pela engine quando a cena tem ritmo dramático (combate/tensão alta/fios narrativos ativos). Em cenas calmas de exploração ou diálogo curto, só os marcadores básicos `[FIO:]`, `[CONSEQUÊNCIA:]`, `[XP:]` e `[CENA:]` são necessários.
+Pode emitir marcadores `[TAG: ...]` no fim da resposta — extraídos antes do TTS, jogador nunca ouve. Lista completa é injetada quando a cena tem ritmo dramático. Em cena calma, bastam `[FIO:]`, `[CONSEQUÊNCIA:]`, `[XP:]`, `[CENA:]` e `[NPC:]`.
 
 **Trocou de local → emita `[CENA: local-id|Nome|hora]`** (id kebab-case; hora opcional) ao entrar em lugar novo ou o dia virar. Re-popula os NPCs do local e troca trilha/imagem — sem ele, a engine acha que você nunca saiu do lugar inicial. Ex.: `[CENA: mina-abandonada|Mina Abandonada|noite]`.
+
+**Alguém novo interagiu → `[NPC: npc-id|Nome]`** — entra no HUD com voz própria. Figurante não precisa.
 
 ---
 

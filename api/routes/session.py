@@ -447,7 +447,9 @@ async def processar_turno(
 
     # Detecção de entrada de combate via texto do jogador — espelha o WebSocket
     # para o REST não divergir. Saída de combate é detectada via pipeline pós-turno.
-    if _RE_COMBATE.search(comando.texto):
+    # Condicional ("ataco SE aparecerem") não entra — o LLM decide via marker.
+    from engine.llm.types import RE_COMBATE_CONDICIONAL
+    if _RE_COMBATE.search(comando.texto) and not RE_COMBATE_CONDICIONAL.search(comando.texto):
         sessao.working_mem.entrar_combate()
 
     contexto = None

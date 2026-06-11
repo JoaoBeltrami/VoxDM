@@ -198,3 +198,138 @@ def test_pacing_decai_firme_apos_combate():
     wm.saiu_combate_recentemente = True
     aplicar_pos_turno(wm, "Respiro fundo e olho ao redor.", "A poeira assenta.")
     assert wm.pacing_nivel == pytest.approx(8.5)
+
+
+# ══ Teste ao vivo 10/06 — lote B ══════════════════════════════════════════════
+# Combate condicional, vocativo OOC, [NPC: id|Nome], cena nominal e snapshot.
+
+
+def _entraria_em_combate(texto: str) -> bool:
+    """Replica o guard dos dois call-sites (WS e REST /turn)."""
+    from engine.llm.types import RE_COMBATE, RE_COMBATE_CONDICIONAL
+
+    return bool(RE_COMBATE.search(texto)) and not RE_COMBATE_CONDICIONAL.search(texto)
+
+
+def test_ataque_condicional_nao_entra_em_combate():
+    """'Ataco SE aparecerem' virou 4 turnos de combate-conversa no teste 10/06."""
+    assert not _entraria_em_combate("Eu ataco os bandidos se eles aparecerem.")
+    assert not _entraria_em_combate("Caso venham atrás de nós, atiro primeiro.")
+    assert not _entraria_em_combate("Se tentarem algo, ataco sem pensar.")
+    assert not _entraria_em_combate("Quando ele chegar perto, golpeio a nuca.")
+
+
+def test_ataque_direto_continua_entrando_em_combate():
+    assert _entraria_em_combate("Eu ataco o goblin!")
+    assert _entraria_em_combate("Desembainho a espada e ataco o bandido.")
+
+
+def test_condicional_em_outra_frase_nao_anula_ataque():
+    """O ataque é declarado SEM condição; o 'se' vive em outra frase."""
+    assert _entraria_em_combate("Ataco o bandido. Se ele fugir, eu o persigo.")
+
+
+# ── Vocativo "mestre" → OOC automático ───────────────────────────────────────
+
+
+def test_vocativo_mestre_no_inicio_e_ooc():
+    from api.websocket import _RE_VOCATIVO_MESTRE
+
+    assert _RE_VOCATIVO_MESTRE.match("Mestre, posso rolar percepção?")
+    assert _RE_VOCATIVO_MESTRE.match("ok mestre, vamos continuar daqui")
+    assert _RE_VOCATIVO_MESTRE.match("  mestre! quanto de vida eu tenho?")
+    assert _RE_VOCATIVO_MESTRE.match("Mestre? Você ainda está aí?")
+
+
+def test_mestre_no_meio_ou_como_titulo_nao_e_ooc():
+    from api.websocket import _RE_VOCATIVO_MESTRE
+
+    assert not _RE_VOCATIVO_MESTRE.match("Pergunto ao mestre da guilda sobre o contrato.")
+    assert not _RE_VOCATIVO_MESTRE.match("O mestre ferreiro me deve uma espada.")
+    assert not _RE_VOCATIVO_MESTRE.match("Mestres antigos contavam essa lenda.")
+
+
+# ── [NPC: id|Nome] — entrada de NPC improvisado na cena ─────────────────────
+
+
+def test_regex_npc_entra():
+    from api.turn_pipeline import _RE_NPC_ENTRA
+
+    m = _RE_NPC_ENTRA.search("Um viajante se aproxima. [NPC: aldric|Aldric]")
+    assert m is not None and m.group(1) == "aldric" and m.group(2) == "Aldric"
+    m2 = _RE_NPC_ENTRA.search("[NPC: mira]")
+    assert m2 is not None and m2.group(1) == "mira" and m2.group(2) is None
+
+
+def test_npc_marker_adiciona_presente_e_apresentado():
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    aplicar_pos_turno(wm, "Quem é você?", "O homem sorri e estende a mão. [NPC: aldric|Aldric]")
+    assert "aldric" in wm.npcs_presentes
+    assert "aldric" in wm.npcs_apresentados
+
+
+def test_npc_marker_idempotente():
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    for _ in range(2):
+        aplicar_pos_turno(wm, "Oi.", "Ele acena de volta. [NPC: aldric|Aldric]")
+    assert wm.npcs_presentes.count("aldric") == 1
+
+
+@pytest.mark.asyncio
+async def test_npc_introduzido_sobrevive_reinferencia_de_cena():
+    """[CENA] + [NPC] no mesmo turno: a substituição via Neo4j não pode apagar
+    o NPC que o mestre acabou de improvisar."""
+    from api.turn_pipeline import reinferir_npcs_se_mudou_cena
+
+    class _FakeCB:
+        async def inferir_npcs_presentes(self, location_id: str) -> list[str]:
+            return ["mercador-anao"]
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    aplicar_pos_turno(
+        wm,
+        "Sigo pra estrada.",
+        "Vocês partem juntos. [CENA: estrada|Estrada|dia] [NPC: aldric|Aldric]",
+    )
+    await reinferir_npcs_se_mudou_cena(wm, _FakeCB())
+    assert "mercador-anao" in wm.npcs_presentes
+    assert "aldric" in wm.npcs_presentes
+
+
+# ── Cena nominal: só apresentados por nome; resto vira "(+N ao fundo)" ──────
+
+
+def test_cena_to_prompt_apenas_apresentados_nominais():
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    wm.npcs_presentes = ["mira", "kael", "tobias"]
+    wm.apresentar_npc("mira")
+    texto = wm.scene.to_prompt()
+    assert "mira" in texto
+    assert "kael" not in texto and "tobias" not in texto
+    assert "+2 ao fundo" in texto
+
+
+def test_cena_to_prompt_sem_fundo_quando_todos_apresentados():
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    wm.npcs_presentes = ["mira"]
+    wm.apresentar_npc("mira")
+    texto = wm.scene.to_prompt()
+    assert "mira" in texto
+    assert "ao fundo" not in texto
+
+
+# ── Snapshot do frontend: npcs_trust só da cena atual ────────────────────────
+
+
+def test_snapshot_npcs_trust_so_da_cena_atual():
+    """npcs_apresentados é cumulativo da sessão — o HUD mostrava NPCs de 3
+    locais atrás como 'presentes' (teste 10/06)."""
+    from api.websocket import _snapshot_estado
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
+    wm.npcs_presentes = ["mira"]
+    wm.apresentar_npc("mira")
+    wm.apresentar_npc("velho-de-tres-cenas-atras")
+    wm.trust_levels = {"mira": 2, "velho-de-tres-cenas-atras": 3}
+    snap = _snapshot_estado(wm)
+    assert set(snap["npcs_trust"].keys()) == {"mira"}

@@ -166,6 +166,17 @@ _RE_CENA = re.compile(
     re.IGNORECASE,
 )
 
+# Entrada de NPC na cena: [NPC: npc-id|Nome] (nome opcional).
+# Teste ao vivo 10/06: o mestre apresentou um viajante novo ("Aldric se aproxima
+# e se apresenta") mas npcs_presentes só era populado pela inferência Neo4j na
+# troca de local — NPC improvisado nunca entrava no HUD nem no prompt de cena,
+# e o jogador quase atacou alguém que "não existia". Com o marker, o LLM
+# registra a entrada; a engine adiciona a presentes + apresentados.
+_RE_NPC_ENTRA = re.compile(
+    r"\[NPC:\s*([a-z0-9][a-z0-9-]{0,48})\s*(?:\|\s*([^|\]]{1,40}?)\s*)?\]",
+    re.IGNORECASE,
+)
+
 # Feature 3: Consequências visíveis — LLM emite [CONSEQUÊNCIA: efeito duradouro no mundo]
 # Ex: "[CONSEQUÊNCIA: A guarda de Valdrek passou a reconhecer Drevamor como suspeito]"
 # Efeitos válidos: NPC morto, aliança formada, local destruído, reputação alterada.
@@ -875,6 +886,20 @@ def aplicar_pos_turno(
                 log.info("combate_encerrado_mudanca_cena")
         break
 
+    # 17b. Entrada de NPC na cena — [NPC: id|Nome] adiciona a presentes +
+    # apresentados (idempotente). Roda DEPOIS do [CENA] e registra os ids num
+    # campo transiente: se o mesmo turno trocou de local, a re-inferência async
+    # (que SUBSTITUI npcs_presentes) faz união com estes — NPC improvisado pelo
+    # mestre não é apagado pelo Neo4j.
+    working_mem.scene.npcs_introduzidos_turno.clear()
+    for m in _RE_NPC_ENTRA.finditer(resposta_completa):
+        npc_id = m.group(1).strip().lower()
+        if npc_id not in working_mem.npcs_presentes:
+            working_mem.npcs_presentes.append(npc_id)
+        working_mem.scene.npcs_apresentados.add(npc_id)
+        working_mem.scene.npcs_introduzidos_turno.append(npc_id)
+        log.info("npc_entrou_cena", npc=npc_id, nome=(m.group(2) or "").strip() or None)
+
     return mudancas_trust
 
 
@@ -899,11 +924,17 @@ async def reinferir_npcs_se_mudou_cena(
         return
     try:
         novos = await context_builder.inferir_npcs_presentes(working_mem.location_id)
-        working_mem.npcs_presentes = novos
+        # União com NPCs introduzidos via [NPC] neste mesmo turno — o mestre
+        # improvisou alguém que o grafo não conhece; a substituição não pode apagá-lo.
+        introduzidos = [
+            n for n in working_mem.scene.npcs_introduzidos_turno if n not in novos
+        ]
+        working_mem.npcs_presentes = novos + introduzidos
         log.info(
             "npcs_reinferidos_mudanca_cena",
             location=working_mem.location_id,
             total=len(novos),
+            preservados=len(introduzidos),
         )
     except Exception as e:
         log.warning("reinferir_npcs_falhou", erro=str(e)[:120])

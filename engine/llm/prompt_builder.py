@@ -113,7 +113,8 @@ BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chun
 _LEMBRETE_SAIDA = (
     "\n---\n"
     "[LEMBRETE] PT-BR falado — sem markdown, listas, asteriscos. "
-    "2 a 4 frases. Termine com ponto/!/? completo — nunca no meio de uma frase. "
+    "2 a 4 frases, máximo 80 palavras — acima disso a fala é CORTADA no meio. "
+    "Termine com ponto/!/? completo — nunca no meio de uma frase. "
     "Comece DIRETO na narração, sem prefácio."
 )
 

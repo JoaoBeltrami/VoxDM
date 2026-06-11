@@ -26,6 +26,19 @@ RE_ROLAGEM = re.compile(r"\[Rolagem:\s*d\d+\s*=\s*\d+", re.IGNORECASE)
 #             "corto o goblin" ou "corto com minha espada" → combate.
 # "luto" removido da raiz — significa mourning em PT-BR; adicionado só com sufixo "contra/com".
 # Substantivos removidos: inimigo, espada, adaga, arco, flecha, escudo, briga, combate.
+
+# Intenção CONDICIONAL de combate — "ataco os bandidos SE eles aparecerem",
+# "caso venham, atiro". Teste ao vivo 10/06: RE_COMBATE casou "ataco" numa
+# frase hipotética e o jogo entrou em combate numa cena 100% social (4 turnos
+# de "combate-conversa" até o guard expirar). Quando este padrão casa junto
+# com RE_COMBATE, a engine NÃO auto-entra — o LLM decide via [COMBATE: iniciar]
+# se/quando a ameaça se materializar.
+RE_COMBATE_CONDICIONAL = re.compile(
+    r"\b(?:se|caso|quando)\b[^.!?]{0,60}\b"
+    r"(?:aparecer\w*|chegar\w*|vier\w*|venh\w*|atacar\w*|surgir\w*|tentar\w*)",
+    re.IGNORECASE,
+)
+
 RE_COMBATE = re.compile(
     r"\b("
     # ── Nível 1: ataques sem ambiguidade ──────────────────────────────────────

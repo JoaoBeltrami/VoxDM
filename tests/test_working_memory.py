@@ -857,9 +857,14 @@ def test_quests_modulo_injetado_com_quests_ativas():
 # ── Fix TOKEN-3: npc_estados_emocionais filtrado por npcs_presentes ─────────
 
 def test_npc_estado_emocional_filtrado_por_presenca():
-    """NPCs ausentes da cena não têm estado emocional injetado no prompt."""
+    """NPCs ausentes da cena não têm estado emocional injetado no prompt.
+
+    Desde 10/06 o contrato exige presença E apresentação: estado emocional
+    de figurante anônimo (presente mas nunca apresentado) também fica fora.
+    """
     wm = _wm()
     wm.npcs_presentes = ["lyssa"]
+    wm.apresentar_npc("lyssa")
     wm.npc_estados_emocionais["lyssa"] = "animada"
     wm.npc_estados_emocionais["vilao-ausente"] = "furioso"
     texto = wm.para_texto()
