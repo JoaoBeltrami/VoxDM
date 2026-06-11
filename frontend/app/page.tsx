@@ -628,6 +628,10 @@ export default function Home() {
 
   // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
+  // Splash central "RODADA N" — o flash de 700ms nos chips era imperceptível
+  // em jogo real (teste 10/06); virada de rodada agora tem peso visual próprio.
+  const [rodadaSplash, setRodadaSplash] = useState<number | null>(null);
+  const rodadaSplashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Auto-dismiss: glow de companion some após 1.5s (coincide com duração da animação).
   const companionFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -800,8 +804,15 @@ export default function Home() {
       setActionEconomyFlash(true);
       if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current);
       actionEconomyFlashTimerRef.current = setTimeout(() => setActionEconomyFlash(false), 700);
+      // Splash central da rodada — 1.4s, mesmo ciclo de vida do flash dos chips
+      setRodadaSplash(rodadaCombate);
+      if (rodadaSplashTimerRef.current) clearTimeout(rodadaSplashTimerRef.current);
+      rodadaSplashTimerRef.current = setTimeout(() => setRodadaSplash(null), 1_400);
     }
-    return () => { if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current); };
+    return () => {
+      if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current);
+      if (rodadaSplashTimerRef.current) clearTimeout(rodadaSplashTimerRef.current);
+    };
   }, [rodadaCombate, emCombate]);
 
   const handleRolagemContextual = useCallback((roll: RolagemPendente) => {
@@ -832,7 +843,10 @@ export default function Home() {
       // viewport. Rolar o PRÓPRIO container não tem efeito colateral nenhum.
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     }
-  }, [historico, respostaAtual]);
+    // textoSincronizado (não respostaAtual): o que cresce na tela é o texto
+    // revelado pelo karaokê — com respostaAtual o efeito disparava uma vez no
+    // início do stream e o jogador rolava na mão o resto da fala (teste 10/06).
+  }, [historico, textoSincronizado]);
 
   // Ordem de prioridade: falando > ouvindo > processando > idle
   // "processando" = texto enviado, LLM ainda não respondeu (gap ~1-6s)
@@ -1008,6 +1022,20 @@ export default function Home() {
               </div>
               <div className="mt-1 text-xs uppercase tracking-widest text-red-500/70">
                 Iniciativa
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Splash "RODADA N" — virada de rodada em combate, 1.4s */}
+        {rodadaSplash !== null && !battleSplash && (
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
+            <div className="animate-crit-pop text-center font-display">
+              <div className="text-4xl font-bold uppercase tracking-[0.35em] text-red-300 drop-shadow-[0_0_36px_rgba(239,68,68,0.85)]">
+                Rodada {rodadaSplash}
+              </div>
+              <div className="mt-2 text-[11px] uppercase tracking-[0.5em] text-red-500/70">
+                ⚔ ações renovadas
               </div>
             </div>
           </div>
