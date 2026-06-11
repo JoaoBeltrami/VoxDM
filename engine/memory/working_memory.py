@@ -765,6 +765,16 @@ class WorkingMemory:
                 self.narrative.relogios = {
                     str(k): dict(v) for k, v in relogios.items() if isinstance(v, dict)
                 }
+            # Ritual P2: perfil do jogador acumula entre sessões (merge se vazio)
+            estilo = dm_state.get("estilo_jogador", {})
+            if estilo and not self.narrative.estilo_jogador:
+                self.narrative.estilo_jogador = {
+                    str(k): int(v) for k, v in estilo.items()
+                    if isinstance(v, (int, float))
+                }
+            # Mundo Vivo P2: locais visitados — união (ecos sobrevivem a restart)
+            for loc in dm_state.get("locais_visitados", []):
+                self.scene.locais_visitados.add(str(loc))
 
     # ── Delegations: PartyState ──────────────────────────────────────────────
 

@@ -12,6 +12,7 @@ Armadilha: cartas_improviso são one-shot — uma vez usadas (ou após decay),
     descartar. cliffhanger_pendente é consumido na próxima abertura (one-shot).
 """
 
+import random
 from dataclasses import dataclass, field
 
 from config import settings
@@ -69,6 +70,17 @@ class NarrativeState:
     # Irrupção pendente (one-shot): nome do relógio que encheu, consumido
     # pelo prompt_builder no próximo turno.
     relogio_irrompido: str = ""
+
+    # Mundo Vivo P2: NPC toma a iniciativa — em cena calma, um NPC com agenda
+    # age por conta própria. Cooldown em turnos + pendência one-shot
+    # (npc_id, plano, presente_na_cena) consumida pelo prompt_builder.
+    turnos_desde_iniciativa_npc: int = 0
+    iniciativa_npc_pendente: tuple[str, str, bool] | None = None
+
+    # Ritual P2: perfil do jogador — contadores de estilo por turno real
+    # (combate/social/exploracao). Persiste via dm_state: o mestre te conhece
+    # entre sessões.
+    estilo_jogador: dict[str, int] = field(default_factory=dict)
 
     # Log de consequências (max 5, rolling)
     log_consequencias: list[str] = field(default_factory=list)
@@ -172,6 +184,58 @@ class NarrativeState:
         nome = self.relogio_irrompido
         self.relogio_irrompido = ""
         return nome
+
+    # ── NPC toma a iniciativa (Mundo Vivo P2) ────────────────────────────────
+
+    def avaliar_iniciativa_npc(self, npcs_presentes: list[str], em_combate: bool) -> None:
+        """Decide se um NPC com agenda age por conta própria neste turno.
+
+        Condições: fora de combate, agenda não-vazia, cena calma há ≥3 turnos
+        e cooldown de ≥5 turnos desde a última iniciativa. Prioriza NPC presente
+        na cena (age em pessoa); ausente vira "sinal" (mensageiro, rumor).
+        Pendência é one-shot — não re-arma enquanto não consumida.
+        """
+        if em_combate or not self.agenda_npcs:
+            return
+        self.turnos_desde_iniciativa_npc += 1
+        if self.iniciativa_npc_pendente is not None:
+            return
+        if self.turnos_sem_tensao < 3 or self.turnos_desde_iniciativa_npc < 5:
+            return
+        presentes = [n for n in self.agenda_npcs if n in set(npcs_presentes)]
+        candidatos = presentes or list(self.agenda_npcs.keys())
+        npc_id = random.choice(candidatos)
+        self.iniciativa_npc_pendente = (npc_id, self.agenda_npcs[npc_id], bool(presentes))
+        self.turnos_desde_iniciativa_npc = 0
+
+    def consumir_iniciativa_npc(self) -> tuple[str, str, bool] | None:
+        """Retorna e limpa a iniciativa pendente (one-shot)."""
+        p = self.iniciativa_npc_pendente
+        self.iniciativa_npc_pendente = None
+        return p
+
+    # ── Perfil do jogador (Ritual P2) ────────────────────────────────────────
+
+    def registrar_estilo(self, categoria: str) -> None:
+        """Conta um turno do estilo dado (combate|social|exploracao)."""
+        if categoria not in ("combate", "social", "exploracao"):
+            return
+        self.estilo_jogador[categoria] = self.estilo_jogador.get(categoria, 0) + 1
+
+    def estilo_dominante(self, minimo: int = 10) -> tuple[str, int, int] | None:
+        """(categoria, contagem, total) do estilo dominante, ou None.
+
+        None quando há menos de `minimo` turnos classificados (amostra curta)
+        ou quando nenhum estilo atinge 45% do total (perfil equilibrado não
+        merece bloco no prompt — seria ruído).
+        """
+        total = sum(self.estilo_jogador.values())
+        if total < minimo:
+            return None
+        categoria, contagem = max(self.estilo_jogador.items(), key=lambda kv: kv[1])
+        if contagem / total < 0.45:
+            return None
+        return categoria, contagem, total
 
     def decay_cartas(self) -> bool:
         """Incrementa contador e descarta cartas se ≥5 turnos sem uso. True se descartou."""

@@ -571,6 +571,62 @@ def montar_mensagens(
                 "proporcionais ao preenchimento — quase cheio = sinais urgentes."
             )
 
+        # Mundo Vivo P2 — NPC toma a iniciativa (one-shot da engine). O NPC
+        # deixa de ser estátua reativa: a agenda dele vira movimento na cena.
+        ini = narrative.consumir_iniciativa_npc()
+        if ini is not None:
+            from engine.memory.working_memory import _id_para_nome
+            _npc_id, _plano, _presente = ini
+            _nome = _id_para_nome(_npc_id)
+            if _presente:
+                secoes.append(
+                    f"\n=== INICIATIVA DE NPC (NESTE turno) ===\n"
+                    f'{_nome} age por vontade própria, movido pela agenda dele: "{_plano}". '
+                    "Ele toma a iniciativa — aborda o jogador, interrompe, faz o movimento. "
+                    "Não espere o jogador puxar."
+                )
+            else:
+                secoes.append(
+                    f"\n=== SINAL DE NPC (NESTE turno) ===\n"
+                    f'Um sinal de {_nome} chega à cena agora — mensageiro, bilhete, rumor, '
+                    f'som à distância — ligado à agenda dele: "{_plano}". '
+                    "Encene o sinal, não o NPC em pessoa."
+                )
+
+        # Ritual P2 — perfil do jogador (gated: fora de combate + amostra ≥10
+        # turnos + estilo realmente dominante). O mestre te conhece.
+        if not getattr(contexto.working_memory, "em_combate", False):
+            dom = narrative.estilo_dominante()
+            if dom is not None:
+                _cat, _n, _total = dom
+                _rotulo = {
+                    "combate": "resolver na lâmina",
+                    "social": "resolver na conversa",
+                    "exploracao": "explorar e investigar antes de agir",
+                }[_cat]
+                secoes.append(
+                    f"\n=== PERFIL DO JOGADOR (meta) ===\n"
+                    f"Nos últimos {_total} turnos, ele tende a {_rotulo} ({_n}/{_total}). "
+                    "Prepare cenas que recompensem esse estilo — e de vez em quando o "
+                    "desafie com o oposto. Pode comentar isso com leveza, como mestre "
+                    "de mesa faz."
+                )
+
+    # Mundo Vivo P2 — ecos: retorno a local conhecido (one-shot). O local
+    # LEMBRA do jogador; consequências viram reação concreta na cena.
+    scene_state = getattr(contexto.working_memory, "scene", None)
+    if scene_state is not None and scene_state.consumir_retorno_local():
+        _eco_conseq = "; ".join(
+            getattr(contexto.working_memory, "log_consequencias", [])
+        ) or "nenhuma registrada — improvise um eco menor (alguém o reconhece)"
+        _local_nome = getattr(contexto.working_memory, "location_nome", "") or "este local"
+        secoes.append(
+            f"\n=== RETORNO A LOCAL CONHECIDO ===\n"
+            f"O jogador JÁ esteve em {_local_nome}. O local LEMBRA da passagem dele — "
+            "mostre pelo menos UM eco concreto: NPC reage à visita anterior, marca que "
+            f"ele deixou, boato sobre o que fez. Consequências registradas: {_eco_conseq}."
+        )
+
     # Pilar Perigo — cicatrizes permanentes: NPCs notam e reagem a elas.
     cicatrizes = getattr(contexto.working_memory, "cicatrizes", [])
     if cicatrizes:

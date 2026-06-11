@@ -371,3 +371,167 @@ def test_pico_pacing_acompanha_ajustes():
         wm.narrative.ajustar_pacing(em_combate=True, saiu_combate_recentemente=False, trust_mudou=False)
     assert wm.narrative.pico_pacing >= 8.0
     assert wm.narrative.turnos_total == 4
+
+
+# ══ PACOTE 2 — Mundo Vivo restante + Ritual ══════════════════════════════════
+
+
+def test_tracking_de_arco_roda_no_pipeline():
+    """Regressão do bug do pacote 1: o pipeline calcula pacing inline e não
+    chama ajustar_pacing() — turnos_total/pico_pacing nunca subiam em produção
+    e momento_de_fecho() jamais disparava."""
+    wm = _wm()
+    wm.entrar_combate()
+    aplicar_pos_turno(wm, "Ataco o goblin!", "O aço encontra carne.")
+    assert wm.narrative.turnos_total == 1
+    assert wm.narrative.pico_pacing >= 4.0  # combate subiu o pacing e o pico seguiu
+
+
+# ── NPC toma a iniciativa ────────────────────────────────────────────────────
+
+
+def _wm_com_agenda(presente: bool) -> WorkingMemory:
+    wm = _wm()
+    wm.narrative.agenda_npcs["mira"] = "descobrir o que o jogador sabe do ritual"
+    wm.npcs_presentes = ["mira"] if presente else ["taverneiro"]
+    return wm
+
+
+def test_iniciativa_npc_dispara_apos_calmaria_com_cooldown():
+    wm = _wm_com_agenda(presente=True)
+    for _ in range(5):
+        aplicar_pos_turno(wm, "Olho ao redor da praça.", "A tarde segue mansa.")
+    pendente = wm.narrative.iniciativa_npc_pendente
+    assert pendente is not None
+    npc_id, plano, presente = pendente
+    assert npc_id == "mira" and presente is True
+    assert "ritual" in plano
+
+
+def test_iniciativa_npc_ausente_vira_sinal():
+    wm = _wm_com_agenda(presente=False)
+    for _ in range(5):
+        aplicar_pos_turno(wm, "Sigo observando o movimento.", "Nada muda.")
+    pendente = wm.narrative.iniciativa_npc_pendente
+    assert pendente is not None and pendente[2] is False  # não está na cena
+
+
+def test_iniciativa_npc_nao_dispara_em_combate():
+    wm = _wm_com_agenda(presente=True)
+    wm.entrar_combate()
+    wm.registrar_inimigo("g1", "Goblin", "intacto")
+    for _ in range(6):
+        aplicar_pos_turno(wm, "Ataco o goblin!", "Vocês trocam golpes.")
+    assert wm.narrative.iniciativa_npc_pendente is None
+
+
+def test_iniciativa_npc_sem_agenda_nao_dispara():
+    wm = _wm()
+    wm.npcs_presentes = ["mira"]
+    for _ in range(8):
+        aplicar_pos_turno(wm, "Olho ao redor.", "Tudo calmo.")
+    assert wm.narrative.iniciativa_npc_pendente is None
+
+
+def test_iniciativa_npc_one_shot_e_cooldown():
+    wm = _wm_com_agenda(presente=True)
+    for _ in range(5):
+        aplicar_pos_turno(wm, "Espero na praça.", "O tempo passa.")
+    assert wm.narrative.consumir_iniciativa_npc() is not None
+    assert wm.narrative.consumir_iniciativa_npc() is None  # one-shot
+    # Cooldown zerado no disparo: o turno seguinte NÃO re-arma de imediato
+    aplicar_pos_turno(wm, "Continuo esperando.", "Nada ainda.")
+    assert wm.narrative.iniciativa_npc_pendente is None
+
+
+def test_iniciativa_npc_injetada_no_prompt():
+    wm = _wm_com_agenda(presente=True)
+    wm.narrative.iniciativa_npc_pendente = ("mira", "cobrar a dívida", True)
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "INICIATIVA DE NPC" in system and "Mira" in system and "cobrar a dívida" in system
+    # Consumido — não repete no próximo prompt
+    system2 = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "INICIATIVA DE NPC" not in system2
+
+
+def test_sinal_de_npc_ausente_injetado_no_prompt():
+    wm = _wm()
+    wm.narrative.iniciativa_npc_pendente = ("velho-sabio", "alertar sobre a mina", False)
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "SINAL DE NPC" in system and "não o NPC em pessoa" in system
+
+
+# ── Ecos de consequência (retorno a local conhecido) ─────────────────────────
+
+
+def test_retorno_a_local_conhecido_seta_flag_one_shot():
+    wm = _wm()  # começa em "vila"
+    aplicar_pos_turno(wm, "Sigo pra estrada.", "Vocês partem. [CENA: estrada|Estrada]")
+    assert "vila" in wm.scene.locais_visitados
+    assert wm.scene.retorno_local_conhecido is False  # estrada é nova
+    aplicar_pos_turno(wm, "Volto pra vila.", "O caminho de volta. [CENA: vila|Vila]")
+    assert wm.scene.consumir_retorno_local() is True
+    assert wm.scene.consumir_retorno_local() is False  # one-shot
+
+
+def test_eco_injetado_no_prompt_no_retorno():
+    wm = _wm()
+    wm.registrar_consequencia("A guarda de Drevamor desconfia do jogador")
+    aplicar_pos_turno(wm, "Pra estrada.", "[CENA: estrada|Estrada]")
+    aplicar_pos_turno(wm, "De volta.", "[CENA: vila|Vila]")
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "RETORNO A LOCAL CONHECIDO" in system
+    assert "guarda de Drevamor" in system
+    system2 = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "RETORNO A LOCAL CONHECIDO" not in system2  # one-shot
+
+
+# ── Perfil do jogador ────────────────────────────────────────────────────────
+
+
+def test_perfil_classifica_estilos_no_pipeline():
+    wm = _wm()
+    aplicar_pos_turno(wm, "Ataco o goblin com tudo!", "Aço no ar.")
+    aplicar_pos_turno(wm, "Pergunto ao taverneiro sobre a mina.", "Ele coça a barba.")
+    aplicar_pos_turno(wm, "Examino as marcas no chão.", "Pegadas recentes.")
+    e = wm.narrative.estilo_jogador
+    assert e["combate"] == 1 and e["social"] == 1 and e["exploracao"] == 1
+
+
+def test_estilo_dominante_exige_amostra_e_dominancia():
+    wm = _wm()
+    n = wm.narrative
+    n.estilo_jogador = {"social": 5, "combate": 2}
+    assert n.estilo_dominante() is None  # amostra < 10
+    n.estilo_jogador = {"social": 4, "combate": 4, "exploracao": 4}
+    assert n.estilo_dominante() is None  # equilibrado (33% < 45%)
+    n.estilo_jogador = {"social": 9, "combate": 3, "exploracao": 2}
+    dom = n.estilo_dominante()
+    assert dom is not None and dom[0] == "social" and dom[1] == 9 and dom[2] == 14
+
+
+def test_perfil_no_prompt_gated_por_combate():
+    wm = _wm()
+    wm.narrative.estilo_jogador = {"social": 9, "combate": 3, "exploracao": 2}
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "PERFIL DO JOGADOR" in system and "resolver na conversa" in system
+
+    wm.entrar_combate()
+    system2 = montar_mensagens(_ctx(wm, "ataco o orc"))[0]["content"]
+    assert "PERFIL DO JOGADOR" not in system2  # budget de combate protegido
+
+
+def test_perfil_e_locais_persistem_no_dm_state():
+    from api.routes.session import _wm_para_dm_state
+
+    wm = _wm()
+    wm.narrative.estilo_jogador = {"social": 7}
+    wm.scene.locais_visitados.add("mina-abandonada")
+    dm_state = _wm_para_dm_state(wm)
+    assert dm_state["estilo_jogador"] == {"social": 7}
+    assert "mina-abandonada" in dm_state["locais_visitados"]
+
+    wm2 = _wm()
+    wm2.aplicar_character_state(SimpleNamespace(dm_state=dm_state))
+    assert wm2.narrative.estilo_jogador == {"social": 7}
+    assert "mina-abandonada" in wm2.scene.locais_visitados

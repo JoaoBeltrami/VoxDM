@@ -789,6 +789,10 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "cicatrizes":           list(wm.cicatrizes),
         # Mundo Vivo — relógios de ameaça continuam andando entre sessões
         "relogios":             {k: dict(v) for k, v in wm.narrative.relogios.items()},
+        # Ritual P2 — o mestre te conhece entre sessões
+        "estilo_jogador":       dict(wm.narrative.estilo_jogador),
+        # Mundo Vivo P2 — ecos: locais por onde o jogador já passou
+        "locais_visitados":     sorted(wm.scene.locais_visitados),
     }
 
 

@@ -67,6 +67,12 @@ class SceneState:
     # do step 17b de cada pipeline. NÃO é serializado.
     npcs_introduzidos_turno: list[str] = field(default_factory=list)
 
+    # Mundo Vivo P2 — ecos de consequência: locais por onde o jogador já
+    # passou (persiste via dm_state). Voltar a um deles seta o flag one-shot
+    # abaixo, e o prompt obriga o mestre a mostrar que o local LEMBRA dele.
+    locais_visitados: set[str] = field(default_factory=set)
+    retorno_local_conhecido: bool = False
+
     # ── Operações ────────────────────────────────────────────────────────────
 
     def aplicar_cena(self, location_id: str, location_nome: str = "", time_of_day: str = "") -> bool:
@@ -83,6 +89,13 @@ class SceneState:
             return False
         mudou_local = novo_id != self.location_id
         if mudou_local:
+            # Ecos (P2): o local que estamos deixando vira "visitado"; se o
+            # destino já foi visitado antes, é um RETORNO — flag one-shot pro
+            # prompt obrigar o mestre a referenciar a passagem anterior.
+            if self.location_id:
+                self.locais_visitados.add(self.location_id)
+            if novo_id in self.locais_visitados:
+                self.retorno_local_conhecido = True
             self.cena_mudou_local = True
             self.location_id = novo_id
         if location_nome.strip():
@@ -95,6 +108,12 @@ class SceneState:
         """Lê e reseta o flag de mudança de local (one-shot)."""
         v = self.cena_mudou_local
         self.cena_mudou_local = False
+        return v
+
+    def consumir_retorno_local(self) -> bool:
+        """Lê e reseta o flag de retorno a local conhecido (one-shot)."""
+        v = self.retorno_local_conhecido
+        self.retorno_local_conhecido = False
         return v
 
     def registrar_fala(self, falante: str, texto: str) -> None:

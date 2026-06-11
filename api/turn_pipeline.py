@@ -178,6 +178,15 @@ _RE_CURA = re.compile(r"\[CURA:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 # um custo físico dramático). Persiste via dm_state; NPCs reagem.
 _RE_CICATRIZ = re.compile(r"\[CICATRIZ:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Ações sociais explícitas no texto do jogador (Ritual P2 — perfil do
+# jogador). Não precisa ser exaustivo: é contador de tendência, não gate.
+_RE_ACAO_SOCIAL = re.compile(
+    r"\b(fal[oa]|pergunt[oa]|convers[oa]|digo|peço|pe[cç]o|convenç[oa]|"
+    r"mint[oa]|persuad[oa]|intimid[oa]|negoci[oa]|cumpriment[oa]|respond[oa]|"
+    r"apresent[oa]|explico|agradeç[oa])\b",
+    re.IGNORECASE,
+)
+
 # Relógios de Ameaça (Mundo Vivo, 10/06) — fronts à la Apocalypse World.
 # [RELOGIO: id|Nome|segmentos] cria (segmentos opcional, default 6, clamp 3-8);
 # [RELOGIO_AVANCA: id] avança 1 por decisão dramática do LLM. A engine também
@@ -701,6 +710,31 @@ def aplicar_pos_turno(
             # Turno normal de exploração/social: leve aumento
             working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
         log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
+
+        # 9a. Arco da sessão (modo episódio) — o pipeline calcula pacing INLINE
+        # (valores recalibrados 09/06), então ajustar_pacing() do NarrativeState
+        # não roda em produção. O tracking de arco precisa viver aqui — sem
+        # isto, turnos_total/pico_pacing nunca subiam e momento_de_fecho()
+        # jamais disparava (bug do pacote 1, pego no pacote 2).
+        working_mem.narrative.turnos_total += 1
+        working_mem.narrative.pico_pacing = max(
+            working_mem.narrative.pico_pacing, working_mem.pacing_nivel
+        )
+
+        # 9b. Perfil do jogador (Ritual P2) — classifica o estilo do turno.
+        # Combate > social (trust mudou OU verbo social) > exploração.
+        if _RE_COMBATE_JOGADOR.search(texto_jogador):
+            working_mem.narrative.registrar_estilo("combate")
+        elif mudancas_trust or _RE_ACAO_SOCIAL.search(texto_jogador):
+            working_mem.narrative.registrar_estilo("social")
+        else:
+            working_mem.narrative.registrar_estilo("exploracao")
+
+        # 9c. Iniciativa de NPC (Mundo Vivo P2) — em cena calma, um NPC com
+        # agenda age por conta própria. One-shot consumido pelo prompt_builder.
+        working_mem.narrative.avaliar_iniciativa_npc(
+            list(working_mem.npcs_presentes), working_mem.em_combate
+        )
 
     # 10. Fios Soltos (Feat 1) — coleta [FIO: ...] da resposta do LLM
     for m in _RE_FIO.finditer(resposta_completa):
