@@ -95,6 +95,11 @@ class Embedder:
     def __init__(self) -> None:
         self._modelo: SentenceTransformer | None = None
         self._device: str = "desconhecido"
+        # Teste ao vivo #3 (12/06): duas buscas paralelas (modules+episodic)
+        # inicializaram o lazy load em RACE — dois SentenceTransformer carregados
+        # simultaneamente, 10s de stall no turno. Lock + double-check resolve.
+        import threading
+        self._lock = threading.Lock()
 
     def _carregar_modelo(self) -> SentenceTransformer:
         """Carrega o modelo na primeira chamada. Tenta CUDA, cai para CPU.
@@ -106,6 +111,13 @@ class Embedder:
         if self._modelo is not None:
             return self._modelo
 
+        with self._lock:
+            if self._modelo is not None:  # double-check: outro thread carregou
+                return self._modelo
+            return self._carregar_modelo_locked()
+
+    def _carregar_modelo_locked(self) -> SentenceTransformer:
+        """Carrega o modelo — chamado SEMPRE sob self._lock."""
         with _hf_offline_temporario():
             try:
                 modelo = SentenceTransformer(MODELO_NOME, device="cuda")

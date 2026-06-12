@@ -1760,6 +1760,52 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 resposta_limpa,
             )
 
+            # F0 (teste #3): combate SEM nenhum inimigo registrado = beat
+            # dormente + tracker vazio a sessão inteira (o LLM nunca emitiu
+            # [INIMIGO]). A engine não espera mais: registra um oponente
+            # genérico; o extractor estruturado refina nome/estado em seguida.
+            if sessao.working_mem.em_combate and not sessao.working_mem.inimigos_combate:
+                sessao.working_mem.registrar_inimigo("oponente-1", "Oponente", "intacto")
+                log.info("inimigo_generico_auto_registrado", session_id=session_id)
+
+            # Frente A mínima (12/06): extractor estruturado pós-turno de
+            # combate. Mesmo sem [INIMIGO]/[DANO] na resposta, a engine lê a
+            # narração via chamada barata (8B/Gemini, JSON) e sincroniza
+            # inimigos/estados/dano. Roda ANTES do fim → tracker correto já
+            # neste turno; o beat usa os inimigos refinados.
+            if (
+                settings.EXTRACTOR_COMBATE_ATIVO
+                and sessao.working_mem.em_combate
+                and not idle_nudge
+            ):
+                try:
+                    from api.turn_pipeline import _RE_DANO as _RE_DANO_MARKER
+                    from engine.llm.extractor import (
+                        aplicar_estado_extraido,
+                        extrair_estado_combate,
+                    )
+                    estado_ext = await asyncio.wait_for(
+                        extrair_estado_combate(
+                            sessao.groq,
+                            resposta_limpa,
+                            dict(sessao.working_mem.inimigos_combate),
+                        ),
+                        timeout=8.0,
+                    )
+                    if estado_ext:
+                        # [DANO] explícito já aplicou no pipeline — não duplicar
+                        if _RE_DANO_MARKER.search(resposta_completa):
+                            estado_ext["dano_ao_jogador"] = 0
+                        aplicar_estado_extraido(sessao.working_mem, estado_ext)
+                        log.info(
+                            "extractor_aplicado",
+                            inimigos=len(estado_ext.get("inimigos", [])),
+                            dano=estado_ext.get("dano_ao_jogador", 0),
+                            session_id=session_id,
+                        )
+                except Exception as exc:
+                    log.warning("extractor_pulado", erro=str(exc)[:120])
+
             # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
             # ficha pro frontend popular a CharacterSheet e persiste no SQLite
             # (o "Continuar como…" passa a listar o personagem). Falha = só log.

@@ -170,12 +170,19 @@ class SceneState:
 
         if self.npcs_presentes:
             conhecidos = [n for n in self.npcs_presentes if n in self.npcs_apresentados]
-            fundo = len(self.npcs_presentes) - len(conhecidos)
+            fundo = [n for n in self.npcs_presentes if n not in self.npcs_apresentados]
             partes: list[str] = []
             if conhecidos:
                 partes.append(", ".join(conhecidos))
-            if fundo > 0:
-                partes.append(f"(+{fundo} ao fundo, sem interação — não dar falas)")
+            # Teste #3 (12/06): esconder os NOMES do fundo deixou o LLM sem ter
+            # como USAR os NPCs reais do local — ele improvisava NPCs fora do
+            # grafo e o HUD ficava vazio pra sempre. Os ids voltam ao prompt em
+            # forma neutra: disponíveis pra puxar pra cena, mas sem fala ativa.
+            if fundo:
+                partes.append(
+                    f"(ao fundo, disponíveis se a cena pedir — sem fala até "
+                    f"interagirem: {', '.join(fundo)})"
+                )
             linhas.append(f"\nNPCs presentes: {' '.join(partes)}")
 
         if self.npc_estados_emocionais:

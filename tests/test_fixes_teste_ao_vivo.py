@@ -299,14 +299,20 @@ async def test_npc_introduzido_sobrevive_reinferencia_de_cena():
 # ── Cena nominal: só apresentados por nome; resto vira "(+N ao fundo)" ──────
 
 
-def test_cena_to_prompt_apenas_apresentados_nominais():
+def test_cena_to_prompt_fundo_lista_nomes_disponiveis():
+    """Teste #3: esconder os NOMES do fundo deixava o LLM sem como usar os NPCs
+    reais do local (improvisava os dele; HUD vazio pra sempre). Contrato novo:
+    apresentados nominais + fundo LISTADO em forma neutra (sem fala ativa)."""
     wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
     wm.npcs_presentes = ["mira", "kael", "tobias"]
     wm.apresentar_npc("mira")
     texto = wm.scene.to_prompt()
     assert "mira" in texto
-    assert "kael" not in texto and "tobias" not in texto
-    assert "+2 ao fundo" in texto
+    assert "ao fundo" in texto
+    assert "kael" in texto and "tobias" in texto  # disponíveis pro LLM puxar
+    # Estados emocionais continuam só para apresentados
+    wm.npc_estados_emocionais["kael"] = "furioso"
+    assert "furioso" not in wm.scene.to_prompt()
 
 
 def test_cena_to_prompt_sem_fundo_quando_todos_apresentados():

@@ -744,6 +744,11 @@ def aplicar_pos_turno(
             # teste 09/06 mostrou pacing pinado em ~10 por 40min após o combate —
             # markers_frag + roteamento CLIMAX ficaram ativos a sessão toda.
             working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 1.5)
+        elif working_mem.pacing_nivel > 6.0:
+            # Drenagem de pico (teste #3): pós-clímax sem combate, o pacing
+            # ficava 8-9 por 10+ turnos — markers_frag sempre injetado, routing
+            # CLIMAX à toa e 429 do 70B. Pico drena rápido até a faixa normal.
+            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 1.2)
         elif working_mem.turnos_sem_tensao > 3:
             # Muitos turnos calmos: reduz pacing gradualmente (era -0.3 — lento
             # demais pra drenar um pico de 10 em sessão real)

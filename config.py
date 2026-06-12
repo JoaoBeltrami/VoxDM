@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # Timeout por tentativa de provider (segundos). Acima disso, router cai pro próximo.
     LLM_PROVIDER_TIMEOUT: float = 30.0
 
+    # ── Extractor estruturado de combate (Frente A, 12/06) ───────────────
+    # Pós-turno de combate, chamada LLM barata (JSON) sincroniza inimigos/
+    # estados/dano mesmo quando o LLM narrador não emite markers. Custa
+    # ~0.7s/turno de combate. Desligar: EXTRACTOR_COMBATE_ATIVO=false.
+    EXTRACTOR_COMBATE_ATIVO: bool = True
+
     # ── Beat de turno inimigo (Pilar Perigo, 11/06) ──────────────────────
     # Kill-switch da feature mais nova de combate: a 2ª chamada LLM que
     # narra o turno dos inimigos após a ação do jogador. Se atrapalhar a

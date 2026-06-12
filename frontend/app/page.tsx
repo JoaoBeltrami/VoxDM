@@ -948,7 +948,13 @@ export default function Home() {
 
   // Session Zero (P3) — criação por voz: bypassa o CharacterForm; o mestre
   // entrevista e a engine monta a ficha ([FICHA] → tipo="ficha_criada").
+  // SZ-FICHA-UI-1 (teste #3): durante a entrevista a ficha mostrava o default
+  // vazio ("personagem sem status") — escondemos a sheet até a ficha nascer e
+  // celebramos com overlay quando ela chega.
+  const [szEmAndamento, setSzEmAndamento] = useState(false);
+  const [fichaFlash, setFichaFlash] = useState<string | null>(null);
   const handleSessionZero = useCallback(() => {
+    setSzEmAndamento(true);
     conectar("", {
       session_zero: true,
       tts_voice: vozSelecionada,
@@ -964,6 +970,11 @@ export default function Home() {
   useEffect(() => {
     if (!fichaCriada) return;
     setPersonagem(p => ({ ...p, ...fichaCriada }));
+    setSzEmAndamento(false);
+    // Celebração: o personagem NASCEU — overlay 2.5s com o nome
+    setFichaFlash(fichaCriada.player_name ?? "Personagem");
+    const t = setTimeout(() => setFichaFlash(null), 2_500);
+    return () => clearTimeout(t);
   }, [fichaCriada]);
 
   const handleConectarSessaoCarregada = useCallback(() => {
@@ -1098,6 +1109,21 @@ export default function Home() {
               </div>
               <div className="mt-1 text-xs uppercase tracking-widest text-red-500/70">
                 Iniciativa
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Session Zero: celebração quando a ficha nasce (2.5s) */}
+        {fichaFlash && (
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
+            <div className="animate-crit-pop text-center font-display">
+              <div className="text-xl text-emerald-400/80">📜</div>
+              <div className="mt-1 text-3xl font-bold tracking-[0.2em] text-emerald-300 drop-shadow-[0_0_30px_rgba(16,185,129,0.8)]">
+                {fichaFlash}
+              </div>
+              <div className="mt-1 text-[11px] uppercase tracking-[0.4em] text-emerald-500/70">
+                ficha criada — boa sorte
               </div>
             </div>
           </div>
@@ -1289,7 +1315,7 @@ export default function Home() {
     // Painel direito — ficha + tracker de combate.
     const rightSlot = (
       <div className="space-y-3">
-        <CharacterSheet
+        {!szEmAndamento && <CharacterSheet
           personagem={personagem}
           sessionId={sessionId}
           onRolar={enviarComando}
@@ -1325,7 +1351,7 @@ export default function Home() {
           knownSpells={personagem.player_spells ?? []}
           emMercado={emMercado}
           onVenderItem={(item) => enviarComando(`Vendo ${item}.`)}
-        />
+        />}
 
         <CombatTracker
           emCombate={emCombate}
@@ -1414,6 +1440,12 @@ export default function Home() {
               ? extrairMotivoRolagem(ultimaFala)
               : { motivo: "", atributo: "" };
 
+          // DADO-PULSO-1 (teste #3): o mestre pedia d12 de dano e o d20
+          // continuava piscando. Detecta o dado pedido na última fala — o
+          // pulso vai pro botão certo e a linha de dano aparece se preciso.
+          const dadoPedidoMatch = esperandoRolagem ? ultimaFala.match(/d(4|6|8|10|12|100)/i) : null;
+          const dadoPedido = dadoPedidoMatch ? Number(dadoPedidoMatch[1]) : null;
+
           const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
             const r1 = Math.floor(Math.random() * 20) + 1;
             const r2 = Math.floor(Math.random() * 20) + 1;
@@ -1437,7 +1469,7 @@ export default function Home() {
             const val = Math.floor(Math.random() * faces) + 1;
             registrarRolagem(`d${faces}`, val, "Dano");
             setDadoJogadorAtivo({ tipo: `d${faces}`, resultado: val, id: Date.now() });
-            if (emCombate) {
+            if (emCombate || dadoPedido === faces) {
               enviarComando(`[Rolagem: d${faces} = ${val}]`);
             }
           };
@@ -1468,7 +1500,7 @@ export default function Home() {
                     onClick={() => rolarD20()}
                     title="Rolar d20"
                     className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
-                      esperandoRolagem
+                      esperandoRolagem && dadoPedido === null
                         ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
                         : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                     }`}
@@ -1491,14 +1523,18 @@ export default function Home() {
                   ▼d20
                 </button>
               </div>
-              {!cinemaMode && emCombate && (
+              {!cinemaMode && (emCombate || dadoPedido !== null) && (
                 <div className="flex items-center gap-1.5">
                   {([4, 6, 8, 10, 12, 100] as const).map(f => (
                     <button
                       key={f}
                       onClick={() => rolarDano(f)}
                       title={`Rolar d${f}`}
-                      className="rounded-full border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[10px] font-medium text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-300"
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        dadoPedido === f
+                          ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_10px_2px_rgba(139,92,246,0.35)]"
+                          : "border-zinc-800 bg-zinc-950 text-zinc-600 hover:border-zinc-600 hover:text-zinc-300"
+                      }`}
                     >
                       d{f}
                     </button>
@@ -1609,25 +1645,8 @@ export default function Home() {
           </div>
         )}
 
-        {!cinemaMode && consequencias.length > 0 && (
-          <div className="max-w-sm w-full">
-            <details className="group">
-              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-orange-400/70 hover:text-orange-300 transition-colors list-none">
-                <span className="text-orange-500">⚡</span>
-                Consequências ({consequencias.length})
-                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-              </summary>
-              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-orange-900/40">
-                {consequencias.map((c, i) => (
-                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
-                    • {c}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
-        )}
+        {/* Painel Consequências removido (teste #3): a Crônica já contém
+            as consequências — dois painéis com o mesmo evento era ruído. */}
 
         {emCombate && !cinemaMode && (() => {
           const turnoJogadorCombate = !respostaAtual && historico.length > 0 && !ouvindo;

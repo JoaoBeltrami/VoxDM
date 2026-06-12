@@ -69,6 +69,10 @@ class ContextBuilder:
         self._qdrant = QdrantMemoryClient()
         self._neo4j = Neo4jMemoryClient()
         self._schema_cache: dict[str, Any] | None = None
+        # Cache de relações Neo4j (teste #3: as MESMAS 3 entidades eram
+        # consultadas TODO turno — ~1.4s desperdiçados). TTL de 300s: relações
+        # do grafo mudam raramente (afeto via [AFETO] tolera staleness).
+        self._rels_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def _carregar_schema(self) -> dict[str, Any]:
         """Carrega e cacheia o schema do módulo em memória."""
@@ -382,11 +386,17 @@ class ContextBuilder:
         # Antes: 4 chamadas Neo4j sequenciais com timeout 2s cada (até 8s no pior caso).
         # Agora: gather com timeout 2s — pior caso é 2s independente de N entidades.
         async def _buscar_rels(entidade_id: str) -> list[dict[str, Any]]:
+            agora = time.monotonic()
+            em_cache = self._rels_cache.get(entidade_id)
+            if em_cache is not None and agora - em_cache[0] < 300.0:
+                return em_cache[1]
             try:
-                return await asyncio.wait_for(
+                rels = await asyncio.wait_for(
                     self._neo4j.buscar_relacionamentos(entidade_id),
                     timeout=2.0,
                 )
+                self._rels_cache[entidade_id] = (agora, rels)
+                return rels
             except TimeoutError:
                 log.warning("neo4j_timeout", entidade=entidade_id)
                 return []

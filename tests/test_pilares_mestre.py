@@ -791,3 +791,105 @@ def test_budget_kitchen_sink_combate_com_tudo_ligado():
         f"Kitchen sink: system com {len(system)} chars — blocos dos Pilares "
         "estouraram o teto; cortar gordura nos blocos dinâmicos"
     )
+
+
+# ══ F0 + FRENTE A mínima (12/06, pós-teste #3) ════════════════════════════════
+
+
+def test_canon_injetado_no_prompt():
+    """CANON-1: LLM improvisou o próprio Valdrek vivo e ele virou companion."""
+    wm = _wm()
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "Canon inviolável" in system
+    assert "MORTO" in system
+
+
+def test_pacing_drena_pico_fora_de_combate():
+    """PACING-INFLADO-2: pico de 10 ficava 8-9 por 10+ turnos em conversa calma."""
+    wm = _wm()
+    wm.pacing_nivel = 10.0
+    aplicar_pos_turno(wm, "Converso com o taverneiro.", "Ele sorri e serve a cerveja.")
+    assert wm.pacing_nivel == pytest.approx(8.8)
+    aplicar_pos_turno(wm, "Pergunto das estradas.", "Ele aponta o norte.")
+    assert wm.pacing_nivel == pytest.approx(7.6)
+
+
+def test_session_zero_proibe_rolagens_no_prompt():
+    from engine.llm.prompt_builder import _SESSION_ZERO_PATH
+
+    conteudo = _SESSION_ZERO_PATH.read_text(encoding="utf-8")
+    assert "NUNCA peça rolagens" in conteudo
+
+
+# ── Extractor estruturado (Frente A mínima) ──────────────────────────────────
+
+
+def test_extrair_json_defensivo_tolera_prosa():
+    from engine.llm.extractor import extrair_json_defensivo
+
+    assert extrair_json_defensivo('{"a": 1}') == {"a": 1}
+    assert extrair_json_defensivo('Claro! Aqui está:\n{"a": 1}\nEspero ter ajudado.') == {"a": 1}
+    assert extrair_json_defensivo("não tem json nenhum aqui") is None
+
+
+def test_extractor_sanitiza_saida_do_llm():
+    from engine.llm.extractor import _sanitizar
+
+    bruto = {
+        "inimigos": [
+            {"id": "Guarda Sombrio!!", "nome": "Guarda Sombrio", "estado": "FERIDO"},
+            {"id": "x", "nome": "X", "estado": "voando"},  # estado inválido → fora
+            "lixo-nao-dict",
+        ],
+        "dano_ao_jogador": 999,
+    }
+    limpo = _sanitizar(bruto)
+    assert len(limpo["inimigos"]) == 1
+    assert limpo["inimigos"][0]["id"] == "guarda-sombrio"
+    assert limpo["inimigos"][0]["estado"] == "ferido"
+    assert limpo["dano_ao_jogador"] == 60  # clamp
+
+
+def test_aplicar_estado_extraido_substitui_generico_e_aplica_dano():
+    from engine.llm.extractor import aplicar_estado_extraido
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("oponente-1", "Oponente", "intacto")  # placeholder F0
+    aplicar_estado_extraido(wm, {
+        "inimigos": [
+            {"id": "rufiao", "nome": "Rufião", "estado": "ferido"},
+            {"id": "capanga", "nome": "Capanga", "estado": "intacto"},
+        ],
+        "dano_ao_jogador": 5,
+    })
+    assert "oponente-1" not in wm.inimigos_combate  # genérico substituído
+    assert wm.inimigos_combate["rufiao"]["estado"] == "ferido"
+    assert "capanga" in wm.inimigos_combate
+    assert wm.player_hp == 15
+
+
+@pytest.mark.asyncio
+async def test_extrair_estado_combate_end_to_end_com_fake_llm():
+    from engine.llm.extractor import extrair_estado_combate
+
+    class _GroqJson:
+        async def completar(self, *a, **kw):
+            return ('Aqui está o estado: {"inimigos": [{"id": "guarda-1", '
+                    '"nome": "Guarda", "estado": "grave"}], "dano_ao_jogador": 3}')
+
+    estado = await extrair_estado_combate(_GroqJson(), "O guarda cambaleia.", {})
+    assert estado is not None
+    assert estado["inimigos"][0]["id"] == "guarda-1"
+    assert estado["dano_ao_jogador"] == 3
+
+
+@pytest.mark.asyncio
+async def test_extractor_falha_de_llm_devolve_none():
+    from engine.llm.extractor import extrair_estado_combate
+
+    class _GroqQuebrado:
+        async def completar(self, *a, **kw):
+            raise RuntimeError("cascata esgotada")
+
+    assert await extrair_estado_combate(_GroqQuebrado(), "Narração.", {}) is None

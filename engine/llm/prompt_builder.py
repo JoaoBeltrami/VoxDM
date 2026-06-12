@@ -54,6 +54,10 @@ _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
 _FRAGMENTS_DIR      = Path(__file__).parent / "prompts" / "fragments"
 _FRAG_VOZ_DUPLA     = _FRAGMENTS_DIR / "voz_dupla.md"
 _FRAG_MARKERS_LISTA = _FRAGMENTS_DIR / "markers_lista.md"
+# Canon do módulo ativo — guarda contra canon-break (teste #3: LLM improvisou o
+# próprio Valdrek vivo e ele virou companion). Hardcoded enquanto o módulo é
+# único; Schema v2 move isto para o JSON do módulo.
+_FRAG_CANON         = _FRAGMENTS_DIR / "canon.md"
 
 # Perfis válidos — alinhar com SessaoConfig.dm_profile e WorkingMemory.dm_profile
 _DM_PROFILES_VALIDOS: frozenset[str] = frozenset({
@@ -289,8 +293,10 @@ def _formatar_chunks(
 def _formatar_relacoes(relacoes: list[dict[str, Any]]) -> str:
     if not relacoes:
         return ""
-    linhas = [f"  {r['tipo']}: {r.get('alvo_nome', r['alvo_id'])} (peso: {r['weight']:.1f})"
-              for r in relacoes]
+    # Cap 10 (teste #3: 13 relações TODO turno inflavam o prompt). Formato
+    # compacto sem o peso — o LLM usa a existência do laço, não o número.
+    linhas = [f"  {r['tipo']}: {r.get('alvo_nome', r['alvo_id'])}"
+              for r in relacoes[:10]]
     return "Relações no grafo:\n" + "\n".join(linhas)
 
 
@@ -366,6 +372,13 @@ def montar_mensagens(
         if voz_dupla:
             secoes.append(voz_dupla)
             chars_voz_dupla = len(voz_dupla)
+
+    # Canon do módulo — sempre injetado (curto): mortos continuam mortos,
+    # segredos exigem conquista. Sem isto o LLM "ressuscita" figuras canônicas
+    # pra agradar o jogador (teste #3).
+    canon = _ler_prompt(_FRAG_CANON)
+    if canon:
+        secoes.append(canon)
 
     # Markers list: injeta só quando a cena tem ritmo dramático (em combate,
     # pacing alto, cliffhanger, fios ou agendas ativos). Em exploração calma
@@ -773,6 +786,12 @@ def montar_mensagens(
         "semantica": len(sem_texto),
         "episodica": len(ep_texto),
     }
+    # "outros" = tudo que não tem chave própria (relações do grafo, rolling
+    # summary, blocos dos Pilares, lembrete). Teste #3: ~8k chars invisíveis
+    # no breakdown — sem medir não há dieta.
+    chars_breakdown["outros"] = max(
+        0, len(system_content) - sum(chars_breakdown.values())
+    )
 
     # Guard de budget — loga warning quando o system prompt excede o teto.
     # Target: ≤ 20 000 chars (≈ 5 700 tokens) para caber em 70B com respostas de
