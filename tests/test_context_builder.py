@@ -267,3 +267,50 @@ def test_relevancia_ordena_defensivamente():
     ]
     sel = _selecionar_por_relevancia(chunks, top_k=5)
     assert [c["source_id"] for c in sel] == ["a", "b"]
+
+
+# ── Testes: cache de relações Neo4j + stale-while-revalidate (teste #4) ────────
+
+def _builder_sem_clientes() -> ContextBuilder:
+    """ContextBuilder sem __init__ (não cria QdrantClient/Neo4jClient reais)."""
+    b = ContextBuilder.__new__(ContextBuilder)
+    b._rels_cache = {}
+    b._neo4j = AsyncMock()
+    return b
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_cacheia_sucesso_nao_reconsulta():
+    """1 fetch bem-sucedido → 2ª chamada vem do cache (não re-consulta o Neo4j)."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "conhece"}])
+    r1 = await b._buscar_rels_cached("aldric-drevasson")
+    r2 = await b._buscar_rels_cached("aldric-drevasson")
+    assert r1 == r2 == [{"rel": "conhece"}]
+    b._neo4j.buscar_relacionamentos.assert_awaited_once()  # 2ª veio do cache
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_timeout_serve_stale():
+    """Após um sucesso, um timeout posterior serve o cache stale — não [] (o bug
+    do teste #4: as MESMAS entidades davam timeout todo turno e sumiam do prompt)."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "x"}])
+    await b._buscar_rels_cached("maren")  # popula o cache
+    # expira o TTL forçando timestamp antigo
+    ts, val = b._rels_cache["maren"]
+    b._rels_cache["maren"] = (ts - 1_000_000.0, val)
+    # agora a consulta dá timeout
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    r = await b._buscar_rels_cached("maren")
+    assert r == [{"rel": "x"}]  # stale servido, não []
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_timeout_sem_cache_retorna_vazio():
+    """Timeout sem nenhum cache prévio → [] (cold start; tenta de novo no próximo turno)."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    r = await b._buscar_rels_cached("dalla")
+    assert r == []
+    assert "dalla" not in b._rels_cache  # não cacheia o timeout — retry permitido
