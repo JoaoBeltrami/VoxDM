@@ -67,7 +67,18 @@ class CombatState:
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def entrar(self) -> None:
-        """Ativa modo combate. Resetta toda estrutura tática."""
+        """Ativa modo combate. Resetta toda estrutura tática.
+
+        IDEMPOTENTE: se já estamos em combate, não faz nada. Antes do fix de
+        13/06, `entrar_combate()` era chamado em TODO turno de ataque
+        (websocket: `if _RE_COMBATE.search(texto_jogador): entrar_combate()`),
+        re-zerando `iniciativa_cache` (warning `iniciativa_fallback` a cada
+        turno + InitiativeBar saltando), `rodada_combate` (voltava pra 1 a cada
+        golpe → pacing/rodada nunca avançavam) e `posicoes_combate`/movimento.
+        Reentrar só faz sentido vindo de FORA de combate.
+        """
+        if self.em_combate:
+            return
         self.em_combate = True
         self.rodada_combate = 1
         self.rodadas_sem_acao_inimigo = 0

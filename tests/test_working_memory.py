@@ -148,6 +148,24 @@ def test_sair_combate_reseta_tudo():
     assert wm.inimigos_combate == {}
     assert wm.saiu_combate_recentemente is True
 
+def test_entrar_combate_idempotente_preserva_estado():
+    """Regressão (13/06): entrar_combate() era chamado em TODO turno de ataque
+    no websocket e re-zerava iniciativa_cache + rodada_combate. Já em combate,
+    chamar de novo NÃO pode resetar nada — só sair_combate() reseta."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin")
+    wm.popular_iniciativa()
+    wm.rodada_combate = 4
+    cache_antes = dict(wm.iniciativa_cache)
+    assert cache_antes  # iniciativa populada
+
+    wm.entrar_combate()  # 2ª chamada já em combate — deve ser no-op
+
+    assert wm.rodada_combate == 4                       # não voltou pra 1
+    assert wm.iniciativa_cache == cache_antes           # cache preservado
+    assert "goblin-1" in wm.inimigos_combate            # inimigos preservados
+
 def test_avancar_rodada_incrementa():
     wm = _wm()
     wm.entrar_combate()

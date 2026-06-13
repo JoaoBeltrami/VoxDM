@@ -772,17 +772,25 @@ async def _beat_turno_inimigo(
     try:
         from engine.llm.tasks import TaskType
 
+        # Nome do personagem — o beat narra na 3ª pessoa COM o nome, nunca "o
+        # jogador" (teste 13/06: "O jogador respira aliviado" quebrava a imersão,
+        # misturando a pessoa real com o personagem).
+        nome_pj = (wm.player_name or "").strip() or "o herói"
         system = (
-            "Você é o Mestre conduzindo APENAS o turno dos INIMIGOS — o jogador "
-            "já agiu; NÃO aja nem fale por ele.\n"
+            f"Você é o Mestre narrando APENAS o turno dos INIMIGOS contra "
+            f"{nome_pj}. O turno de {nome_pj} já aconteceu — NÃO aja, role nem "
+            f"fale por {nome_pj}, e NUNCA escreva 'o jogador' (refira-se sempre "
+            f"a {nome_pj} pelo nome ou em 2ª pessoa).\n"
             f"{wm.para_texto()}\n"
-            f"CA do jogador: {wm.ca}. HP do jogador: {wm.player_hp}/{wm.player_hp_max}.\n"
+            f"CA de {nome_pj}: {wm.ca}. HP: {wm.player_hp}/{wm.player_hp_max}.\n"
             "Cada inimigo vivo age UMA vez: ataque (rolagem interna vs CA), "
             "reposicionamento ou manobra coerente com a ficha. Acertou → narre o "
             "golpe e emita [DANO: -N motivo]; errou → narre o quase. Use "
             "[POSICAO]/[INIMIGO_MORTO] se aplicável. PT-BR falado, 2-4 frases, "
-            "máximo 70 palavras, sem markdown. Termine devolvendo a iniciativa "
-            "ao jogador — tensão, não pergunta retórica."
+            "máximo 70 palavras, sem markdown. Termine na tensão da cena (o que "
+            "os inimigos fazem em seguida) — NUNCA anuncie 'iniciativa', 'sua "
+            f"vez' nem 'turno de {nome_pj}', e não faça pergunta retórica. A "
+            "engine controla a ordem de turno; você só narra o que os inimigos fazem."
         )
         texto_beat = await asyncio.wait_for(
             sessao.groq.completar(
@@ -791,7 +799,11 @@ async def _beat_turno_inimigo(
                     {"role": "user", "content": "Turno dos inimigos."},
                 ],
                 max_tokens=220,
-                task=TaskType.NARRATIVE,
+                # NARRATIVE_LIGHT (8B primeiro): o beat é uma narração curta e
+                # mecânica — não precisa do 70B. Tirar a 2ª chamada 70B/turno
+                # elimina a pressão de TPM que disparava 429 em combate longo
+                # (teste 13/06: 429 no 70B no meio da luta → cascata pro Gemini).
+                task=TaskType.NARRATIVE_LIGHT,
             ),
             timeout=25.0,
         )
@@ -1812,6 +1824,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             if era_session_zero and not sessao.working_mem.session_zero_ativa:
                 try:
                     _ch = sessao.working_mem.character
+                    # Repertório recém-gerado precisa ir pro cache da sessão: o
+                    # guard de cast (spells_lower) e a cópia pro contexto do
+                    # prompt leem de sessao.spells_conhecidas, não do character.
+                    sessao.spells_conhecidas = list(_ch.spells_conhecidas)
                     ficha_payload = {
                         "player_name": _ch.player_name,
                         "player_race": _ch.player_race,

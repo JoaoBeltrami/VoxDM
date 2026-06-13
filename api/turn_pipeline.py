@@ -466,7 +466,11 @@ def aplicar_pos_turno(
         m_ficha = _RE_FICHA.search(resposta_completa)
         if m_ficha:
             from engine.chargen import gerar_atributos, hit_die, hp_nivel, normalizar_classe
-            from engine.magic.spell_list import slots_padrao
+            from engine.magic.spell_list import (
+                limite_progressao,
+                slots_padrao,
+                spells_da_classe,
+            )
 
             ch = working_mem.character
             ch.player_name = m_ficha.group(1).strip()[:40]
@@ -484,6 +488,20 @@ def aplicar_pos_turno(
             ch.hit_dice_current = ch.player_level
             ch.spell_slots = slots_padrao(classe, ch.player_level)
             ch.inicializar_features_classe(classe, "")
+            # Repertório inicial para conjuradores — sem isto, spells_conhecidas
+            # fica vazio e (a) o guard de cast libera QUALQUER magia (a heurística
+            # `not spells_lower` vira True) e (b) o prompt não lista magia alguma,
+            # então o LLM deixa o jogador "inventar" feitiços fora da classe
+            # (teste 13/06: Paladino lançava bola de fogo). Damos toda a lista da
+            # classe até o nível de magia acessível — o jogador só conjura o que a
+            # classe dele realmente conhece. Não-conjuradores ficam com [] (nivel_max=0).
+            _lim = limite_progressao(classe, ch.player_level)
+            if _lim.get("nivel_max", 0) > 0:
+                ch.spells_conhecidas = [
+                    s.nome_pt
+                    for s in spells_da_classe(classe)
+                    if s.nivel <= _lim["nivel_max"]
+                ]
             working_mem.session_zero_ativa = False
             log.info(
                 "ficha_criada_session_zero",
@@ -579,7 +597,10 @@ def aplicar_pos_turno(
             if iid not in working_mem.iniciativa_cache
         ]
         if inimigos_sem_ini:
-            log.warning("iniciativa_fallback", inimigos=inimigos_sem_ini)
+            # debug, não warning: cair no fallback decrescente é o caminho
+            # ESPERADO (o LLM raramente propõe iniciativa numérica). Vira ruído
+            # de log a cada turno de combate sem indicar problema algum.
+            log.debug("iniciativa_fallback", inimigos=inimigos_sem_ini)
         working_mem.popular_iniciativa()
         # Volta o cursor visual pro JOGADOR — é a próxima vez que ele vai agir.
         # Bug R4-1: turno_atual_idx=0 sempre apontava para a posição 0 da lista,

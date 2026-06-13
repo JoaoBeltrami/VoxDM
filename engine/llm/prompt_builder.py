@@ -479,7 +479,11 @@ def montar_mensagens(
             secoes.append(f"\nREGRAS DE JOGO:\n{regras_texto}")
 
     # Guia de rolagem de dados — injetado apenas quando o jogador rola um dado
-    if _RE_ROLAGEM.search(contexto.transcricao_atual):
+    # E NÃO está em combate: combat.md (já injetado) cobre as 3 camadas de dados
+    # em combate, então somar dice.md por cima é redundante e estoura o budget de
+    # combate (~580 chars de duplicata — teste 13/06: prompt_excede_budget em
+    # TODO turno de combate com [Rolagem]). Fora de combate, dice.md é o único guia.
+    if _RE_ROLAGEM.search(contexto.transcricao_atual) and not _em_combate_ativo:
         dice_texto = _carregar_dice()
         if dice_texto:
             secoes.append(f"\n{dice_texto}")

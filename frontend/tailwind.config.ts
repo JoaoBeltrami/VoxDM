@@ -93,10 +93,13 @@ const config: Config = {
           "100%": { transform: "scale(1.8)", opacity: "0"   },
         },
         "crit-pop": {
-          "0%":   { transform: "scale(0.5)", opacity: "0"   },
-          "20%":  { transform: "scale(1.15)",opacity: "1"   },
-          "70%":  { transform: "scale(1)",   opacity: "1"   },
-          "100%": { transform: "scale(0.95)",opacity: "0"   },
+          // Hold longo (pico visível ~10%→82%): momentos dramáticos (crit "20"/"1",
+          // splash COMBATE, RODADA, ficha) precisam respirar. Teste 13/06:
+          // "animações muito curtas quando acontecem".
+          "0%":   { transform: "scale(0.5)",  opacity: "0"   },
+          "10%":  { transform: "scale(1.18)", opacity: "1"   },
+          "82%":  { transform: "scale(1.02)", opacity: "1"   },
+          "100%": { transform: "scale(0.96)", opacity: "0"   },
         },
         "fade-in": {
           "0%":   { opacity: "0", transform: "translateY(-4px)" },
@@ -125,10 +128,10 @@ const config: Config = {
           "100%": { transform: "scale(1.1)",  opacity: "0"   },
         },
         "sua-vez": {
-          "0%":   { transform: "scale(1)",    opacity: "0"   },
-          "20%":  { transform: "scale(1.18)", opacity: "1"   },
-          "65%":  { transform: "scale(1.08)", opacity: "0.7" },
-          "100%": { transform: "scale(1)",    opacity: "0"   },
+          "0%":   { transform: "scale(1)",    opacity: "0"    },
+          "12%":  { transform: "scale(1.18)", opacity: "1"    },
+          "78%":  { transform: "scale(1.08)", opacity: "0.85" },
+          "100%": { transform: "scale(1)",    opacity: "0"    },
         },
         "shake-cena": {
           "0%, 100%": { transform: "translateX(0)" },
@@ -163,7 +166,7 @@ const config: Config = {
         speak:             "speak 0.55s ease-in-out infinite",
         ripple:            "ripple 1.4s ease-out infinite",
         "ripple-delay":    "ripple-delay 1.4s ease-out 0.7s infinite",
-        "crit-pop":        "crit-pop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "crit-pop":        "crit-pop 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "fade-in":         "fade-in 400ms ease-out",
         "fade-in-up":      "fade-in-up 320ms cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-in-right":  "slide-in-right 200ms ease-out",
@@ -173,7 +176,7 @@ const config: Config = {
         "shake-cena":      "shake-cena 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
         "ganho-sobe":      "ganho-sobe 2s ease-out forwards",
         "morte-flash":     "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "sua-vez":         "sua-vez 0.8s ease-out forwards",
+        "sua-vez":         "sua-vez 1.3s ease-out forwards",
         "accent-glow-pulse": "accent-glow-pulse 2.2s ease-in-out infinite",
       },
     },
