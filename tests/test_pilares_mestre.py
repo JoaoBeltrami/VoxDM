@@ -923,3 +923,34 @@ async def test_extractor_falha_de_llm_devolve_none():
             raise RuntimeError("cascata esgotada")
 
     assert await extrair_estado_combate(_GroqQuebrado(), "Narração.", {}) is None
+
+
+# ── B2: fronts autorais → relógios de ameaça (Schema v2 → runtime) ─────────────
+
+def test_carregar_fronts_modulo_real():
+    from pathlib import Path
+
+    from engine.memory.quest_detector import carregar_fronts_modulo
+    p = str(Path(__file__).resolve().parents[1] / "modulo_teste" / "modulo_teste_v1.2.json")
+    fronts = carregar_fronts_modulo(p)
+    ids = {f["id"] for f in fronts}
+    assert "guerra-das-vilas" in ids
+    assert all({"id", "name", "segments", "filled"} <= set(f) for f in fronts)
+
+
+def test_carregar_fronts_modulo_ausente_vazio():
+    from engine.memory.quest_detector import carregar_fronts_modulo
+    assert carregar_fronts_modulo("/caminho/que/nao/existe.json") == []
+
+
+def test_criar_relogio_inicial_clampa():
+    wm = _wm()
+    assert wm.narrative.criar_relogio("c1", "Clock 1", 6, inicial=2) is True
+    assert wm.narrative.relogios["c1"]["atual"] == 2
+    # filled >= max → clampa a max-1 (não nasce cheio)
+    wm.narrative.criar_relogio("c2", "Clock 2", 6, inicial=99)
+    rel2 = wm.narrative.relogios["c2"]
+    assert rel2["atual"] == rel2["max"] - 1
+    # filled negativo → 0
+    wm.narrative.criar_relogio("c3", "Clock 3", 6, inicial=-5)
+    assert wm.narrative.relogios["c3"]["atual"] == 0

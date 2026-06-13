@@ -36,6 +36,15 @@ def test_modulo_real_tem_canon_v2():
     assert all(c.immutable for c in modulo.canon)
 
 
+def test_modulo_real_tem_fronts_v2():
+    """B2: o módulo ganhou fronts autorais (relógios de ameaça do Mundo Vivo)."""
+    dados = json.loads(_MODULO_V12.read_text(encoding="utf-8"))
+    modulo = validar_modulo(dados)
+    ids = {f.id for f in modulo.fronts}
+    assert "guerra-das-vilas" in ids
+    assert all(f.segments >= 1 for f in modulo.fronts)
+
+
 def test_connections_v12_lista_de_strings_normaliza():
     """v1.2: connections = ['tharnvik', ...] → vira Connection(to='tharnvik')."""
     modulo = validar_modulo({

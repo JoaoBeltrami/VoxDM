@@ -3,6 +3,10 @@
     { "fact": "Valdrek, o fundador, morreu há gerações — é lenda reverenciada, jamais pessoa viva. Um 'Valdrek' vivo é impostor ou o coração de um mistério, nunca um aliado casual.", "immutable": true },
     { "fact": "Após a morte de Valdrek, o reino partiu-se em três vilas rivais: Tharnvik, Kaelmund e Drevamor.", "immutable": true }
   ],
+  "fronts": [
+    { "id": "guerra-das-vilas", "name": "As três vilas marcham para a guerra", "segments": 6, "filled": 1 },
+    { "id": "divida-de-vyrmathax", "name": "Vyrmathax se prepara para cobrar a dívida antiga", "segments": 8, "filled": 0 }
+  ],
   "_meta": {
     "schema_version": "1.2",
     "converted_by": "Claude Opus 4.6",

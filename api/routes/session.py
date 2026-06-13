@@ -46,6 +46,7 @@ from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
     carregar_catalog_modulo,
     carregar_efeitos_modulo,
+    carregar_fronts_modulo,
     catalog_para_texto,
     detectar_e_aplicar_quests,
 )
@@ -204,6 +205,18 @@ async def iniciar_sessao(
     _quest_efeitos = carregar_efeitos_modulo(settings.DEFAULT_MODULE_PATH)
     _quests_modulo_txt = catalog_para_texto(_quest_catalog)
     working_mem.quests_modulo = _quests_modulo_txt
+
+    # Schema v2 — fronts autorais viram relógios de ameaça já no turno 1 (pilar
+    # Mundo Vivo). SÓ em sessão NOVA: uma sessão continuada restaura seus próprios
+    # relógios (com o progresso que já tinham) — re-semear zeraria a ameaça.
+    if not config.session_anterior_id:
+        for _front in carregar_fronts_modulo(settings.DEFAULT_MODULE_PATH):
+            working_mem.narrative.criar_relogio(
+                str(_front["id"]),
+                str(_front["name"]),
+                segmentos=int(_front["segments"]),  # type: ignore[call-overload]
+                inicial=int(_front["filled"]),       # type: ignore[call-overload]
+            )
 
     sessao = SessaoAtiva(
         session_id=config.session_id,

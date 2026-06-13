@@ -77,6 +77,42 @@ def carregar_catalog_modulo(modulo_path: str) -> dict[str, list[str]]:
         return {}
 
 
+def carregar_fronts_modulo(modulo_path: str) -> list[dict[str, object]]:
+    """Carrega os fronts (relógios de ameaça autorais) de um módulo — Schema v2.
+
+    Returns:
+        Lista de {id, name, segments, filled} válidos. Vazio se o módulo não
+        declara `fronts` (v1.2 puro) ou se o arquivo não existir/for inválido.
+        Entradas sem id/name são puladas.
+    """
+    import json
+    from pathlib import Path
+
+    path = Path(modulo_path)
+    if not path.exists():
+        return []
+    try:
+        dados = json.loads(path.read_text(encoding="utf-8"))
+        fronts: list[dict[str, object]] = []
+        for f in dados.get("fronts", []):
+            fid = str(f.get("id", "")).strip()
+            nome = str(f.get("name", "")).strip()
+            if not fid or not nome:
+                continue
+            fronts.append({
+                "id": fid,
+                "name": nome,
+                "segments": int(f.get("segments", 6) or 6),
+                "filled": int(f.get("filled", 0) or 0),
+            })
+        if fronts:
+            log.info("fronts_modulo_carregados", total=len(fronts))
+        return fronts
+    except Exception as e:
+        log.warning("fronts_modulo_falhou", erro=str(e))
+        return []
+
+
 def catalog_para_texto(catalog: dict[str, list[str]]) -> str:
     """Serializa o catálogo para texto compacto injetado no prompt do LLM.
 

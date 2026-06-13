@@ -153,21 +153,26 @@ class NarrativeState:
 
     # ── Relógios de Ameaça (fronts) ──────────────────────────────────────────
 
-    def criar_relogio(self, relogio_id: str, nome: str, segmentos: int = 6) -> bool:
+    def criar_relogio(
+        self, relogio_id: str, nome: str, segmentos: int = 6, inicial: int = 0
+    ) -> bool:
         """Cria relógio de ameaça (idempotente por id; máx 4 relógios ativos).
 
         Segmentos clampados em [3, 8] — abaixo de 3 estoura rápido demais,
-        acima de 8 o jogador nunca vê a ameaça se concretizar.
+        acima de 8 o jogador nunca vê a ameaça se concretizar. `inicial` permite
+        um front autoral (Schema v2) começar parcialmente preenchido — clampado
+        a [0, max-1] (um relógio que já nasce cheio não faria sentido).
         """
         relogio_id = relogio_id.strip().lower()
         if not relogio_id or relogio_id in self.relogios:
             return False
         if len(self.relogios) >= 4:
             return False
+        seg_max = max(3, min(8, int(segmentos)))
         self.relogios[relogio_id] = {
             "nome": nome.strip()[:60] or relogio_id,
-            "atual": 0,
-            "max": max(3, min(8, int(segmentos))),
+            "atual": max(0, min(seg_max - 1, int(inicial))),
+            "max": seg_max,
         }
         return True
 
