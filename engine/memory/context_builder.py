@@ -52,6 +52,15 @@ _TRUST_PADRAO = 2
 _QUERY_CURTA_LIMITE = 5
 
 
+# TTL do cache de relações Neo4j. Relações de lore (quem-conhece-quem, facções)
+# são IMUTÁVEIS durante a sessão — só [AFETO] muda estado afetivo, que não passa
+# por aqui. TTL longo ⇒ na prática "1 fetch bem-sucedido por entidade por sessão".
+# Era 300s, curto demais: a MESMA entidade re-buscava e dava timeout a cada ~5min
+# numa AuraDB free fria (teste #4: neo4j_timeout em aldric/maren/dalla quase todo
+# turno). Como o ContextBuilder é per-sessão, isto basta.
+_TTL_RELS_CACHE = 1800.0
+
+
 class ContextBuilder:
     """
     Orquestra a montagem do contexto de 3 camadas para cada turno de jogo.
@@ -69,9 +78,10 @@ class ContextBuilder:
         self._qdrant = QdrantMemoryClient()
         self._neo4j = Neo4jMemoryClient()
         self._schema_cache: dict[str, Any] | None = None
-        # Cache de relações Neo4j (teste #3: as MESMAS 3 entidades eram
-        # consultadas TODO turno — ~1.4s desperdiçados). TTL de 300s: relações
-        # do grafo mudam raramente (afeto via [AFETO] tolera staleness).
+        # Cache de relações Neo4j (teste #3/#4: as MESMAS 3 entidades eram
+        # consultadas TODO turno — ~2s desperdiçados em timeout). TTL longo
+        # (_TTL_RELS_CACHE) + stale-while-revalidate no _buscar_rels: uma vez
+        # buscado com sucesso, a entidade não re-consulta nem volta a dar timeout.
         self._rels_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
     def _carregar_schema(self) -> dict[str, Any]:
@@ -173,6 +183,39 @@ class ContextBuilder:
 
         # Condição folha — sem filhos
         return self._avaliar_condicao_simples(cond, working_mem)
+
+    # ── Relações do grafo (cache + stale-while-revalidate) ────────────────────
+
+    async def _buscar_rels_cached(self, entidade_id: str) -> list[dict[str, Any]]:
+        """Relações de uma entidade no Neo4j, com cache per-sessão.
+
+        Relações de lore são imutáveis na sessão → cache de TTL longo
+        (_TTL_RELS_CACHE): após 1 fetch bem-sucedido, a entidade não re-consulta.
+        Em timeout/erro, serve o último valor bom (stale-while-revalidate) em vez
+        de [] — a AuraDB free é fria/lenta e timeouts são transitórios; sem isto,
+        as MESMAS entidades davam timeout TODO turno (teste #4) e sumiam do prompt.
+        """
+        agora = time.monotonic()
+        em_cache = self._rels_cache.get(entidade_id)
+        if em_cache is not None and agora - em_cache[0] < _TTL_RELS_CACHE:
+            return em_cache[1]
+        try:
+            rels = await asyncio.wait_for(
+                self._neo4j.buscar_relacionamentos(entidade_id),
+                timeout=2.0,
+            )
+            self._rels_cache[entidade_id] = (agora, rels)
+            return rels
+        except TimeoutError:
+            if em_cache is not None:
+                return em_cache[1]  # stale-while-revalidate
+            log.warning("neo4j_timeout", entidade=entidade_id)
+            return []
+        except Exception as e:
+            if em_cache is not None:
+                return em_cache[1]
+            log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
+            return []
 
     # ── Avaliação de secrets ──────────────────────────────────────────────────
 
@@ -385,29 +428,11 @@ class ContextBuilder:
         # ── Relações do grafo (paralelo) ──────────────────────────────────────
         # Antes: 4 chamadas Neo4j sequenciais com timeout 2s cada (até 8s no pior caso).
         # Agora: gather com timeout 2s — pior caso é 2s independente de N entidades.
-        async def _buscar_rels(entidade_id: str) -> list[dict[str, Any]]:
-            agora = time.monotonic()
-            em_cache = self._rels_cache.get(entidade_id)
-            if em_cache is not None and agora - em_cache[0] < 300.0:
-                return em_cache[1]
-            try:
-                rels = await asyncio.wait_for(
-                    self._neo4j.buscar_relacionamentos(entidade_id),
-                    timeout=2.0,
-                )
-                self._rels_cache[entidade_id] = (agora, rels)
-                return rels
-            except TimeoutError:
-                log.warning("neo4j_timeout", entidade=entidade_id)
-                return []
-            except Exception as e:
-                log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
-                return []
-
+        # O cache + stale-while-revalidate vive em _buscar_rels_cached.
         relacoes: list[dict[str, Any]] = []
         if ids_para_grafo:
             resultados_neo4j = await asyncio.gather(
-                *(_buscar_rels(eid) for eid in ids_para_grafo[:4]),
+                *(self._buscar_rels_cached(eid) for eid in ids_para_grafo[:4]),
                 return_exceptions=False,  # exceções já tratadas no helper
             )
             for rels in resultados_neo4j:

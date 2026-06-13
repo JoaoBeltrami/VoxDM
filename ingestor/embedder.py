@@ -14,6 +14,7 @@ Exemplo:
 """
 
 import os
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -83,54 +84,61 @@ MODELO_NOME: str = settings.EMBEDDING_MODEL
 VECTOR_SIZE = 384
 BATCH_SIZE = 64
 
+# Modelo PROCESS-WIDE (não por instância). Teste ao vivo #4 (13/06): o modelo
+# recarregava (~3s de stall) no meio da sessão — turno 5 e em combate — porque
+# cada QdrantMemoryClient (context_builder, bestiário, session_writer…) criava um
+# Embedder com seu PRÓPRIO _modelo. O lock do hotfix #3 só resolvia a corrida
+# DENTRO de uma instância. Singleton de módulo: o SentenceTransformer carrega uma
+# única vez por processo e é compartilhado por todas as instâncias de Embedder.
+_modelo_global: SentenceTransformer | None = None
+_device_global: str = "desconhecido"
+_lock_global = threading.Lock()
+
 
 class Embedder:
     """
     Wrapper do modelo sentence-transformers com lazy loading e fallback CPU.
 
-    Mantém o modelo em memória após o primeiro uso — criar uma instância
-    por processo, não por chamada.
+    O modelo subjacente é um singleton process-wide (`_modelo_global`): criar
+    quantas instâncias de Embedder quiser — todas compartilham o mesmo modelo,
+    carregado uma única vez.
     """
 
     def __init__(self) -> None:
-        self._modelo: SentenceTransformer | None = None
-        self._device: str = "desconhecido"
-        # Teste ao vivo #3 (12/06): duas buscas paralelas (modules+episodic)
-        # inicializaram o lazy load em RACE — dois SentenceTransformer carregados
-        # simultaneamente, 10s de stall no turno. Lock + double-check resolve.
-        import threading
-        self._lock = threading.Lock()
+        # Espelha o device do modelo global após o primeiro load (para a property).
+        self._device: str = _device_global
 
     def _carregar_modelo(self) -> SentenceTransformer:
-        """Carrega o modelo na primeira chamada. Tenta CUDA, cai para CPU.
+        """Devolve o modelo global, carregando-o (1×/processo) na primeira chamada.
 
-        O load acontece dentro de _hf_offline_temporario() — suprime a checagem
-        de adapter PEFT do transformers que falha em contexto asyncio, sem
-        deixar o flag offline permanente no processo.
+        Tenta CUDA, cai para CPU. O load acontece dentro de
+        _hf_offline_temporario() — suprime a checagem de adapter PEFT do
+        transformers que falha em contexto asyncio, sem deixar o flag offline
+        permanente no processo. Lock + double-check evitam corrida entre buscas
+        paralelas (modules+episodic) que antes carregavam dois modelos.
         """
-        if self._modelo is not None:
-            return self._modelo
+        global _modelo_global, _device_global
+        if _modelo_global is not None:
+            self._device = _device_global
+            return _modelo_global
 
-        with self._lock:
-            if self._modelo is not None:  # double-check: outro thread carregou
-                return self._modelo
-            return self._carregar_modelo_locked()
-
-    def _carregar_modelo_locked(self) -> SentenceTransformer:
-        """Carrega o modelo — chamado SEMPRE sob self._lock."""
-        with _hf_offline_temporario():
-            try:
-                modelo = SentenceTransformer(MODELO_NOME, device="cuda")
-                self._device = "cuda"
-                log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cuda")
-            except Exception:
-                log.warning("embedder_cuda_indisponivel", fallback="cpu")
-                modelo = SentenceTransformer(MODELO_NOME, device="cpu")
-                self._device = "cpu"
-                log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cpu")
-
-        self._modelo = modelo
-        return self._modelo
+        with _lock_global:
+            if _modelo_global is not None:  # double-check: outro thread carregou
+                self._device = _device_global
+                return _modelo_global
+            with _hf_offline_temporario():
+                try:
+                    modelo = SentenceTransformer(MODELO_NOME, device="cuda")
+                    _device_global = "cuda"
+                    log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cuda")
+                except Exception:
+                    log.warning("embedder_cuda_indisponivel", fallback="cpu")
+                    modelo = SentenceTransformer(MODELO_NOME, device="cpu")
+                    _device_global = "cpu"
+                    log.info("embedder_modelo_carregado", modelo=MODELO_NOME, device="cpu")
+            _modelo_global = modelo
+            self._device = _device_global
+            return _modelo_global
 
     def gerar(
         self,
