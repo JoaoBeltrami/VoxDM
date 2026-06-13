@@ -954,3 +954,19 @@ def test_criar_relogio_inicial_clampa():
     # filled negativo → 0
     wm.narrative.criar_relogio("c3", "Clock 3", 6, inicial=-5)
     assert wm.narrative.relogios["c3"]["atual"] == 0
+
+
+def test_carregar_agendas_modulo_real():
+    from pathlib import Path
+
+    from engine.memory.quest_detector import carregar_agendas_modulo
+    p = str(Path(__file__).resolve().parents[1] / "modulo_teste" / "modulo_teste_v1.2.json")
+    agendas = carregar_agendas_modulo(p)
+    assert "bjorn-tharnsson" in agendas
+    assert "Tharnvik" in agendas["bjorn-tharnsson"]
+    assert all(len(v) <= 200 for v in agendas.values())
+
+
+def test_carregar_agendas_modulo_ausente_vazio():
+    from engine.memory.quest_detector import carregar_agendas_modulo
+    assert carregar_agendas_modulo("/nao/existe.json") == {}
