@@ -204,6 +204,27 @@ def test_montar_mensagens_com_rolagem_injeta_dice():
     assert "fumble" in system.lower() or "d20" in system
 
 
+def test_canon_modulo_injetado_no_prompt():
+    """Bridge B2: fatos de canon do módulo (Schema v2) entram no prompt como
+    'FATOS CANÔNICOS', data-driven — separados da regra genérica (canon.md)."""
+    invalidar_cache()
+    contexto = _contexto_minimo()
+    contexto.canon_modulo = ["Valdrek morreu há gerações", "Três vilas rivais"]
+    system = montar_mensagens(contexto)[0]["content"]
+    assert "FATOS CANÔNICOS" in system
+    assert "Valdrek morreu há gerações" in system
+    assert "Três vilas rivais" in system
+
+
+def test_canon_modulo_vazio_nao_injeta_secao():
+    invalidar_cache()
+    contexto = _contexto_minimo()  # canon_modulo default []
+    system = montar_mensagens(contexto)[0]["content"]
+    assert "FATOS CANÔNICOS" not in system
+    # a REGRA genérica continua presente
+    assert "Canon inviolável" in system
+
+
 def test_montar_mensagens_em_combate_nao_injeta_dice():
     """Regressão (13/06): dice.md era injetado SOBRE combat.md em turnos de
     combate com [Rolagem], duplicando o protocolo de dados e estourando o budget

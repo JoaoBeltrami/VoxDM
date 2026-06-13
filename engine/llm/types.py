@@ -148,3 +148,7 @@ class ContextoMontado:
     # na criação. Injetadas no prompt como restrição de repertório.
     # Populadas em api/websocket.py a partir de SessaoAtiva.spells_conhecidas.
     spells_conhecidas: list[str] = field(default_factory=list)
+    # Canon do módulo (Schema v2): fatos imutáveis declarados pelo AUTOR
+    # (ex: "Valdrek está morto há gerações"). Injetados no prompt junto da regra
+    # genérica de canon — data-driven, não hardcoded. Populado pelo context_builder.
+    canon_modulo: list[str] = field(default_factory=list)

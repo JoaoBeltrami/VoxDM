@@ -373,12 +373,19 @@ def montar_mensagens(
             secoes.append(voz_dupla)
             chars_voz_dupla = len(voz_dupla)
 
-    # Canon do módulo — sempre injetado (curto): mortos continuam mortos,
-    # segredos exigem conquista. Sem isto o LLM "ressuscita" figuras canônicas
-    # pra agradar o jogador (teste #3).
+    # Canon — duas camadas. (1) A REGRA genérica (canon.md): mortos continuam
+    # mortos, segredos saem por conquista, canon não muda pra agradar o jogador.
+    # (2) Os FATOS específicos deste módulo (Schema v2 `canon`, data-driven via
+    # context_builder) — ex: "Valdrek está morto há gerações". Sem isto o LLM
+    # "ressuscita" figuras canônicas (teste #3). A regra é engine-wide; os fatos
+    # são do autor do módulo.
     canon = _ler_prompt(_FRAG_CANON)
     if canon:
         secoes.append(canon)
+    fatos_canon = getattr(contexto, "canon_modulo", [])
+    if fatos_canon:
+        linhas_canon = "\n".join(f"• {f}" for f in fatos_canon)
+        secoes.append(f"\nFATOS CANÔNICOS DESTE MUNDO (imutáveis):\n{linhas_canon}")
 
     # Markers list: injeta só quando a cena tem ritmo dramático (em combate,
     # pacing alto, cliffhanger, fios ou agendas ativos). Em exploração calma

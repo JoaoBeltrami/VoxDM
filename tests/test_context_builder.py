@@ -314,3 +314,27 @@ async def test_buscar_rels_timeout_sem_cache_retorna_vazio():
     r = await b._buscar_rels_cached("dalla")
     assert r == []
     assert "dalla" not in b._rels_cache  # não cacheia o timeout — retry permitido
+
+
+# ── Testes: canon do módulo (Schema v2, bridge B2) ──────────────────────────────
+
+def test_carregar_canon_aceita_objetos_e_strings():
+    b = ContextBuilder.__new__(ContextBuilder)
+    b._schema_cache = {"canon": [
+        {"fact": "Valdrek está morto", "immutable": True},
+        "Três vilas rivais",
+        {"fact": "   "},   # vazio → ignorado
+    ]}
+    assert b._carregar_canon() == ["Valdrek está morto", "Três vilas rivais"]
+
+
+def test_carregar_canon_vazio_sem_secao():
+    b = ContextBuilder.__new__(ContextBuilder)
+    b._schema_cache = {}
+    assert b._carregar_canon() == []
+
+
+def test_carregar_canon_cap_8():
+    b = ContextBuilder.__new__(ContextBuilder)
+    b._schema_cache = {"canon": [{"fact": f"f{i}"} for i in range(20)]}
+    assert len(b._carregar_canon()) == 8
