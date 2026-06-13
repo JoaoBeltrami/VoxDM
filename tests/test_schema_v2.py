@@ -27,6 +27,15 @@ def test_modulo_v12_real_valida_como_v2():
     assert modulo.locations and modulo.npcs and modulo.secrets
 
 
+def test_modulo_real_tem_canon_v2():
+    """B2: o módulo Valdrek ganhou a seção canon (fatos públicos imutáveis)."""
+    dados = json.loads(_MODULO_V12.read_text(encoding="utf-8"))
+    modulo = validar_modulo(dados)
+    assert modulo.canon, "módulo deveria declarar canon"
+    assert any("Valdrek" in c.fact for c in modulo.canon)
+    assert all(c.immutable for c in modulo.canon)
+
+
 def test_connections_v12_lista_de_strings_normaliza():
     """v1.2: connections = ['tharnvik', ...] → vira Connection(to='tharnvik')."""
     modulo = validar_modulo({

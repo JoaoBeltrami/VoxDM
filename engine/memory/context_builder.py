@@ -184,6 +184,27 @@ class ContextBuilder:
         # Condição folha — sem filhos
         return self._avaliar_condicao_simples(cond, working_mem)
 
+    # ── Canon do módulo (Schema v2) ───────────────────────────────────────────
+
+    def _carregar_canon(self) -> list[str]:
+        """Fatos de canon imutáveis declarados pelo módulo (Schema v2 `canon`).
+
+        Aceita a forma v2 (lista de {fact, immutable}) e strings soltas. Vazio se
+        o módulo não declara canon (v1.2 puro) — a regra genérica (canon.md)
+        segue valendo. Cap defensivo de 8 fatos para não inflar o prompt.
+        """
+        schema = self._carregar_schema()
+        bruto = schema.get("canon") or []
+        fatos: list[str] = []
+        for item in bruto:
+            if isinstance(item, dict):
+                texto = str(item.get("fact", "")).strip()
+            else:
+                texto = str(item).strip()
+            if texto:
+                fatos.append(texto)
+        return fatos[:8]
+
     # ── Relações do grafo (cache + stale-while-revalidate) ────────────────────
 
     async def _buscar_rels_cached(self, entidade_id: str) -> list[dict[str, Any]]:
@@ -449,6 +470,7 @@ class ContextBuilder:
             relacoes_grafo=relacoes,
             secrets_visiveis=secrets,
             transcricao_atual=transcricao,
+            canon_modulo=self._carregar_canon(),
         )
 
         log.info(

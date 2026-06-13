@@ -1,4 +1,8 @@
 {
+  "canon": [
+    { "fact": "Valdrek, o fundador, morreu há gerações — é lenda reverenciada, jamais pessoa viva. Um 'Valdrek' vivo é impostor ou o coração de um mistério, nunca um aliado casual.", "immutable": true },
+    { "fact": "Após a morte de Valdrek, o reino partiu-se em três vilas rivais: Tharnvik, Kaelmund e Drevamor.", "immutable": true }
+  ],
   "_meta": {
     "schema_version": "1.2",
     "converted_by": "Claude Opus 4.6",
