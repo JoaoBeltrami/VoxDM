@@ -6,11 +6,11 @@ import {
   encerrarSessao,
   checkpointSessao,
   wsUrl,
-  type MensagemWS,
   type PersonagemConfig,
   type SpellSlot,
   type TokenIniciativa,
 } from "@/lib/api";
+import { parseMensagemWS } from "@/lib/ws-schema";
 import { useAudio } from "@/hooks/useAudio";
 
 /** Converte erros técnicos vindos do server em frases narrativas pro jogador.
@@ -395,27 +395,13 @@ export function useGameSession() {
     };
 
     ws.onmessage = (ev) => {
-      // F0 (robustez): fronteira WS validada — payload malformado NUNCA pode
-      // derrubar a UI. Era `JSON.parse` com cast cego; um server bugado/versão
-      // velha crashava a sessão inteira. (Schema zod completo com inferência
-      // de tipos fica pro F2 — este guard cobre o caso catastrófico hoje.)
-      let msg: MensagemWS;
-      try {
-        msg = JSON.parse(ev.data);
-      } catch {
-        console.warn("[VoxDM] mensagem WS não-JSON descartada");
-        return;
-      }
-      if (!msg || typeof msg.tipo !== "string") {
-        console.warn("[VoxDM] mensagem WS sem 'tipo' descartada");
-        return;
-      }
-      // Cap de áudio: ~2.8M chars de base64 ≈ 2MB de MP3 ≈ minutos de fala.
-      // Acima disso é bug ou abuso — decodificar congelaria a aba.
-      if (msg.conteudo_b64 && msg.conteudo_b64.length > 2_800_000) {
-        console.warn("[VoxDM] audio_chunk acima do teto (2MB) descartado");
-        return;
-      }
+      // F0-a (robustez): fronteira WS validada por zod — payload malformado
+      // NUNCA pode derrubar a UI cujo coração é não interromper a narração.
+      // parseMensagemWS valida o discriminador `tipo`, tipa os campos críticos
+      // e impõe o teto de áudio base64 (anti-OOM) antes do decode; inválido →
+      // null (descartado com warn, sem crash). Ver lib/ws-schema.ts.
+      const msg = parseMensagemWS(ev.data);
+      if (!msg) return;
 
       if (msg.tipo === "audio_chunk" && msg.conteudo_b64) {
         // CRIT-2: passa narrativo=false em chunks de thinking ("Hmm...") para
