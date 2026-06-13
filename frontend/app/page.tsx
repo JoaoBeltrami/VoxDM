@@ -410,7 +410,7 @@ export default function Home() {
       // Mestre acabou de falar → sinaliza turno do jogador
       setSuaVezGlow(true);
       if (suaVezTimerRef.current) clearTimeout(suaVezTimerRef.current);
-      suaVezTimerRef.current = setTimeout(() => setSuaVezGlow(false), 800);
+      suaVezTimerRef.current = setTimeout(() => setSuaVezGlow(false), 1300);
       // Crystal ping via Web Audio API — zero deps de arquivo
       try {
         const pingCtx = new AudioContext();
@@ -657,7 +657,7 @@ export default function Home() {
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
     if (critTimerRef.current) clearTimeout(critTimerRef.current);
     setCritFlash(tipo);
-    critTimerRef.current = setTimeout(() => setCritFlash(null), 1200);
+    critTimerRef.current = setTimeout(() => setCritFlash(null), 1800);
     if (tipo === "crit") tocarCritico();
     else tocarFalha();
   }, [tocarCritico, tocarFalha]);
@@ -854,10 +854,11 @@ export default function Home() {
       setActionEconomyFlash(true);
       if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current);
       actionEconomyFlashTimerRef.current = setTimeout(() => setActionEconomyFlash(false), 700);
-      // Splash central da rodada — 1.4s, mesmo ciclo de vida do flash dos chips
+      // Splash central da rodada — 1.8s, casa com a duração nova de crit-pop
+      // (timer curto demais cortava o overlay no meio da animação).
       setRodadaSplash(rodadaCombate);
       if (rodadaSplashTimerRef.current) clearTimeout(rodadaSplashTimerRef.current);
-      rodadaSplashTimerRef.current = setTimeout(() => setRodadaSplash(null), 1_400);
+      rodadaSplashTimerRef.current = setTimeout(() => setRodadaSplash(null), 1_800);
     }
     return () => {
       if (actionEconomyFlashTimerRef.current) clearTimeout(actionEconomyFlashTimerRef.current);
@@ -1129,7 +1130,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Splash "RODADA N" — virada de rodada em combate, 1.4s */}
+        {/* Splash "RODADA N" — virada de rodada em combate, 1.8s */}
         {rodadaSplash !== null && !battleSplash && (
           <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
             <div className="animate-crit-pop text-center font-display">
@@ -1143,7 +1144,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Overlay de crítico / falha crítica — 1.2s */}
+        {/* Overlay de crítico / falha crítica — 1.8s */}
         {critFlash && (
           <div className={`pointer-events-none fixed inset-0 z-50 flex items-center justify-center ${
             critFlash === "crit" ? "bg-violet-500/10" : "bg-red-900/15"

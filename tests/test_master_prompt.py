@@ -204,6 +204,20 @@ def test_montar_mensagens_com_rolagem_injeta_dice():
     assert "fumble" in system.lower() or "d20" in system
 
 
+def test_montar_mensagens_em_combate_nao_injeta_dice():
+    """Regressão (13/06): dice.md era injetado SOBRE combat.md em turnos de
+    combate com [Rolagem], duplicando o protocolo de dados e estourando o budget
+    (prompt_excede_budget em todo turno de combate). Em combate, combat.md já
+    cobre as 3 camadas de dados — dice.md não deve ser somado."""
+    invalidar_cache()
+    contexto = _contexto_minimo("[Rolagem: d20 = 17]")
+    contexto.working_memory.entrar_combate()
+    mensagens = montar_mensagens(contexto)
+    system = mensagens[0]["content"]
+    # "Escala de narração" é exclusivo do dice.md — ausente confirma que não foi injetado
+    assert "Escala de narração" not in system
+
+
 def test_montar_mensagens_com_critico_injeta_dice():
     invalidar_cache()
     contexto = _contexto_minimo("[Rolagem: d20 = 20 — CRÍTICO!]")

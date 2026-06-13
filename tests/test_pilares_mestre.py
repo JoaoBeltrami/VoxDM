@@ -601,6 +601,36 @@ def test_ficha_aplica_personagem_completo_e_desliga_modo():
     assert "provar seu valor" in ch.player_description
 
 
+def test_ficha_popula_repertorio_de_magias_para_conjurador():
+    """Regressão (13/06): Session Zero não populava spells_conhecidas → guard de
+    cast liberava QUALQUER magia (o LLM deixava o jogador inventar feitiços fora
+    da classe). Conjurador deve nascer com o repertório da classe; o nome só vale
+    como conhecido se for da lista."""
+    wm = _wm(session_zero=True)
+    aplicar_pos_turno(
+        wm, "Sou a Mira, uma maga.",
+        "Que comece. [FICHA: Mira|Humana|maga|aprendiz expulsa|provar seu valor]",
+    )
+    from engine.magic.spell_list import spells_da_classe
+
+    ch = wm.character
+    assert ch.spells_conhecidas, "Mago nível 3 precisa nascer com magias conhecidas"
+    # O repertório é estritamente um subconjunto da lista da classe — prova que é
+    # class-scoped, não arbitrário. Magia de fora (ex: de Clérigo) não entra.
+    nomes_classe = {s.nome_pt for s in spells_da_classe("mago")}
+    assert set(ch.spells_conhecidas) <= nomes_classe
+
+
+def test_ficha_nao_conjurador_sem_magias():
+    """Guerreiro não é conjurador — spells_conhecidas fica vazio (nivel_max=0)."""
+    wm = _wm(session_zero=True)
+    aplicar_pos_turno(
+        wm, "Sou Kael, um guerreiro.",
+        "Bem-vindo. [FICHA: Kael|Humano|guerreiro|soldado|vingança]",
+    )
+    assert wm.character.spells_conhecidas == []
+
+
 def test_ficha_ignorada_fora_da_session_zero():
     wm = _wm()  # session_zero=False
     aplicar_pos_turno(wm, "Oi.", "Beleza. [FICHA: Hacker|Robô|Mago|invasor|caos]")
