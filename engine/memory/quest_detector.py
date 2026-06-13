@@ -113,6 +113,36 @@ def carregar_fronts_modulo(modulo_path: str) -> list[dict[str, object]]:
         return []
 
 
+def carregar_agendas_modulo(modulo_path: str) -> dict[str, str]:
+    """Agendas de fundo dos NPCs declaradas no módulo (Schema v2 npc.agenda).
+
+    Returns:
+        dict[npc_id, plano] — planos de fundo que o autor definiu. Vazio se
+        nenhum NPC declara `agenda` (v1.2 puro) ou arquivo inválido. Plano
+        truncado a 200 chars.
+    """
+    import json
+    from pathlib import Path
+
+    path = Path(modulo_path)
+    if not path.exists():
+        return {}
+    try:
+        dados = json.loads(path.read_text(encoding="utf-8"))
+        agendas: dict[str, str] = {}
+        for npc in dados.get("npcs", []):
+            nid = str(npc.get("id", "")).strip()
+            plano = str(npc.get("agenda", "")).strip()
+            if nid and plano:
+                agendas[nid] = plano[:200]
+        if agendas:
+            log.info("agendas_modulo_carregadas", total=len(agendas))
+        return agendas
+    except Exception as e:
+        log.warning("agendas_modulo_falhou", erro=str(e))
+        return {}
+
+
 def catalog_para_texto(catalog: dict[str, list[str]]) -> str:
     """Serializa o catálogo para texto compacto injetado no prompt do LLM.
 

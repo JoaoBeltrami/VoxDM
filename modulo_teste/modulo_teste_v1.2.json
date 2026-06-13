@@ -188,6 +188,7 @@
   "npcs": [
     {
       "id": "bjorn-tharnsson",
+      "agenda": "Fazer Tharnvik ser reconhecida como dominante entre as três vilas; confunde proteção com controle, mas não quer destruir as outras.",
       "name": "Bjorn Tharnsson",
       "role": "lider-de-tharnvik",
       "personality": "Inteligente o suficiente para ser perigoso. Cultiva a imagem de bárbaro burro porque subestimação é vantagem. Calculista por trás da brutalidade aparente. Ama Tharnvik genuinamente, mas confunde proteção com controle. Não quer destruir as outras vilas — quer que reconheçam Tharnvik como dominante.",

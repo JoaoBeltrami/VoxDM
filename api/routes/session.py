@@ -44,6 +44,7 @@ from engine.memory.episodic_memory import EpisodicMemory
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.quest_detector import (
     aplicar_recompensas_avancos,
+    carregar_agendas_modulo,
     carregar_catalog_modulo,
     carregar_efeitos_modulo,
     carregar_fronts_modulo,
@@ -217,6 +218,12 @@ async def iniciar_sessao(
                 segmentos=int(_front["segments"]),  # type: ignore[call-overload]
                 inicial=int(_front["filled"]),       # type: ignore[call-overload]
             )
+        # Agendas de NPC autorais — planos de fundo desde o turno 1 (Mundo Vivo).
+        # Cap de 8 para não inflar o prompt (o sistema [AGENDA] do LLM acrescenta
+        # mais durante o jogo). Continuada restaura as próprias (não re-semeia).
+        _agendas = carregar_agendas_modulo(settings.DEFAULT_MODULE_PATH)
+        if _agendas:
+            working_mem.agenda_npcs = dict(list(_agendas.items())[:8])
 
     sessao = SessaoAtiva(
         session_id=config.session_id,
