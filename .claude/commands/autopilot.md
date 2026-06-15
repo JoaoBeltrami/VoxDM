@@ -55,4 +55,11 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
 
 - **Manual:** só digitar `/autopilot`.
 - **Em loop:** `/loop /autopilot` (auto-ritmado) — bom pra uma janela de algumas horas.
-- **Agendado (cron):** usar a skill `schedule` pra rodar `/autopilot` num horário. ⚠️ Como ele commita em `main`, confirme uma vez com o Beltrami que autopilot agendado tem standing-OK pra commitar local sem revisão prévia. Sem esse OK, o agendado só **abre branch + deixa relatório** (não merge).
+- **Agendado (cron):** usar a skill `schedule` pra rodar `/autopilot` num horário.
+- **Standing-OK de commit (decidido 13/06):** o Beltrami autorizou o autopilot
+  desacompanhado a **commitar local em `main`** (merge `--no-ff`) sem revisão
+  prévia — opção (A). Justificativa: **ainda NÃO há deploy**, então commit local
+  é reversível e de baixo risco. ⚠️ **Reavaliar quando houver deploy/produção**:
+  aí o desacompanhado deve voltar a só "abrir branch + relatório" (opção B). Os
+  portões verdes (pytest+tsc+ruff) continuam obrigatórios — standing-OK NÃO
+  dispensa teste; só dispensa a revisão humana prévia ao merge local.
