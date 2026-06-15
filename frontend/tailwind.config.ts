@@ -72,17 +72,17 @@ const config: Config = {
       },
       keyframes: {
         breathe: {
-          "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
-          "50%":       { transform: "scale(1.06)", opacity: "1"    },
-        },
-        listen: {
-          "0%, 100%": { transform: "scale(1)",    opacity: "0.9"  },
+          "0%, 100%": { transform: "scale(0.98)", opacity: "0.78" },
           "50%":       { transform: "scale(1.12)", opacity: "1"    },
         },
+        listen: {
+          "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
+          "50%":       { transform: "scale(1.18)", opacity: "1"    },
+        },
         speak: {
-          "0%, 100%": { transform: "rotate(-4deg) scale(1.02)" },
-          "25%":       { transform: "rotate(4deg)  scale(1.08)" },
-          "75%":       { transform: "rotate(-2deg) scale(1.05)" },
+          "0%, 100%": { transform: "rotate(-6deg) scale(1.04)" },
+          "25%":       { transform: "rotate(6deg)  scale(1.16)" },
+          "75%":       { transform: "rotate(-4deg) scale(1.09)" },
         },
         ripple: {
           "0%":   { transform: "scale(0.8)", opacity: "0.6" },
@@ -161,9 +161,9 @@ const config: Config = {
         },
       },
       animation: {
-        breathe:           "breathe 3.2s ease-in-out infinite",
-        listen:            "listen 0.9s ease-in-out infinite",
-        speak:             "speak 0.55s ease-in-out infinite",
+        breathe:           "breathe 2.4s ease-in-out infinite",
+        listen:            "listen 0.8s ease-in-out infinite",
+        speak:             "speak 0.5s ease-in-out infinite",
         ripple:            "ripple 1.4s ease-out infinite",
         "ripple-delay":    "ripple-delay 1.4s ease-out 0.7s infinite",
         "crit-pop":        "crit-pop 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",

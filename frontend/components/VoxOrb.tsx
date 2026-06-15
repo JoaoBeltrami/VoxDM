@@ -55,7 +55,7 @@ export function VoxOrb({ estado, tamanho = 96 }: Props) {
                 : estado === "processando"  ? tamanho * 1.25
                 : tamanho * 1.6,
           background: estado === "idle"
-            ? "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)"
+            ? "radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)"
             : estado === "ouvindo"
             ? "radial-gradient(circle, rgba(167,139,250,0.28) 0%, transparent 70%)"
             : estado === "processando"
