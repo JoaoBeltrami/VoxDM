@@ -94,23 +94,10 @@ export function MasterResponse({
             </Card>
           )}
 
-          {/* Recap — sépia âmbar */}
-          {turno.tipo === "recap" && turno.mestre && (
-            <Card
-              variant="bare"
-              elevation={1}
-              rounded="xl"
-              padding="md"
-              className="self-start w-full border-amber-900/40 bg-amber-950/20"
-            >
-              <p className="mb-1.5 font-display text-[10px] font-semibold uppercase tracking-widest text-amber-600/80">
-                Anteriormente…
-              </p>
-              <p className="font-atmospheric text-sm leading-relaxed text-amber-200/70">
-                {turno.mestre}
-              </p>
-            </Card>
-          )}
+          {/* Recap: NÃO renderizado aqui. Vive no banner âmbar de page.tsx
+              (textoRecap) — fonte única, com × dispensar + ▶ ouvir novamente +
+              auto-fade 30s. Antes era renderizado em DOBRO (banner + esta bolha).
+              O turno tipo="recap" segue no histórico só para o timeline/jornal. */}
 
           {/* Fala do jogador — roteiro: anotação itálica à direita; Mesa: balão */}
           {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.jogador && (

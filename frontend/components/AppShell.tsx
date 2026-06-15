@@ -82,10 +82,14 @@ export function AppShell({
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-vox-bg-base text-vox-text-primary">
-      {/* Background dinâmico — scene_image renderiza como blur de fundo full-screen */}
+      {/* Background dinâmico — scene_image como HERÓI cinematográfico (Palco C1).
+          Antes opacity-30 + blur-2xl = ambiente quase invisível (uma cena noturna
+          virava preto). Agora mais presença (0.5), blur menor (lg, lê-se a cena),
+          brightness pra erguer imagens escuras. A vinheta radial abaixo escurece
+          as bordas e mantém a narração (canto) legível. */}
       {backgroundUrl && (
         <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-30 blur-2xl saturate-150 transition-opacity duration-1000"
+          className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.5] blur-lg saturate-[1.4] brightness-110 transition-opacity duration-1000"
           style={{ backgroundImage: `url(${backgroundUrl})` }}
           aria-hidden
         />
