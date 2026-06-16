@@ -111,6 +111,37 @@ async def _send_json_seguro(ws: WebSocket, payload: dict[str, Any]) -> bool:
         return False
 
 
+# ── Sanitização do beat de inimigo (BEAT-MARKER-LEAK-1, playtest #6) ──────────
+# O beat roda no 8B (NARRATIVE_LIGHT), que às vezes emite o marcador MEIO-formatado
+# como prosa — "DANO: machadinha [6 - CA]. Shaw agora tem 14/20 HP." Isso NÃO casa
+# com strip_marcadores (não é `[DANO: ...]` bem-formado) e era lido em voz alta.
+# Removemos: keyword de marcador cru (sem colchete), colchete órfão e vazamento de
+# HP numérico, antes do TTS. Não toca no estado — só higieniza a fala.
+_RE_BEAT_KEYWORD_NU = re.compile(
+    r"(?:DANO|CURA|POSICAO|MOV|INIMIGO_MORTO|INIMIGO|XP|OURO|LOOT|PERDEU|FEATURE_GASTA)"
+    r"\s*:\s*[^.\n]*\.?"
+)
+_RE_BEAT_BRACKETS = re.compile(r"\[[^\]]*\]")
+_RE_BEAT_HP = re.compile(
+    r"[^.!?\n]*\b\d{1,3}\s*/\s*\d{1,3}\s*(?:HP|PV)\b[^.!?\n]*[.!?]?"
+)
+
+
+def _sanitizar_texto_beat(texto: str) -> str:
+    """Higieniza a narração do beat contra marcadores meio-formatados do 8B.
+
+    Aplicado DEPOIS de strip_marcadores (que já tira os bem-formados). Pega o que
+    escapa: `DANO: ...` cru, `[6 - CA]` órfão e frases de HP tipo `14/20 HP`.
+    """
+    t = _RE_BEAT_KEYWORD_NU.sub("", texto)
+    t = _RE_BEAT_HP.sub("", t)
+    t = _RE_BEAT_BRACKETS.sub("", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)        # colapsa espaços
+    t = re.sub(r"\s+([.!?,;])", r"\1", t)   # pontuação órfã colada à esquerda
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 # Limites de validação para sync_* — protegem contra payloads malformados ou
 # manipulação direta do WebSocket (campo numérico gigante poluindo a UI).
 _MAX_GOLD     = 1_000_000          # 1 milhão de PO já é roleplay
@@ -854,7 +885,9 @@ async def _beat_turno_inimigo(
         # Markers do beat valem de verdade: [DANO] reduz HP, mortes e posições
         # sincronizam. texto_jogador="" mantém pacing/rodada intocados (CRIT-4).
         aplicar_pos_turno(wm, "", texto_beat)
-        texto_limpo = strip_marcadores(texto_beat).strip()
+        # strip_marcadores tira os bem-formados; _sanitizar_texto_beat tira o que
+        # o 8B emite cru (BEAT-MARKER-LEAK-1) — sem isso o TTS lê "DANO: ...".
+        texto_limpo = _sanitizar_texto_beat(strip_marcadores(texto_beat)).strip()
         if not texto_limpo:
             return
         # Pseudo-stream por sentença — frontend/karaokê tratam como turno normal
