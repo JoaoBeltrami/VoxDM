@@ -459,6 +459,11 @@ class WorkingMemory:
     def fatos_ancora(self, v: list[str]) -> None: self.narrative.fatos_ancora = v
 
     @property
+    def quests_improvisadas(self) -> list[dict]: return self.narrative.quests_improvisadas
+    @quests_improvisadas.setter
+    def quests_improvisadas(self, v: list[dict]) -> None: self.narrative.quests_improvisadas = v
+
+    @property
     def log_consequencias(self) -> list[str]: return self.narrative.log_consequencias
     @log_consequencias.setter
     def log_consequencias(self, v: list[str]) -> None: self.narrative.log_consequencias = v
@@ -756,6 +761,13 @@ class WorkingMemory:
             ancoras = dm_state.get("fatos_ancora", [])
             if ancoras and not self.narrative.fatos_ancora:
                 self.narrative.fatos_ancora = list(ancoras)
+            # PLAY5-QUEST: missões improvisadas restauradas (só se vazias) — o
+            # Mestre não esquece o que prometeu ao reconectar/após crash.
+            qimprov = dm_state.get("quests_improvisadas", [])
+            if qimprov and not self.narrative.quests_improvisadas:
+                self.narrative.quests_improvisadas = [
+                    dict(q) for q in qimprov if isinstance(q, dict) and q.get("id")
+                ]
             pacing = dm_state.get("pacing_nivel")
             if isinstance(pacing, (int, float)) and pacing != 3.0:
                 # Só restaura se diferente do default — evita sobrescrever valor

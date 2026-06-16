@@ -174,6 +174,126 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     return adicionados
 
 
+_SYSTEM_QUEST_EXTRACTOR = (
+    "Você rastreia objetivos/missões de RPG em PT-BR a partir da narração do "
+    "Mestre. Responda APENAS com JSON válido, sem texto antes ou depois, no "
+    'formato:\n{"novas": [{"id": "kebab-case", "titulo": "Título curto", '
+    '"objetivo": "O que o jogador precisa fazer (1 frase)"}], "concluidas": '
+    '["id-de-quest"]}\n'
+    "Regras: 'novas' = objetivos CONCRETOS que o Mestre deu, ofereceu ou pediu "
+    "ao jogador NESTA narração (ex: 'encontrar o ferreiro sumido', 'investigar "
+    "as luzes na torre') e que NÃO estão na lista de missões abertas. NÃO invente "
+    "missão a partir de conversa fiada, ambientação ou descrição de cenário — só "
+    "tarefas reais que o jogador pode perseguir. 'concluidas' = ids (escolhidos da "
+    "lista de abertas) que a narração mostra como cumpridos. id em kebab-case "
+    "derivado do título. Se nada novo nem concluído, devolva ambas as listas vazias."
+)
+
+
+def _sanitizar_quests(
+    bruto: dict[str, Any], ids_abertos: set[str]
+) -> dict[str, Any]:
+    """Valida a saída do extractor de quest — nunca confiar em JSON de modelo.
+
+    'novas' rejeita ids já abertos (não duplica). 'concluidas' só aceita ids
+    que estão de fato na lista de abertas (o LLM não pode concluir o que não
+    existe nem inventar ids).
+    """
+    novas: list[dict[str, str]] = []
+    vistos: set[str] = set()
+    for item in (bruto.get("novas") or [])[:3]:  # cap defensivo por turno
+        if not isinstance(item, dict):
+            continue
+        qid = str(item.get("id", "")).strip().lower()
+        qid = re.sub(r"[^a-z0-9-]", "-", qid)[:48].strip("-")
+        titulo = str(item.get("titulo", "")).strip()[:80]
+        objetivo = str(item.get("objetivo", "")).strip()[:200]
+        if not qid or qid in vistos or qid in ids_abertos:
+            continue
+        vistos.add(qid)
+        novas.append({"id": qid, "titulo": titulo or qid, "objetivo": objetivo})
+    concluidas: list[str] = []
+    for cid in (bruto.get("concluidas") or [])[:6]:
+        cid_s = re.sub(r"[^a-z0-9-]", "-", str(cid).strip().lower())[:48].strip("-")
+        if cid_s and cid_s in ids_abertos and cid_s not in concluidas:
+            concluidas.append(cid_s)
+    return {"novas": novas, "concluidas": concluidas}
+
+
+async def extrair_quests_cena(
+    groq: Any,
+    narracao: str,
+    quests_abertas: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Extrai quests improvisadas (novas/concluídas) da narração — sem [Q:].
+
+    PLAY5-QUEST: o sistema de quests valida `[Q:id:stage]` contra o catálogo do
+    módulo e rejeita o que o autor não escreveu. Quando o Mestre improvisa uma
+    missão, ela nunca vira estado (`quest_stages` vazio) e some no chat. A engine
+    lê a narração via chamada barata (ENTITY_EXTRACTION → 8B) e devolve as
+    missões novas + as concluídas — mesma inversão de autoridade dos extractors
+    de combate e NPC.
+
+    Retorna {"novas": [...], "concluidas": [...]} sanitizado (pode ser vazio)
+    ou None (falha = turno segue sem captura).
+    """
+    if not narracao.strip():
+        return None
+    ids_abertos = {q.get("id", "") for q in quests_abertas if q.get("id")}
+    abertas_txt = "; ".join(
+        f"{q.get('id')} ({q.get('titulo', '')})" for q in quests_abertas
+    ) or "nenhuma"
+    try:
+        resposta = await groq.completar(
+            [
+                {"role": "system", "content": _SYSTEM_QUEST_EXTRACTOR},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Missões já abertas (NÃO repita em 'novas'): {abertas_txt}\n\n"
+                        f"Narração do turno:\n{narracao[:1500]}"
+                    ),
+                },
+            ],
+            temperatura=0.1,
+            max_tokens=240,
+            task=TaskType.ENTITY_EXTRACTION,
+        )
+    except Exception as e:
+        log.warning("quest_extractor_llm_falhou", erro=str(e)[:120])
+        return None
+    bruto = extrair_json_defensivo(resposta or "")
+    if bruto is None:
+        log.warning("quest_extractor_json_invalido", amostra=(resposta or "")[:80])
+        return None
+    return _sanitizar_quests(bruto, ids_abertos)
+
+
+def aplicar_quests_extraidas(
+    wm: Any, extraido: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """Registra quests novas e marca concluídas na WorkingMemory. Idempotente.
+
+    Retorna (ids_adicionados, ids_concluidos). Falha silenciosa de dados ruins
+    é absorvida pelo sanitizador — aqui só aplicamos o que já passou.
+    """
+    adicionadas: list[str] = []
+    for q in extraido.get("novas", []):
+        if wm.narrative.registrar_quest_improvisada(
+            q.get("id", ""), q.get("titulo", ""), q.get("objetivo", "")
+        ):
+            adicionadas.append(q["id"])
+    concluidas: list[str] = []
+    for cid in extraido.get("concluidas", []):
+        if wm.narrative.concluir_quest_improvisada(cid):
+            concluidas.append(cid)
+    if adicionadas or concluidas:
+        log.info(
+            "quests_improvisadas_aplicadas", novas=adicionadas, concluidas=concluidas
+        )
+    return adicionadas, concluidas
+
+
 async def extrair_estado_combate(
     groq: Any,
     narracao: str,

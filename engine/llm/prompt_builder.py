@@ -517,6 +517,22 @@ def montar_mensagens(
             "Trate-os como oportunidades — mencione ou aprofunde 1 por turno se a cena permitir."
         )
 
+    # PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo). Sem este
+    # bloco o Mestre "esquece" objetivos que ele mesmo deu e o jogador fica sem
+    # rumo. Só as ativas entram no prompt (concluídas vivem só no quest log).
+    qimprov = getattr(contexto.working_memory, "quests_improvisadas", [])
+    ativas = [q for q in qimprov if q.get("status") != "concluida"]
+    if ativas:
+        lista_q = "\n".join(
+            f"• {q.get('titulo', '')}" + (f": {q.get('objetivo', '')}" if q.get("objetivo") else "")
+            for q in ativas
+        )
+        secoes.append(
+            f"\n=== MISSÕES EM ANDAMENTO ===\n{lista_q}\n"
+            "São objetivos que você deu ao jogador. Mantenha-os vivos — referencie, "
+            "avance ou complique conforme a cena pedir. Não os deixe sumir."
+        )
+
     # Feat 2: Cliffhanger — encerramento dramático planejado
     cliffhanger = getattr(contexto.working_memory, "cliffhanger_pendente", "")
     if cliffhanger:

@@ -890,6 +890,8 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "rodada_combate": wm.rodada_combate,
         "class_features": dict(wm.class_features),
         "fios_soltos": list(wm.fios_soltos),
+        # PLAY5-QUEST — missões improvisadas pelo Mestre, rastreadas como estado
+        "quests_improvisadas": [dict(q) for q in wm.quests_improvisadas],
         "consequencias": list(wm.log_consequencias),
         "posicoes_combate": dict(wm.posicoes_combate),
         "movimento_restante_ft": wm.movimento_restante_ft,
@@ -1852,6 +1854,46 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
                 except Exception as exc:
                     log.warning("npc_extractor_pulado", erro=str(exc)[:120])
+
+            # PLAY5-QUEST (16/06): extractor de quest improvisada pós-turno
+            # SOCIAL. O sistema [Q:id:stage] valida contra o catálogo do módulo,
+            # então missões que o Mestre cria na hora eram rejeitadas e sumiam no
+            # chat (`quest_stages` vazio). A engine lê a narração (8B JSON) e
+            # captura missões novas/concluídas como estado rastreável — injetado
+            # no prompt do próximo turno (continuidade) e exposto no snapshot pro
+            # quest log. Mesmos guards do extractor de NPC. Falha silenciosa.
+            if (
+                settings.EXTRACTOR_QUEST_ATIVO
+                and not sessao.working_mem.em_combate
+                and not idle_nudge
+                and not sessao.working_mem.session_zero_ativa
+            ):
+                try:
+                    from engine.llm.extractor import (
+                        aplicar_quests_extraidas,
+                        extrair_quests_cena,
+                    )
+                    quests_ext = await asyncio.wait_for(
+                        extrair_quests_cena(
+                            sessao.groq,
+                            resposta_limpa,
+                            list(sessao.working_mem.quests_improvisadas),
+                        ),
+                        timeout=8.0,
+                    )
+                    if quests_ext:
+                        novas, concluidas = aplicar_quests_extraidas(
+                            sessao.working_mem, quests_ext
+                        )
+                        if novas or concluidas:
+                            log.info(
+                                "quest_extractor_aplicado",
+                                novas=novas,
+                                concluidas=concluidas,
+                                session_id=session_id,
+                            )
+                except Exception as exc:
+                    log.warning("quest_extractor_pulado", erro=str(exc)[:120])
 
             # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
             # ficha pro frontend popular a CharacterSheet e persiste no SQLite
