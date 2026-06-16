@@ -52,3 +52,21 @@ def test_snapshot_desempacota_em_mensagem_ws():
     assert msg.tipo == "fim"
     assert msg.player_level == wm.player_level
     assert msg.location_nome == wm.location_nome
+
+
+# ── SZ-RELOGIOS-1 — relógios de ameaça não vazam pro HUD na criação por voz ────
+
+def test_relogios_ocultos_na_session_zero():
+    wm = _wm()
+    wm.narrative.relogios["guerra"] = {"nome": "Guerra das vilas", "atual": 1, "max": 6}
+    wm.session_zero_ativa = True
+    assert _snapshot_estado(wm)["relogios"] == {}
+
+
+def test_relogios_visiveis_fora_da_session_zero():
+    wm = _wm()
+    wm.narrative.relogios["guerra"] = {"nome": "Guerra das vilas", "atual": 1, "max": 6}
+    wm.session_zero_ativa = False
+    snap = _snapshot_estado(wm)
+    assert "guerra" in snap["relogios"]
+    assert snap["relogios"]["guerra"]["atual"] == 1
