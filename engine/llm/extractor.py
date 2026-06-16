@@ -180,14 +180,38 @@ _SYSTEM_QUEST_EXTRACTOR = (
     'formato:\n{"novas": [{"id": "kebab-case", "titulo": "Título curto", '
     '"objetivo": "O que o jogador precisa fazer (1 frase)"}], "concluidas": '
     '["id-de-quest"]}\n'
-    "Regras: 'novas' = objetivos CONCRETOS que o Mestre deu, ofereceu ou pediu "
-    "ao jogador NESTA narração (ex: 'encontrar o ferreiro sumido', 'investigar "
-    "as luzes na torre') e que NÃO estão na lista de missões abertas. NÃO invente "
-    "missão a partir de conversa fiada, ambientação ou descrição de cenário — só "
-    "tarefas reais que o jogador pode perseguir. 'concluidas' = ids (escolhidos da "
-    "lista de abertas) que a narração mostra como cumpridos. id em kebab-case "
-    "derivado do título. Se nada novo nem concluído, devolva ambas as listas vazias."
+    "Regras: 'novas' = objetivos CONCRETOS e PERSEGUÍVEIS por VÁRIOS turnos que o "
+    "Mestre deu, ofereceu ou pediu ao jogador NESTA narração (ex: 'encontrar o "
+    "ferreiro sumido', 'investigar as luzes na torre') e que NÃO estão na lista de "
+    "missões abertas. NÃO invente missão a partir de conversa fiada, ambientação ou "
+    "descrição de cenário. PROIBIDO criar missão para REAÇÕES IMEDIATAS de cena — "
+    "responder alguém, abordar/acalmar/cumprimentar um NPC, decidir o próximo passo "
+    "do turno NÃO são missões. Na dúvida, devolva 'novas' vazia. 'concluidas' = ids "
+    "(escolhidos da lista de abertas) que a narração mostra como cumpridos. id em "
+    "kebab-case derivado do título. Se nada novo nem concluído, devolva ambas as listas vazias."
 )
+
+
+# QUEST-SPAM-1 (playtest #6): o 8B transformava CADA reação de conversa em
+# "missão" — responder-o-homem, abordar-o-homem, acalmar-a-situacao,
+# responder-taverneiro. Barra determinística: missão cujo verbo inicial é uma
+# reação imediata de fala/aproximação NÃO é objetivo perseguível — descartar.
+_VERBOS_REATIVOS = frozenset({
+    "responder", "abordar", "acalmar", "falar", "perguntar", "conversar",
+    "dizer", "contar", "ouvir", "escutar", "cumprimentar", "saudar",
+    "agradecer", "reagir", "decidir", "esperar", "observar", "olhar",
+})
+
+
+def _quest_reativa(qid: str, titulo: str) -> bool:
+    """True se a quest é uma reação imediata de cena (não um objetivo real).
+
+    Checa o verbo inicial do id (kebab) e do título — se for de fala/aproximação,
+    é ruído de turno, não missão perseguível.
+    """
+    verbo_id = qid.split("-", 1)[0] if qid else ""
+    verbo_tit = titulo.strip().lower().split(" ", 1)[0] if titulo else ""
+    return verbo_id in _VERBOS_REATIVOS or verbo_tit in _VERBOS_REATIVOS
 
 
 def _sanitizar_quests(
@@ -195,9 +219,9 @@ def _sanitizar_quests(
 ) -> dict[str, Any]:
     """Valida a saída do extractor de quest — nunca confiar em JSON de modelo.
 
-    'novas' rejeita ids já abertos (não duplica). 'concluidas' só aceita ids
-    que estão de fato na lista de abertas (o LLM não pode concluir o que não
-    existe nem inventar ids).
+    'novas' rejeita ids já abertos (não duplica) E reações imediatas de conversa
+    (QUEST-SPAM-1). 'concluidas' só aceita ids que estão de fato na lista de
+    abertas (o LLM não pode concluir o que não existe nem inventar ids).
     """
     novas: list[dict[str, str]] = []
     vistos: set[str] = set()
@@ -209,6 +233,9 @@ def _sanitizar_quests(
         titulo = str(item.get("titulo", "")).strip()[:80]
         objetivo = str(item.get("objetivo", "")).strip()[:200]
         if not qid or qid in vistos or qid in ids_abertos:
+            continue
+        if _quest_reativa(qid, titulo):
+            log.info("quest_reativa_descartada", id=qid, titulo=titulo)
             continue
         vistos.add(qid)
         novas.append({"id": qid, "titulo": titulo or qid, "objetivo": objetivo})
