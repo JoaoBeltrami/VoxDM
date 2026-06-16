@@ -251,6 +251,10 @@ class MensagemWS(BaseModel):
     # DM Feat 1: Fios Soltos — threads narrativas abertas para exibição no frontend
     # Atualizado no "fim" sempre que a lista muda. Máx 5 fios simultâneos.
     fios_soltos: list[str] = Field(default_factory=list)
+    # PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo do módulo),
+    # capturadas pelo extractor de quest. Cada item: {id, titulo, objetivo, status}.
+    # Alimenta o quest log do frontend (Palco). Cap 6.
+    quests_improvisadas: list[dict[str, Any]] = Field(default_factory=list)
     # Feature 3: Consequências visíveis — efeitos duradouros no mundo emitidos via
     # [CONSEQUÊNCIA: ...]. Lista circular máx 5 (working_mem.log_consequencias).
     consequencias: list[str] = Field(default_factory=list)

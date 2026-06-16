@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     # autoridade do extractor de combate. Desligar: EXTRACTOR_NPC_ATIVO=false.
     EXTRACTOR_NPC_ATIVO: bool = True
 
+    # ── Extractor de quest improvisada (PLAY5-QUEST, 16/06) ──────────────
+    # Pós-turno social, chamada LLM barata (JSON 8B) captura missões que o
+    # Mestre improvisa fora do catálogo do módulo (o sistema [Q:id:stage] as
+    # rejeita) e as transforma em estado rastreável (continuidade + quest log).
+    # Mesma inversão de autoridade dos outros extractors. Desligar:
+    # EXTRACTOR_QUEST_ATIVO=false.
+    EXTRACTOR_QUEST_ATIVO: bool = True
+
     # ── Beat de turno inimigo (Pilar Perigo, 11/06) ──────────────────────
     # Kill-switch da feature mais nova de combate: a 2ª chamada LLM que
     # narra o turno dos inimigos após a ação do jogador. Se atrapalhar a

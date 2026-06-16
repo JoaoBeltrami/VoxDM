@@ -810,6 +810,8 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "cliffhanger_pendente": wm.cliffhanger_pendente or "",
         # Repetition guard — fatos já narrados não devem voltar após crash
         "fatos_ancora":         list(wm.fatos_ancora),
+        # PLAY5-QUEST — missões improvisadas não devem sumir ao reconectar
+        "quests_improvisadas":  [dict(q) for q in wm.quests_improvisadas],
         # Pacing meter — drift do ritmo é caro de re-construir
         "pacing_nivel":         float(wm.pacing_nivel),
         # Pilar Perigo — cicatrizes são permanentes por definição

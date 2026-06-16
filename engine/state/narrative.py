@@ -23,6 +23,7 @@ _MAX_ANCORAS = 5
 _MAX_CONSEQUENCIAS = 5
 _MAX_AGENDA = 8
 _MAX_VOZES = 20
+_MAX_QUESTS_IMPROV = 6
 
 
 @dataclass
@@ -62,6 +63,14 @@ class NarrativeState:
 
     # Repetition guard — fatos já narrados
     fatos_ancora: list[str] = field(default_factory=list)
+
+    # PLAY5-QUEST: quests improvisadas pelo Mestre (fora do catálogo do módulo).
+    # O sistema [Q:id:stage] valida contra o catálogo e rejeita o que o autor
+    # não escreveu → missões que o Mestre cria na hora sumiam no chat (playtest
+    # #5). Aqui viram estado rastreável: injetadas no prompt (continuidade),
+    # persistidas (dm_state) e expostas no snapshot (quest log do Palco).
+    # Cada item: {id, titulo, objetivo, status: "ativa"|"concluida"}. Cap 6.
+    quests_improvisadas: list[dict] = field(default_factory=list)
 
     # Relógios de Ameaça (fronts) — id → {nome, atual, max}. O mundo anda
     # sem o jogador: engine avança em descanso longo e viagem; LLM avança
@@ -119,6 +128,39 @@ class NarrativeState:
         if len(self.fatos_ancora) > _MAX_ANCORAS:
             self.fatos_ancora.pop(0)
         return True
+
+    def registrar_quest_improvisada(self, quest_id: str, titulo: str, objetivo: str) -> bool:
+        """Registra uma quest improvisada pelo Mestre. Retorna True se inserida.
+
+        Dedup por id; cap _MAX_QUESTS_IMPROV (eviction oldest). Toda quest nova
+        entra na crônica como evento-chave da sessão.
+        """
+        quest_id = quest_id.strip().lower()
+        if not quest_id:
+            return False
+        if any(q.get("id") == quest_id for q in self.quests_improvisadas):
+            return False
+        titulo = titulo.strip()[:80] or quest_id
+        self.quests_improvisadas.append({
+            "id": quest_id,
+            "titulo": titulo,
+            "objetivo": objetivo.strip()[:200],
+            "status": "ativa",
+        })
+        self.registrar_cronica(f"📜 Nova missão: {titulo}")
+        while len(self.quests_improvisadas) > _MAX_QUESTS_IMPROV:
+            self.quests_improvisadas.pop(0)
+        return True
+
+    def concluir_quest_improvisada(self, quest_id: str) -> bool:
+        """Marca uma quest improvisada como concluída. True se mudou de estado."""
+        quest_id = quest_id.strip().lower()
+        for q in self.quests_improvisadas:
+            if q.get("id") == quest_id and q.get("status") != "concluida":
+                q["status"] = "concluida"
+                self.registrar_cronica(f"✓ Missão cumprida: {q.get('titulo', quest_id)}")
+                return True
+        return False
 
     def registrar_consequencia(self, texto: str) -> None:
         """Adiciona consequência ao log rolling (e espelha na crônica)."""
