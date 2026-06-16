@@ -127,6 +127,29 @@ _RE_BEAT_HP = re.compile(
 )
 
 
+def _extractors_pos_turno_liberados(
+    em_combate: bool,
+    idle_nudge: bool,
+    session_zero_ativa: bool,
+    era_session_zero: bool,
+) -> bool:
+    """Decide se os extractors pós-turno (NPC/quest improvisados) podem rodar.
+
+    SZ-NPC-PRESENTE-1 (playtest #6): no turno que CONCLUI a Session Zero, o
+    `[FICHA]` zera session_zero_ativa no meio do turno — os extractors rodavam na
+    narração de criação (cheia de backstory) e registravam o inimigo citado (Tharn)
+    como NPC presente + quest 'encontrar-tharn'. Gatear também por `era_session_zero`
+    (estado no INÍCIO do turno) pula o turno de conclusão. Extractors só em jogo:
+    fora de combate, fora de idle, e nem durante nem encerrando a Session Zero.
+    """
+    return (
+        not em_combate
+        and not idle_nudge
+        and not session_zero_ativa
+        and not era_session_zero
+    )
+
+
 def _sanitizar_texto_beat(texto: str) -> str:
     """Higieniza a narração do beat contra marcadores meio-formatados do 8B.
 
@@ -1902,11 +1925,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # frontend deriva o nome do id. Só fora de combate (lá os personagens
             # são inimigos, tratados pelo extractor de combate) e fora da Sessão
             # Zero. Falha silenciosa.
-            if (
-                settings.EXTRACTOR_NPC_ATIVO
-                and not sessao.working_mem.em_combate
-                and not idle_nudge
-                and not sessao.working_mem.session_zero_ativa
+            if settings.EXTRACTOR_NPC_ATIVO and _extractors_pos_turno_liberados(
+                sessao.working_mem.em_combate,
+                idle_nudge,
+                sessao.working_mem.session_zero_ativa,
+                era_session_zero,
             ):
                 try:
                     from engine.llm.extractor import (
@@ -1936,11 +1959,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # captura missões novas/concluídas como estado rastreável — injetado
             # no prompt do próximo turno (continuidade) e exposto no snapshot pro
             # quest log. Mesmos guards do extractor de NPC. Falha silenciosa.
-            if (
-                settings.EXTRACTOR_QUEST_ATIVO
-                and not sessao.working_mem.em_combate
-                and not idle_nudge
-                and not sessao.working_mem.session_zero_ativa
+            if settings.EXTRACTOR_QUEST_ATIVO and _extractors_pos_turno_liberados(
+                sessao.working_mem.em_combate,
+                idle_nudge,
+                sessao.working_mem.session_zero_ativa,
+                era_session_zero,
             ):
                 try:
                     from engine.llm.extractor import (
