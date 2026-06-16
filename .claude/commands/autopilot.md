@@ -24,11 +24,18 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
    - Bridges/feature de backend cobríveis por teste (ex: Schema v2 → runtime).
    - Dieta de tokens/latência mensurável.
    - Refactor com testes existentes de guarda.
+   - **Frontend/visual AGORA é elegível** (standing-OK do Beltrami, 16/06): o autopilot
+     PODE usar o browser pra validar mudança visual/UX — subir o front (`scripts/exec/start.bat`
+     ou `npm run dev`), abrir via MCP de browser (Claude-in-Chrome ou Preview), screenshot +
+     checar render/console/layout. Vale pro rebrand do Palco, ficha, dock, etc. Continua
+     valendo a regra de ouro: gate de código com `tsc`+`eslint` E evidência visual no browser
+     (print do estado certo, sem erro de console). O que NÃO posso decidir sozinho é **gosto
+     estético subjetivo** ("essa paleta é a cara do projeto?") — isso fica pro Beltrami.
    - **EXCLUIR sempre** (vira pendência, não trabalho de autopilot):
-     - Qualquer coisa que precise **jogar pra validar** (qualidade narrativa, "soa bem?").
-     - Mudança **visual/UX** que precise de print/browser pra confirmar (layout do Palco, etc.).
+     - Qualquer coisa que precise **jogar pra validar** (qualidade narrativa, "soa bem?", balance de combate).
+     - **Decisão estética/de produto** subjetiva (qual visual, o que cortar do prompt, tom da voz).
      - **Re-ingestão / troca de embedder** (GPU + recria Qdrant) — só com OK explícito.
-     - Decisões de produto, contas externas (GitHub, Cloudflare), segredos.
+     - Contas externas (GitHub push, Cloudflare), segredos.
      - Itens das "Decisões Travadas" do CLAUDE.md.
 
 3. **Implementar com as convenções** do CLAUDE.md: Python 3.12 async, type hints, comentários PT-BR, `from config import settings`, structlog, httpx+tenacity, kebab-case, foco **singleplayer**, só conteúdo **SRD** (nunca Curse of Strahd). Kill-switch pra feature arriscada. Manter o jogo funcionando a cada passo.
@@ -36,7 +43,10 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
 4. **Branch + portões verdes** (nunca commit direto em `main` sem isto):
    - `git checkout -b <tipo>/<slug>` off main.
    - `uv run pytest -q` → **tudo verde** (e cobrir o que mudou com teste novo).
-   - Se mexeu no frontend: `cd frontend && npx tsc --noEmit` verde.
+   - Se mexeu no frontend: `cd frontend && npx tsc --noEmit` verde + `npm run lint` (eslint).
+   - **Se a mudança é visual**: validar no browser (MCP Claude-in-Chrome/Preview) — abrir a
+     tela afetada, screenshot do estado esperado, confirmar zero erro de console. Anexar o que
+     viu no relatório. Sem evidência visual, mudança de UI não fecha.
    - `uvx ruff@0.15.16 check engine/ api/ tests/ ingestor/` → "All checks passed!".
    - Se QUALQUER portão falhar e não der pra consertar com confiança → reverter a branch e registrar como pendência. Não force-ship.
 
