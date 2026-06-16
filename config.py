@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     # ~0.7s/turno de combate. Desligar: EXTRACTOR_COMBATE_ATIVO=false.
     EXTRACTOR_COMBATE_ATIVO: bool = True
 
+    # ── Extractor de NPC (PLAY5-NPC, 13/06) ──────────────────────────────
+    # Pós-turno social (fora de combate), chamada LLM barata (JSON 8B) detecta
+    # NPCs NOMEADOS novos que o Mestre improvisou e os registra como presença +
+    # voz — sem depender do LLM lembrar do marcador [NPC:]. Mesma inversão de
+    # autoridade do extractor de combate. Desligar: EXTRACTOR_NPC_ATIVO=false.
+    EXTRACTOR_NPC_ATIVO: bool = True
+
     # ── Beat de turno inimigo (Pilar Perigo, 11/06) ──────────────────────
     # Kill-switch da feature mais nova de combate: a 2ª chamada LLM que
     # narra o turno dos inimigos após a ação do jogador. Se atrapalhar a

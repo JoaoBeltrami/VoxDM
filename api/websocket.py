@@ -1818,6 +1818,41 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 except Exception as exc:
                     log.warning("extractor_pulado", erro=str(exc)[:120])
 
+            # PLAY5-NPC (13/06): extractor de NPC pós-turno SOCIAL. O Mestre
+            # improvisa NPCs e raramente emite [NPC:] → eles viravam "fantasmas"
+            # no chat (playtest #5: a quest começou com um NPC que nunca entrou
+            # em npcs_presentes). A engine lê a narração (8B JSON) e registra os
+            # NPCs novos como presença — o loop de voz abaixo lhes dá voz, e o
+            # frontend deriva o nome do id. Só fora de combate (lá os personagens
+            # são inimigos, tratados pelo extractor de combate) e fora da Sessão
+            # Zero. Falha silenciosa.
+            if (
+                settings.EXTRACTOR_NPC_ATIVO
+                and not sessao.working_mem.em_combate
+                and not idle_nudge
+                and not sessao.working_mem.session_zero_ativa
+            ):
+                try:
+                    from engine.llm.extractor import (
+                        aplicar_npcs_extraidos,
+                        extrair_npcs_cena,
+                    )
+                    npcs_novos = await asyncio.wait_for(
+                        extrair_npcs_cena(
+                            sessao.groq,
+                            resposta_limpa,
+                            list(sessao.working_mem.npcs_presentes),
+                            nome_jogador=sessao.working_mem.player_name,
+                        ),
+                        timeout=8.0,
+                    )
+                    if npcs_novos:
+                        ids = aplicar_npcs_extraidos(sessao.working_mem, npcs_novos)
+                        if ids:
+                            log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
+                except Exception as exc:
+                    log.warning("npc_extractor_pulado", erro=str(exc)[:120])
+
             # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
             # ficha pro frontend popular a CharacterSheet e persiste no SQLite
             # (o "Continuar como…" passa a listar o personagem). Falha = só log.

@@ -78,6 +78,102 @@ def _sanitizar(bruto: dict[str, Any]) -> dict[str, Any]:
     return {"inimigos": inimigos, "dano_ao_jogador": min(dano, 60)}
 
 
+_SYSTEM_NPC_EXTRACTOR = (
+    "Você extrai NPCs de narração de RPG em PT-BR. Responda APENAS com JSON "
+    "válido, sem texto antes ou depois, no formato:\n"
+    '{"npcs": [{"id": "kebab-case", "nome": "Nome"}]}\n'
+    "Liste SÓ personagens NOMEADOS que APARECERAM ou FALARAM nesta narração e que "
+    "NÃO estão na lista de conhecidos. NÃO inclua: o personagem do jogador, "
+    "multidões/figurantes sem nome, monstros/inimigos, lugares ou objetos. id em "
+    "kebab-case derivado do nome (ex: 'Velho Mercador' → 'velho-mercador'). Se "
+    "nenhum NPC novo nomeado apareceu, devolva npcs como lista vazia."
+)
+
+
+def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
+    """Valida a saída do extractor de NPC — nunca confiar em JSON de modelo."""
+    out: list[dict[str, str]] = []
+    vistos: set[str] = set()
+    for item in (bruto.get("npcs") or [])[:4]:  # cap defensivo por turno
+        if not isinstance(item, dict):
+            continue
+        nid = str(item.get("id", "")).strip().lower()
+        nid = re.sub(r"[^a-z0-9-]", "-", nid)[:48].strip("-")
+        nome = str(item.get("nome", "")).strip()[:40]
+        if not nid or nid in vistos:
+            continue
+        vistos.add(nid)
+        out.append({"id": nid, "nome": nome or nid})
+    return out
+
+
+async def extrair_npcs_cena(
+    groq: Any,
+    narracao: str,
+    npcs_atuais: list[str],
+    nome_jogador: str = "",
+) -> list[dict[str, str]] | None:
+    """Extrai NPCs nomeados NOVOS introduzidos na narração (sem depender de [NPC:]).
+
+    PLAY5-NPC: o Mestre improvisa NPCs e raramente lembra de emitir o marcador
+    `[NPC: id|nome]`, então eles nunca viram presença/voz (ficam "fantasmas" no
+    chat). A engine lê a narração via chamada barata (ENTITY_EXTRACTION → 8B) e
+    devolve os NPCs novos — mesma inversão de autoridade do extractor de combate.
+
+    Retorna lista sanitizada (pode ser vazia) ou None (falha = turno segue).
+    """
+    if not narracao.strip():
+        return None
+    conhecidos = ", ".join(npcs_atuais) or "nenhum"
+    contexto_jogador = f"O personagem do jogador é {nome_jogador} — NUNCA o liste.\n" if nome_jogador else ""
+    try:
+        resposta = await groq.completar(
+            [
+                {"role": "system", "content": _SYSTEM_NPC_EXTRACTOR},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{contexto_jogador}"
+                        f"NPCs já conhecidos (NÃO repita): {conhecidos}\n\n"
+                        f"Narração do turno:\n{narracao[:1500]}"
+                    ),
+                },
+            ],
+            temperatura=0.1,
+            max_tokens=200,
+            task=TaskType.ENTITY_EXTRACTION,
+        )
+    except Exception as e:
+        log.warning("npc_extractor_llm_falhou", erro=str(e)[:120])
+        return None
+    bruto = extrair_json_defensivo(resposta or "")
+    if bruto is None:
+        log.warning("npc_extractor_json_invalido", amostra=(resposta or "")[:80])
+        return None
+    return _sanitizar_npcs(bruto)
+
+
+def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
+    """Registra NPCs extraídos na cena (presença + apresentado). Idempotente.
+
+    Espelha o efeito do marcador `[NPC: id|nome]` (turn_pipeline step 17b). Pula
+    NPCs já presentes e o id do personagem do jogador. Retorna os ids adicionados.
+    """
+    import re as _re
+    jogador_id = _re.sub(r"[^a-z0-9-]", "-", str(getattr(wm, "player_name", "")).strip().lower()).strip("-")
+    adicionados: list[str] = []
+    for npc in npcs:
+        nid = npc.get("id", "")
+        if not nid or nid == jogador_id or nid in wm.npcs_presentes:
+            continue
+        wm.npcs_presentes.append(nid)
+        wm.scene.npcs_apresentados.add(nid)
+        adicionados.append(nid)
+    if adicionados:
+        log.info("npcs_extraidos_registrados", ids=adicionados)
+    return adicionados
+
+
 async def extrair_estado_combate(
     groq: Any,
     narracao: str,
