@@ -979,7 +979,14 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "death_saves_stable": wm.death_saves_stable,
         # Pilar Perigo + Mundo Vivo (10/06)
         "cicatrizes": list(wm.cicatrizes),
-        "relogios": {k: dict(v) for k, v in wm.narrative.relogios.items()},
+        # SZ-RELOGIOS-1 (playtest #6): relógios de ameaça não devem chegar ao HUD
+        # durante a criação por voz — o jogador nem é o personagem ainda e via
+        # "ameaças que não sabe por que estão lá". Liberados quando a Session Zero fecha.
+        "relogios": (
+            {}
+            if getattr(wm, "session_zero_ativa", False)
+            else {k: dict(v) for k, v in wm.narrative.relogios.items()}
+        ),
         # Imersão P4 — timeline da sessão
         "cronica": list(wm.narrative.cronica),
         "em_combate": wm.em_combate,
