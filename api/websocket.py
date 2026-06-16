@@ -31,6 +31,7 @@ from typing import Any
 
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
@@ -69,6 +70,45 @@ def _criar_background_task(coro) -> asyncio.Task:
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return task
+
+
+async def _send_text_seguro(ws: WebSocket, payload: str) -> bool:
+    """Envia um text frame só se o WS ainda está conectado. NUNCA lança.
+
+    Crash do playtest #6 (16/06): o cliente reconectou no meio de um turno (o
+    Neo4j caiu → o WS antigo fechou) e o pipeline em voo chamou `send` no socket
+    já fechado → `Cannot call "send" once a close message has been sent`, que
+    estourava como `ws_erro_inesperado` e abortava o turno (frontend travado 69s).
+    Aqui o envio para um socket morto vira no-op silencioso e o pipeline conclui.
+
+    Returns:
+        True se enviou; False se o socket estava fechado ou recusou o frame.
+
+    Nota: checamos só o estado DISCONNECTED (o único em que enviar é proibido) —
+    qualquer corrida que escape vira `RuntimeError`/`WebSocketDisconnect` e é
+    engolida no try. Não exigimos CONNECTED explícito para não quebrar fakes de
+    teste que não setam client_state.
+    """
+    if getattr(ws, "client_state", None) is WebSocketState.DISCONNECTED:
+        return False
+    try:
+        await ws.send_text(payload)
+        return True
+    except (WebSocketDisconnect, RuntimeError) as e:
+        log.info("ws_send_ignorado", motivo=str(e)[:80])
+        return False
+
+
+async def _send_json_seguro(ws: WebSocket, payload: dict[str, Any]) -> bool:
+    """Versão JSON de _send_text_seguro — mesmo contrato, nunca lança."""
+    if getattr(ws, "client_state", None) is WebSocketState.DISCONNECTED:
+        return False
+    try:
+        await ws.send_json(payload)
+        return True
+    except (WebSocketDisconnect, RuntimeError) as e:
+        log.info("ws_send_ignorado", motivo=str(e)[:80])
+        return False
 
 
 # Limites de validação para sync_* — protegem contra payloads malformados ou
@@ -228,7 +268,7 @@ async def _enviar_lampejo(
     if not texto.strip():
         return
     try:
-        await websocket.send_text(
+        await _send_text_seguro(websocket,
             MensagemWS(tipo="lampejo", conteudo=texto).model_dump_json()
         )
         audio = await _sintetizar_com_timeout(
@@ -237,7 +277,7 @@ async def _enviar_lampejo(
             label="lampejo",
         )
         if audio:
-            await websocket.send_text(
+            await _send_text_seguro(websocket,
                 MensagemWS(
                     tipo="audio_chunk",
                     conteudo_b64=base64.b64encode(audio).decode("ascii"),
@@ -293,7 +333,7 @@ def _criar_task_thinking(
             frase, audio_bytes = resultado
             if sessao:
                 sessao.ultima_frase_thinking = frase  # registra para evitar repetição
-            await websocket.send_text(
+            await _send_text_seguro(websocket,
                 MensagemWS(
                     tipo="audio_chunk",
                     conteudo_b64=base64.b64encode(audio_bytes).decode("ascii"),
@@ -363,7 +403,7 @@ async def _enviar_imagem_cena(websocket: WebSocket, sessao: SessaoAtiva) -> None
 
         url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width=1024&height=576&model=flux&nologo=true"
 
-        await websocket.send_json({"tipo": "scene_image", "conteudo": url})
+        await _send_json_seguro(websocket, {"tipo": "scene_image", "conteudo": url})
         sessao.ultima_imagem_chave = chave
         log.info("scene_image_enviada", location=location, em_combate=em_combate)
 
@@ -402,7 +442,7 @@ async def _enviar_retratos_npcs(websocket: WebSocket, sessao: SessaoAtiva) -> No
                 f"https://image.pollinations.ai/prompt/{quote(prompt)}"
                 f"?width=256&height=256&model=flux&nologo=true&seed={seed}"
             )
-            await websocket.send_json(
+            await _send_json_seguro(websocket,
                 {"tipo": "npc_retrato", "npc_id": npc_id, "conteudo": url}
             )
             sessao.retratos_enviados.add(npc_id)
@@ -614,7 +654,8 @@ async def _sintetizar_e_enviar(
         )
         if audio_bytes:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-            await ws.send_text(
+            await _send_text_seguro(
+                ws,
                 MensagemWS(
                     tipo="audio_chunk",
                     conteudo_b64=audio_b64,
@@ -705,7 +746,7 @@ async def _enviar_recap_sessao_anterior(
             return
 
         # Envia texto antes do áudio para o frontend exibir a bolha
-        await websocket.send_text(
+        await _send_text_seguro(websocket,
             MensagemWS(tipo="recap", conteudo=texto_recap).model_dump_json()
         )
         log.info("recap_enviado", session_id=sessao.session_id, chars=len(texto_recap))
@@ -721,7 +762,7 @@ async def _enviar_recap_sessao_anterior(
             label="recap",
         )
         if audio:
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(
                         tipo="audio_chunk",
                         conteudo_b64=base64.b64encode(audio).decode("ascii"),
@@ -819,7 +860,7 @@ async def _beat_turno_inimigo(
         # Pseudo-stream por sentença — frontend/karaokê tratam como turno normal
         for sent in re.split(r"(?<=[.!?…])\s+", texto_limpo):
             if sent.strip():
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(tipo="token", conteudo=sent + " ").model_dump_json()
                 )
         tts = _obter_tts()
@@ -830,7 +871,7 @@ async def _beat_turno_inimigo(
             voice=wm.tts_voice or None,
             npc_vozes=wm.npc_vozes or None,
         )
-        await websocket.send_text(
+        await _send_text_seguro(websocket,
             MensagemWS(tipo="fim", **_snapshot_estado(wm)).model_dump_json()
         )
         log.info(
@@ -1003,7 +1044,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
             if not primeiro_token_intro.is_set():
                 primeiro_token_intro.set()
             resposta_intro += token
-            await websocket.send_text(
+            await _send_text_seguro(websocket,
                 MensagemWS(tipo="token", conteudo=token).model_dump_json()
             )
     except Exception as e:
@@ -1013,7 +1054,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         # Drifts #11/#13/#17/#24 resolvidos.
         msg_fallback = _carregar_intro_fallback()
         resposta_intro = msg_fallback
-        await websocket.send_text(
+        await _send_text_seguro(websocket,
             MensagemWS(tipo="token", conteudo=msg_fallback).model_dump_json()
         )
     finally:
@@ -1052,7 +1093,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
                 label=f"abertura_seq{_seq}",
             )
             if _audio:
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(
                         tipo="audio_chunk",
                         conteudo_b64=base64.b64encode(_audio).decode("ascii"),
@@ -1097,7 +1138,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     await reinferir_npcs_se_mudou_cena(wm, sessao.context_builder)
 
     latencia_ms = int((time.perf_counter() - t0) * 1000)
-    await websocket.send_text(
+    await _send_text_seguro(websocket,
         MensagemWS(
             tipo="fim",
             latencia_ms=latencia_ms,
@@ -1155,7 +1196,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
     # 4. Sessão deve existir — usuário autenticado recebe mensagem de erro legível
     sessao = sessions.get(session_id)
     if not sessao:
-        await websocket.send_text(
+        await _send_text_seguro(websocket,
             MensagemWS(
                 tipo="erro",
                 conteudo=f"Sessão '{session_id}' não encontrada. Crie via POST /session/start.",
@@ -1186,7 +1227,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 texto_jogador: str = str(dados.get("texto", "")).strip()
                 tipo_msg: str = str(dados.get("tipo", "")).strip()
             except (json.JSONDecodeError, TypeError):
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(
                         tipo="erro",
                         conteudo='Formato inválido — enviar JSON com chave "texto"',
@@ -1213,7 +1254,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # do fim de turno) com latência 0. O helper único garante que
                     # nenhum campo (player_level, iniciativa_ordem…) fique de fora
                     # aqui — origem histórica dos bugs ROB-1/ROB-2.
-                    await websocket.send_text(
+                    await _send_text_seguro(websocket,
                         MensagemWS(
                             tipo="fim",
                             latencia_ms=0,
@@ -1359,7 +1400,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 continue
 
             if len(texto_jogador) > 500:
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(
                         tipo="erro",
                         conteudo="Texto muito longo — máximo 500 caracteres",
@@ -1581,7 +1622,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         chunk = tts_buffer_audio.pop(prox)
                         tts_enviado_ate = prox
                         if chunk:
-                            await websocket.send_text(
+                            await _send_text_seguro(websocket,
                                 MensagemWS(
                                     tipo="audio_chunk",
                                     conteudo_b64=base64.b64encode(chunk).decode("ascii"),
@@ -1627,7 +1668,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     if latencia_primeiro_token < 0:
                         latencia_primeiro_token = int((time.perf_counter() - t0) * 1000)
                         primeiro_token_evento.set()
-                    await websocket.send_text(
+                    await _send_text_seguro(websocket,
                         MensagemWS(tipo="token", conteudo=token).model_dump_json()
                     )
                     if tts:
@@ -1670,7 +1711,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
                 erros_turno.append(f"groq: {e}")
                 _emit({"tipo": "erro", "session_id": session_id, "etapa": "groq", "mensagem": str(e)})
-                await websocket.send_text(
+                await _send_text_seguro(websocket,
                     MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                 )
                 # CRIT-1: limpa pending para não decrementar slot em retry de outro turno
@@ -1720,7 +1761,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Enviadas uma a uma na ordem de aparição no texto.
             for _m_dado in _RE_ROLAGEM_VISIVEL.finditer(resposta_completa):
                 try:
-                    await websocket.send_text(
+                    await _send_text_seguro(websocket,
                         MensagemWS(
                             tipo="dado_rolado",
                             dado_tipo=f"d{_m_dado.group(1)}",
@@ -1918,7 +1959,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         "con_score": _ch.con_score, "int_score": _ch.int_score,
                         "wis_score": _ch.wis_score, "cha_score": _ch.cha_score,
                     }
-                    await websocket.send_text(
+                    await _send_text_seguro(websocket,
                         MensagemWS(tipo="ficha_criada", ficha=ficha_payload).model_dump_json()
                     )
                     _criar_background_task(_auto_checkpoint(sessao))
@@ -1998,7 +2039,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     sessao.working_mem, resposta_limpa
                 )
                 if level_up_resumo:
-                    await websocket.send_text(
+                    await _send_text_seguro(websocket,
                         MensagemWS(
                             tipo="level_up",
                             level_up=level_up_resumo,  # dict completo do resumo
@@ -2063,7 +2104,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 )
                 if _prov_primario_esperado and _ultimo_prov != _prov_primario_esperado:
                     try:
-                        await websocket.send_text(
+                        await _send_text_seguro(websocket,
                             MensagemWS(tipo="cascade", conteudo=_ultimo_prov).model_dump_json()
                         )
                         log.info(
@@ -2105,7 +2146,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             ]
             relacoes: list[dict[str, Any]] = contexto.relacoes_grafo if contexto else []
 
-            await websocket.send_text(
+            await _send_text_seguro(websocket,
                 MensagemWS(
                     tipo="fim",
                     latencia_ms=latencia_ms,
@@ -2179,7 +2220,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
     except Exception as e:
         log.error("ws_erro_inesperado", session_id=session_id, erro=str(e))
         try:
-            await websocket.send_text(
+            await _send_text_seguro(websocket,
                 MensagemWS(tipo="erro", conteudo=f"Erro interno: {e}").model_dump_json()
             )
         except Exception:

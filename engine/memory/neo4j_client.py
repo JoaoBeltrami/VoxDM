@@ -46,9 +46,14 @@ class Neo4jMemoryClient:
 
     async def _get_driver(self) -> AsyncDriver:
         if self._driver is None:
+            # liveness_check_timeout: o driver dá ping numa conexão do pool antes
+            # de usá-la se ela ficou ociosa mais que esse tempo. Sem isso, o
+            # AuraDB Free entrega conexões mortas após idle e a query estoura
+            # (ConnectionResetError 10054 — crash do playtest #6).
             self._driver = AsyncGraphDatabase.driver(
                 settings.NEO4J_URI,
                 auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                liveness_check_timeout=settings.NEO4J_LIVENESS_TIMEOUT,
             )
         return self._driver
 
@@ -306,9 +311,20 @@ class Neo4jMemoryClient:
             log.warning("afeto_busca_falhou", npc_id=npc_id, erro=str(e))
             return {}
 
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        before_sleep=_logar_tentativa,
+        reraise=True,
+    )
     async def buscar_npcs_no_local(self, location_id: str) -> list[dict[str, Any]]:
         """
         Retorna todos os NPCs/Companions relacionados a um local.
+
+        Tem @retry (faltava): na troca de cena após idle, a 1ª query pegava a
+        conexão morta do AuraDB e estourava sem nova tentativa — `npcs_inferir_falhou`
+        do playtest #6. O retry reabre a conexão e o local repopula.
 
         Returns:
             Lista de dicts com id, nome e tipo de label do nó.
