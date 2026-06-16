@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""  # deprecated — free tier extinto
     LANGCHAIN_API_KEY: str = ""  # mantido para compatibilidade com .env existentes; não usado
     NEO4J_USER: str = "neo4j"
+    # AuraDB Free derruba conexões ociosas — sem liveness check o driver entrega
+    # uma conexão "defunct" do pool e a query estoura (ConnectionResetError 10054,
+    # crash do playtest #6). Ping pré-uso quando a conexão ficou ociosa > N s.
+    NEO4J_LIVENESS_TIMEOUT: float = 30.0
     GROQ_MODEL: str = "llama-3.3-70b-versatile"  # centralizado aqui conforme DIRETRIZES
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
