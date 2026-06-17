@@ -392,6 +392,17 @@ def test_hot_reload_retorna_none_quando_arquivo_some(tmp_path):
     ("entrei em combate com o guarda", True),
     ("iniciei o combate", True),
     ("começou o combate", True),
+    # ── Nível 1: golpe físico descritivo (ACAO-FISICA-COMBATE-1, playtest #6) ──
+    ("dou um tapa na cara dele", True),
+    ("dei um soco no bandido", True),
+    ("dou um murro nele", True),
+    ("dei uma joelhada no estômago do guarda", True),
+    ("dou um empurrão nele", True),
+    ("mando um soco na cara do orc", True),
+    ("esmurro o goblin", True),
+    ("esbofeteio o nobre arrogante", True),
+    ("dou um abraço no Aldric", False),       # carinho, não golpe
+    ("dou uma olhada no mapa", False),        # observar, não golpe
     # ── Não combate ────────────────────────────────────────────────────────────
     ("eu falo com o ferreiro", False),
     ("olho ao redor da sala", False),
