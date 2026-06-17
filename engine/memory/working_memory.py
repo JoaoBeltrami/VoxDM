@@ -561,7 +561,7 @@ class WorkingMemory:
             character=character,
             session_id=session_id,
             tts_voice=tts_voice,
-            dm_profile=dm_profile if dm_profile in {"rigoroso", "equilibrado", "tranquilo", "rule_of_cool"} else "equilibrado",
+            dm_profile=dm_profile if dm_profile in {"rigoroso", "equilibrado", "tranquilo", "rule_of_cool", "sombrio"} else "equilibrado",
             roll_visibility=roll_visibility if roll_visibility in {"open", "result_only", "narrated"} else "result_only",
             death_policy=death_policy if death_policy in {"narrativo", "mortal"} else "narrativo",
             modo_episodio=bool(modo_episodio),

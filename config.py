@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
     LLM_BACKEND: str = "groq"
 
+    # ── Narração grimdark (ficção sombria sem filtro) ─────────────────────
+    # Kill-switch global: False = grimdark desabilitado, roteamento normal.
+    # True = dm_profile="sombrio" roteia para NARRATIVE_GRIM (groq-70b →
+    # gemini → ollama-grim), e fragmento de contrato de ficção é injetado.
+    GRIMDARK_ATIVO: bool = False
+    # Modelo Ollama uncensored/abliterated — garantia de último recurso.
+    # Precisa ser baixado manualmente: `ollama pull dolphin-mistral`
+    # Candidatos testados no RTX 2060 6GB: dolphin-mistral (7B Q4, ~4.2GB)
+    OLLAMA_MODEL_GRIM: str = "dolphin-mistral"
+
     # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
     # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
     GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"

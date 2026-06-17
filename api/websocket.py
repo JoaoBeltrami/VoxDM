@@ -36,6 +36,7 @@ from starlette.websockets import WebSocketState
 from api.models.schemas import MensagemWS
 from api.state import SessaoAtiva, sessions
 from config import settings
+from engine.llm.amarelada import e_cena_sombria
 from engine.llm.prompt_builder import (
     _LEMBRETE_SAIDA,
     _RE_COMBATE,
@@ -1703,6 +1704,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # baseado em combate + pacing + cliffhanger pendente. Em sessão de
             # 1h, ~30% dos turnos viram LIGHT (8B) economizando TPM do 70B.
             from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+            _dm_prof = sessao.working_mem.dm_profile
+            _grim = settings.GRIMDARK_ATIVO
             _task_turno = escolher_task_type_narrativo(
                 em_combate=sessao.working_mem.em_combate,
                 pacing_nivel=sessao.working_mem.pacing_nivel,
@@ -1710,7 +1713,16 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
                 npc_na_cena=bool(sessao.working_mem.npcs_presentes),
                 light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
+                dm_profile=_dm_prof,
+                grimdark_ativo=_grim,
             )
+            # Informa os providers se a cena atual exige detecção de amarelada.
+            # Setado antes do stream para que o buffer check do GroqProvider
+            # cascateie no próprio turno, não no próximo.
+            _cena_sombria = _grim and (
+                _dm_prof == "sombrio" or e_cena_sombria(texto_jogador)
+            )
+            sessao.groq.router.set_cena_sombria(_cena_sombria)
             # Atualiza o cap anti-robô: conta turnos LIGHT (8B) seguidos para
             # que a próxima decisão force um 70B periódico e quebre o loop.
             sessao.working_mem.narrative.registrar_task_narrativo(

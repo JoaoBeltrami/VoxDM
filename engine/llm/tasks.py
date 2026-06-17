@@ -30,6 +30,7 @@ class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda s
     NARRATIVE = "narrative"            # default — qualidade máxima
     NARRATIVE_CLIMAX = "narrative_climax"  # combate intenso, cliffhanger, momentos chave
     NARRATIVE_LIGHT = "narrative_light"    # exploração filler, transição rápida → 8B
+    NARRATIVE_GRIM = "narrative_grim"      # ficção sombria — garantia de fallback uncensored
     SUMMARIZATION = "summarization"    # compressão de sessão episódica
     CLASSIFICATION = "classification"  # decisões binárias (placeholder; ainda não usado)
     ENTITY_EXTRACTION = "entity_extraction"  # placeholder
@@ -40,10 +41,11 @@ class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda s
 
 # Nomes canônicos de provider — devem casar com LLMRouter._providers.
 # Mantemos como constantes pra evitar typos espalhados.
-PROV_GROQ_70B:   Final[str] = "groq-70b"
-PROV_GROQ_8B:    Final[str] = "groq-8b"
-PROV_GEMINI:     Final[str] = "gemini-flash"
-PROV_OLLAMA:     Final[str] = "ollama-local"
+PROV_GROQ_70B:    Final[str] = "groq-70b"
+PROV_GROQ_8B:     Final[str] = "groq-8b"
+PROV_GEMINI:      Final[str] = "gemini-flash"
+PROV_OLLAMA:      Final[str] = "ollama-local"
+PROV_OLLAMA_GRIM: Final[str] = "ollama-grim"   # modelo uncensored para ficção sombria
 
 
 # Cascata aplicada quando o TaskType não tem entrada explícita aqui.
@@ -80,6 +82,14 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
         PROV_GEMINI,
         PROV_GROQ_70B,      # 70B só como último recurso aqui
         PROV_OLLAMA,
+    ],
+    # Grim: ficção sombria (massacre, tortura, horror de fantasia) — pula 8B
+    # (amarelea mais) e termina no modelo uncensored como GARANTIA.
+    # groq-70b → gemini (BLOCK_NONE já configurado) → ollama-grim (abliterated).
+    TaskType.NARRATIVE_GRIM: [
+        PROV_GROQ_70B,
+        PROV_GEMINI,
+        PROV_OLLAMA_GRIM,
     ],
     # Resumo: Gemini é excelente em síntese e tem cota muito maior. Usar como
     # primário evita estourar a quota do Groq com tarefas não-narrativas.
@@ -129,10 +139,15 @@ def escolher_task_type_narrativo(
     turnos_sem_tensao: int = 0,
     npc_na_cena: bool = False,
     light_consecutivos: int = 0,
+    dm_profile: str = "",
+    grimdark_ativo: bool = False,
 ) -> TaskType:
     """Decide qual TaskType usar para o turno narrativo atual.
 
     Lógica (híbrida — calibração 02/06 pós teste ao vivo):
+      0. Grim: dm_profile="sombrio" + GRIMDARK_ATIVO → NARRATIVE_GRIM
+         (groq-70b → gemini → ollama-grim, pula 8B). Tem prioridade pra
+         garantir o fallback uncensored independente do estado de combate.
       1. Combate + pacing≥7 OU cliffhanger → CLIMAX (qualidade máxima)
       2. Fora de combate COM NPC na cena → NARRATIVE (70B), nunca 8B: cena
          social/RP é narrativamente exigente (diálogo, subtexto, voz de
@@ -150,7 +165,14 @@ def escolher_task_type_narrativo(
 
     `light_consecutivos` é o contador de turnos LIGHT seguidos (vem do
     NarrativeState); o caller deve atualizá-lo via registrar_task_narrativo().
+
+    `dm_profile` e `grimdark_ativo` controlam a rota grim (Camada 3 do roadmap
+    anti-amarelada). Passar `grimdark_ativo=settings.GRIMDARK_ATIVO` no call site.
     """
+    # Grim tem prioridade: dm_profile sombrio com kill-switch ativo
+    if grimdark_ativo and dm_profile == "sombrio":
+        return TaskType.NARRATIVE_GRIM
+
     if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
         return TaskType.NARRATIVE_CLIMAX
 

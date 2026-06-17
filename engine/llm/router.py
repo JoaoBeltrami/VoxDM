@@ -26,15 +26,18 @@ from collections.abc import AsyncIterator
 import structlog
 
 from config import settings
+from engine.llm.amarelada import e_amarelada
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 from engine.llm.providers.gemini import GeminiProvider
 from engine.llm.providers.groq import GroqProvider
 from engine.llm.providers.ollama import OllamaProvider
+from engine.llm.providers.ollama_grim import OllamaGrimProvider
 from engine.llm.tasks import (
     PROV_GEMINI,
     PROV_GROQ_8B,
     PROV_GROQ_70B,
     PROV_OLLAMA,
+    PROV_OLLAMA_GRIM,
     TaskType,
     cascata_para,
 )
@@ -55,11 +58,14 @@ class LLMRouter:
         # Registrados uma vez por processo. Compartilham sem race condition
         # porque cada provider usa httpx.AsyncClient *por chamada*.
         self._providers: dict[str, BaseLLMProvider] = {
-            PROV_GROQ_70B:  GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
-            PROV_GROQ_8B:   GroqProvider(nome=PROV_GROQ_8B,  modelo=settings.GROQ_MODEL_FALLBACK),
-            PROV_GEMINI:    GeminiProvider(),
-            PROV_OLLAMA:    OllamaProvider(),
+            PROV_GROQ_70B:    GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
+            PROV_GROQ_8B:     GroqProvider(nome=PROV_GROQ_8B,  modelo=settings.GROQ_MODEL_FALLBACK),
+            PROV_GEMINI:      GeminiProvider(),
+            PROV_OLLAMA:      OllamaProvider(),
+            PROV_OLLAMA_GRIM: OllamaGrimProvider(),
         }
+        # Flag de cena sombria para os providers que suportam amarelada check.
+        self._cena_sombria: bool = False
         # Override por sessão — quando setado, esse provider vai pra frente da
         # cascata (sem remover os outros).
         self._override_primario: str | None = None
@@ -79,6 +85,18 @@ class LLMRouter:
             return
         self._override_primario = nome
         log.info("router_override_primario", provider=nome)
+
+    def set_cena_sombria(self, val: bool) -> None:
+        """Habilita detecção de amarelada para a próxima chamada.
+
+        Propagado para os GroqProviders que suportam a checagem no buffer
+        de stream. O websocket.py chama com val=True quando a transcrição
+        ativa `e_cena_sombria()` ou dm_profile="sombrio".
+        """
+        self._cena_sombria = val
+        for p in self._providers.values():
+            if hasattr(p, "set_cena_sombria"):
+                p.set_cena_sombria(val)
 
     def _cascata_efetiva(self, task: TaskType) -> list[str]:
         """Cascata final: override primário (se houver) seguido pelo default.
@@ -158,6 +176,19 @@ class LLMRouter:
             try:
                 log.info("llm_provider_tentando", provider=p.nome, task=task.value)
                 texto = await p.completar(mensagens, temperatura, max_tokens)
+                # Detecção de amarelada em cena sombria: se o provider filtrou
+                # suavemente (fade-to-black, moralização), cascateia pro próximo.
+                if self._cena_sombria and e_amarelada(texto):
+                    log.warning(
+                        "llm_amarelada_detectada_completar",
+                        provider=p.nome,
+                        trecho=texto[:80],
+                    )
+                    ultimo_erro = LLMRetriable(
+                        f"{p.nome} amarelou (fade-to-black/moralização)",
+                        categoria="amarelada",
+                    )
+                    continue
                 log.info("llm_provider_ok", provider=p.nome, task=task.value, chars=len(texto))
                 cascata_disparou = p.nome != provider_primario
                 self._emitir_decisao(

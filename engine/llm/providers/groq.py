@@ -30,6 +30,7 @@ from groq import (
 )
 
 from config import settings
+from engine.llm.amarelada import e_amarelada
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 
 log = structlog.get_logger(__name__)
@@ -107,6 +108,13 @@ class GroqProvider(BaseLLMProvider):
         self.nome = nome
         self._modelo = modelo
         self._client: AsyncGroq | None = None
+        # Setado pelo router quando a cena ativa e_cena_sombria() ou
+        # dm_profile="sombrio". Habilita detecção de amarelada no buffer.
+        self._cena_sombria: bool = False
+
+    def set_cena_sombria(self, val: bool) -> None:
+        """Habilita/desabilita detecção de amarelada no buffer de stream."""
+        self._cena_sombria = val
 
     @property
     def disponivel(self) -> bool:
@@ -220,6 +228,11 @@ class GroqProvider(BaseLLMProvider):
                                 f"groq[{self._modelo}] stream refusal: {buffer[:80]!r}",
                                 categoria="refusal",
                             )
+                        if self._cena_sombria and e_amarelada(buffer):
+                            raise LLMRetriable(
+                                f"groq[{self._modelo}] stream amarelada: {buffer[:80]!r}",
+                                categoria="amarelada",
+                            )
                         for c in pendentes:
                             yield c
                         pendentes.clear()
@@ -252,6 +265,11 @@ class GroqProvider(BaseLLMProvider):
                 raise LLMRetriable(
                     f"groq[{self._modelo}] stream refusal curto: {buffer[:80]!r}",
                     categoria="refusal",
+                )
+            if self._cena_sombria and e_amarelada(buffer):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream amarelada curta: {buffer[:80]!r}",
+                    categoria="amarelada",
                 )
             for c in pendentes:
                 yield c
