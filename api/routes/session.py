@@ -23,6 +23,7 @@ import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from api.auth import get_owner
+from api.debug_archive import arquivar_debug_sessao
 from api.models.schemas import (
     CharacterStateSchema,
     ComandoJogador,
@@ -793,6 +794,11 @@ async def encerrar_sessao(
             session_id=session_id,
             erro=str(e),
         )
+
+    # PLAY5-DEBUGDATA: arquiva histórico de debug ANTES de destruir a sessão — o
+    # /playtest puxa o relatório mesmo após o Encerrar (os endpoints /debug fazem
+    # fallback pro arquivo). Internamente silencioso: não quebra o encerramento.
+    await arquivar_debug_sessao(session_id, sessao.historico_turnos, sessao.ultimo_turno)
 
     del sessions[session_id]
     log.info("sessao_encerrada", session_id=session_id, iteracoes=sessao.iteracoes)
