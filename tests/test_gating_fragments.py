@@ -177,3 +177,52 @@ def test_cena_calma_system_menor_que_dramatica():
     # Voz dupla + markers sozinhos somam pelo menos 1500 chars
     delta_minimo_esperado = 1500
     assert len(sys_drama) - len(sys_calmo) >= delta_minimo_esperado
+
+
+# ── TOKENS-21K: decomposicao do bucket "outros" ────────────────────────────────
+
+# Chaves novas que decompoem o antigo "outros" invisivel (~10k chars no teste #6).
+_CHAVES_BREAKDOWN_NOVAS = (
+    "social_md", "saves_md", "dice_md", "quests_md",
+    "canon", "relacoes_grafo", "rolling_summary", "lembrete_saida",
+)
+
+
+def _capturar_breakdown(wm: WorkingMemory) -> dict:
+    """Roda montar_mensagens e extrai o chars_breakdown do log prompt_montado."""
+    import structlog
+
+    with structlog.testing.capture_logs() as logs:
+        montar_mensagens(_ctx(wm))
+    eventos = [e for e in logs if e.get("event") == "prompt_montado"]
+    assert eventos, "log prompt_montado nao capturado"
+    return eventos[-1]["chars_breakdown"]
+
+
+def test_breakdown_tem_chaves_decompostas():
+    """As novas chaves existem no breakdown mesmo quando o bloco nao foi injetado."""
+    bd = _capturar_breakdown(_wm_calmo())
+    for chave in _CHAVES_BREAKDOWN_NOVAS:
+        assert chave in bd, f"chave {chave} ausente no breakdown"
+    assert bd["lembrete_saida"] > 0  # _LEMBRETE_SAIDA e constante, sempre presente
+
+
+def test_breakdown_mede_social_md_quando_injetado():
+    """social.md (maior culpado oculto do 'outros') vira bucket proprio mensuravel."""
+    wm = _wm_calmo()
+    wm.npcs_presentes = ["mira"]  # NPC presente fora de combate -> social.md injeta
+    bd = _capturar_breakdown(wm)
+    assert bd["social_md"] > 0
+
+
+def test_breakdown_soma_fecha_o_total_sem_dupla_contagem():
+    """Invariante: a soma dos buckets == tamanho do system prompt (outros e residuo)."""
+    import structlog
+
+    wm = _wm_calmo()
+    wm.npcs_presentes = ["mira"]
+    with structlog.testing.capture_logs() as logs:
+        system = montar_mensagens(_ctx(wm))[0]["content"]
+    bd = [e for e in logs if e.get("event") == "prompt_montado"][-1]["chars_breakdown"]
+    assert bd["outros"] >= 0
+    assert sum(bd.values()) == len(system)

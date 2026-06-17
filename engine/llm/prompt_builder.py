@@ -367,6 +367,15 @@ def montar_mensagens(
     wm = contexto.working_memory
     chars_voz_dupla = 0
     chars_markers = 0
+    # TOKENS-21K: acumuladores pra decompor o antigo bucket "outros" (~10k chars
+    # invisíveis no breakdown). social.md (~6k) era o maior culpado oculto.
+    chars_canon = 0
+    chars_saves = 0
+    chars_social = 0
+    chars_relacoes = 0
+    chars_dice = 0
+    chars_quests = 0
+    chars_rolling = 0
     if getattr(wm, "npc_vozes", {}):
         voz_dupla = _carregar_voz_dupla()
         if voz_dupla:
@@ -382,10 +391,13 @@ def montar_mensagens(
     canon = _ler_prompt(_FRAG_CANON)
     if canon:
         secoes.append(canon)
+        chars_canon += len(canon)
     fatos_canon = getattr(contexto, "canon_modulo", [])
     if fatos_canon:
         linhas_canon = "\n".join(f"• {f}" for f in fatos_canon)
-        secoes.append(f"\nFATOS CANÔNICOS DESTE MUNDO (imutáveis):\n{linhas_canon}")
+        _bloco_canon = f"\nFATOS CANÔNICOS DESTE MUNDO (imutáveis):\n{linhas_canon}"
+        secoes.append(_bloco_canon)
+        chars_canon += len(_bloco_canon)
 
     # Markers list: injeta só quando a cena tem ritmo dramático (em combate,
     # pacing alto, cliffhanger, fios ou agendas ativos). Em exploração calma
@@ -435,7 +447,9 @@ def montar_mensagens(
             )
         saves_texto = _carregar_saves()
         if saves_texto:
-            secoes.append(f"\n{saves_texto}")
+            _bloco_saves = f"\n{saves_texto}"
+            secoes.append(_bloco_saves)
+            chars_saves = len(_bloco_saves)
 
     # Camada social — cena de conversa/barganha/interrogatório (NPCs presentes,
     # fora de combate). Parte do prefixo estático (cache-friendly), igual combat.md.
@@ -445,7 +459,9 @@ def montar_mensagens(
     if (not _em_combate_ativo) and bool(getattr(wm, "npcs_presentes", [])):
         social_texto = _carregar_social()
         if social_texto:
-            secoes.append(f"\n{social_texto}")
+            _bloco_social = f"\n{social_texto}"
+            secoes.append(_bloco_social)
+            chars_social = len(_bloco_social)
 
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
     # Subclasse injetada separadamente para não inflar para_texto() com campo raro.
@@ -462,7 +478,9 @@ def montar_mensagens(
 
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:
-        secoes.append(_formatar_relacoes(contexto.relacoes_grafo))
+        _bloco_rel = _formatar_relacoes(contexto.relacoes_grafo)
+        secoes.append(_bloco_rel)
+        chars_relacoes = len(_bloco_rel)
 
     # Memória semântica (conteúdo do módulo)
     sem_texto = _formatar_chunks(contexto.chunks_semanticos, limite_chars=BUDGET_SEMANTICO * 4)
@@ -493,14 +511,18 @@ def montar_mensagens(
     if _RE_ROLAGEM.search(contexto.transcricao_atual) and not _em_combate_ativo:
         dice_texto = _carregar_dice()
         if dice_texto:
-            secoes.append(f"\n{dice_texto}")
+            _bloco_dice = f"\n{dice_texto}"
+            secoes.append(_bloco_dice)
+            chars_dice = len(_bloco_dice)
             log.info("dice_md_injetado", transcricao=contexto.transcricao_atual[:60])
 
     # Instrução de progressão de quests — injetada apenas quando o módulo define quests
     if getattr(contexto.working_memory, "quests_modulo", ""):
         quests_texto = _carregar_quests()
         if quests_texto:
-            secoes.append(f"\n{quests_texto}")
+            _bloco_quests = f"\n{quests_texto}"
+            secoes.append(_bloco_quests)
+            chars_quests = len(_bloco_quests)
 
     # ── Features de Mestre Veterano ──────────────────────────────────────────
 
@@ -810,10 +832,12 @@ def montar_mensagens(
     if settings.ROLLING_SUMMARY_ATIVO:
         _resumo_rolling = getattr(contexto.working_memory, "resumo_rolling", "")
         if _resumo_rolling:
-            secoes.append(
+            _bloco_rolling = (
                 "\nVocê se lembra de tudo o que já aconteceu nesta sessão:\n"
                 + _resumo_rolling
             )
+            secoes.append(_bloco_rolling)
+            chars_rolling = len(_bloco_rolling)
 
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
 
@@ -829,10 +853,20 @@ def montar_mensagens(
         "combat_md": chars_combat,
         "semantica": len(sem_texto),
         "episodica": len(ep_texto),
+        # TOKENS-21K: ex-"outros" agora decomposto. social.md era ~6k oculto;
+        # relações do grafo (3 NPCs repetidos) e rolling summary são os outros pesos.
+        "social_md": chars_social,
+        "saves_md": chars_saves,
+        "dice_md": chars_dice,
+        "quests_md": chars_quests,
+        "canon": chars_canon,
+        "relacoes_grafo": chars_relacoes,
+        "rolling_summary": chars_rolling,
+        "lembrete_saida": len(_LEMBRETE_SAIDA),
     }
-    # "outros" = tudo que não tem chave própria (relações do grafo, rolling
-    # summary, blocos dos Pilares, lembrete). Teste #3: ~8k chars invisíveis
-    # no breakdown — sem medir não há dieta.
+    # "outros" = resíduo após a decomposição acima — agora majoritariamente os
+    # blocos inline dos Pilares (relógios, ameaças latentes, iniciativa NPC, perfil
+    # do jogador, ecos, fios/cliffhanger/âncora, cartas, magias) + newlines do join.
     chars_breakdown["outros"] = max(
         0, len(system_content) - sum(chars_breakdown.values())
     )
