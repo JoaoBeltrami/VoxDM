@@ -1074,7 +1074,12 @@ def aplicar_pos_turno(
     for m in _RE_RELOGIO.finditer(resposta_completa):
         rid = m.group(1).strip().lower()
         seg = int(m.group(3)) if m.group(3) else 6
-        if working_mem.narrative.criar_relogio(rid, m.group(2), seg):
+        # PLAY5-FRONTS: se o id casa com uma ameaça latente, ATIVA preservando os
+        # segmentos/filled autorais; senão cria um relógio improvisado novo.
+        if rid in working_mem.narrative.fronts_latentes:
+            if working_mem.narrative.ativar_front_latente(rid):
+                log.info("front_latente_ativado", relogio=rid)
+        elif working_mem.narrative.criar_relogio(rid, m.group(2), seg):
             log.info("relogio_criado", relogio=rid, nome=m.group(2).strip()[:40], max=seg)
     for m in _RE_RELOGIO_AVANCA.finditer(resposta_completa):
         rid = m.group(1).strip().lower()

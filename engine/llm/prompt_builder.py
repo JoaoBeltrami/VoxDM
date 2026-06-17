@@ -628,6 +628,23 @@ def montar_mensagens(
                 "proporcionais ao preenchimento — quase cheio = sinais urgentes."
             )
 
+        # PLAY5-FRONTS — ameaças latentes (fronts autorais ainda não introduzidos).
+        # Diferente dos relógios ativos: o jogador NÃO as vê e elas não andam até
+        # serem estabelecidas na cena. O LLM as semeia e, quando a narrativa
+        # justifica, ativa via [RELOGIO: id|...] (vira relógio visível e correndo).
+        if getattr(narrative, "fronts_latentes", None):
+            linhas_lat = "\n".join(
+                f"• [{fid}] {f['nome']}" for fid, f in narrative.fronts_latentes.items()
+            )
+            secoes.append(
+                f"\n=== AMEAÇAS LATENTES (o jogador AINDA não as conhece) ===\n{linhas_lat}\n"
+                "Forças que o autor plantou no mundo, mas que o jogador ainda não "
+                "viu. NÃO as anuncie como ameaça pronta nem como contagem — semeie "
+                "presságios sutis (rumores, sinais, tensão de fundo). Quando a cena "
+                "ESTABELECER a ameaça de verdade, emita [RELOGIO: id|nome|segmentos] "
+                "com o id entre colchetes para torná-la um relógio ativo e visível."
+            )
+
         # Mundo Vivo P2 — NPC toma a iniciativa (one-shot da engine). O NPC
         # deixa de ser estátua reativa: a agenda dele vira movimento na cena.
         ini = narrative.consumir_iniciativa_npc()

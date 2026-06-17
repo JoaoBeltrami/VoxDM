@@ -207,16 +207,19 @@ async def iniciar_sessao(
     _quests_modulo_txt = catalog_para_texto(_quest_catalog)
     working_mem.quests_modulo = _quests_modulo_txt
 
-    # Schema v2 — fronts autorais viram relógios de ameaça já no turno 1 (pilar
-    # Mundo Vivo). SÓ em sessão NOVA: uma sessão continuada restaura seus próprios
-    # relógios (com o progresso que já tinham) — re-semear zeraria a ameaça.
+    # Schema v2 — fronts autorais entram como ameaças LATENTES (pilar Mundo Vivo).
+    # SÓ em sessão NOVA: uma sessão continuada restaura seus próprios fronts/relógios
+    # (com o progresso que já tinham) — re-semear zeraria a ameaça.
+    # PLAY5-FRONTS: NÃO viram relógio visível no turno 1 (era "ameaça que o jogador
+    # não sabe por que está lá"). Ficam latentes; o LLM as semeia e ativa via
+    # [RELOGIO: id|...] quando a cena estabelece a ameaça.
     if not config.session_anterior_id:
         for _front in carregar_fronts_modulo(settings.DEFAULT_MODULE_PATH):
-            working_mem.narrative.criar_relogio(
+            working_mem.narrative.registrar_front_latente(
                 str(_front["id"]),
                 str(_front["name"]),
                 segmentos=int(_front["segments"]),  # type: ignore[call-overload]
-                inicial=int(_front["filled"]),       # type: ignore[call-overload]
+                filled=int(_front["filled"]),         # type: ignore[call-overload]
             )
         # Agendas de NPC autorais — planos de fundo desde o turno 1 (Mundo Vivo).
         # Cap de 8 para não inflar o prompt (o sistema [AGENDA] do LLM acrescenta
@@ -818,6 +821,8 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "cicatrizes":           list(wm.cicatrizes),
         # Mundo Vivo — relógios de ameaça continuam andando entre sessões
         "relogios":             {k: dict(v) for k, v in wm.narrative.relogios.items()},
+        # PLAY5-FRONTS — ameaças latentes ainda não introduzidas seguem entre sessões
+        "fronts_latentes":      {k: dict(v) for k, v in wm.narrative.fronts_latentes.items()},
         # Ritual P2 — o mestre te conhece entre sessões
         "estilo_jogador":       dict(wm.narrative.estilo_jogador),
         # Mundo Vivo P2 — ecos: locais por onde o jogador já passou
