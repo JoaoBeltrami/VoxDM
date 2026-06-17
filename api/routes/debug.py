@@ -20,6 +20,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import exige_admin
+from api.debug_archive import carregar_debug_sessao
 from api.state import sessions
 from engine.auth.identity import Owner
 from engine.telemetry import read_latest
@@ -181,6 +182,16 @@ async def historico_sessao(
     """
     sessao = sessions.get(session_id)
     if not sessao:
+        # PLAY5-DEBUGDATA: fallback pro arquivo de uma sessão já encerrada — o
+        # /playtest puxa o relatório mesmo depois do Encerrar.
+        arquivo = await carregar_debug_sessao(session_id)
+        if arquivo is not None:
+            return {
+                "session_id": session_id,
+                "total_turnos": arquivo.get("total_turnos", 0),
+                "historico": arquivo.get("historico", []),
+                "arquivada": True,
+            }
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
     return {
         "session_id": session_id,
@@ -207,6 +218,10 @@ async def ultimo_turno(
     """Retorna snapshot completo do último turno: prompt enviado ao Groq, RAG scores e breakdown de latência."""
     sessao = sessions.get(session_id)
     if not sessao:
+        # PLAY5-DEBUGDATA: fallback pro arquivo de uma sessão já encerrada.
+        arquivo = await carregar_debug_sessao(session_id)
+        if arquivo and arquivo.get("ultimo_turno"):
+            return arquivo["ultimo_turno"]
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
     if not sessao.ultimo_turno:
         raise HTTPException(status_code=404, detail="Nenhum turno registrado ainda nesta sessão")
