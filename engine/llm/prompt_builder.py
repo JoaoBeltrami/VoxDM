@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 
 from config import settings
+from engine.llm.amarelada import e_cena_sombria
 from engine.llm.types import (
     RE_COMBATE as _RE_COMBATE,
 )
@@ -58,10 +59,14 @@ _FRAG_MARKERS_LISTA = _FRAGMENTS_DIR / "markers_lista.md"
 # próprio Valdrek vivo e ele virou companion). Hardcoded enquanto o módulo é
 # único; Schema v2 move isto para o JSON do módulo.
 _FRAG_CANON         = _FRAGMENTS_DIR / "canon.md"
+# Contrato de ficção sombria — injetado quando GRIMDARK_ATIVO e (dm_profile=="sombrio"
+# ou cena contém keywords de atrocidade). ~900 chars, instrui o LLM a narrar sem
+# fade-to-black/moralização. Ver engine/llm/amarelada.py para detecção de amarelada.
+_FRAG_GRIMDARK      = _FRAGMENTS_DIR / "grimdark.md"
 
 # Perfis válidos — alinhar com SessaoConfig.dm_profile e WorkingMemory.dm_profile
 _DM_PROFILES_VALIDOS: frozenset[str] = frozenset({
-    "rigoroso", "equilibrado", "tranquilo", "rule_of_cool",
+    "rigoroso", "equilibrado", "tranquilo", "rule_of_cool", "sombrio",
 })
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
@@ -414,11 +419,27 @@ def montar_mensagens(
     # ~150 tokens/turno de redundância (6k tokens em sessão de 40 turnos).
     # Pulamos quando perfil é o default.
     dm_profile_attr = getattr(contexto.working_memory, "dm_profile", "equilibrado")
-    if dm_profile_attr != "equilibrado":
+    if dm_profile_attr not in ("equilibrado", "sombrio"):
         overlay = _carregar_dm_profile(dm_profile_attr)
         if overlay:
             secoes.append(overlay)
             log.info("dm_profile_aplicado", profile=dm_profile_attr)
+
+    # Contrato de ficção sombria — injetado quando kill-switch ativo E
+    # (dm_profile="sombrio" OU keywords de atrocidade na transcrição atual).
+    # Posicionado APÓS o overlay de perfil pra ter prioridade de instrução.
+    # "sombrio" não tem overlay de dm_profiles/ — ele só usa este fragmento.
+    if settings.GRIMDARK_ATIVO:
+        _transcricao = getattr(contexto, "transcricao_atual", "") or ""
+        _usa_grimdark = (
+            dm_profile_attr == "sombrio"
+            or e_cena_sombria(_transcricao)
+        )
+        if _usa_grimdark:
+            grimdark_frag = _ler_prompt(_FRAG_GRIMDARK)
+            if grimdark_frag and len(grimdark_frag) >= _PROMPT_MIN_CHARS:
+                secoes.append(grimdark_frag)
+                log.info("grimdark_fragmento_injetado", dm_profile=dm_profile_attr)
 
     # ── Camada de combate — parte do PREFIXO ESTÁTICO (cache-friendly) ────────
     # combat.md + saves.md são INSTRUÇÕES de comportamento ("como rodar combate"),

@@ -59,8 +59,9 @@ class SessaoConfig(BaseModel):
         ),
     )
     # Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md
-    # Valores: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool"
-    dm_profile: str = Field(default="equilibrado", pattern=r"^(rigoroso|equilibrado|tranquilo|rule_of_cool)$")
+    # Valores: "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool" | "sombrio"
+    # "sombrio" + GRIMDARK_ATIVO=True → fragmento grimdark.md + cascata NARRATIVE_GRIM
+    dm_profile: str = Field(default="equilibrado", pattern=r"^(rigoroso|equilibrado|tranquilo|rule_of_cool|sombrio)$")
     # Visibilidade das rolagens do mestre (Fase 5.7):
     # "open"        → animação + número (transparência total)
     # "result_only" → só o número sem animação (padrão)

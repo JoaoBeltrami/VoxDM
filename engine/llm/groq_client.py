@@ -31,6 +31,7 @@ from engine.llm.tasks import (
     PROV_GROQ_8B,
     PROV_GROQ_70B,
     PROV_OLLAMA,
+    PROV_OLLAMA_GRIM,
     TaskType,
 )
 
@@ -44,8 +45,9 @@ _BACKEND_PARA_PROVIDER: dict[str, str | None] = {
     "groq-70b": PROV_GROQ_70B,
     "groq-8b": PROV_GROQ_8B,
     "gemini":  PROV_GEMINI,
-    "ollama":  PROV_OLLAMA,
-    "auto":    None,
+    "ollama":      PROV_OLLAMA,
+    "ollama-grim": PROV_OLLAMA_GRIM,
+    "auto":        None,
     "":        None,
     "default": None,
 }
@@ -85,6 +87,11 @@ class GroqClient:
     def backend_efetivo(self) -> str:
         """Hint legível do backend ativo — ``"auto"`` quando sem override."""
         return self._backend_override or "auto"
+
+    @property
+    def router(self) -> LLMRouter:
+        """Acesso direto ao LLMRouter para chamadas de controle (ex: set_cena_sombria)."""
+        return self._router
 
     @property
     def ultimo_provider_stream(self) -> str | None:
