@@ -50,6 +50,16 @@ RE_COMBATE = re.compile(
     r"apunhal[ao]|apunhalei|apunhalar|"
     r"soc[ao]|socou|socar|"
     r"chut[ao]|chutei|chutar|"
+    # ── Nível 1: golpe físico descritivo — "dou um tapa/soco na cara dele" ─────
+    # Bug ACAO-FISICA-COMBATE-1 (playtest #6): a construção "dou/dei um/uma
+    # <golpe>" virava quest social ("acalmar-a-situação") — a regex pegava só o
+    # VERBO (soco/chuto), não o substantivo de golpe. Esses substantivos são
+    # inerentemente agressivos, então dispensam alvo explícito (como os Nível 1).
+    r"(?:dou|dei|desfiro|desferi|acerto|acertei|mando|mandei)\s+(?:lhe\s+)?"
+    r"(?:um|uma)\s+(?:tapa|soco|murro|chute|empurr[ãa]o|joelhada|cabe[çc]ada|"
+    r"cotovelada|bofetada|tabefe|coronhada|rasteira|patada|golpe|estocada|"
+    r"cutilada|bordoada|porrada|pancada)|"
+    r"esmurr\w*|esbofete\w*|estape\w*|"
     # ── Nível 1: distância ────────────────────────────────────────────────────
     r"dispar[ao]|disparei|disparar|"
     r"atir[ao]|atirei|atirar|"
