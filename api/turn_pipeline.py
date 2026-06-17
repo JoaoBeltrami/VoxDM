@@ -174,6 +174,35 @@ _RE_CENA = re.compile(
 _RE_DANO = re.compile(r"\[DANO:\s*-?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 _RE_CURA = re.compile(r"\[CURA:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 
+# DANO-IMPROVISADO-1 (playtest #6, 16/06): teto de dano por golpe quando o
+# encontro é 100% IMPROVISADO — nenhum inimigo vivo tem ficha SRD no bestiário.
+# No teste, um "homem comum" sem ficha levou o 8B a inventar dano=17 num golpe só
+# (quase one-shot num PJ nv3). O teto ancora em CR≈0–1/8 (commoner com clava 1d4≈4;
+# bandido 1d6+1≈7): o golpe mais duro de um humano improvisado fica em ~8. Quando
+# ALGUM inimigo tem ficha SRD, o LLM tem stats reais pra ancorar o dano e o clamp
+# NÃO interfere (confia no teto de hp_max de aplicar_dano). Fora de combate também
+# não atua — preserva dano legítimo de queda/armadilha/narrativa. Ajustável após
+# validação de balance ao vivo.
+_DANO_MAX_INIMIGO_IMPROVISADO = 8
+
+
+def _combate_sem_ficha_srd(working_mem: Any) -> bool:
+    """True quando há combate ativo e NENHUM inimigo vivo tem ficha SRD.
+
+    Sinaliza um encontro 100% improvisado, em que o dano de inimigo não tem
+    stat block pra se ancorar — gatilho do clamp DANO-IMPROVISADO-1.
+    """
+    if not getattr(working_mem, "em_combate", False):
+        return False
+    vivos = [
+        d
+        for d in getattr(working_mem, "inimigos_combate", {}).values()
+        if d.get("estado") != "morto"
+    ]
+    if not vivos:
+        return False
+    return not any(d.get("ficha") for d in vivos)
+
 # Cicatriz permanente — emitida quando o personagem sobrevive a 0 PV (ou a
 # um custo físico dramático). Persiste via dm_state; NPCs reagem.
 _RE_CICATRIZ = re.compile(r"\[CICATRIZ:\s*([^\]]+?)\s*\]", re.IGNORECASE)
@@ -1005,12 +1034,26 @@ def aplicar_pos_turno(
     # 16c. Dano/cura no jogador — [DANO: -N] / [CURA: +N] (Pilar Perigo).
     # Soma todas as ocorrências do turno; clamps no substate. A 0 PV o
     # prompt_builder injeta o protocolo da death_policy no próximo turno.
+    # DANO-IMPROVISADO-1: em combate 100% improvisado (sem ficha SRD) limita o
+    # dano por golpe a um teto CR≈0 — evita o 8B inventar one-shot (dano=17).
+    teto_improvisado = (
+        _DANO_MAX_INIMIGO_IMPROVISADO if _combate_sem_ficha_srd(working_mem) else None
+    )
     for m in _RE_DANO.finditer(resposta_completa):
+        dano = int(m.group(1))
+        if teto_improvisado is not None and dano > teto_improvisado:
+            log.info(
+                "dano_improvisado_clampado",
+                bruto=dano,
+                teto=teto_improvisado,
+                motivo=m.group(2).strip()[:60] or None,
+            )
+            dano = teto_improvisado
         antes = working_mem.player_hp
-        depois = working_mem.character.aplicar_dano(int(m.group(1)))
+        depois = working_mem.character.aplicar_dano(dano)
         log.info(
             "dano_jogador",
-            dano=int(m.group(1)),
+            dano=dano,
             hp=f"{antes}->{depois}",
             motivo=m.group(2).strip()[:60] or None,
         )

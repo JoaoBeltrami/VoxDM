@@ -16,11 +16,13 @@ from types import SimpleNamespace
 import pytest
 
 from api.turn_pipeline import (
+    _DANO_MAX_INIMIGO_IMPROVISADO,
     _RE_CICATRIZ,
     _RE_CURA,
     _RE_DANO,
     _RE_RELOGIO,
     _RE_RELOGIO_AVANCA,
+    _combate_sem_ficha_srd,
     aplicar_pos_turno,
 )
 from engine.llm.prompt_builder import montar_mensagens
@@ -79,6 +81,58 @@ def test_cura_clampa_em_hp_max_e_reseta_death_saves():
 def test_dano_e_cura_no_mesmo_turno_em_ordem():
     wm = _wm(player_hp=20, player_hp_max=20)
     aplicar_pos_turno(wm, "", "Dói, mas a poção age. [DANO: -8 flecha] [CURA: +3 poção]")
+    assert wm.player_hp == 15
+
+
+# ── DANO-IMPROVISADO-1: teto de dano de inimigo sem ficha SRD ─────────────────
+
+
+def test_combate_sem_ficha_srd_helper():
+    """O gatilho só dispara em combate ativo com inimigo vivo e sem ficha."""
+    wm = _wm()
+    assert _combate_sem_ficha_srd(wm) is False  # fora de combate
+    wm.entrar_combate()
+    assert _combate_sem_ficha_srd(wm) is False  # combate sem inimigos
+    wm.registrar_inimigo("homem", "Homem comum", "intacto")
+    assert _combate_sem_ficha_srd(wm) is True  # improvisado: sem ficha
+    wm.inimigos_combate["homem"]["ficha"] = "Homem comum — CR 1/8, CA 11 ..."
+    assert _combate_sem_ficha_srd(wm) is False  # tem ficha SRD
+    wm.inimigos_combate["homem"]["estado"] = "morto"
+    assert _combate_sem_ficha_srd(wm) is False  # só inimigos mortos
+
+
+def test_dano_improvisado_clampado_em_combate_sem_ficha():
+    """Inimigo improvisado (sem ficha) não pode dar dano acima do teto CR≈0."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("homem", "Homem comum", "intacto")
+    aplicar_pos_turno(wm, "Ataco o homem!", "Ele revida com fúria. [DANO: -17 machadinha]")
+    assert wm.player_hp == 20 - _DANO_MAX_INIMIGO_IMPROVISADO  # 12, não 3
+
+
+def test_dano_nao_clampado_quando_inimigo_tem_ficha_srd():
+    """Com ficha SRD o LLM tem stats reais — só o clamp de hp_max atua."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("ogro", "Ogro", "intacto")
+    wm.inimigos_combate["ogro"]["ficha"] = "Ogro — CR 2, clava 2d8+4 ..."
+    aplicar_pos_turno(wm, "Ataco o ogro!", "A clava te acerta em cheio. [DANO: -17 clava]")
+    assert wm.player_hp == 3  # dano integral (17), ancorado na ficha
+
+
+def test_dano_nao_clampado_fora_de_combate():
+    """Dano de queda/armadilha/narrativa fora de combate é preservado."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "Pulo o abismo.", "A queda é brutal. [DANO: -17 queda]")
+    assert wm.player_hp == 3
+
+
+def test_dano_abaixo_do_teto_nao_e_alterado():
+    """Golpe improvisado dentro do teto passa intacto (não infla pro teto)."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("homem", "Homem comum", "intacto")
+    aplicar_pos_turno(wm, "Ataco o homem!", "Um corte raso. [DANO: -5 faca]")
     assert wm.player_hp == 15
 
 
