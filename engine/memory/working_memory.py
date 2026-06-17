@@ -783,6 +783,12 @@ class WorkingMemory:
                 self.narrative.relogios = {
                     str(k): dict(v) for k, v in relogios.items() if isinstance(v, dict)
                 }
+            # PLAY5-FRONTS: ameaças latentes ainda não introduzidas (idem: só se vazio)
+            fronts_lat = dm_state.get("fronts_latentes", {})
+            if fronts_lat and not self.narrative.fronts_latentes:
+                self.narrative.fronts_latentes = {
+                    str(k): dict(v) for k, v in fronts_lat.items() if isinstance(v, dict)
+                }
             # Ritual P2: perfil do jogador acumula entre sessões (merge se vazio)
             estilo = dm_state.get("estilo_jogador", {})
             if estilo and not self.narrative.estilo_jogador:

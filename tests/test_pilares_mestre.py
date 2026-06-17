@@ -282,6 +282,76 @@ def test_irrupcao_injetada_uma_vez_no_prompt():
     assert "RELÓGIO ESTOUROU" not in system2  # one-shot consumido
 
 
+# ── PLAY5-FRONTS: fronts autorais entram LATENTES, não como relógio no turno 1 ─
+
+
+def test_registrar_front_latente_idempotente_e_cap():
+    wm = _wm()
+    assert wm.narrative.registrar_front_latente("guerra", "A guerra das vilas", 6, 1) is True
+    assert wm.narrative.registrar_front_latente("guerra", "Duplicado", 6) is False  # idempotente
+    # id que já é relógio ativo não vira latente
+    wm.narrative.criar_relogio("ritual", "O ritual", 6)
+    assert wm.narrative.registrar_front_latente("ritual", "Conflito", 6) is False
+    # cap 8 de latentes
+    for i in range(10):
+        wm.narrative.registrar_front_latente(f"f{i}", f"Front {i}", 6)
+    assert len(wm.narrative.fronts_latentes) <= 8
+
+
+def test_front_latente_nao_aparece_como_relogio_no_prompt():
+    """Latente vai pro bloco AMEAÇAS LATENTES, nunca pro RELÓGIOS DE AMEAÇA."""
+    wm = _wm()
+    wm.narrative.registrar_front_latente("guerra-das-vilas", "As três vilas marcham", 6, 1)
+    system = montar_mensagens(_ctx(wm))[0]["content"]
+    assert "AMEAÇAS LATENTES" in system
+    assert "guerra-das-vilas" in system  # id exposto pra o LLM ativar
+    assert "As três vilas marcham" in system
+    assert "RELÓGIOS DE AMEAÇA" not in system  # não é relógio ativo ainda
+    assert not wm.narrative.relogios  # HUD vazio (snapshot não mostra)
+
+
+def test_ativar_front_latente_via_marker_preserva_progresso_autoral():
+    """[RELOGIO: id] com id latente promove a relógio ativo, mantendo o filled."""
+    wm = _wm()
+    wm.narrative.registrar_front_latente("guerra-das-vilas", "As três vilas marcham", 6, 3)
+    aplicar_pos_turno(
+        wm, "O que houve com as vilas?",
+        "Um mensageiro chega ofegante. [RELOGIO: guerra-das-vilas|As três vilas marcham|6]",
+    )
+    assert "guerra-das-vilas" not in wm.narrative.fronts_latentes  # saiu da latência
+    assert "guerra-das-vilas" in wm.narrative.relogios  # virou relógio visível
+    assert wm.narrative.relogios["guerra-das-vilas"]["atual"] == 3  # progresso autoral mantido
+
+
+def test_relogio_improvisado_nao_latente_ainda_e_criado():
+    """[RELOGIO] de id desconhecido cria relógio novo (comportamento preservado)."""
+    wm = _wm()
+    aplicar_pos_turno(wm, "Aceito o pacto.", "Que assim seja. [RELOGIO: nova-ameaca|A nova ameaça|4]")
+    assert "nova-ameaca" in wm.narrative.relogios
+
+
+def test_front_latente_nao_avanca_com_tick_global():
+    """Ameaça latente não corre — só relógio ativo tica em descanso/viagem."""
+    wm = _wm()
+    wm.narrative.registrar_front_latente("guerra", "A guerra", 6, 1)
+    wm.narrative.avancar_todos_relogios(passos=2)
+    assert wm.narrative.fronts_latentes["guerra"]["filled"] == 1  # intacto
+
+
+def test_fronts_latentes_roundtrip_dm_state():
+    from api.routes.session import _wm_para_dm_state
+
+    wm = _wm()
+    wm.narrative.registrar_front_latente("divida-de-vyrmathax", "Vyrmathax cobra a dívida", 8, 0)
+    dm_state = _wm_para_dm_state(wm)
+    assert "divida-de-vyrmathax" in dm_state["fronts_latentes"]
+
+    wm2 = _wm()
+    wm2.aplicar_character_state(SimpleNamespace(dm_state=dm_state))
+    assert "divida-de-vyrmathax" in wm2.narrative.fronts_latentes
+    assert wm2.narrative.fronts_latentes["divida-de-vyrmathax"]["segmentos"] == 8
+
+
 # ══ Pilar Perigo — beat do turno inimigo ══════════════════════════════════════
 
 

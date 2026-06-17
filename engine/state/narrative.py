@@ -80,6 +80,14 @@ class NarrativeState:
     # pelo prompt_builder no próximo turno.
     relogio_irrompido: str = ""
 
+    # PLAY5-FRONTS: ameaças latentes (fronts autorais do Schema v2) — id →
+    # {nome, segmentos, filled}. Mostrar um front como relógio do HUD no turno 1
+    # é "ameaça que o personagem não sabe por que está lá" (playtest #5/#6). Aqui
+    # ficam LATENTES: a engine os entrega ao LLM como ameaças A SEMEAR; só viram
+    # relógio visível (`relogios`) quando a cena estabelece a ameaça e o LLM emite
+    # [RELOGIO: id|...]. Não avançam (ticks) enquanto latentes.
+    fronts_latentes: dict[str, dict] = field(default_factory=dict)
+
     # Mundo Vivo P2: NPC toma a iniciativa — em cena calma, um NPC com agenda
     # age por conta própria. Cooldown em turnos + pendência one-shot
     # (npc_id, plano, presente_na_cena) consumida pelo prompt_builder.
@@ -217,6 +225,45 @@ class NarrativeState:
             "max": seg_max,
         }
         return True
+
+    def registrar_front_latente(
+        self, front_id: str, nome: str, segmentos: int = 6, filled: int = 0
+    ) -> bool:
+        """Registra ameaça latente (front autoral ainda invisível ao jogador).
+
+        Idempotente por id; ignora se o id já é um relógio ATIVO. Cap 8 — o módulo
+        pode declarar vários fronts, mas só 4 viram relógio ativo de cada vez
+        (cap de criar_relogio). Segmentos/filled são preservados pra ativação.
+        """
+        front_id = front_id.strip().lower()
+        if not front_id or front_id in self.relogios or front_id in self.fronts_latentes:
+            return False
+        if len(self.fronts_latentes) >= 8:
+            return False
+        self.fronts_latentes[front_id] = {
+            "nome": nome.strip()[:60] or front_id,
+            "segmentos": max(3, min(8, int(segmentos))),
+            "filled": max(0, int(filled)),
+        }
+        return True
+
+    def ativar_front_latente(self, front_id: str) -> bool:
+        """Promove ameaça latente a relógio ativo (visível), preservando os
+        segmentos/filled autorais. Retorna True se ativou.
+
+        Só remove da lista latente se o relógio for de fato criado — respeita o
+        cap de 4 relógios ativos: se estourar, a ameaça segue latente pra próxima.
+        """
+        front_id = front_id.strip().lower()
+        front = self.fronts_latentes.get(front_id)
+        if front is None:
+            return False
+        if self.criar_relogio(
+            front_id, front["nome"], front["segmentos"], inicial=front["filled"]
+        ):
+            del self.fronts_latentes[front_id]
+            return True
+        return False
 
     def avancar_relogio(self, relogio_id: str, passos: int = 1) -> bool:
         """Avança relógio. Retorna True se ENCHEU agora (irrupção pendente).
