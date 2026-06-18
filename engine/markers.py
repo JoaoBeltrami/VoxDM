@@ -46,14 +46,23 @@ def _construir_regex_strip() -> re.Pattern[str]:
     """Gera o regex de strip a partir da tupla canônica.
 
     Match: `[NOME ...]` ou `[NOME=...]` para qualquer NOME na tupla.
-    Também captura `[Rolagem visível: ...]` (caso especial — nome com
-    espaço, fica fora da tabela porque não segue o padrão `[X:...]`).
+    Também captura QUALQUER `[Rolagem ...]` (caso especial — nome com espaço,
+    fica fora da tabela porque não segue o padrão `[X:...]`). Cobre as três
+    variantes de uma só vez:
+      - `[Rolagem visível: dX = Y]`  → rolagem do mestre (Fase 5.7); o número já
+        foi extraído como `dado_rolado` pelo websocket ANTES do strip.
+      - `[Rolagem interna: dX = Y]`  → rolagem atrás da tela (modo narrated); o
+        jogador NUNCA deve ouvir/ver o número.
+      - `[Rolagem: dX = Y]`          → formato do JOGADOR (input). Se aparecer na
+        RESPOSTA do LLM é fabricação (ROLL-AUTHORITY-1): o mestre inventou uma
+        rolagem do jogador. Stripar evita que o TTS leia o marcador e que o
+        número fabricado confunda a autoridade de dados.
     """
     alternativa = "|".join(re.escape(n) for n in NOMES_MARCADORES)
     return re.compile(
         rf"\[(?:{alternativa})(?::|=)?[^\]]*\]"
         r"|"
-        r"\[Rolagem\s+visível:[^\]]*\]",
+        r"\[Rolagem\b[^\]]*\]",
         re.IGNORECASE,
     )
 

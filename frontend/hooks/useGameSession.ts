@@ -469,11 +469,15 @@ export function useGameSession() {
         // onclose/erro também — sem risco de travar o jogador.
         if (!isProcessingRef.current) setIsProcessing(true);
         textoAtualRef.current += msg.conteudo;
-        // Strip de marcadores [Q:...] e [LAMPEJO:...] — nunca visíveis na bolha
-        // principal. Lampejos chegam como mensagem própria `tipo: "lampejo"`.
+        // Strip de marcadores [Q:...], [LAMPEJO:...] e [Rolagem ...] — nunca visíveis
+        // na bolha principal. Lampejos chegam como mensagem própria `tipo: "lampejo"`;
+        // rolagens visíveis chegam como `tipo: "dado_rolado"`. ROLL-AUTHORITY-1: o
+        // mestre às vezes fabrica `[Rolagem: dX = Y]` (formato do jogador) — strip
+        // cobre essa e as variantes visível/interna pra não vazarem no karaokê.
         const exibicao = textoAtualRef.current
           .replace(/\[Q:[^\]]*\]/g, "")
           .replace(/\[LAMPEJO:[^\]]*\]/gi, "")
+          .replace(/\[Rolagem\b[^\]]*\]/gi, "")
           .trimEnd();
         setEstado(s => ({ ...s, respostaAtual: exibicao }));
       }

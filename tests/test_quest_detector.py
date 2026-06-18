@@ -534,6 +534,43 @@ def test_strip_combinado_fio_e_rolagem_visivel():
     assert "O orc luta com fúria" in resultado
 
 
+# ── ROLL-AUTHORITY-1 — strip de rolagem fabricada/interna ────────────────────
+
+def test_strip_remove_rolagem_fabricada_formato_jogador():
+    """[Rolagem: dX = Y] (formato do JOGADOR) fabricado pelo mestre é removido."""
+    texto = "Você avança e ataca o goblin [Rolagem: d20 = 15]. A lâmina encontra a carne."
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "Você avança e ataca o goblin" in resultado
+    assert "A lâmina encontra a carne." in resultado
+
+
+def test_strip_remove_rolagem_interna():
+    """[Rolagem interna: dX = Y] (atrás da tela) nunca chega ao TTS."""
+    texto = "O assassino se move nas sombras [Rolagem interna: d20 = 18]. Ninguém o vê."
+    resultado = strip_marcadores(texto)
+    assert "[Rolagem" not in resultado
+    assert "O assassino se move nas sombras" in resultado
+    assert "Ninguém o vê." in resultado
+
+
+def test_strip_rolagem_fabricada_case_insensitive():
+    """Capitalização variada do formato fabricado também é removida."""
+    texto = "Resultado: [ROLAGEM: D20 = 9]. Quase."
+    resultado = strip_marcadores(texto)
+    assert "[ROLAGEM" not in resultado
+    assert "Quase." in resultado
+
+
+def test_re_rolagem_fabricada_detecta_formato_jogador():
+    """O regex de detecção (log) casa o formato do jogador, não o visível/interna."""
+    from api.websocket import _RE_ROLAGEM_FABRICADA
+    assert _RE_ROLAGEM_FABRICADA.search("texto [Rolagem: d20 = 15] fim")
+    # Variantes legítimas têm a palavra ANTES do ":" — não devem casar.
+    assert not _RE_ROLAGEM_FABRICADA.search("texto [Rolagem visível: d20 = 15] fim")
+    assert not _RE_ROLAGEM_FABRICADA.search("texto [Rolagem interna: d20 = 15] fim")
+
+
 def test_strip_afeto():
     """[AFETO] deve ser removido antes do TTS."""
     texto = "Fael te observa com respeito. [AFETO: fael-valdreksson|respeito|+2]"
