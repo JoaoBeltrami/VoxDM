@@ -206,6 +206,18 @@ _RE_ROLAGEM_VISIVEL = re.compile(
     re.IGNORECASE,
 )
 
+# ROLL-AUTHORITY-1: detecta rolagem FABRICADA pelo LLM — o formato `[Rolagem: dX = Y]`
+# (dois-pontos colado em "Rolagem") é o que o JOGADOR envia como input. Se aparece na
+# RESPOSTA do mestre, ele inventou um resultado de dado pelo jogador, furando a autoridade
+# da engine sobre rolagens. As variantes legítimas têm a palavra ANTES do ":"
+# (`[Rolagem visível:`, `[Rolagem interna:`), então não casam com `\[Rolagem\s*:`.
+# O strip (engine/markers.py) já remove do TTS/texto; este regex só LOGA a ocorrência
+# (diagnóstico do playtest — frente C3).
+_RE_ROLAGEM_FABRICADA = re.compile(
+    r"\[Rolagem\s*:[^\]]*\]",
+    re.IGNORECASE,
+)
+
 # Os regexes de combate e o sync de inimigos vivem em api/turn_pipeline para que
 # o endpoint REST `/turn` e o WebSocket usem a MESMA implementação. Re-exportados
 # aqui só por compat com tests legados que importam de api.websocket.
@@ -1851,6 +1863,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     )
                 except Exception as _e_dado:
                     log.warning("dado_rolado_falhou", erro=str(_e_dado)[:120])
+
+            # ROLL-AUTHORITY-1: o mestre não deve fabricar `[Rolagem: dX = Y]` (formato
+            # do jogador). O strip já tira do TTS/texto; aqui só logamos pra medir a
+            # frequência no playtest (frente C3) sem poluir a fala do jogador.
+            _fabricadas = _RE_ROLAGEM_FABRICADA.findall(resposta_completa)
+            if _fabricadas:
+                log.warning(
+                    "rolagem_fabricada_pelo_mestre",
+                    session_id=session_id,
+                    qtd=len(_fabricadas),
+                    exemplo=_fabricadas[0][:60],
+                )
 
             # Lampejos — extraímos ANTES de quests pra remover dos markers do texto
             # que vai pro pipeline (registrar_fala, episodic memory). Lampejos
