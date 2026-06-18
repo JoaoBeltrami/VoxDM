@@ -68,9 +68,20 @@ def test_e_cena_sombria_massacre_com_alvo():
 
 # ── OllamaGrimProvider ─────────────────────────────────────────────────────────
 
-def test_ollama_grim_indisponivel_por_padrao():
+def test_ollama_grim_indisponivel_sem_flag(monkeypatch):
+    # Hermético: não depende do .env do dev (que pode ter GRIMDARK_ATIVO=true).
+    # Com o kill-switch desligado, o provider grim nunca está disponível.
+    monkeypatch.setattr("config.settings.GRIMDARK_ATIVO", False)
     from engine.llm.providers.ollama_grim import OllamaGrimProvider
-    # GRIMDARK_ATIVO=False (default)
+    p = OllamaGrimProvider()
+    assert p.disponivel is False
+
+
+def test_ollama_grim_indisponivel_sem_modelo(monkeypatch):
+    # Flag ligada mas sem modelo configurado → indisponível (guard do disponivel).
+    monkeypatch.setattr("config.settings.GRIMDARK_ATIVO", True)
+    monkeypatch.setattr("config.settings.OLLAMA_MODEL_GRIM", "")
+    from engine.llm.providers.ollama_grim import OllamaGrimProvider
     p = OllamaGrimProvider()
     assert p.disponivel is False
 
