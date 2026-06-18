@@ -186,7 +186,10 @@ _SYSTEM_QUEST_EXTRACTOR = (
     "missões abertas. NÃO invente missão a partir de conversa fiada, ambientação ou "
     "descrição de cenário. PROIBIDO criar missão para REAÇÕES IMEDIATAS de cena — "
     "responder alguém, abordar/acalmar/cumprimentar um NPC, decidir o próximo passo "
-    "do turno NÃO são missões. Na dúvida, devolva 'novas' vazia. 'concluidas' = ids "
+    "do turno NÃO são missões. PROIBIDO criar missão a partir de PEDIDO DE ROLAGEM "
+    "ou teste de atributo (rolar um dado, jogar o dado, teste de Constituição, "
+    "salvaguarda) nem de AÇÃO FÍSICA MOMENTÂNEA (conseguir se levantar, resistir a "
+    "um golpe) — são mecânica do turno, não objetivo. Na dúvida, devolva 'novas' vazia. 'concluidas' = ids "
     "(escolhidos da lista de abertas) que a narração mostra como cumpridos. id em "
     "kebab-case derivado do título. Se nada novo nem concluído, devolva ambas as listas vazias."
 )
@@ -214,6 +217,35 @@ def _quest_reativa(qid: str, titulo: str) -> bool:
     return verbo_id in _VERBOS_REATIVOS or verbo_tit in _VERBOS_REATIVOS
 
 
+# PT-2 (playtest #7): além das reações de conversa, o 8B virava PEDIDOS DE
+# ROLAGEM do Mestre em "missão" — "Rolar para Ver", "Jogar o Dado",
+# "Rolar para ver se sua vontade resiste". Pedido de dado/teste de atributo é
+# instrução mecânica do turno, nunca objetivo perseguível. Barra determinística
+# por verbo de rolagem (id/título) + notação de dado em qualquer lugar.
+# Regex mantido ESTREITO de propósito: só sinais inequívocos de rolagem, pra
+# não pegar exploração legítima como "ir à torre para ver se há sobreviventes".
+_VERBOS_ROLAGEM = frozenset({"rolar", "role", "rolagem"})
+
+_RE_QUEST_ROLAGEM = re.compile(
+    r"\b(rolar|role|rolagem|jog\w*\s+o\s+dado|d4|d6|d8|d10|d12|d20|d100)\b",
+    re.IGNORECASE,
+)
+
+
+def _quest_mecanica(qid: str, titulo: str, objetivo: str) -> bool:
+    """True se a 'missão' é na verdade um pedido de rolagem/teste de atributo.
+
+    Checa o verbo inicial do id/título (rolar/role/rolagem) e a notação de dado
+    no título+objetivo. "Jogar o dado", "Rolar para ver se a Constituição
+    aguenta" não são objetivos — são a instrução de rolagem virando ruído.
+    """
+    verbo_id = qid.split("-", 1)[0] if qid else ""
+    verbo_tit = titulo.strip().lower().split(" ", 1)[0] if titulo else ""
+    if verbo_id in _VERBOS_ROLAGEM or verbo_tit in _VERBOS_ROLAGEM:
+        return True
+    return bool(_RE_QUEST_ROLAGEM.search(f"{titulo} {objetivo}"))
+
+
 def _sanitizar_quests(
     bruto: dict[str, Any], ids_abertos: set[str]
 ) -> dict[str, Any]:
@@ -236,6 +268,9 @@ def _sanitizar_quests(
             continue
         if _quest_reativa(qid, titulo):
             log.info("quest_reativa_descartada", id=qid, titulo=titulo)
+            continue
+        if _quest_mecanica(qid, titulo, objetivo):
+            log.info("quest_mecanica_descartada", id=qid, titulo=titulo)
             continue
         vistos.add(qid)
         novas.append({"id": qid, "titulo": titulo or qid, "objetivo": objetivo})
