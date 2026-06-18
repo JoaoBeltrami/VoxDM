@@ -30,6 +30,7 @@ from engine.llm.prompt_builder import (
     _carregar_dice,
     _carregar_master_system,
     _carregar_saves,
+    _formatar_relacoes,
     invalidar_cache,
     montar_mensagens,
     validar_master_system,
@@ -620,3 +621,67 @@ def test_prompt_combate_dentro_do_budget_de_tokens():
         f"System prompt de combate com {len(system)} chars excede teto de 18 800 — "
         f"turn total estimado: ~{(len(system)/3.5 + 400):.0f} tokens"
     )
+
+
+# ── B4 — dieta mecânica: dedup de relações do grafo ──────────────────────────
+
+def test_formatar_relacoes_vazio():
+    """Sem relações → string vazia."""
+    assert _formatar_relacoes([]) == ""
+
+
+def test_formatar_relacoes_dedup_laco_bidirecional():
+    """Laços idênticos (tipo, alvo) — vindos de consultar A e B — colapsam em 1 linha."""
+    relacoes = [
+        {"tipo": "ALIADO_DE", "alvo_id": "valdrek", "alvo_nome": "Valdrek"},
+        {"tipo": "ALIADO_DE", "alvo_id": "valdrek", "alvo_nome": "Valdrek"},
+        {"tipo": "ALIADO_DE", "alvo_id": "valdrek", "alvo_nome": "Valdrek"},
+    ]
+    resultado = _formatar_relacoes(relacoes)
+    assert resultado.count("ALIADO_DE: Valdrek") == 1
+
+
+def test_formatar_relacoes_preserva_ordem_e_distintos():
+    """Dedup preserva a 1ª ocorrência e mantém laços distintos."""
+    relacoes = [
+        {"tipo": "ALIADO_DE", "alvo_id": "a", "alvo_nome": "Ana"},
+        {"tipo": "INIMIGO_DE", "alvo_id": "b", "alvo_nome": "Bor"},
+        {"tipo": "ALIADO_DE", "alvo_id": "a", "alvo_nome": "Ana"},  # dup
+        {"tipo": "PROTEGE", "alvo_id": "c", "alvo_nome": "Cael"},
+    ]
+    resultado = _formatar_relacoes(relacoes)
+    linhas = [ln for ln in resultado.splitlines() if ln.startswith("  ")]
+    assert linhas == ["  ALIADO_DE: Ana", "  INIMIGO_DE: Bor", "  PROTEGE: Cael"]
+
+
+def test_formatar_relacoes_cap_conta_distintos():
+    """O cap de 10 vale sobre laços ÚNICOS, não sobre duplicatas."""
+    # 6 laços únicos repetidos 3x cada = 18 entradas, mas só 6 distintos < 10
+    relacoes = []
+    for i in range(6):
+        for _ in range(3):
+            relacoes.append({"tipo": "CONHECE", "alvo_id": f"npc-{i}", "alvo_nome": f"NPC{i}"})
+    resultado = _formatar_relacoes(relacoes)
+    linhas = [ln for ln in resultado.splitlines() if ln.startswith("  ")]
+    assert len(linhas) == 6  # todos os distintos cabem; nenhuma duplicata
+
+
+def test_formatar_relacoes_cap_limita_em_10():
+    """Mais de 10 laços DISTINTOS → corta em 10."""
+    relacoes = [
+        {"tipo": "CONHECE", "alvo_id": f"npc-{i}", "alvo_nome": f"NPC{i}"}
+        for i in range(15)
+    ]
+    resultado = _formatar_relacoes(relacoes)
+    linhas = [ln for ln in resultado.splitlines() if ln.startswith("  ")]
+    assert len(linhas) == 10
+
+
+def test_formatar_relacoes_fallback_alvo_id_sem_nome():
+    """Sem alvo_nome usa alvo_id (e dedup também funciona nesse caminho)."""
+    relacoes = [
+        {"tipo": "CONHECE", "alvo_id": "strahd-von-zarovich"},
+        {"tipo": "CONHECE", "alvo_id": "strahd-von-zarovich"},
+    ]
+    resultado = _formatar_relacoes(relacoes)
+    assert resultado.count("CONHECE: strahd-von-zarovich") == 1

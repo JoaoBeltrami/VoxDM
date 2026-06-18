@@ -298,10 +298,24 @@ def _formatar_chunks(
 def _formatar_relacoes(relacoes: list[dict[str, Any]]) -> str:
     if not relacoes:
         return ""
-    # Cap 10 (teste #3: 13 relações TODO turno inflavam o prompt). Formato
-    # compacto sem o peso — o LLM usa a existência do laço, não o número.
-    linhas = [f"  {r['tipo']}: {r.get('alvo_nome', r['alvo_id'])}"
-              for r in relacoes[:10]]
+    # Dedup ANTES do cap (B4 — dieta mecânica de tokens): relacoes_grafo concatena
+    # os laços de até 4 entidades, e laços bidirecionais (A→ALIADO_DE→B aparece ao
+    # consultar A e ao consultar B) + alvos compartilhados por NPCs distintos geram
+    # linhas idênticas. Uma linha repetida não carrega informação nova pro LLM —
+    # só gasta token e, pior, consome o cap de 10 empurrando laços ÚNICOS pra fora.
+    # Dedup por (tipo, alvo) preservando a 1ª ocorrência → o cap passa a valer
+    # sobre relações distintas. Não muda o significado: o LLM usa a existência do
+    # laço, não a contagem.
+    linhas: list[str] = []
+    vistas: set[tuple[str, str]] = set()
+    for r in relacoes:
+        chave = (r["tipo"], r.get("alvo_nome", r["alvo_id"]))
+        if chave in vistas:
+            continue
+        vistas.add(chave)
+        linhas.append(f"  {chave[0]}: {chave[1]}")
+        if len(linhas) >= 10:  # cap mantido (teste #3: 13 laços/turno inflavam)
+            break
     return "Relações no grafo:\n" + "\n".join(linhas)
 
 
