@@ -1954,8 +1954,10 @@ export default function Home() {
           {cinemaMode ? "🎬" : "🛠️"}
         </button>
 
-        {/* Controle de volume da voz — canto inferior esquerdo */}
-        <VolumeControl volume={volume} onChange={handleVolumeChange} />
+        {/* Controle de volume da voz — só no modo cinema (PT-7, playtest #7).
+            Na HUD normal ele competia com mic/dado no canto; em cinema, onde a
+            HUD utilitária some, permanece como único controle acessível. */}
+        {cinemaMode && <VolumeControl volume={volume} onChange={handleVolumeChange} />}
       </div>
     );
   }
