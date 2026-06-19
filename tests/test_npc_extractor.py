@@ -8,6 +8,7 @@ do LLM emitir [NPC:]. Mock do groq — sem rede.
 import pytest
 
 from engine.llm.extractor import (
+    _npc_fantasma,
     _sanitizar_npcs,
     aplicar_npcs_extraidos,
     extrair_npcs_cena,
@@ -36,6 +37,34 @@ class _FakeGroq:
 def test_sanitizar_npcs_valido():
     out = _sanitizar_npcs({"npcs": [{"id": "Velho Mercador", "nome": "Velho Mercador"}]})
     assert out == [{"id": "velho-mercador", "nome": "Velho Mercador"}]
+
+
+# PT-3 (playtest #7): fragmento de narração com verbo no fim vira "NPC presente".
+@pytest.mark.parametrize("nid", [
+    "velho-sorri", "figura-observa", "o-homem-ri", "guarda-grita",
+    "sombra-recua", "anciao-murmurou",
+])
+def test_npc_fantasma_verbo_no_fim(nid):
+    assert _npc_fantasma(nid) is True
+
+
+@pytest.mark.parametrize("nid", [
+    "velho-mercador", "aldric-drevasson", "mira", "garrek",
+    "osmund-o-exilado", "maren-drevadottir",
+])
+def test_npc_real_nao_e_fantasma(nid):
+    assert _npc_fantasma(nid) is False
+
+
+def test_sanitizar_npcs_filtra_fragmento_de_narracao():
+    """'o velho sorri' não vira NPC; 'Mira' (nome real) sobrevive."""
+    bruto = {"npcs": [
+        {"id": "velho-sorri", "nome": "Velho"},
+        {"id": "mira", "nome": "Mira"},
+        {"id": "figura-observa", "nome": "Figura"},
+    ]}
+    out = _sanitizar_npcs(bruto)
+    assert [n["id"] for n in out] == ["mira"]
 
 
 def test_sanitizar_npcs_dedup_e_cap():
