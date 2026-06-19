@@ -30,6 +30,7 @@ from engine.llm.types import (
     SecretVisivel,
 )
 from engine.magic.spell_list import nivel_da_spell
+from engine.memory.item_authority import nota_item_ausente
 
 # Re-exportados para compatibilidade com importações existentes
 __all__ = ["ContextoMontado", "SecretVisivel", "montar_mensagens", "invalidar_cache",
@@ -510,6 +511,15 @@ def montar_mensagens(
             1,
         )
     secoes.append(wm_texto)
+
+    # PT-6 (playtest #7): autoridade de item — INFORMA (não proíbe) quando o
+    # jogador cita usar um consumível que não está no inventário. Por turno
+    # (depende da transcrição), fica na seção dinâmica. Detecção conservadora.
+    _nota_item = nota_item_ausente(
+        contexto.transcricao_atual, getattr(wm, "player_inventory", [])
+    )
+    if _nota_item:
+        secoes.append(f"\n[NOTA DA ENGINE] {_nota_item}")
 
     # Relações do grafo (NPCs presentes)
     if contexto.relacoes_grafo:
