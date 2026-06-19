@@ -391,10 +391,14 @@ def _criar_task_thinking(
                 return  # token chegou a tempo — silêncio é OK
             except TimeoutError:
                 pass
-            from engine.voice.thinking_cache import pegar_random
+            from engine.voice.thinking_cache import garantir_voz, pegar_random
+            # PT-5: aquece (bg) e usa a voz da sessão; fallback p/ a padrão até
+            # ficar pronta — evita voz feminina sobre Mestre de voz masculina.
+            voz_sessao = sessao.working_mem.tts_voice if sessao else None
+            garantir_voz(voz_sessao)
             # Dedup: evita repetir a mesma frase de "pensamento" em turnos consecutivos
             exceto = sessao.ultima_frase_thinking if sessao else None
-            resultado = pegar_random(exceto=exceto)
+            resultado = pegar_random(voz=voz_sessao, exceto=exceto)
             if resultado is None:
                 return  # cache vazio (warmup falhou) — silêncio
             frase, audio_bytes = resultado
