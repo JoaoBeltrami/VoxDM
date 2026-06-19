@@ -82,12 +82,46 @@ _SYSTEM_NPC_EXTRACTOR = (
     "Você extrai NPCs de narração de RPG em PT-BR. Responda APENAS com JSON "
     "válido, sem texto antes ou depois, no formato:\n"
     '{"npcs": [{"id": "kebab-case", "nome": "Nome"}]}\n'
-    "Liste SÓ personagens NOMEADOS que APARECERAM ou FALARAM nesta narração e que "
-    "NÃO estão na lista de conhecidos. NÃO inclua: o personagem do jogador, "
+    "Liste SÓ personagens NOMEADOS que AGIRAM ou FALARAM DIRETAMENTE nesta "
+    "narração e que NÃO estão na lista de conhecidos. NUNCA inclua alguém apenas "
+    "CITADO, mencionado de passagem, referido em conversa ou parado no fundo da "
+    "cena sem interagir. NÃO inclua: o personagem do jogador, "
     "multidões/figurantes sem nome, monstros/inimigos, lugares ou objetos. id em "
     "kebab-case derivado do nome (ex: 'Velho Mercador' → 'velho-mercador'). Se "
     "nenhum NPC novo nomeado apareceu, devolva npcs como lista vazia."
 )
+
+
+# PT-3 (playtest #7): o 8B virava FRAGMENTO DE NARRAÇÃO em NPC presente —
+# "o velho sorri" → id 'velho-sorri', "a figura observa" → 'figura-observa'.
+# Esses poluíram o HUD durante um combate de 2 guardas. Sinal forte e SEGURO:
+# o último token do id é um verbo de narração conjugado. Nome próprio nunca
+# termina em verbo — e isso NÃO mexe em descritor legítimo ('velho-mercador',
+# que um teste existente abençoa). Descritor-vira-cenário é decisão de produto.
+_VERBOS_NPC_FRAGMENTO = frozenset({
+    "sorri", "sorriu", "ri", "riu", "olha", "olhou", "fala", "falou",
+    "murmura", "murmurou", "observa", "observou", "geme", "gemeu", "range",
+    "rangeu", "suspira", "suspirou", "grita", "gritou", "sussurra", "sussurrou",
+    "acena", "acenou", "recua", "recuou", "avanca", "avancou", "hesita",
+    "hesitou", "encara", "encarou", "aponta", "apontou", "cospe", "cuspiu",
+    "some", "sumiu", "chega", "chegou", "entra", "entrou", "sai", "saiu",
+    "espera", "esperou", "responde", "respondeu", "pergunta", "perguntou",
+    "assente", "franze", "ergue", "ergueu", "vira", "virou", "treme", "tremeu",
+    "balanca", "balancou", "arrasta", "arrastou", "limpa", "limpou",
+})
+
+
+def _npc_fantasma(nid: str) -> bool:
+    """True se o id é fragmento de narração, não nome de NPC.
+
+    Sinal forte e seguro: o ÚLTIMO token do id é um verbo de narração
+    conjugado ("o velho sorri" → 'velho-sorri'). Nome próprio nunca termina em
+    verbo. Não toca descritor como 'velho-mercador' — isso é decisão de produto.
+    """
+    tokens = [t for t in nid.split("-") if t]
+    if not tokens:
+        return True
+    return tokens[-1] in _VERBOS_NPC_FRAGMENTO
 
 
 def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
@@ -101,6 +135,9 @@ def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
         nid = re.sub(r"[^a-z0-9-]", "-", nid)[:48].strip("-")
         nome = str(item.get("nome", "")).strip()[:40]
         if not nid or nid in vistos:
+            continue
+        if _npc_fantasma(nid):
+            log.info("npc_fantasma_descartado", id=nid, nome=nome)
             continue
         vistos.add(nid)
         out.append({"id": nid, "nome": nome or nid})
