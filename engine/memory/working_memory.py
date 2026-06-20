@@ -629,6 +629,30 @@ class WorkingMemory:
         """Mod de dano básico: melhor de FOR/DES (sem proficiência no dano)."""
         return max(self.character.mod_for, self.character.mod_des)
 
+    def mod_atributo(self, attr: str) -> int:
+        """Modificador de um atributo por código (FOR/DES/CON/INT/SAB/CAR). 0 se inválido.
+
+        Aceita código OU nome PT-BR (Força→FOR, Destreza→DES, …) — os 3 primeiros
+        caracteres maiúsculos coincidem com o código nos seis atributos.
+        """
+        c = self.character
+        mapa = {
+            "FOR": c.mod_for, "DES": c.mod_des, "CON": c.mod_con,
+            "INT": c.mod_int, "SAB": c.mod_sab, "CAR": c.mod_car,
+        }
+        return mapa.get(str(attr).strip().upper()[:3], 0)
+
+    def mod_salvaguarda(self, attr: str) -> int:
+        """Mod de salvaguarda: atributo + proficiência se o PJ for proficiente nele.
+
+        Robusto ao formato de `save_profs` (código ou nome PT-BR) via a mesma
+        normalização [:3] do atributo.
+        """
+        code = str(attr).strip().upper()[:3]
+        base = self.mod_atributo(code)
+        profs = {str(p).strip().upper()[:3] for p in (self.character.save_profs or [])}
+        return base + (self.character.prof_bonus if code in profs else 0)
+
     def registrar_inimigo(
         self,
         inimigo_id: str,
