@@ -21,7 +21,7 @@ Exemplo:
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -46,10 +46,11 @@ class CombatState:
     rodada_combate: int = 0
     iniciativa_jogador: int | None = None
 
-    # Inimigos: id → {nome, estado, hp_rel, srd_index, ficha}
+    # Inimigos: id → {nome, estado, hp_rel, srd_index, ficha, ca, hp_max, hp_atual}
     # srd_index/ficha são opcionais — preenchidos pelo bestiário quando o monstro
-    # existe no SRD indexado (engine.bestiary).
-    inimigos_combate: dict[str, dict[str, str]] = field(default_factory=dict)
+    # existe no SRD indexado (engine.bestiary). ca/hp_* (int) entram via
+    # aplicar_stats_inimigo, permitindo morte determinística por HP.
+    inimigos_combate: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     # Cache de iniciativa: token_id → valor
     iniciativa_cache: dict[str, int] = field(default_factory=dict)
@@ -177,6 +178,47 @@ class CombatState:
             # Limpa posição tática quando inimigo morre
             if estado == "morto":
                 self.posicoes_combate.pop(inimigo_id, None)
+
+    def aplicar_stats_inimigo(self, inimigo_id: str, ca: int, hp_max: int) -> None:
+        """Define CA/HP numéricos de um inimigo (da ficha SRD ou default por CR).
+
+        Idempotente por turno: NÃO re-zera `hp_atual` se o inimigo já tomou dano.
+        """
+        d = self.inimigos_combate.get(inimigo_id)
+        if d is None:
+            return
+        d["ca"] = int(ca)
+        d["hp_max"] = int(hp_max)
+        d.setdefault("hp_atual", int(hp_max))
+
+    def aplicar_dano_inimigo(self, inimigo_id: str, dano: int) -> str:
+        """Reduz o HP numérico do inimigo e deriva o estado narrativo. Retorna o estado.
+
+        Morte é DETERMINÍSTICA (HP ≤ 0) — não depende de regex de vocabulário do
+        LLM (resolve COMBAT-1). Sem HP numérico (inimigo sem stats aplicados),
+        mantém o estado narrativo atual e não inventa morte.
+        """
+        d = self.inimigos_combate.get(inimigo_id)
+        if d is None:
+            return ""
+        hp_max = int(d.get("hp_max", 0) or 0)
+        if hp_max <= 0:
+            return str(d.get("estado", "intacto"))
+        hp = int(d.get("hp_atual", hp_max)) - max(0, int(dano))
+        hp = max(0, hp)
+        d["hp_atual"] = hp
+        if hp <= 0:
+            estado = "morto"
+        elif hp <= hp_max * 0.25:
+            estado = "gravemente ferido"
+        elif hp < hp_max:
+            estado = "ferido"
+        else:
+            estado = "intacto"
+        d["estado"] = estado
+        if estado == "morto":
+            self.posicoes_combate.pop(inimigo_id, None)
+        return estado
 
     def remover_inimigo(self, inimigo_id: str) -> None:
         """Remove inimigo (morte definitiva ou fuga)."""

@@ -645,6 +645,12 @@ class WorkingMemory:
     def remover_inimigo(self, inimigo_id: str) -> None:
         self.combat.remover_inimigo(inimigo_id)
 
+    def aplicar_stats_inimigo(self, inimigo_id: str, ca: int, hp_max: int) -> None:
+        self.combat.aplicar_stats_inimigo(inimigo_id, ca, hp_max)
+
+    def aplicar_dano_inimigo(self, inimigo_id: str, dano: int) -> str:
+        return self.combat.aplicar_dano_inimigo(inimigo_id, dano)
+
     def sair_combate(self) -> None:
         """Encerra combate — registra consequência antes de zerar inimigos."""
         mortos = sum(
