@@ -64,6 +64,12 @@ class CombatState:
     saiu_combate_recentemente: bool = False
     rodadas_sem_acao_inimigo: int = 0
 
+    # Action economy (combate engine-autoritativo, task 1): 1 ação + 1 bônus +
+    # movimento por rodada. Resetados ao entrar, a cada rodada e ao sair. A engine
+    # é a autoridade — recusa 2ª ação na mesma rodada (enforcement = task 5).
+    acao_usada: bool = False
+    bonus_usada: bool = False
+
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def entrar(self) -> None:
@@ -87,6 +93,7 @@ class CombatState:
         self.turno_atual_idx = 0
         self.posicoes_combate = {}
         self.movimento_restante_ft = self.movimento_total_ft
+        self.reset_economia()
 
     def sair(self) -> None:
         """Desativa combate. Idempotente — todos os campos voltam ao default."""
@@ -100,12 +107,39 @@ class CombatState:
         self.posicoes_combate.clear()
         self.movimento_restante_ft = self.movimento_total_ft
         self.saiu_combate_recentemente = True
+        self.reset_economia()
 
     def avancar_rodada(self) -> None:
-        """Incrementa rodada e renova movimento (SRD: speed inteiro por rodada)."""
+        """Incrementa rodada e renova movimento + economia (SRD: tudo novo por rodada)."""
         if self.em_combate:
             self.rodada_combate += 1
             self.movimento_restante_ft = self.movimento_total_ft
+            self.reset_economia()
+
+    # ── Action economy (autoridade da engine) ────────────────────────────────
+
+    def reset_economia(self) -> None:
+        """Zera ação e bônus da rodada (movimento é renovado em avancar_rodada)."""
+        self.acao_usada = False
+        self.bonus_usada = False
+
+    def usar_acao(self) -> bool:
+        """Consome a ação principal da rodada. False se já foi usada."""
+        if self.acao_usada:
+            return False
+        self.acao_usada = True
+        return True
+
+    def usar_bonus(self) -> bool:
+        """Consome a ação bônus da rodada. False se já foi usada."""
+        if self.bonus_usada:
+            return False
+        self.bonus_usada = True
+        return True
+
+    def pode_agir(self) -> bool:
+        """True se o jogador ainda tem a ação principal nesta rodada."""
+        return not self.acao_usada
 
     # ── Inimigos ─────────────────────────────────────────────────────────────
 

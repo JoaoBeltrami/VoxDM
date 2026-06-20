@@ -207,6 +207,16 @@ class WorkingMemory:
     @rodadas_sem_acao_inimigo.setter
     def rodadas_sem_acao_inimigo(self, v: int) -> None: self.combat.rodadas_sem_acao_inimigo = v
 
+    @property
+    def acao_usada(self) -> bool: return self.combat.acao_usada
+    @acao_usada.setter
+    def acao_usada(self, v: bool) -> None: self.combat.acao_usada = v
+
+    @property
+    def bonus_usada(self) -> bool: return self.combat.bonus_usada
+    @bonus_usada.setter
+    def bonus_usada(self, v: bool) -> None: self.combat.bonus_usada = v
+
     # ── Properties: PlayerCharacter ──────────────────────────────────────────
 
     @property
@@ -594,6 +604,18 @@ class WorkingMemory:
 
     def avancar_rodada(self) -> None:
         self.combat.avancar_rodada()
+
+    def usar_acao(self) -> bool:
+        return self.combat.usar_acao()
+
+    def usar_bonus(self) -> bool:
+        return self.combat.usar_bonus()
+
+    def pode_agir(self) -> bool:
+        return self.combat.pode_agir()
+
+    def reset_economia(self) -> None:
+        self.combat.reset_economia()
 
     def registrar_inimigo(
         self,
