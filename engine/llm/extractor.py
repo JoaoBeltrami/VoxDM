@@ -20,6 +20,7 @@ Exemplo:
 
 import json
 import re
+import unicodedata
 from typing import Any
 
 import structlog
@@ -111,15 +112,44 @@ _VERBOS_NPC_FRAGMENTO = frozenset({
 })
 
 
-def _npc_fantasma(nid: str) -> bool:
-    """True se o id é fragmento de narração, não nome de NPC.
+def _transliterar(texto: str) -> str:
+    """Acentos → ASCII (ç→c, ã→a) via NFKD + descarte de marcas combinantes."""
+    nfkd = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
 
-    Sinal forte e seguro: o ÚLTIMO token do id é um verbo de narração
-    conjugado ("o velho sorri" → 'velho-sorri'). Nome próprio nunca termina em
-    verbo. Não toca descritor como 'velho-mercador' — isso é decisão de produto.
+
+def _kebab_id(texto: str) -> str:
+    """Nome/id → kebab-case ASCII estável.
+
+    NPC-DUP-1 (playtest #8): sem transliterar antes do kebab, o mesmo NPC
+    'Braço' virava ids diferentes ('bra-o' com ç→dash vs 'brao') conforme a
+    grafia do LLM/caminho, duplicando o NPC. Transliterar fixa a grafia.
+    """
+    return re.sub(r"[^a-z0-9-]", "-", _transliterar(texto).lower())[:48].strip("-")
+
+
+def _canonico(nid: str) -> str:
+    """Chave canônica p/ dedup de NPC: ASCII sem acento, só alfanumérico, minúsculo.
+
+    'gharen-bra-o-de-ferro' e 'gharen-brao-de-ferro' colapsam em
+    'gharenbraodeferro' — o mesmo NPC não entra duas vezes (NPC-DUP-1).
+    """
+    return re.sub(r"[^a-z0-9]", "", _transliterar(nid).lower())
+
+
+def _npc_fantasma(nid: str) -> bool:
+    """True se o id é fragmento de narração ou figurante, não nome de NPC.
+
+    Dois sinais fortes e seguros (nome próprio não tem nenhum dos dois):
+    - último token é VERBO de narração conjugado ("o velho sorri" → 'velho-sorri');
+    - último token é NÚMERO ("pessoa-1", "homem-1", "viajante-espalhado-1") —
+      figurante enumerado pelo LLM, não NPC nomeado (NPC-CITADO-2, playtest #8).
+    Não toca descritor como 'velho-mercador' — isso é decisão de produto.
     """
     tokens = [t for t in nid.split("-") if t]
     if not tokens:
+        return True
+    if tokens[-1].isdigit():
         return True
     return tokens[-1] in _VERBOS_NPC_FRAGMENTO
 
@@ -131,8 +161,7 @@ def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
     for item in (bruto.get("npcs") or [])[:4]:  # cap defensivo por turno
         if not isinstance(item, dict):
             continue
-        nid = str(item.get("id", "")).strip().lower()
-        nid = re.sub(r"[^a-z0-9-]", "-", nid)[:48].strip("-")
+        nid = _kebab_id(str(item.get("id", "")))
         nome = str(item.get("nome", "")).strip()[:40]
         if not nid or nid in vistos:
             continue
@@ -194,17 +223,20 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     """Registra NPCs extraídos na cena (presença + apresentado). Idempotente.
 
     Espelha o efeito do marcador `[NPC: id|nome]` (turn_pipeline step 17b). Pula
-    NPCs já presentes e o id do personagem do jogador. Retorna os ids adicionados.
+    o id do jogador e dedup por CHAVE CANÔNICA (NPC-DUP-1): 'gharen-bra-o-de-ferro'
+    e 'gharen-brao-de-ferro' não entram os dois. Retorna os ids adicionados.
     """
-    import re as _re
-    jogador_id = _re.sub(r"[^a-z0-9-]", "-", str(getattr(wm, "player_name", "")).strip().lower()).strip("-")
+    jogador_canon = _canonico(str(getattr(wm, "player_name", "")))
+    presentes_canon = {_canonico(p) for p in wm.npcs_presentes}
     adicionados: list[str] = []
     for npc in npcs:
         nid = npc.get("id", "")
-        if not nid or nid == jogador_id or nid in wm.npcs_presentes:
+        canon = _canonico(nid)
+        if not nid or not canon or canon == jogador_canon or canon in presentes_canon:
             continue
         wm.npcs_presentes.append(nid)
         wm.scene.npcs_apresentados.add(nid)
+        presentes_canon.add(canon)
         adicionados.append(nid)
     if adicionados:
         log.info("npcs_extraidos_registrados", ids=adicionados)

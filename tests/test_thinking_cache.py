@@ -83,6 +83,8 @@ async def test_aquecer_voz_sintetiza_na_voz_pedida(monkeypatch):
 
     monkeypatch.setattr("engine.voice.tts.TTSEngine", _FakeTTS)
     monkeypatch.setattr(tc, "_salvar_no_disco", lambda *a, **k: None)
+    # Hermético: não carregar MP3s reais que uma sessão ao vivo possa ter gravado.
+    monkeypatch.setattr(tc, "_carregar_do_disco", lambda voz: 0)
     await tc.aquecer_voz("pt-BR-AntonioNeural")
     pool = tc._cache.get("pt-BR-AntonioNeural")
     assert pool, "deveria ter sintetizado o pool da voz"

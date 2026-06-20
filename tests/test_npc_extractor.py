@@ -8,6 +8,8 @@ do LLM emitir [NPC:]. Mock do groq — sem rede.
 import pytest
 
 from engine.llm.extractor import (
+    _canonico,
+    _kebab_id,
     _npc_fantasma,
     _sanitizar_npcs,
     aplicar_npcs_extraidos,
@@ -68,8 +70,9 @@ def test_sanitizar_npcs_filtra_fragmento_de_narracao():
 
 
 def test_sanitizar_npcs_dedup_e_cap():
-    bruto = {"npcs": [{"id": f"npc-{i}", "nome": f"N{i}"} for i in range(10)]
-             + [{"id": "npc-0", "nome": "dup"}]}
+    # sufixo de letra (não número) pra não colidir com o filtro de figurante numerado
+    bruto = {"npcs": [{"id": f"npc-{chr(97 + i)}", "nome": f"N{i}"} for i in range(10)]
+             + [{"id": "npc-a", "nome": "dup"}]}
     out = _sanitizar_npcs(bruto)
     assert len(out) == 4  # cap defensivo
     assert len({n["id"] for n in out}) == len(out)  # sem duplicata
@@ -83,6 +86,46 @@ def test_sanitizar_npcs_pula_invalido():
 def test_sanitizar_npcs_vazio():
     assert _sanitizar_npcs({}) == []
     assert _sanitizar_npcs({"npcs": []}) == []
+
+
+# ── NPC-DUP-1 / NPC-CITADO-2 (playtest #8) ──────────────────────────────────────
+
+def test_kebab_id_translitera_acento():
+    # 'Braço' não pode virar 'bra-o' (ç→dash) — transliterar p/ 'braco'
+    assert _kebab_id("Gharen Braço de Ferro") == "gharen-braco-de-ferro"
+    assert _kebab_id("Anção") == "ancao"
+
+
+def test_canonico_colapsa_variantes_de_acento():
+    # as duas variantes do MESMO NPC viram a mesma chave canônica
+    assert _canonico("gharen-bra-o-de-ferro") == _canonico("gharen-brao-de-ferro")
+    assert _canonico("gharen-braço-de-ferro") == _canonico("gharen-braco-de-ferro")
+
+
+def test_aplicar_dedup_variante_de_acento():
+    """NPC-DUP-1: 'Gharen Braço' não entra duas vezes por grafia diferente."""
+    wm = _wm()
+    aplicar_npcs_extraidos(wm, [{"id": "gharen-bra-o-de-ferro", "nome": "Gharen"}])
+    add2 = aplicar_npcs_extraidos(wm, [{"id": "gharen-brao-de-ferro", "nome": "Gharen"}])
+    assert add2 == []  # variante canônica já presente
+    assert len(wm.npcs_presentes) == 1
+
+
+@pytest.mark.parametrize("nid", [
+    "pessoa-1", "pessoa-2", "homem-1", "viajante-espalhado-1", "cavaleiro-solitario-1",
+])
+def test_npc_figurante_numerado_e_fantasma(nid):
+    assert _npc_fantasma(nid) is True
+
+
+def test_sanitizar_filtra_figurante_numerado():
+    bruto = {"npcs": [
+        {"id": "pessoa-1", "nome": "Pessoa"},
+        {"id": "garrek", "nome": "Garrek"},
+        {"id": "viajante-espalhado-1", "nome": "Viajante"},
+    ]}
+    out = _sanitizar_npcs(bruto)
+    assert [n["id"] for n in out] == ["garrek"]
 
 
 # ── aplicar_npcs_extraidos ──────────────────────────────────────────────────────
