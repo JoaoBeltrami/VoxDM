@@ -33,6 +33,24 @@ def test_defende_npc_aumenta_trust():
     assert ("fael-valdreksson", +1) in resultado
 
 
+def test_defende_npc_sem_preposicao_aumenta_trust():
+    # "defendo Fael" sem "do/de/contra" também é ato de boa-fé dirigido
+    resultado = detectar_mudancas_trust("defendo Fael", NPCS)
+    assert ("fael-valdreksson", +1) in resultado
+
+
+def test_autodefesa_contra_npc_nao_aumenta_trust():
+    # "me defendo de Fael" é autodefesa CONTRA o NPC — não deve gerar +1
+    resultado = detectar_mudancas_trust("me defendo de Fael", NPCS)
+    assert ("fael-valdreksson", +1) not in resultado
+
+
+def test_agradece_npc_aumenta_trust():
+    # Reconhecimento explícito é gesto comum de boa-fé
+    resultado = detectar_mudancas_trust("eu agradeço Fael pela ajuda", NPCS)
+    assert ("fael-valdreksson", +1) in resultado
+
+
 # ── Casos negativos (traição, ataque, roubo) ──────────────────────────────────
 
 def test_ataca_npc_reduz_trust():
