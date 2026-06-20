@@ -617,6 +617,18 @@ class WorkingMemory:
     def reset_economia(self) -> None:
         self.combat.reset_economia()
 
+    def mod_ataque(self) -> int:
+        """Bônus de ataque básico do jogador: melhor de FOR/DES + proficiência.
+
+        Simplificação de task 2: martial/finesse usa o melhor atributo físico.
+        A engine soma isto ao d20 do jogador (resolver_ataque), não o LLM.
+        """
+        return max(self.character.mod_for, self.character.mod_des) + self.character.prof_bonus
+
+    def mod_dano(self) -> int:
+        """Mod de dano básico: melhor de FOR/DES (sem proficiência no dano)."""
+        return max(self.character.mod_for, self.character.mod_des)
+
     def registrar_inimigo(
         self,
         inimigo_id: str,
