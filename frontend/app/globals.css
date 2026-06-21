@@ -52,6 +52,11 @@
   --vox-elev-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.20);
   --vox-elev-3: 0 12px 32px rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.25);
   --vox-elev-glow: 0 0 24px -4px rgba(139, 92, 246, 0.40);
+
+  /* Palco v2 — narração como roteiro + rim de combate (redesign 20/06) */
+  --vox-text-narrative: #e8e6e1;             /* off-white quente p/ a prosa do Mestre */
+  --vox-narrative-measure: 62ch;             /* largura de leitura de livro */
+  --vox-rim-combat: rgba(127, 29, 29, 0.45); /* vinheta inset vermelha em combate */
 }
 
 body {
@@ -74,6 +79,19 @@ body {
 .font-display {
   font-family: 'Cinzel', Georgia, serif;
   letter-spacing: 0.02em;
+}
+
+/* Palco — narração do Mestre como ROTEIRO: serif romano, largo, leitura de livro.
+ * Distinto do .font-atmospheric (itálico, p/ falas/recap): aqui é prosa corrida
+ * legível em blocos longos com a voz (karaokê). */
+.font-screenplay {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 1.3rem;
+  line-height: 1.72;
+  letter-spacing: 0.005em;
+  color: var(--vox-text-narrative);
 }
 
 /* Glassmorphism utilitário — camadas em ordem crescente de opacidade */
