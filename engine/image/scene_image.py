@@ -78,9 +78,12 @@ async def gerar_e_enviar_imagem(
 
         # Pollinations gera a imagem ao acessar a URL — verificamos se o endpoint
         # responde com sucesso antes de enviar ao frontend. HEAD evita baixar os bytes.
+        # follow_redirects=False: não seguimos redirecionamentos do host fixo para
+        # um destino arbitrário (defesa contra SSRF se a resposta do terceiro for
+        # comprometida); 301/302 já contam como sucesso na checagem abaixo.
         try:
             async with httpx.AsyncClient(
-                timeout=_TIMEOUT_S, follow_redirects=True
+                timeout=_TIMEOUT_S, follow_redirects=False
             ) as client:
                 resp = await client.head(url)
                 if resp.status_code not in (200, 301, 302):
