@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { listarSessoes, listarPersonagensSalvos, type SessaoListaItem, type PersonagemSalvoItem } from "@/lib/api";
-import { Avatar, Card, HpBar } from "@/components/ui";
+import { Card, HpBar } from "@/components/ui";
 
 /**
  * SessionPicker — duas seções colapsáveis no setup:
@@ -26,6 +26,17 @@ function formatarData(timestamp: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// Emoji por classe — substitui o avatar-de-letra (Palco v2). Chave sem acento.
+const CLASSE_EMOJI: Record<string, string> = {
+  guerreiro: "⚔️", barbaro: "🪓", mago: "🔮", feiticeiro: "🔥", bruxo: "👁️",
+  clerigo: "✨", druida: "🍃", ladino: "🗡️", bardo: "🎵", paladino: "🛡️",
+  patrulheiro: "🏹", ranger: "🏹", monge: "👊",
+};
+function classeEmoji(classe: string): string {
+  const k = (classe ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return CLASSE_EMOJI[k] ?? "🎲";
 }
 
 export function SessionPicker({ onContinuar, onContinuarPersonagem }: Props) {
@@ -94,13 +105,16 @@ export function SessionPicker({ onContinuar, onContinuarPersonagem }: Props) {
                     className="border-emerald-900/40 transition hover:border-emerald-600/60 hover:bg-emerald-950/30"
                   >
                     <div className="flex items-start gap-3">
-                      <Avatar
-                        name={p.player_name}
-                        id={p.session_id}
-                        tone="emerald"
-                        size="md"
-                        status={p.hp_atual / p.hp_max < 0.3 ? "wounded" : "alive"}
-                      />
+                      <div
+                        aria-hidden
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-lg ${
+                          p.hp_atual / p.hp_max < 0.3
+                            ? "border-amber-700/50 bg-amber-950/30"
+                            : "border-emerald-700/40 bg-emerald-950/30"
+                        }`}
+                      >
+                        {classeEmoji(p.player_class)}
+                      </div>
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-display text-sm font-semibold text-emerald-300 truncate">
