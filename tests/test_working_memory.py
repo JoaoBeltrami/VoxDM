@@ -671,6 +671,18 @@ def test_apresentar_npcs_idempotente():
     assert len(wm.npcs_apresentados) == 1
 
 
+def test_apresentar_npcs_nao_marca_por_substring():
+    """Bug real: substring marcava 'ana-bela' quando o Mestre dizia 'semana'."""
+    wm = _wm()
+    wm.npcs_presentes = ["ana-bela", "tom-velho"]
+    wm.apresentar_npcs_mencionados("Vejo vocês na semana, no fim do verão.")
+    assert "ana-bela" not in wm.npcs_apresentados   # 'ana' em 'semana' não é palavra
+    assert "tom-velho" not in wm.npcs_apresentados
+    # palavra inteira ainda marca
+    wm.apresentar_npcs_mencionados("Ana sorri pra você.")
+    assert "ana-bela" in wm.npcs_apresentados
+
+
 # ── para_texto() — companions e posições de combate ───────────────────────
 
 def test_para_texto_companions_vivo():
