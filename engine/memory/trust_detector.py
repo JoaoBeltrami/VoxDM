@@ -29,7 +29,7 @@ _RE_POSITIVO = re.compile(
     r"salvo|salvei|salvar|"
     r"protejo|protegi|proteger|"
     r"curo|curei|curar|"
-    r"(?<!me )defendo|defendi|defender|"  # "defendo Bjorn"; "me defendo" (autodefesa) NÃO conta
+    r"(?<!me )defend(?:o|i|er)|"  # "defendo/defendi Bjorn"; "me defendo/defendi" (autodefesa) NÃO conta
     r"agradeço|agradeci|agradecer|"     # reconhecimento explícito — gesto comum de boa-fé
     r"presenteio|presenteei|"
     r"dou (?:minha|meu|um presente|uma poção|comida|ouro|dinheiro)|"  # dar item
