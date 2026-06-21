@@ -45,6 +45,19 @@ def test_autodefesa_contra_npc_nao_aumenta_trust():
     assert ("fael-valdreksson", +1) not in resultado
 
 
+def test_autodefesa_passado_nao_aumenta_trust():
+    # Bug: o lookbehind só protegia 'defendo'; 'me defendi de Fael' (passado)
+    # também é autodefesa e NÃO pode contar como gesto de boa-fé.
+    resultado = detectar_mudancas_trust("me defendi de Fael", NPCS)
+    assert ("fael-valdreksson", +1) not in resultado
+
+
+def test_defende_npc_passado_aumenta_trust():
+    # 'defendi Fael' (passado, sem 'me') é ato de boa-fé dirigido → +1
+    resultado = detectar_mudancas_trust("defendi Fael dos bandidos", NPCS)
+    assert ("fael-valdreksson", +1) in resultado
+
+
 def test_agradece_npc_aumenta_trust():
     # Reconhecimento explícito é gesto comum de boa-fé
     resultado = detectar_mudancas_trust("eu agradeço Fael pela ajuda", NPCS)
