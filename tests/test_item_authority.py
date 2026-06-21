@@ -44,6 +44,7 @@ def test_consumivel_em_posse_nao_gera_nota(texto, inv):
     "lanço bola de fogo no orc",
     "pego a espada e ataco",
     "bebo uma cerveja na taverna",
+    "bebo da poça d'água parada no chão",  # 'poça' não é 'poção' (era radical 'poç')
     "tem uma poção na mesa ao lado",  # citada mas sem verbo de uso
     "observo o frasco empoeirado na prateleira",
 ])
