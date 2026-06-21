@@ -29,17 +29,20 @@ class SessaoConfig(BaseModel):
     # Campo aceito por compat (testes legados podem passar), mas é IGNORADO
     # na criação — o backend sempre gera novo. Frontend nunca envia em produção.
     session_id: str = Field(default="", description="Ignorado em /start — servidor gera UUID v4")
-    location_id: str = "drevamor"
-    location_nome: str = "Drevamor"
-    time_of_day: str = "noite"
-    weather: str = "frio"
+    # Campos de cena e personagem: limites de tamanho previnem abuso de recurso
+    # por cliente autenticado (estouro de tokens no prompt, inflação do JSON
+    # persistido em SQLite, e da URL de imagem montada com location_id).
+    location_id: str = Field(default="drevamor", max_length=120)
+    location_nome: str = Field(default="Drevamor", max_length=120)
+    time_of_day: str = Field(default="noite", max_length=40)
+    weather: str = Field(default="frio", max_length=40)
     player_hp: int = Field(default=30, ge=1, le=999)
     player_hp_max: int = Field(default=30, ge=1, le=999)
     # Personagem D&D 5e — opcionais na criação, mestre pergunta se ausentes
-    player_name: str = ""
-    player_race: str = ""
-    player_class: str = ""
-    player_background: str = ""
+    player_name: str = Field(default="", max_length=80)
+    player_race: str = Field(default="", max_length=60)
+    player_class: str = Field(default="", max_length=60)
+    player_background: str = Field(default="", max_length=80)
     # Descrição livre do personagem (opcional, max 600 chars) — passado por
     # texto pelo jogador na criação. Quando preenchido, o LLM usa pra moldar
     # a abertura: traços, segredos, motivações, aparência. NÃO substitui
@@ -86,13 +89,14 @@ class SessaoConfig(BaseModel):
     wis_score: int = Field(default=10, ge=3, le=20)
     cha_score: int = Field(default=10, ge=3, le=20)
     # Subclasse D&D 5e — determina features especiais (Action Surge, Rage, Sneak Attack, etc.)
-    player_subclass: str = Field(default="", description="Ex: 'Campeão', 'Ladrão', 'Escola da Evocação'")
-    # Proficiências derivadas de classe + background
-    skill_profs: list[str] = Field(default_factory=list)
-    save_profs: list[str] = Field(default_factory=list)
+    player_subclass: str = Field(default="", max_length=80, description="Ex: 'Campeão', 'Ladrão', 'Escola da Evocação'")
+    # Proficiências derivadas de classe + background — limites de itens previnem
+    # listas gigantes que inflariam prompt e o blob persistido.
+    skill_profs: list[str] = Field(default_factory=list, max_length=30)
+    save_profs: list[str] = Field(default_factory=list, max_length=10)
     # Magias selecionadas na criação — lista de nomes PT-BR (truques + magias).
     # Usadas para popular SessaoAtiva.spells_conhecidas e injetar no prompt.
-    player_spells: list[str] = Field(default_factory=list)
+    player_spells: list[str] = Field(default_factory=list, max_length=80)
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":
