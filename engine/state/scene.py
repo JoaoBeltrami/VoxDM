@@ -11,6 +11,7 @@ Armadilha: npcs_apresentados é set — NPCs do local mas que não foram nomeado
     pelo mestre ainda. Só os apresentados aparecem no HUD do frontend.
 """
 
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -133,13 +134,24 @@ class SceneState:
         self.npcs_apresentados.add(npc_id)
 
     def apresentar_npcs_mencionados(self, texto: str) -> None:
-        """Varre texto e marca como apresentado qualquer NPC mencionado."""
+        """Varre texto e marca como apresentado qualquer NPC mencionado.
+
+        Match por PALAVRA INTEIRA (não substring): sem isto, um NPC 'ana-bela'
+        era marcado como apresentado quando o Mestre dizia 'semana' (contém
+        'ana'), poluindo o HUD com NPCs nunca apresentados. O 1º nome só conta se
+        tiver ≥3 letras (evita casar artigo/fragmento curto tipo 'o', 'a').
+        """
         texto_lower = texto.lower()
         for npc_id in self.npcs_presentes:
             if npc_id in self.npcs_apresentados:
                 continue
             primeiro_nome = npc_id.split("-")[0]
-            if primeiro_nome in texto_lower or npc_id.replace("-", " ") in texto_lower:
+            nome_completo = npc_id.replace("-", " ")
+            por_primeiro = len(primeiro_nome) >= 3 and re.search(
+                rf"\b{re.escape(primeiro_nome)}\b", texto_lower
+            )
+            por_completo = re.search(rf"\b{re.escape(nome_completo)}\b", texto_lower)
+            if por_primeiro or por_completo:
                 self.npcs_apresentados.add(npc_id)
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
