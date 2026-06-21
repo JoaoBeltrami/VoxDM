@@ -23,6 +23,7 @@ from typing import Any
 import structlog
 
 from config import settings
+from engine.combat.stats import stats_inimigo
 
 log = structlog.get_logger()
 
@@ -121,18 +122,28 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
     if not getattr(working_mem, "em_combate", False):
         return 0
     carregadas = 0
-    for dados in working_mem.inimigos_combate.values():
-        if carregadas >= _MAX_LOOKUPS_POR_TURNO:
-            break
-        if dados.get("estado") == "morto" or dados.get("ficha"):
+    for iid, dados in working_mem.inimigos_combate.items():
+        if dados.get("estado") == "morto":
             continue
-        ficha = await buscar_ficha_monstro(
-            srd_index=dados.get("srd_index", ""),
-            nome=dados.get("nome", ""),
-        )
-        if ficha:
-            dados["ficha"] = ficha
-            carregadas += 1
+        # 1. Ficha SRD em texto (lookup Qdrant, com cap por turno).
+        if not dados.get("ficha") and carregadas < _MAX_LOOKUPS_POR_TURNO:
+            ficha = await buscar_ficha_monstro(
+                srd_index=dados.get("srd_index", ""),
+                nome=dados.get("nome", ""),
+            )
+            if ficha:
+                dados["ficha"] = ficha
+                carregadas += 1
+        # 2. Stats numéricos (CA/HP) — todo inimigo vivo sem CA recebe, da ficha
+        #    SRD parseada ou do default por CR. Grátis (sem I/O), não conta no cap.
+        #    Sem isto, o combate autoritativo (resolver/turno inimigo) não tem CA/HP
+        #    pra trabalhar e a morte volta a depender de regex.
+        if "ca" not in dados:
+            stats = stats_inimigo(
+                ficha=str(dados.get("ficha", "")),
+                nome=str(dados.get("nome", iid)),
+            )
+            working_mem.aplicar_stats_inimigo(iid, stats.ca, stats.hp_max)
     if carregadas:
         log.info("bestiario_fichas_carregadas", quantidade=carregadas)
     return carregadas
