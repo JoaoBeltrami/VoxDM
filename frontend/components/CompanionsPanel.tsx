@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, Button, Card, Chip, HpBar, Panel } from "@/components/ui";
+import { Button, Card, Chip, HpBar, Panel } from "@/components/ui";
 
 /**
  * Painel de companions ativos (Feature party).
@@ -123,23 +123,28 @@ interface RowProps {
   onComandar?: (cmd: string) => void;
 }
 
-function CompanionRow({ id, companion: c, emCombate, onComandar }: RowProps) {
+function CompanionRow({ companion: c, emCombate, onComandar }: RowProps) {
   const morto = c.hp <= 0;
 
   return (
     <div className="flex items-start gap-2.5">
-      <Avatar
-        name={c.nome}
-        id={id}
-        tone="emerald"
-        size="md"
-        status={morto ? "dead" : c.hp / c.hp_max < 0.5 ? "wounded" : "alive"}
-      />
+      {/* Badge de emoji do TIPO (não mais avatar-de-letra) — colorida por status */}
+      <div
+        aria-hidden
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-base ${
+          morto
+            ? "border-zinc-700 bg-zinc-900/60 opacity-50 grayscale"
+            : c.hp / c.hp_max < 0.5
+            ? "border-amber-700/50 bg-amber-950/30"
+            : "border-emerald-700/40 bg-emerald-950/30"
+        }`}
+      >
+        {ICONE_POR_TIPO[c.tipo] ?? "👥"}
+      </div>
 
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-sm font-medium text-vox-text-primary truncate">
-            <span aria-hidden>{ICONE_POR_TIPO[c.tipo] ?? "👥"}</span>
+          <span className="text-sm font-medium text-vox-text-primary truncate">
             <span className={morto ? "line-through text-vox-text-muted" : ""}>
               {c.nome}
             </span>
