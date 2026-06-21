@@ -184,6 +184,31 @@ def test_enriquecer_idempotente():
     assert wm.inimigos_combate["g1"]["ficha"] == "ja-existe"
 
 
+def test_enriquecer_aplica_stats_da_ficha():
+    """Inimigo ganha CA/HP numéricos parseados da ficha SRD (bridge task 3)."""
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    wm.registrar_inimigo("g1", "Goblin", srd_index="goblin")
+    bloco = "Goblin — CR 1/4. CA 15 | PV 7 (2d6) | Ataques: Cimitarra +4."
+    with patch("engine.bestiary.bestiary.buscar_ficha_monstro",
+               AsyncMock(return_value=bloco)):
+        asyncio.run(enriquecer_fichas_inimigos(wm))
+    d = wm.inimigos_combate["g1"]
+    assert d["ca"] == 15 and d["hp_max"] == 7 and d["hp_atual"] == 7
+
+
+def test_enriquecer_aplica_default_sem_ficha():
+    """Sem ficha SRD (Qdrant fora / monstro não indexado) → stats default por CR."""
+    wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
+    wm.entrar_combate()
+    wm.registrar_inimigo("v1", "Vulto Sombrio")
+    with patch("engine.bestiary.bestiary.buscar_ficha_monstro",
+               AsyncMock(return_value=None)):
+        asyncio.run(enriquecer_fichas_inimigos(wm))
+    d = wm.inimigos_combate["v1"]
+    assert d["ca"] == 12 and d["hp_max"] == 9   # default conservador
+
+
 # ── Fase 2 — injeção no prompt de combate ─────────────────────────────────────
 
 def test_to_prompt_injeta_fichas_dedup_e_cap():
