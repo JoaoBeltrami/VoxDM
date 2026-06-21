@@ -44,7 +44,7 @@ _MAGIAS_MAGO: list[SpellEntry] = [
     SpellEntry("Choque de Trovão", "Shocking Grasp", 0, "Evocação", "1d8 elétrico, alvo sem reação. +1d8 em 5/11/17"),
     SpellEntry("Explosão de Ácido", "Acid Splash", 0, "Conjuração", "1d6 ácido, até 2 alvos adjacentes, save DES"),
     SpellEntry("Chama Produzida", "Produce Flame", 0, "Conjuração", "1d8 fogo corpo a corpo ou 9m arremessado"),
-    SpellEntry("Taumaturgia do Mago", "Mage Hand", 0, "Adivinhação", "Percepção de entorno mágico a 9m por 10 min"),
+    SpellEntry("Dança das Luzes", "Dancing Lights", 0, "Evocação", "Até 4 luzes flutuantes, ilumina 3m cada, concentração"),
     # Nível 1
     SpellEntry("Míssil Mágico", "Magic Missile", 1, "Evocação", "3 dardos 1d4+1 força, sempre acertam; +1 dardo por slot extra"),
     SpellEntry("Escudo Arcano", "Shield", 1, "Abjuração", "Reação: +5 CA até próximo turno, bloqueia Míssil Mágico"),

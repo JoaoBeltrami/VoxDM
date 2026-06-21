@@ -304,3 +304,63 @@ class TestPromptInjecao:
         msgs = montar_mensagens(contexto, master_system_override="System placeholder.")
         system = msgs[0]["content"]
         assert "Truques:" in system or "Nível 1:" in system
+
+
+# ── Testes: invariantes de cantrips (truques) ────────────────────────────────
+#
+# Regressão pro bug do entry corrompido "Taumaturgia do Mago" (nome_en "Mage
+# Hand" duplicado, escola errada), que divergia do frontend spells.ts. Estes
+# invariantes garantem que o catálogo de truques não regrida de novo.
+
+# Conjuradores que GANHAM truques no SRD 5e (full casters + Bruxo).
+_CLASSES_COM_TRUQUE = ["mago", "clérigo", "druida", "bardo", "feiticeiro", "bruxo"]
+# Meio-conjuradores: NÃO têm truques no SRD 5e.
+_CLASSES_SEM_TRUQUE = ["paladino", "ranger"]
+
+
+class TestCantripsInvariantes:
+    def test_full_casters_tem_pelo_menos_um_truque(self):
+        """Todo full caster + Bruxo deve oferecer ao menos um truque (nível 0)."""
+        for classe in _CLASSES_COM_TRUQUE:
+            truques = spells_por_nivel(classe, 0)
+            assert len(truques) > 0, f"{classe} deveria ter truques na seleção"
+
+    def test_meio_conjuradores_nao_tem_truque(self):
+        """Paladino e Ranger não recebem truques no SRD — não devem listar nenhum."""
+        for classe in _CLASSES_SEM_TRUQUE:
+            assert spells_por_nivel(classe, 0) == [], f"{classe} não deveria ter truque"
+
+    def test_progressao_concede_truques_a_quem_tem_lista(self):
+        """Quem lista truques deve ter truques>0 na progressão de nível 3, e vice-versa."""
+        for classe in _CLASSES_COM_TRUQUE:
+            tem_na_lista = len(spells_por_nivel(classe, 0)) > 0
+            tem_na_progressao = limite_progressao(classe, 3)["truques"] > 0
+            assert tem_na_lista == tem_na_progressao, (
+                f"{classe}: lista de truques e progressão discordam"
+            )
+
+    def test_sem_nome_en_duplicado_entre_truques(self):
+        """Nenhuma classe pode ter dois truques com o mesmo nome_en.
+
+        Pega exatamente o bug do 'Taumaturgia do Mago' (nome_en 'Mage Hand'
+        repetido), que correlacionaria errado no spell_detector.
+        """
+        for classe in _CLASSES_COM_TRUQUE:
+            ens = [s.nome_en for s in spells_por_nivel(classe, 0)]
+            assert len(ens) == len(set(ens)), (
+                f"{classe} tem nome_en de truque duplicado: {ens}"
+            )
+
+    def test_sem_nome_pt_duplicado_entre_truques(self):
+        """Nenhuma classe pode listar o mesmo truque (nome_pt) duas vezes."""
+        for classe in _CLASSES_COM_TRUQUE:
+            pts = [s.nome_pt for s in spells_por_nivel(classe, 0)]
+            assert len(pts) == len(set(pts)), (
+                f"{classe} tem nome_pt de truque duplicado: {pts}"
+            )
+
+    def test_mago_tem_danca_das_luzes_e_nao_entry_corrompido(self):
+        """Regressão direta: o slot corrompido virou 'Dança das Luzes'."""
+        nomes = [s.nome_pt for s in spells_por_nivel("mago", 0)]
+        assert "Dança das Luzes" in nomes
+        assert "Taumaturgia do Mago" not in nomes

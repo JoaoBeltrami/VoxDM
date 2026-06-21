@@ -253,11 +253,9 @@ Checklist completo em `memory/validacao_proxima_sessao_21052026.md` cobre:
 - Para usar outro personagem: encerrar sessão atual (DELETE) e criar nova com novo PersonagemConfig.
 - Não é bug. Comportamento intencional. Documentar no onboarding futuro.
 
-**FEAT — Cantrips de classe não estão na lista de seleção de magias**
-- `engine/magic/spell_list.py` tem as 246 magias mas cantrips das classes ficaram de fora.
-- Workaround atual: player pode mencionar a cantrip na fala e o LLM resolve por contexto.
-- Fix: adicionar cantrips por classe em `spell_list.py` + `frontend/lib/spells.ts`.
-- Prioridade: baixa. Implementar após singleplayer estar polido.
+~~**FEAT — Cantrips de classe não estão na lista de seleção de magias**~~ ✅ RESOLVIDO (21/06)
+- Nota estava **obsoleta**: truques (nível 0) já existiam em `spell_list.py` e `frontend/lib/spells.ts` para os 6 full casters + Bruxo (meio-conjuradores Paladino/Ranger corretamente sem truques — SRD).
+- Fix aplicado nesta sessão: o 8º truque do Mago era um entry corrompido (`"Taumaturgia do Mago"` com `nome_en` "Mage Hand" duplicado + escola errada), divergindo do frontend → trocado por "Dança das Luzes" (Dancing Lights, truque legítimo SRD). +6 testes de invariante em `tests/test_spell_list.py` (full-caster tem truque, meio-conjurador não, sem `nome_en`/`nome_pt` duplicado entre truques).
 
 ~~**COMBAT-1**~~ ✅ RESOLVIDO (19/05) — `_RE_INIMIGO_MORTO` expandido para 22 padrões em `api/turn_pipeline.py`. Fix definitivo pendente (Fase 5): classificação LLM.
 
