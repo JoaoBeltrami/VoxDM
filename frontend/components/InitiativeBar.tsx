@@ -3,82 +3,55 @@
 /**
  * Barra de iniciativa horizontal no topo da tela durante combate.
  *
- * Por que existe: feedback visual de quem age agora — inspirado em Baldur's Gate 3.
- *   Authority = engine (LLM apenas propõe iniciativa, engine cacheia ordem).
+ * Por que existe: feedback visual de quem age agora. Authority = engine (LLM só
+ *   propõe; a engine cacheia a ordem).
  *
- * Refatorado 27/05: usa Card + Avatar primitivas + tokens semânticos.
- *
- * Tokens:
- *   - Avatar circular 48px com inicial + cor por hash do id.
- *   - Turno atual: ring violeta + scale + glow + seta ▼ acima.
- *   - Morto: status "dead" no Avatar (grayscale + ring zinc).
+ * Redesenhada 20/06 (Palco v2, decisão B do Beltrami): antes eram TOKENS de 48px
+ *   com AVATAR DE INICIAL (a queixa "avatar em letras" do playtest #8). Agora são
+ *   PILLS compactas — ponto colorido por tipo + nome + iniciativa — numa régua
+ *   discreta. Turno atual: ring violeta + scale + glow. Morto: grayscale + risco.
  */
 
 import { memo } from "react";
 import type { TokenIniciativa } from "@/lib/api";
-import { Avatar, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
 
 interface Props {
   ordem: TokenIniciativa[];
   emCombate: boolean;
 }
 
-function statusDoToken(t: TokenIniciativa): "alive" | "dead" | "active" {
-  if (t.morto) return "dead";
-  if (t.turno_atual) return "active";
-  return "alive";
-}
-
-function toneDoToken(t: TokenIniciativa): "violet" | "rose" {
-  return t.tipo === "jogador" ? "violet" : "rose";
-}
-
 const InitiativeToken = memo(function InitiativeToken({ token }: { token: TokenIniciativa }) {
-  const nomeCurto = token.nome.length > 12 ? token.nome.slice(0, 11) + "…" : token.nome;
+  const nomeCurto = token.nome.length > 14 ? token.nome.slice(0, 13) + "…" : token.nome;
   const isAtual = token.turno_atual && !token.morto;
+  const jogador = token.tipo === "jogador";
+  const cor = jogador ? "var(--vox-accent-primary)" : "var(--vox-accent-danger)";
 
   return (
-    <div className="relative flex flex-col items-center" style={{ width: 64 }}>
-      {/* Seta indicando turno atual */}
-      {isAtual && (
-        <div
-          className="absolute -top-3 text-vox-accent-glow drop-shadow-[0_0_6px_rgba(167,139,250,0.8)]"
-          style={{ fontSize: 14 }}
-          aria-hidden
-        >
-          ▼
-        </div>
-      )}
-
-      <div className="relative">
-        <Avatar
-          name={token.nome}
-          id={token.id}
-          tone={toneDoToken(token)}
-          size="lg"
-          status={statusDoToken(token)}
-        />
-
-        {/* Badge de iniciativa no canto superior direito */}
-        <span
-          className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border border-vox-border-strong bg-vox-bg-floating px-1 text-[10px] font-bold leading-none text-vox-accent-glow shadow-vox-1"
-          aria-label={`Iniciativa ${token.iniciativa}`}
-        >
-          {token.iniciativa}
-        </span>
-      </div>
-
+    <div
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-all duration-300 ${
+        token.morto ? "opacity-45 grayscale" : ""
+      } ${isAtual ? "scale-105 shadow-[0_0_12px_-2px_var(--vox-accent-glow)]" : ""}`}
+      style={{
+        borderColor: isAtual ? "var(--vox-accent-glow)" : "var(--vox-border-soft)",
+        backgroundColor: isAtual ? "rgba(139,92,246,0.18)" : "var(--vox-bg-elevated)",
+      }}
+      title={`${token.nome} · iniciativa ${token.iniciativa}`}
+    >
+      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: cor }} />
       <span
-        className={`mt-1 max-w-[64px] truncate text-center text-[10px] font-display tracking-wide ${
-          isAtual
-            ? "text-vox-accent-glow"
-            : token.morto
+        className={`font-display text-[11px] tracking-wide ${
+          token.morto
             ? "text-vox-text-muted line-through"
+            : isAtual
+            ? "text-vox-accent-glow"
             : "text-vox-text-secondary"
         }`}
-        title={token.nome}
       >
         {nomeCurto}
+      </span>
+      <span className="font-mono text-[10px] tabular-nums text-vox-text-muted">
+        {token.iniciativa}
       </span>
     </div>
   );
@@ -102,8 +75,8 @@ export function InitiativeBar({ ordem, emCombate }: Props) {
         variant="strong"
         elevation={3}
         rounded="2xl"
-        padding="md"
-        className="flex items-end gap-3"
+        padding="sm"
+        className="flex max-w-[90vw] flex-wrap items-center justify-center gap-1.5"
       >
         {ordem.map((token) => (
           <InitiativeToken key={token.id} token={token} />
