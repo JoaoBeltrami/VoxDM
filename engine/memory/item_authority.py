@@ -24,7 +24,7 @@ import re
 # o jogador "usa/bebe/aplica" e que têm provisão limitada. Inclui o inglês que o
 # STT às vezes transcreve ("potion", "scroll"). Nada de FOR/charme/magia aqui.
 _ITENS_CONSUMIVEIS: tuple[str, ...] = (
-    "poç", "pocao", "potion", "elixir", "pergaminho", "scroll", "antídoto",
+    "poção", "poções", "pocao", "potion", "elixir", "pergaminho", "scroll", "antídoto",
     "antidoto", "antitoxina", "tônico", "tonico", "ampola", "unguento",
     "bálsamo", "balsamo", "reagente", "granada", "kit de cura", "kit médico",
     "kit medico",
@@ -58,7 +58,7 @@ def nota_item_ausente(texto_jogador: str, inventario: list[str]) -> str | None:
         # O consumível foi citado — está no inventário?
         if any(radical in item for item in inv_baixo):
             continue  # tem o item, sem nota
-        rotulo = "poção" if radical in ("poç", "pocao", "potion") else radical
+        rotulo = "poção" if radical in ("poção", "poções", "pocao", "potion") else radical
         return (
             f"O jogador mencionou usar um consumível ('{rotulo}'), que não "
             "consta no inventário dele. Ele talvez não tenha o item — você "
