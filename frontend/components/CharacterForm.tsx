@@ -346,7 +346,7 @@ export function CharacterForm({ onChange }: Props) {
   return (
     <div className="w-full space-y-4 text-left">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
+        <p className="text-xs font-semibold text-vox-accent-glow uppercase tracking-wider">
           Seu Personagem
         </p>
         <Chip
@@ -361,7 +361,7 @@ export function CharacterForm({ onChange }: Props) {
 
       {/* Nome */}
       <div>
-        <label className="mb-1 block text-xs text-zinc-400">
+        <label className="mb-1 block text-xs text-vox-text-secondary">
           Nome <span className="text-red-400">*</span>
         </label>
         <input
@@ -369,20 +369,20 @@ export function CharacterForm({ onChange }: Props) {
           onChange={e => setNome(e.target.value)}
           placeholder="Ex: Aldric, Lyra, Torvin..."
           maxLength={40}
-          className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+          className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
         />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         {/* Raça */}
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">
+          <label className="mb-1 block text-xs text-vox-text-secondary">
             Raça <span className="text-red-400">*</span>
           </label>
           <select
             value={raca}
             onChange={e => setRaca(e.target.value)}
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+            className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
           >
             <option value="">— Escolher —</option>
             {RACAS_DND.map(r => <option key={r} value={r}>{r}</option>)}
@@ -391,13 +391,13 @@ export function CharacterForm({ onChange }: Props) {
 
         {/* Classe */}
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">
+          <label className="mb-1 block text-xs text-vox-text-secondary">
             Classe <span className="text-red-400">*</span>
           </label>
           <select
             value={classe}
             onChange={e => { setClasse(e.target.value); setSubclasse(""); setSelectedSpells([]); setNivelTabSpells(0); }}
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+            className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
           >
             <option value="">— Escolher —</option>
             {CLASSES_DND.map(c => <option key={c} value={c}>{c}</option>)}
@@ -408,14 +408,14 @@ export function CharacterForm({ onChange }: Props) {
       {/* Subclasse — aparece somente quando a classe tem subclasses mapeadas */}
       {classe && (SUBCLASSES[classe]?.length ?? 0) > 0 && (
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">
+          <label className="mb-1 block text-xs text-vox-text-secondary">
             Subclasse
-            <span className="ml-1 text-[10px] text-zinc-600">(opcional)</span>
+            <span className="ml-1 text-[10px] text-vox-text-muted">(opcional)</span>
           </label>
           <select
             value={subclasse}
             onChange={e => setSubclasse(e.target.value)}
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+            className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
           >
             <option value="">— Sem subclasse —</option>
             {(SUBCLASSES[classe] ?? []).map(s => (
@@ -456,8 +456,8 @@ export function CharacterForm({ onChange }: Props) {
         return (
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs text-zinc-400">Magias</label>
-              <span className={`text-[10px] font-semibold ${totalSelecionadas >= totalPermitido ? "text-violet-400" : "text-zinc-500"}`}>
+              <label className="text-xs text-vox-text-secondary">Magias</label>
+              <span className={`text-[10px] font-semibold ${totalSelecionadas >= totalPermitido ? "text-vox-accent-glow" : "text-vox-text-muted"}`}>
                 {totalSelecionadas}/{totalPermitido} selecionadas
               </span>
             </div>
@@ -474,8 +474,8 @@ export function CharacterForm({ onChange }: Props) {
                     onClick={() => setNivelTabSpells(lv)}
                     className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
                       ativo
-                        ? "border border-violet-500 bg-violet-900/40 text-violet-300"
-                        : "border border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                        ? "border border-vox-accent-primary bg-vox-accent-primary/40 text-vox-accent-glow"
+                        : "border border-vox-border-soft text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-primary"
                     }`}
                   >
                     {rotulo}
@@ -487,7 +487,7 @@ export function CharacterForm({ onChange }: Props) {
             {/* Lista de spells na aba ativa */}
             <Card variant="subtle" elevation="none" padding="sm" className="space-y-1 max-h-48 overflow-y-auto">
               {spellsNaAba.length === 0 && (
-                <p className="text-[10px] text-zinc-600">Nenhuma magia disponível neste nível.</p>
+                <p className="text-[10px] text-vox-text-muted">Nenhuma magia disponível neste nível.</p>
               )}
               {spellsNaAba.map(spell => {
                 const selecionada = selectedSpells.includes(spell.nome_pt);
@@ -501,10 +501,10 @@ export function CharacterForm({ onChange }: Props) {
                     key={spell.nome_pt}
                     className={`flex items-start gap-2 cursor-pointer rounded p-1.5 transition ${
                       selecionada
-                        ? "bg-violet-900/20 border border-violet-700/40"
+                        ? "bg-vox-accent-primary/20 border border-vox-accent-primary/60/40"
                         : limiteAtingido
                           ? "opacity-50 cursor-not-allowed border border-transparent"
-                          : "hover:bg-zinc-800/60 border border-transparent"
+                          : "hover:bg-vox-bg-elevated/60 border border-transparent"
                     }`}
                   >
                     <input
@@ -515,8 +515,8 @@ export function CharacterForm({ onChange }: Props) {
                       onChange={() => !limiteAtingido && toggleSpell(spell)}
                     />
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-zinc-200 leading-tight">{spell.nome_pt}</p>
-                      <p className="text-[10px] text-zinc-400 leading-tight">{spell.desc_curta}</p>
+                      <p className="text-[11px] font-semibold text-vox-text-primary leading-tight">{spell.nome_pt}</p>
+                      <p className="text-[10px] text-vox-text-secondary leading-tight">{spell.desc_curta}</p>
                     </div>
                   </label>
                 );
@@ -525,7 +525,7 @@ export function CharacterForm({ onChange }: Props) {
 
             {/* Resumo das selecionadas */}
             {totalSelecionadas > 0 && (
-              <p className="mt-1.5 text-[10px] text-violet-400">
+              <p className="mt-1.5 text-[10px] text-vox-accent-glow">
                 Selecionadas: {selectedSpells.slice(0, 6).join(", ")}{selectedSpells.length > 6 ? ` +${selectedSpells.length - 6}` : ""}
               </p>
             )}
@@ -535,13 +535,13 @@ export function CharacterForm({ onChange }: Props) {
 
       {/* Background — obrigatório: afeta perícias */}
       <div>
-        <label className="mb-1 block text-xs text-zinc-400">
+        <label className="mb-1 block text-xs text-vox-text-secondary">
           Background <span className="text-red-400">*</span>
         </label>
         <select
           value={background}
           onChange={e => setBackground(e.target.value)}
-          className="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-violet-500"
+          className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
         >
           <option value="">— Escolher —</option>
           {BACKGROUNDS_DND.map(b => <option key={b} value={b}>{b}</option>)}
@@ -551,11 +551,11 @@ export function CharacterForm({ onChange }: Props) {
       {/* Descrição livre — opcional. Molda a abertura narrativa do Mestre. */}
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-xs text-zinc-400">
+          <label className="text-xs text-vox-text-secondary">
             Quem é seu personagem?
-            <span className="ml-1 text-[10px] text-zinc-600">(opcional)</span>
+            <span className="ml-1 text-[10px] text-vox-text-muted">(opcional)</span>
           </label>
-          <span className={`text-[10px] ${descricao.length > DESC_MAX * 0.9 ? "text-amber-400" : "text-zinc-600"}`}>
+          <span className={`text-[10px] ${descricao.length > DESC_MAX * 0.9 ? "text-amber-400" : "text-vox-text-muted"}`}>
             {descricao.length}/{DESC_MAX}
           </span>
         </div>
@@ -564,14 +564,14 @@ export function CharacterForm({ onChange }: Props) {
           onChange={e => setDescricao(e.target.value.slice(0, DESC_MAX))}
           placeholder="Aparência, personalidade, motivação, segredo... O mestre usa pra moldar sua entrada na cena."
           rows={3}
-          className="w-full resize-none rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs leading-relaxed text-zinc-100 outline-none focus:border-violet-500"
+          className="w-full resize-none rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs leading-relaxed text-vox-text-primary outline-none focus:border-vox-accent-primary"
         />
       </div>
 
       {/* Atributos — Standard Array OU 4d6 drop lowest */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs text-zinc-400">Atributos</label>
+          <label className="text-xs text-vox-text-secondary">Atributos</label>
           <div className="flex items-center gap-1.5">
             <Chip
               tone="amber"
@@ -607,8 +607,8 @@ export function CharacterForm({ onChange }: Props) {
         </div>
 
         {modoAtributos === "array" && (
-          <p className="mb-1.5 text-[10px] text-zinc-600">
-            Standard array: <span className="text-zinc-500">15, 14, 13, 12, 10, 8</span>
+          <p className="mb-1.5 text-[10px] text-vox-text-muted">
+            Standard array: <span className="text-vox-text-muted">15, 14, 13, 12, 10, 8</span>
           </p>
         )}
         {modoAtributos === "rolado-auto" && allAssigned && (
@@ -625,7 +625,7 @@ export function CharacterForm({ onChange }: Props) {
               {[...valoresRolados].sort((a, b) => b - a).join(", ")}
             </span>
             {remainingRolados.length > 0 && (
-              <span className="text-violet-400">
+              <span className="text-vox-accent-glow">
                 · restam: <span className="font-mono">{remainingRolados.join(", ")}</span>
               </span>
             )}
@@ -647,13 +647,13 @@ export function CharacterForm({ onChange }: Props) {
                 key={key}
                 className={`rounded-lg border p-2 transition ${destaque} ${
                   valor
-                    ? "border-violet-700/60 bg-violet-900/10"
-                    : "border-zinc-700 bg-zinc-800/50"
+                    ? "border-vox-accent-primary/60/60 bg-vox-accent-primary/10"
+                    : "border-vox-border-soft bg-vox-bg-elevated/50"
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-zinc-300">{abrev}</span>
-                  <span className={`text-xs font-semibold ${valor ? "text-violet-400" : "text-zinc-600"}`}>
+                  <span className="text-xs font-bold text-vox-text-primary">{abrev}</span>
+                  <span className={`text-xs font-semibold ${valor ? "text-vox-accent-glow" : "text-vox-text-muted"}`}>
                     {valor ? fmtMod(valor) : "—"}
                   </span>
                 </div>
@@ -662,10 +662,10 @@ export function CharacterForm({ onChange }: Props) {
                   <select
                     value={valor || ""}
                     onChange={e => assignScore(key, Number(e.target.value))}
-                    className={`w-full rounded border bg-zinc-900 py-0.5 text-center text-xs outline-none focus:border-violet-500 ${
+                    className={`w-full rounded border bg-vox-bg-panel py-0.5 text-center text-xs outline-none focus:border-vox-accent-primary ${
                       modoAtributos === "rolado-manual"
                         ? "border-amber-800/60 text-amber-200 font-bold"
-                        : "border-zinc-700 text-zinc-200"
+                        : "border-vox-border-soft text-vox-text-primary"
                     }`}
                   >
                     <option value="">—</option>
@@ -675,19 +675,19 @@ export function CharacterForm({ onChange }: Props) {
                     ))}
                   </select>
                 ) : (
-                  <div className="w-full rounded border border-amber-800/40 bg-zinc-900 py-0.5 text-center text-xs font-bold text-amber-300">
+                  <div className="w-full rounded border border-amber-800/40 bg-vox-bg-panel py-0.5 text-center text-xs font-bold text-amber-300">
                     {valor || "—"}
                   </div>
                 )}
 
-                <p className="mt-0.5 text-center text-[10px] text-zinc-600 truncate">{label}</p>
+                <p className="mt-0.5 text-center text-[10px] text-vox-text-muted truncate">{label}</p>
               </div>
             );
           })}
         </div>
 
         {(modoAtributos === "array" || modoAtributos === "rolado-manual") && remainingValues.length > 0 && (
-          <p className="mt-1.5 text-xs text-zinc-600">
+          <p className="mt-1.5 text-xs text-vox-text-muted">
             Disponíveis: {remainingValues.join(", ")}
           </p>
         )}
@@ -698,28 +698,28 @@ export function CharacterForm({ onChange }: Props) {
         <Card variant="subtle" elevation="none" padding="none" className="px-3 py-2 space-y-1.5">
           <div className="grid grid-cols-3 gap-x-4 text-xs">
             <div className="flex justify-between">
-              <span className="text-zinc-500">HP</span>
-              <span className="font-semibold text-violet-400">{hp}</span>
+              <span className="text-vox-text-muted">HP</span>
+              <span className="font-semibold text-vox-accent-glow">{hp}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">CA</span>
-              <span className="font-semibold text-zinc-300">{ca}</span>
+              <span className="text-vox-text-muted">CA</span>
+              <span className="font-semibold text-vox-text-primary">{ca}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">Proef</span>
-              <span className="font-semibold text-zinc-300">+{prof}</span>
+              <span className="text-vox-text-muted">Proef</span>
+              <span className="font-semibold text-vox-text-primary">+{prof}</span>
             </div>
           </div>
           {(CLASS_SAVES[classe] ?? []).length > 0 && (
             <div className="text-xs">
-              <span className="text-zinc-500">Saves: </span>
-              <span className="text-zinc-400">{(CLASS_SAVES[classe] ?? []).join(", ")}</span>
+              <span className="text-vox-text-muted">Saves: </span>
+              <span className="text-vox-text-secondary">{(CLASS_SAVES[classe] ?? []).join(", ")}</span>
             </div>
           )}
           {allSkills.length > 0 && (
             <div className="text-xs">
-              <span className="text-zinc-500">Perícias: </span>
-              <span className="text-zinc-400">{allSkills.join(", ")}</span>
+              <span className="text-vox-text-muted">Perícias: </span>
+              <span className="text-vox-text-secondary">{allSkills.join(", ")}</span>
             </div>
           )}
         </Card>
@@ -727,7 +727,7 @@ export function CharacterForm({ onChange }: Props) {
 
       {/* Local de início */}
       <div>
-        <label className="mb-1 block text-xs text-zinc-400">
+        <label className="mb-1 block text-xs text-vox-text-secondary">
           Local de início <span className="text-red-400">*</span>
         </label>
         <div className="space-y-2">
@@ -738,14 +738,14 @@ export function CharacterForm({ onChange }: Props) {
               onClick={() => setLocalId(local.id)}
               className={`w-full rounded-lg border px-3 py-2 text-left transition ${
                 localId === local.id
-                  ? "border-violet-500 bg-violet-900/30"
-                  : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                  ? "border-vox-accent-primary bg-vox-accent-primary/30"
+                  : "border-vox-border-soft bg-vox-bg-elevated/50 hover:border-vox-border-strong"
               }`}
             >
-              <p className={`text-xs font-semibold ${localId === local.id ? "text-violet-300" : "text-zinc-300"}`}>
+              <p className={`text-xs font-semibold ${localId === local.id ? "text-vox-accent-glow" : "text-vox-text-primary"}`}>
                 {local.nome}
               </p>
-              <p className="text-xs text-zinc-500 mt-0.5">{local.descricao}</p>
+              <p className="text-xs text-vox-text-muted mt-0.5">{local.descricao}</p>
             </button>
           ))}
         </div>

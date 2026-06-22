@@ -111,6 +111,31 @@ def test_aplicar_dedup_variante_de_acento():
     assert len(wm.npcs_presentes) == 1
 
 
+def test_aplicar_dedup_epiteto_de_local():
+    """NPC-DUP-2: 'Brennan' e 'Brennan Sem Vila' (alcunha do local) são o mesmo
+    NPC — o epíteto anexado não pode duplicá-lo na cena."""
+    wm = _wm()
+    wm.npcs_presentes = ["brennan"]
+    add = aplicar_npcs_extraidos(wm, [{"id": "brennan-sem-vila", "nome": "Brennan Sem Vila"}])
+    assert add == []
+    assert len(wm.npcs_presentes) == 1
+    # caminho inverso: presente com alcunha, extrai nome curto
+    wm2 = _wm()
+    wm2.npcs_presentes = ["brennan-sem-vila"]
+    add2 = aplicar_npcs_extraidos(wm2, [{"id": "brennan", "nome": "Brennan"}])
+    assert add2 == []
+    assert len(wm2.npcs_presentes) == 1
+
+
+def test_aplicar_nao_funde_nomes_distintos():
+    """A dedup por primeiro nome não pode fundir NPCs diferentes de um token."""
+    wm = _wm()
+    wm.npcs_presentes = ["aldric"]
+    add = aplicar_npcs_extraidos(wm, [{"id": "aldrina", "nome": "Aldrina"}])
+    assert add == ["aldrina"]
+    assert len(wm.npcs_presentes) == 2
+
+
 @pytest.mark.parametrize("nid", [
     "pessoa-1", "pessoa-2", "homem-1", "viajante-espalhado-1", "cavaleiro-solitario-1",
 ])

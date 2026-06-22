@@ -137,6 +137,22 @@ def _canonico(nid: str) -> str:
     return re.sub(r"[^a-z0-9]", "", _transliterar(nid).lower())
 
 
+def _chave_dedup(nid: str) -> str:
+    """Chave de dedup TOLERANTE A EPÍTETO (NPC-DUP-2, playtest 21/06).
+
+    Quando o Mestre anexa a alcunha do local ao nome — 'Brennan' vira
+    'Brennan, dos Sem-Vila' → id 'brennan-sem-vila' — o canônico completo
+    ('brennansemvila') não bate com 'brennan' e o NPC duplica na cena. Aqui,
+    se o id tem epíteto (multi-token) e o PRIMEIRO nome é substancial (>=4
+    chars), a chave é só o primeiro nome — 'brennan-sem-vila' e 'brennan'
+    colapsam em 'brennan'. Nome de um token só usa o canônico inteiro.
+    """
+    tokens = [t for t in re.split(r"[\s-]+", _transliterar(nid).lower()) if t]
+    if len(tokens) > 1 and len(tokens[0]) >= 4:
+        return re.sub(r"[^a-z0-9]", "", tokens[0])
+    return _canonico(nid)
+
+
 def _npc_fantasma(nid: str) -> bool:
     """True se o id é fragmento de narração ou figurante, não nome de NPC.
 
@@ -226,12 +242,12 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     o id do jogador e dedup por CHAVE CANÔNICA (NPC-DUP-1): 'gharen-bra-o-de-ferro'
     e 'gharen-brao-de-ferro' não entram os dois. Retorna os ids adicionados.
     """
-    jogador_canon = _canonico(str(getattr(wm, "player_name", "")))
-    presentes_canon = {_canonico(p) for p in wm.npcs_presentes}
+    jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
+    presentes_canon = {_chave_dedup(p) for p in wm.npcs_presentes}
     adicionados: list[str] = []
     for npc in npcs:
         nid = npc.get("id", "")
-        canon = _canonico(nid)
+        canon = _chave_dedup(nid)
         if not nid or not canon or canon == jogador_canon or canon in presentes_canon:
             continue
         wm.npcs_presentes.append(nid)

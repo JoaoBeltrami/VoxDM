@@ -44,14 +44,14 @@ export function SceneHeader({ locationNome, timeOfDay }: Props) {
   return (
     <div
       key={locationNome}
-      className="flex items-center justify-center gap-3 border-b border-vox-border-subtle bg-vox-bg-elevated px-4 py-2 font-display text-sm tracking-wider text-vox-text-secondary animate-fade-in"
+      className="flex items-center justify-center gap-2.5 border-b border-vox-border-subtle bg-vox-bg-elevated px-4 py-2 animate-fade-in"
     >
-      <span aria-hidden className="text-base">{icone}</span>
-      <span className="uppercase">{locationNome}</span>
+      <span aria-hidden className="text-base opacity-90">{icone}</span>
+      <span className="font-display text-base tracking-[0.06em] text-vox-text-primary">{locationNome}</span>
       {timeFormatado && (
         <>
           <span className="text-vox-text-muted">·</span>
-          <span className="text-vox-text-muted italic font-atmospheric">{timeFormatado}</span>
+          <span className="font-atmospheric text-sm italic text-vox-text-muted">{timeFormatado}</span>
         </>
       )}
     </div>

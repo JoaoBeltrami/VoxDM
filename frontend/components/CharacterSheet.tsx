@@ -505,21 +505,31 @@ export function CharacterSheet({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="absolute right-4 top-14 z-10">
+    <div className="relative">
       <button
         onClick={() => setAberto(a => !a)}
-        title="Ficha do personagem"
-        className={`flex h-8 w-8 items-center justify-center rounded-full border bg-zinc-900 text-xs transition ${
+        title="Detalhes do personagem (inventário, ouro, XP, descanso, dados, condições)"
+        className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
           inspiration
-            ? "border-yellow-500 text-yellow-400 animate-pulse"
-            : "border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-400"
+            ? "border-yellow-500/60 bg-yellow-900/10 text-yellow-300"
+            : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/50 hover:text-vox-text-primary"
         }`}
       >
-        ⚔️
+        <span aria-hidden>⚔️</span> {aberto ? "Fechar detalhes" : "Detalhes"}
       </button>
 
       {aberto && (
-        <Card variant="strong" elevation={3} padding="lg" rounded="xl" className="absolute right-0 top-10 w-72 max-h-[85vh] overflow-y-auto">
+        <Card variant="strong" elevation={3} padding="lg" rounded="xl" className="fixed right-3 top-16 bottom-3 z-50 w-80 overflow-y-auto">
+
+          {/* Cabeçalho do painel de detalhes com botão de fechar */}
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-medium uppercase tracking-widest text-vox-text-muted">Detalhes</span>
+            <button
+              onClick={() => setAberto(false)}
+              title="Fechar detalhes"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary"
+            >✕</button>
+          </div>
 
           {/* Identidade */}
           <div className="mb-3 border-b border-zinc-800 pb-3">

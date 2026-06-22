@@ -76,21 +76,21 @@ const config: Config = {
           "50%":       { transform: "scale(1.12)", opacity: "1"    },
         },
         listen: {
-          "0%, 100%": { transform: "scale(1)",    opacity: "0.85" },
-          "50%":       { transform: "scale(1.18)", opacity: "1"    },
+          "0%, 100%": { transform: "scale(1)",    opacity: "0.88" },
+          "50%":       { transform: "scale(1.1)",  opacity: "1"    },
         },
         speak: {
-          "0%, 100%": { transform: "rotate(-6deg) scale(1.04)" },
-          "25%":       { transform: "rotate(6deg)  scale(1.16)" },
-          "75%":       { transform: "rotate(-4deg) scale(1.09)" },
+          // Respiração suave (sem rotação) — wobble rápido anterior parecia antinatural
+          "0%, 100%": { transform: "scale(1)",    opacity: "0.9" },
+          "50%":       { transform: "scale(1.08)", opacity: "1"   },
         },
         ripple: {
-          "0%":   { transform: "scale(0.8)", opacity: "0.6" },
-          "100%": { transform: "scale(1.6)", opacity: "0"   },
+          "0%":   { transform: "scale(0.85)", opacity: "0.4" },
+          "100%": { transform: "scale(1.6)",  opacity: "0"   },
         },
         "ripple-delay": {
-          "0%":   { transform: "scale(0.8)", opacity: "0.4" },
-          "100%": { transform: "scale(1.8)", opacity: "0"   },
+          "0%":   { transform: "scale(0.85)", opacity: "0.28" },
+          "100%": { transform: "scale(1.8)",  opacity: "0"    },
         },
         "crit-pop": {
           // Hold longo (pico visível ~10%→82%): momentos dramáticos (crit "20"/"1",
@@ -161,11 +161,11 @@ const config: Config = {
         },
       },
       animation: {
-        breathe:           "breathe 2.4s ease-in-out infinite",
-        listen:            "listen 0.8s ease-in-out infinite",
-        speak:             "speak 0.5s ease-in-out infinite",
-        ripple:            "ripple 1.4s ease-out infinite",
-        "ripple-delay":    "ripple-delay 1.4s ease-out 0.7s infinite",
+        breathe:           "breathe 3s ease-in-out infinite",
+        listen:            "listen 1.1s ease-in-out infinite",
+        speak:             "speak 1.2s ease-in-out infinite",
+        ripple:            "ripple 2.2s ease-out infinite",
+        "ripple-delay":    "ripple-delay 2.2s ease-out 1.1s infinite",
         "crit-pop":        "crit-pop 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "fade-in":         "fade-in 400ms ease-out",
         "fade-in-up":      "fade-in-up 320ms cubic-bezier(0.16, 1, 0.3, 1)",

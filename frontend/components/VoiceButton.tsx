@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyboardEvent, useCallback, useRef, useState } from "react";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { transcrever } from "@/lib/api";
 import { Button, Chip } from "@/components/ui";
 
@@ -68,6 +68,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   const mediaRecRef   = useRef<MediaRecorder | null>(null);
   const chunksRef     = useRef<Blob[]>([]);
   const inputRef      = useRef<HTMLTextAreaElement>(null);
+  const espacoSeguradoRef = useRef(false);
 
   const temMediaRec = typeof window !== "undefined" && !!window.MediaRecorder && !!sessionId;
   const temWebSpeech = typeof window !== "undefined" &&
@@ -234,8 +235,53 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   // Pausa só funciona com MediaRecorder (Web Speech API não suporta pause nativo)
   const podePausar = temMediaRec && ouvindo;
 
+  // ── Hotkeys globais (pedido Beltrami) ────────────────────────────────────────
+  // Espaço = SEGURE pra falar (push-to-talk); Enter = foca o input pra falar com o
+  // Mestre. Ignorados quando o foco está num campo de texto (não atrapalha digitar).
+  // Edge raro: soltar o Espaço antes da permissão de mic resolver pode orfanar uma
+  // gravação — aceitável v1 (mic costuma já estar concedido, resolve em ~ms).
+  useEffect(() => {
+    if (semVoz) return;
+    const ehCampoTexto = (el: EventTarget | null) =>
+      el instanceof HTMLElement &&
+      (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    const ehInterativo = (el: EventTarget | null) =>
+      ehCampoTexto(el) ||
+      (el instanceof HTMLElement &&
+        (el.tagName === "BUTTON" || el.tagName === "A" || el.tagName === "SELECT"));
+    const onDown = (e: WindowEventMap["keydown"]) => {
+      if (e.code === "Space" && !ehCampoTexto(e.target) && !desabilitado) {
+        e.preventDefault();
+        if (espacoSeguradoRef.current) return; // ignora auto-repeat do teclado
+        espacoSeguradoRef.current = true;
+        if (!ouvindo) {
+          if (temMediaRec) iniciarMediaRec();
+          else if (temWebSpeech) iniciarWebSpeech();
+        }
+      } else if (e.key === "Enter" && !ehInterativo(e.target)) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    const onUp = (e: WindowEventMap["keyup"]) => {
+      if (e.code === "Space" && espacoSeguradoRef.current) {
+        espacoSeguradoRef.current = false;
+        e.preventDefault();
+        if (mediaRecRef.current) pararMediaRec();
+        else if (recRef.current) pararWebSpeech();
+      }
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [semVoz, desabilitado, ouvindo, temMediaRec, temWebSpeech,
+      iniciarMediaRec, iniciarWebSpeech, pararMediaRec, pararWebSpeech]);
+
   return (
-    <div className="flex flex-col items-center gap-3 w-full">
+    <div className="flex w-full flex-col items-center gap-1.5">
 
       {/* Botão de falar + botão de pausa */}
       {!semVoz && (
@@ -277,7 +323,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
               ouvindo ? "Parar de ouvir" : "Falar"
             }
             className={`relative flex items-center justify-center rounded-full transition-all duration-300
-              w-14 h-14
+              w-12 h-12
               ${pausado
                 ? "bg-amber-600 shadow-[0_0_16px_4px_rgba(245,158,11,0.3)] scale-105"
                 : ouvindo
@@ -357,6 +403,14 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           Enviar
         </Button>
       </div>
+
+      {!semVoz && (
+        <p className="text-[10px] tracking-wide text-vox-text-muted/70">
+          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Espaço</kbd> segure pra falar
+          <span className="mx-1.5">·</span>
+          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Enter</kbd> Mestre
+        </p>
+      )}
     </div>
   );
 }

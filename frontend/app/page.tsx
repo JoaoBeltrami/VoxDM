@@ -13,6 +13,7 @@ import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { CharacterForm } from "@/components/CharacterForm";
 import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
+import { FichaViva } from "@/components/FichaViva";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
 import { CompanionsPanel } from "@/components/CompanionsPanel";
@@ -1313,9 +1314,20 @@ export default function Home() {
       </div>
     );
 
-    // Painel direito — ficha + tracker de combate.
+    // Painel direito — ficha viva (trilho sempre à vista) + detalhes + tracker.
     const rightSlot = (
       <div className="space-y-3">
+        {(personagem.player_name || personagem.player_class || personagem.player_race) && (
+          <div className="rounded-xl border border-vox-border-soft bg-vox-bg-panel p-4 backdrop-blur-md">
+            <FichaViva
+              personagem={personagem}
+              hpAtual={personagem.player_hp}
+              spellSlots={spellSlots}
+              conditions={playerConditions}
+            />
+          </div>
+        )}
+
         {!szEmAndamento && <CharacterSheet
           personagem={personagem}
           sessionId={sessionId}
@@ -1714,21 +1726,6 @@ export default function Home() {
           );
         })()}
 
-        <div className="relative">
-          <VoxOrb estado={orbEstado} tamanho={52} />
-          {respostaAtual && (
-            <button
-              onClick={pararAudio}
-              title="Parar fala do mestre"
-              className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 transition hover:bg-black/70"
-            >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-white">
-                <rect x="4" y="4" width="12" height="12" rx="2" />
-              </svg>
-            </button>
-          )}
-        </div>
-
         {condicoesDetectadas.length > 0 && !cinemaMode && (
           <div className="flex flex-wrap justify-center gap-1.5 px-4">
             {condicoesDetectadas.map(cond => (
@@ -1752,17 +1749,33 @@ export default function Home() {
           </div>
         )}
 
-        <div className={`rounded-full transition-all duration-200 ${
-          suaVezGlow ? "shadow-[0_0_0_3px_rgba(251,191,36,0.45),0_0_18px_rgba(251,191,36,0.2)] animate-sua-vez" : ""
-        }`}>
-          <VoiceButton
-            onEnviar={enviarComando}
-            onOuvindoChange={setOuvindo}
-            desabilitado={!!respostaAtual}
-            sessionId={sessionId}
-            onIniciarFala={pararAudio}
-            mestreAudioTocando={audioTocando && !ouvindo}
-          />
+        <div className="flex items-center justify-center gap-4">
+          <div className="relative shrink-0">
+            <VoxOrb estado={orbEstado} tamanho={48} />
+            {respostaAtual && (
+              <button
+                onClick={pararAudio}
+                title="Parar fala do mestre"
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 transition hover:bg-black/70"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" className="text-white">
+                  <rect x="4" y="4" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className={`rounded-full transition-all duration-200 ${
+            suaVezGlow ? "shadow-[0_0_0_3px_rgba(251,191,36,0.45),0_0_18px_rgba(251,191,36,0.2)] animate-sua-vez" : ""
+          }`}>
+            <VoiceButton
+              onEnviar={enviarComando}
+              onOuvindoChange={setOuvindo}
+              desabilitado={!!respostaAtual}
+              sessionId={sessionId}
+              onIniciarFala={pararAudio}
+              mestreAudioTocando={audioTocando && !ouvindo}
+            />
+          </div>
         </div>
       </div>
     );
@@ -1973,40 +1986,47 @@ export default function Home() {
   // ── Menu inicial ──────────────────────────────────────────────────────────
   if (tela === "menu") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-10 bg-zinc-950 px-6">
-        <div className="flex flex-col items-center gap-4">
-          <VoxOrb estado="idle" tamanho={96} />
+      <main className="relative flex min-h-screen flex-col items-center justify-center gap-12 bg-vox-bg-base px-6">
+        {/* Vinheta atmosférica de fundo */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(ellipse at center, rgba(139,92,246,0.08) 0%, transparent 55%)" }}
+          aria-hidden
+        />
+
+        <div className="relative flex flex-col items-center gap-5">
+          <VoxOrb estado="idle" tamanho={104} />
           <div className="text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-violet-400">VoxDM</h1>
-            <p className="mt-2 text-sm text-zinc-500">Narração de RPG por voz</p>
+            <h1 className="font-display text-5xl tracking-[0.18em] text-vox-text-primary">VoxDM</h1>
+            <p className="mt-3 text-[11px] uppercase tracking-[0.32em] text-vox-text-muted">
+              narração de rpg por voz
+            </p>
           </div>
         </div>
 
-        <div className="flex w-full max-w-xs flex-col gap-3">
+        <div className="relative flex w-full max-w-xs flex-col gap-2.5">
           {/* Gamificação: se há save, "Continuar" em destaque retoma o mais
               recente direto (bypass do CharacterForm via handleContinuarPersonagem). */}
           {saveRecente ? (
             <>
               <button
                 onClick={() => handleContinuarPersonagem(saveRecente.session_id)}
-                className="group w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg shadow-violet-900/40 transition hover:bg-violet-500 active:scale-95"
+                className="group w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98]"
               >
-                <span className="flex items-center justify-center gap-2">
-                  <span>▶ Continuar</span>
-                </span>
-                <span className="mt-0.5 block text-xs font-normal text-violet-200/80">
-                  {saveRecente.player_name} · {saveRecente.player_class} nv {saveRecente.player_level}
+                <span className="flex items-center justify-center gap-2">▶ Continuar</span>
+                <span className="mt-0.5 block text-xs font-normal text-white/70">
+                  {saveRecente.player_name} · {saveRecente.player_class} · nível {saveRecente.player_level}
                 </span>
               </button>
               <button
                 onClick={() => setTela("nova-sessao")}
-                className="w-full rounded-2xl border border-zinc-700 bg-zinc-900 py-3.5 text-base font-semibold text-zinc-200 transition hover:border-violet-500 hover:bg-zinc-800 active:scale-95"
+                className="w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-accent-primary/50 hover:bg-vox-bg-panel active:scale-[0.98]"
               >
-                Nova Aventura
+                Nova aventura
               </button>
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 active:scale-95"
+                className="w-full rounded-xl border border-vox-border-subtle py-3 text-sm font-medium text-vox-text-secondary transition hover:border-vox-border-soft hover:text-vox-text-primary active:scale-[0.98]"
               >
                 Carregar outra sessão
               </button>
@@ -2015,9 +2035,9 @@ export default function Home() {
             <>
               <button
                 onClick={() => setTela("nova-sessao")}
-                className="w-full rounded-2xl bg-violet-600 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-500 active:scale-95"
+                className="w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98]"
               >
-                Nova Aventura
+                Nova aventura
               </button>
               {/* UI-LOAD-1: o botão de carregar TEM que existir mesmo sem
                   saveRecente — o picker lista sessões do Qdrant/SQLite que o
@@ -2025,7 +2045,7 @@ export default function Home() {
                   trocou, etc.). Sem ele, o jogador acha que perdeu tudo. */}
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 active:scale-95"
+                className="w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-accent-primary/50 hover:bg-vox-bg-panel active:scale-[0.98]"
               >
                 Carregar sessão
               </button>
@@ -2033,12 +2053,14 @@ export default function Home() {
           )}
           <button
             onClick={() => setTela("opcoes")}
-            className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 py-3 text-sm font-semibold text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300 active:scale-95"
+            className="w-full rounded-xl py-3 text-sm font-medium text-vox-text-muted transition hover:text-vox-text-secondary active:scale-[0.98]"
           >
             Opções
           </button>
         </div>
-        <VolumeControl volume={volume} onChange={handleVolumeChange} />
+        <div className="relative">
+          <VolumeControl volume={volume} onChange={handleVolumeChange} />
+        </div>
       </main>
     );
   }
@@ -2046,7 +2068,7 @@ export default function Home() {
   // ── Tela 2a — Nova Sessão ─────────────────────────────────────────────────
   if (tela === "nova-sessao") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4 py-8">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-vox-bg-base px-4 py-8">
         <div className="w-full max-w-xs space-y-5">
           <div className="flex items-center gap-2">
             <button
@@ -2055,7 +2077,7 @@ export default function Home() {
             >
               ← Voltar
             </button>
-            <h2 className="text-lg font-bold text-violet-400">Nova Sessão</h2>
+            <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Nova Sessão</h2>
           </div>
 
           {/* Session Zero (P3) — criação conversada, 100% por voz */}
@@ -2107,7 +2129,7 @@ export default function Home() {
   // ── Tela 2b — Carregar Sessão ─────────────────────────────────────────────
   if (tela === "carregar-sessao") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4 py-8">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-vox-bg-base px-4 py-8">
         <div className="w-full max-w-xs space-y-5">
           <div className="flex items-center gap-2">
             <button
@@ -2116,7 +2138,7 @@ export default function Home() {
             >
               ← Voltar
             </button>
-            <h2 className="text-lg font-bold text-violet-400">Carregar Sessão</h2>
+            <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Carregar Sessão</h2>
           </div>
 
           <SessionPicker
@@ -2144,7 +2166,7 @@ export default function Home() {
           <button
             onClick={handleConectarSessaoCarregada}
             disabled={!sessaoSelecionada || carregando}
-            className="w-full rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-500 disabled:opacity-30"
+            className="w-full rounded-xl bg-vox-accent-primary py-3 text-sm font-medium text-white transition hover:bg-vox-accent-glow disabled:opacity-30"
           >
             {carregando ? "Conectando…" : "Continuar"}
           </button>
@@ -2156,20 +2178,20 @@ export default function Home() {
 
   // ── Tela 2c — Opções ─────────────────────────────────────────────────────
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4 py-8">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-vox-bg-base px-4 py-8">
       <div className="w-full max-w-xs space-y-5">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setTela("menu")}
-            className="text-sm text-zinc-500 transition hover:text-zinc-300"
+            className="text-sm text-vox-text-muted transition hover:text-vox-text-secondary"
           >
             ← Voltar
           </button>
-          <h2 className="text-lg font-bold text-violet-400">Opções</h2>
+          <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Opções</h2>
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-zinc-400">Voz do Mestre (Edge TTS)</p>
+          <p className="text-xs font-medium text-vox-text-secondary">Voz do Mestre (Edge TTS)</p>
           <div className="space-y-2">
             {VOZES_PTBR.map(v => (
               <button
@@ -2177,8 +2199,8 @@ export default function Home() {
                 onClick={() => handleSalvarVoz(v.id)}
                 className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
                   vozSelecionada === v.id
-                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
+                    : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
                 <span>{v.label}</span>
@@ -2192,8 +2214,8 @@ export default function Home() {
         </div>
 
         {/* Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Perfil do Mestre</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Perfil do Mestre</p>
           <div className="space-y-2">
             {DM_PROFILES.map(p => (
               <button
@@ -2201,8 +2223,8 @@ export default function Home() {
                 onClick={() => handleSalvarDmProfile(p.id)}
                 className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                   dmProfile === p.id
-                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
+                    : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
                 <span className="flex items-center justify-between">
@@ -2219,8 +2241,8 @@ export default function Home() {
         </div>
 
         {/* Task 4 — Provedor de LLM (Groq cloud / Ollama local) */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Provedor de LLM</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Provedor de LLM</p>
           <div className="space-y-2">
             {LLM_BACKENDS.map(b => (
               <button
@@ -2228,8 +2250,8 @@ export default function Home() {
                 onClick={() => handleSalvarLlmBackend(b.id)}
                 className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                   llmBackend === b.id
-                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
+                    : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
                 <span className="flex items-center justify-between">
@@ -2247,8 +2269,8 @@ export default function Home() {
         </div>
 
         {/* Fase 5.7 — Visibilidade das rolagens do mestre */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Rolagens do Mestre</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Rolagens do Mestre</p>
           <div className="space-y-2">
             {ROLL_VIS_OPTIONS.map(o => (
               <button
@@ -2256,8 +2278,8 @@ export default function Home() {
                 onClick={() => handleSalvarRollVisibility(o.id)}
                 className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                   rollVisibility === o.id
-                    ? "border-violet-500 bg-violet-900/30 text-violet-300"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
+                    : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
                 <span className="flex items-center justify-between">
@@ -2274,8 +2296,8 @@ export default function Home() {
         </div>
 
         {/* Pilar Perigo (10/06) — política de morte */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Política de Morte</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Política de Morte</p>
           <div className="grid grid-cols-2 gap-2">
             {([
               { id: "narrativo" as const, label: "🛡 Narrativo", desc: "derrota tem custo, nunca apaga o personagem" },
@@ -2287,7 +2309,7 @@ export default function Home() {
                 className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                   deathPolicy === o.id
                     ? "border-red-700 bg-red-950/30 text-red-300"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
                 <span className="font-semibold">{o.label}{deathPolicy === o.id && " ✓"}</span>
@@ -2301,13 +2323,13 @@ export default function Home() {
         </div>
 
         {/* Ritual de mesa (10/06) — modo episódio */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Formato de Sessão</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Formato de Sessão</p>
           <button
             onClick={() => handleToggleModoEpisodio(!modoEpisodio)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               modoEpisodio
-                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
                 : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
             }`}
           >
@@ -2325,13 +2347,13 @@ export default function Home() {
         </div>
 
         {/* Imersão P4 — nudge de silêncio */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Silêncio na Mesa</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Silêncio na Mesa</p>
           <button
             onClick={() => handleToggleIdleNudge(!idleNudgeAtivo)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               idleNudgeAtivo
-                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
                 : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
             }`}
           >
@@ -2346,13 +2368,13 @@ export default function Home() {
         </div>
 
         {/* Toggle de som em natural 20 / natural 1 */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Sons de Combate</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Sons de Combate</p>
           <button
             onClick={() => toggleSomCritico(!somCritico)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               somCritico
-                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
                 : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
             }`}
           >
@@ -2370,8 +2392,8 @@ export default function Home() {
         </div>
 
         {/* Fase 5.6 — Sync texto-voz (karaokê reverso) */}
-        <div className="space-y-2 border-t border-zinc-800 pt-4">
-          <p className="text-xs font-semibold text-zinc-400">Sincronização Texto-Voz</p>
+        <div className="space-y-2 border-t border-vox-border-subtle pt-4">
+          <p className="text-xs font-medium text-vox-text-secondary">Sincronização Texto-Voz</p>
           <button
             onClick={() => {
               const novo = !syncAtivo;
@@ -2380,7 +2402,7 @@ export default function Home() {
             }}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               syncAtivo
-                ? "border-violet-500 bg-violet-900/30 text-violet-300"
+                ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
                 : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
             }`}
           >

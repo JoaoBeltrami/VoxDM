@@ -133,7 +133,7 @@ function CompanionRow({ companion: c, emCombate, onComandar }: RowProps) {
         aria-hidden
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-base ${
           morto
-            ? "border-zinc-700 bg-zinc-900/60 opacity-50 grayscale"
+            ? "border-vox-border-soft bg-vox-bg-panel/60 opacity-50 grayscale"
             : c.hp / c.hp_max < 0.5
             ? "border-amber-700/50 bg-amber-950/30"
             : "border-emerald-700/40 bg-emerald-950/30"
