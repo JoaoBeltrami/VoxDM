@@ -14,6 +14,7 @@ import { CharacterForm } from "@/components/CharacterForm";
 import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { FichaViva } from "@/components/FichaViva";
+import { PanelLauncher, type PainelDef } from "@/components/PanelLauncher";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
 import { CompanionsPanel } from "@/components/CompanionsPanel";
@@ -954,6 +955,8 @@ export default function Home() {
   // vazio ("personagem sem status") — escondemos a sheet até a ficha nascer e
   // celebramos com overlay quando ela chega.
   const [szEmAndamento, setSzEmAndamento] = useState(false);
+  // Launcher de painéis estilo BG1 — qual painel está aberto (null = nenhum).
+  const [painelAberto, setPainelAberto] = useState<string | null>(null);
   const [fichaFlash, setFichaFlash] = useState<string | null>(null);
   const handleSessionZero = useCallback(() => {
     setSzEmAndamento(true);
@@ -1637,26 +1640,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* Imersão P4 — Crônica: timeline de eventos-chave da sessão */}
-        {!cinemaMode && cronica.length > 0 && (
-          <div className="max-w-sm w-full">
-            <details className="group">
-              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-amber-400/70 hover:text-amber-300 transition-colors list-none">
-                <span className="text-amber-500">📜</span>
-                Crônica ({cronica.length})
-                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-              </summary>
-              <ol className="mt-1.5 space-y-1 pl-3.5 border-l border-amber-900/40 max-h-48 overflow-y-auto">
-                {cronica.map((evento, i) => (
-                  <li key={i} className="text-[10px] text-zinc-500 leading-snug">
-                    {evento}
-                  </li>
-                ))}
-              </ol>
-            </details>
-          </div>
-        )}
+        {/* Crônica migrada pro launcher de painéis BG1 (PanelLauncher + drawer,
+            irmãos do AppShell mais abaixo). Era um chip <details> solto aqui. */}
 
         {/* Painel Consequências removido (teste #3): a Crônica já contém
             as consequências — dois painéis com o mesmo evento era ruído. */}
@@ -1804,6 +1789,52 @@ export default function Home() {
         />
 
         {/* ── Overlays interativos — irmãos do AppShell (recebem cliques) ──── */}
+
+        {/* Launcher de painéis estilo BG1 — barra de ícones (esquerda) + drawer.
+            Consolida Crônica/Quests/etc. num sistema só (substitui chips soltos). */}
+        {!cinemaMode && conectado && (() => {
+          const PAINEIS: PainelDef[] = [
+            { id: "ficha", label: "Ficha" },
+            { id: "inventario", label: "Inventário" },
+            { id: "party", label: "Party" },
+            { id: "quests", label: "Quests", badge: activeQuests.length },
+            { id: "cronica", label: "Crônica", badge: cronica.length },
+            { id: "mapa", label: "Mapa" },
+          ];
+          const LABEL: Record<string, string> = Object.fromEntries(PAINEIS.map(p => [p.id, p.label]));
+          return (
+            <>
+              <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
+                <PanelLauncher paineis={PAINEIS} ativo={painelAberto} onSelect={setPainelAberto} />
+              </div>
+              {painelAberto && (
+                <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="font-display text-base tracking-wide text-vox-text-primary">{LABEL[painelAberto]}</span>
+                    <button onClick={() => setPainelAberto(null)} title="Fechar" aria-label="Fechar painel"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary">✕</button>
+                  </div>
+                  {painelAberto === "cronica" ? (
+                    cronica.length === 0 ? (
+                      <p className="text-xs text-vox-text-muted">Nada na crônica ainda.</p>
+                    ) : (
+                      <ol className="space-y-2.5 border-l border-vox-border-soft pl-3.5">
+                        {cronica.map((evento, i) => (
+                          <li key={i} className="relative text-xs leading-relaxed text-vox-text-secondary">
+                            <span className="absolute -left-[1.18rem] top-1 h-2 w-2 rounded-full bg-vox-accent-glow" />
+                            {evento}
+                          </li>
+                        ))}
+                      </ol>
+                    )
+                  ) : (
+                    <p className="text-xs leading-relaxed text-vox-text-muted">Este painel entra no rebuild em breve — por ora a informação ainda vive no seu lugar antigo.</p>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Palco-lite: toggles dos painéis laterais (persistidos). Escondidos
             em cinema mode — lá a HUD inteira já some. */}
