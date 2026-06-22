@@ -1575,25 +1575,7 @@ export default function Home() {
           );
         })()}
 
-        {!cinemaMode && fiosSoltos.length > 0 && (
-          <div className="max-w-sm w-full">
-            <details className="group">
-              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-violet-400/70 hover:text-violet-300 transition-colors list-none">
-                <span className="text-violet-500">◈</span>
-                Fios narrativos ({fiosSoltos.length})
-                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-              </summary>
-              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-violet-900/40">
-                {fiosSoltos.map((fio, i) => (
-                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
-                    {fio}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
-        )}
+        {/* Fios narrativos migrados pro painel "Quests" do launcher BG1. */}
 
         {/* Mundo Vivo (10/06) — Relógios de Ameaça: o jogador VÊ que o mundo anda */}
         {!cinemaMode && Object.keys(relogios).length > 0 && (
@@ -1797,7 +1779,7 @@ export default function Home() {
             { id: "ficha", label: "Ficha" },
             { id: "inventario", label: "Inventário" },
             { id: "party", label: "Party" },
-            { id: "quests", label: "Quests", badge: activeQuests.length },
+            { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
             { id: "cronica", label: "Crônica", badge: cronica.length },
             { id: "mapa", label: "Mapa" },
           ];
@@ -1826,6 +1808,40 @@ export default function Home() {
                           </li>
                         ))}
                       </ol>
+                    )
+                  ) : painelAberto === "quests" ? (
+                    (activeQuests.length === 0 && fiosSoltos.length === 0) ? (
+                      <p className="text-xs text-vox-text-muted">Sem missões ou fios em aberto.</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {activeQuests.length > 0 && (
+                          <div>
+                            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-vox-text-muted">Missões</div>
+                            <div className="space-y-1.5">
+                              {activeQuests.map((qid) => {
+                                const nome = qid.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                                const stage = questStages[qid];
+                                return (
+                                  <div key={qid} className="rounded-lg border border-vox-accent-primary/30 bg-vox-accent-primary/10 px-2.5 py-1.5">
+                                    <p className="text-xs font-medium text-vox-accent-glow">{nome}</p>
+                                    {stage && <p className="mt-0.5 text-[10px] text-vox-text-muted">{stage.replace(/-/g, " ")}</p>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {fiosSoltos.length > 0 && (
+                          <div>
+                            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-vox-text-muted">Fios narrativos</div>
+                            <ul className="space-y-1 border-l border-vox-border-soft pl-3">
+                              {fiosSoltos.map((fio, i) => (
+                                <li key={i} className="text-xs italic leading-relaxed text-vox-text-secondary">{fio}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     )
                   ) : (
                     <p className="text-xs leading-relaxed text-vox-text-muted">Este painel entra no rebuild em breve — por ora a informação ainda vive no seu lugar antigo.</p>

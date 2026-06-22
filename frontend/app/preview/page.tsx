@@ -34,6 +34,7 @@ import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
+import { PanelLauncher } from "@/components/PanelLauncher";
 import { useViewMode, chromeOpacityClass } from "@/hooks/useViewMode";
 
 const ORB_STATES: OrbState[] = ["idle", "ouvindo", "processando", "falando"];
@@ -70,6 +71,8 @@ export default function PreviewPage() {
   const { mode, setMode } = useViewMode();
   const [esperandoRolagem, setEsperandoRolagem] = useState(true);
   const [orbState, setOrbState] = useState<OrbState>("idle");
+  // Verificação do launcher BG1 sem precisar de sessão in-game.
+  const [painelPreview, setPainelPreview] = useState<string | null>("cronica");
 
   const dimChrome = chromeOpacityClass(mode);
 
@@ -85,6 +88,7 @@ export default function PreviewPage() {
   };
 
   return (
+    <>
     <AppShell
       topBar={
         <div className={`flex items-center justify-between gap-4 px-4 py-2 ${dimChrome}`}>
@@ -322,5 +326,38 @@ export default function PreviewPage() {
       }
       backgroundUrl="https://image.pollinations.ai/prompt/medieval%20norse%20port%20village%20at%20dawn%20foggy%20fantasy%20art?width=1920&height=1080&model=flux"
     />
+
+    {/* Launcher BG1 — verificação visual (rail + drawer da Crônica com mock) */}
+    <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
+      <PanelLauncher
+        paineis={[
+          { id: "ficha", label: "Ficha" },
+          { id: "inventario", label: "Inventário" },
+          { id: "party", label: "Party", badge: 2 },
+          { id: "quests", label: "Quests", badge: 3 },
+          { id: "cronica", label: "Crônica", badge: 4 },
+          { id: "mapa", label: "Mapa" },
+        ]}
+        ativo={painelPreview}
+        onSelect={setPainelPreview}
+      />
+    </div>
+    {painelPreview && (
+      <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="font-display text-base capitalize tracking-wide text-vox-text-primary">{painelPreview}</span>
+          <button onClick={() => setPainelPreview(null)} aria-label="Fechar" className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary">✕</button>
+        </div>
+        <ol className="space-y-2.5 border-l border-vox-border-soft pl-3.5">
+          {["Garruk chega ao acampamento dos Sem-Vila à noite.", "Brennan recusa os espólios — “não há nada para você aqui”.", "Garruk sofre 1 de dano ao se aproximar demais.", "O frio noturno corta o acampamento."].map((e, i) => (
+            <li key={i} className="relative text-xs leading-relaxed text-vox-text-secondary">
+              <span className="absolute -left-[1.18rem] top-1 h-2 w-2 rounded-full bg-vox-accent-glow" />
+              {e}
+            </li>
+          ))}
+        </ol>
+      </div>
+    )}
+    </>
   );
 }
