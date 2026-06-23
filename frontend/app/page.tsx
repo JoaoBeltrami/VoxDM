@@ -1373,6 +1373,8 @@ export default function Home() {
           knownSpells={personagem.player_spells ?? []}
           emMercado={emMercado}
           onVenderItem={(item) => enviarComando(`Vendo ${item}.`)}
+          abertoExterno={painelAberto === "ficha"}
+          onAbertoChange={(v) => setPainelAberto(v ? "ficha" : null)}
         />}
 
         <CombatTracker
@@ -1799,7 +1801,9 @@ export default function Home() {
             Ancorado em left-16 pra começar logo após o gutter de 56px (w-14). */}
         {mostrarLauncher && (
             <>
-              {painelAberto && (
+              {/* "ficha" não usa este drawer genérico — reaproveita a view de
+                  Detalhes do CharacterSheet (popover próprio, posicionado à direita). */}
+              {painelAberto && painelAberto !== "ficha" && (
                 <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
                   <div className="mb-3 flex items-center justify-between">
                     <span className="font-display text-base tracking-wide text-vox-text-primary">{labelPainel[painelAberto]}</span>
@@ -1922,7 +1926,7 @@ export default function Home() {
                       </ol>
                     )
                   ) : (
-                    <p className="text-xs leading-relaxed text-vox-text-muted">Este painel entra no rebuild em breve — por ora a informação ainda vive no seu lugar antigo.</p>
+                    <p className="text-xs leading-relaxed text-vox-text-muted">Painel ainda não disponível.</p>
                   )}
                 </div>
               )}

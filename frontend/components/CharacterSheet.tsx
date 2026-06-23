@@ -49,6 +49,11 @@ interface Props {
   emMercado?: boolean;
   // Callback quando jogador clica "vender" — envia comando "Vendo {item}" ao mestre.
   onVenderItem?: (item: string) => void;
+  // Abertura controlada externamente — quando o launcher BG1 abre o painel "Ficha",
+  // a mesma view de Detalhes é reaproveitada (sem duplicar a lógica). Se omitido,
+  // o componente gerencia o estado internamente (botão "Detalhes" próprio).
+  abertoExterno?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
 }
 
 const DADOS_DND = [4, 6, 8, 10, 12, 20, 100] as const;
@@ -165,8 +170,17 @@ export function CharacterSheet({
   knownSpells = [],
   emMercado = false,
   onVenderItem,
+  abertoExterno,
+  onAbertoChange,
 }: Props) {
-  const [aberto, setAberto] = useState(false);
+  // Estado de abertura: controlado (launcher BG1) ou interno (botão próprio).
+  const [abertoInterno, setAbertoInterno] = useState(false);
+  const aberto = abertoExterno ?? abertoInterno;
+  const setAberto = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === "function" ? (v as (p: boolean) => boolean)(aberto) : v;
+    if (onAbertoChange) onAbertoChange(next);
+    else setAbertoInterno(next);
+  };
   const [atributosAberto, setAtributosAberto] = useState(false);
   const [inventarioAberto, setInventarioAberto] = useState(false);
   const [condicoesAberto, setCondicoesAberto] = useState(false);
