@@ -12,6 +12,7 @@ Exemplo:
     # → [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,24 @@ _DM_PROFILES_VALIDOS: frozenset[str] = frozenset({
 
 # Tamanho mínimo aceitável para um prompt (em chars) — evita servir arquivo corrompido
 _PROMPT_MIN_CHARS = 100
+
+# MESTRE-MOVER-LOCAL (playtest 21/06): o Mestre esquece de emitir [CENA] quando
+# o jogador viaja, e a engine acha que ninguém saiu do local inicial. Detecta
+# DESLOCAMENTO EXPLÍCITO na fala do jogador (verbo de movimento + preposição de
+# destino) pra injetar um lembrete de [CENA] nesse turno. Conservador: exige
+# preposição de destino — "vou atacar"/"vamos lutar" (sem destino) NÃO casam.
+_RE_VIAGEM = re.compile(
+    r"\b(?:vou|vamos|sigo|seguimos|viajo|viajamos|parto|partimos|volto|voltamos|"
+    r"retorno|retornamos)\s+(?:para|pra|at[ée]|ao|à|aos|às|a|rumo|de\s+volta|"
+    r"em\s+direção)\b"
+    r"|\brumo\s+a[oô]?\b"
+    r"|\b(?:me\s+dirijo|nos\s+dirigimos)\b"
+    r"|\b(?:entro|entramos|adentro|adentramos)\s+(?:n[oa]s?|em)\b"
+    r"|\b(?:saio|sa[íi]mos)\s+d[oae]s?\b"
+    r"|\b(?:atravesso|atravessamos|cruzo|cruzamos)\b"
+    r"|\b(?:vou|vamos)\s+embora\b",
+    re.IGNORECASE,
+)
 
 # Cache com hot reload por mtime — quando o arquivo .md muda, próxima leitura
 # pega o novo conteúdo sem precisar reiniciar o servidor. Estrutura:
@@ -821,6 +840,20 @@ def montar_mensagens(
             "UMA vez — não reabra o turno com a mesma frase. Ser sensorial não é "
             "repetir a mesma imagem: varie a descrição ou apenas avance a cena."
         )
+
+    # MESTRE-MOVER-LOCAL — nudge de [CENA]. Quando o jogador declara deslocamento
+    # explícito, lembra o LLM de marcar a troca de cena se a narração chegar a um
+    # local novo. Não muda estado (sem risco de teleporte falso) — só reforça a
+    # emissão do marcador, que o LLM costuma esquecer. Fora de combate (mudança de
+    # cena mid-combate é rara e não vale o custo no turno mais pesado em tokens).
+    if not _em_combate_ativo and _RE_VIAGEM.search(contexto.transcricao_atual or ""):
+        secoes.append(
+            "\n=== DESLOCAMENTO PEDIDO ===\n"
+            "O jogador indicou ir a outro lugar. Se a cena chegar a um local NOVO, "
+            "EMITA [CENA: local-id|Nome|hora] no fim da resposta — sem isso a engine "
+            "não atualiza local, NPCs, trilha nem imagem."
+        )
+        log.info("nudge_cena_injetado", transcricao=(contexto.transcricao_atual or "")[:60])
 
     # Fase 5.7: instrução de visibilidade de rolagens do mestre.
     # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
