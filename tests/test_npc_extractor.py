@@ -9,6 +9,7 @@ import pytest
 
 from engine.llm.extractor import (
     _canonico,
+    _e_apelido_do_jogador,
     _kebab_id,
     _npc_fantasma,
     _sanitizar_npcs,
@@ -197,3 +198,50 @@ async def test_extrair_npcs_cena_narracao_vazia():
 async def test_extrair_npcs_cena_json_invalido():
     groq = _FakeGroq("desculpe, não consigo")
     assert await extrair_npcs_cena(groq, "algo aconteceu", []) is None
+
+
+# ── _e_apelido_do_jogador (NPC-APELIDO) ─────────────────────────────────────────
+
+@pytest.mark.parametrize("nome,narracao", [
+    ("Ladrãozinho", "Ninguém te convidou, ladrãozinho."),
+    ("forasteiro", "Você não é bem-vindo aqui, forasteiro."),
+    ("Ladrãozinho", "Ladrãozinho, você acha que pode entrar assim?"),
+    ("pequeno tolo", "Eu já te avisei, pequeno tolo."),
+])
+def test_apelido_do_jogador_vocativo(nome, narracao):
+    # Alcunha dirigida ao jogador (2ª pessoa) — não é NPC.
+    assert _e_apelido_do_jogador(nome, narracao) is True
+
+
+@pytest.mark.parametrize("nome,narracao", [
+    # NPC que AGE na cena é preservado mesmo com vocativo de 2ª pessoa por perto.
+    ("Brennan", "Você é tolo, Brennan recua para as sombras."),
+    ("Aldric", "Aldric disse que você deve ir embora."),
+    # Sem vocativo de 2ª pessoa — NPC normal.
+    ("Mira", "Mira se aproxima do balcão e observa a sala."),
+    # Nome ausente da narração — não há como julgar, mantém.
+    ("Vyrmathax", "O porto cheira a sal e peixe podre."),
+])
+def test_apelido_do_jogador_mantem_npc(nome, narracao):
+    assert _e_apelido_do_jogador(nome, narracao) is False
+
+
+def test_apelido_do_jogador_nome_curto_ignorado():
+    # < 3 chars é ruidoso demais — nunca descarta por vocativo.
+    assert _e_apelido_do_jogador("Ré", "Eu te vejo, ré.") is False
+
+
+@pytest.mark.asyncio
+async def test_extrair_npcs_cena_descarta_apelido_do_jogador():
+    # O 8B extrai "Ladrãozinho" de um vocativo dirigido ao jogador → filtrado.
+    groq = _FakeGroq('{"npcs": [{"id": "ladraozinho", "nome": "Ladrãozinho"}]}')
+    out = await extrair_npcs_cena(groq, "Ninguém te convidou, ladrãozinho.", [])
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
+    # NPC real que age na cena não é confundido com alcunha do jogador.
+    groq = _FakeGroq('{"npcs": [{"id": "brennan", "nome": "Brennan"}]}')
+    out = await extrair_npcs_cena(groq, "Você é tolo, Brennan recua para as sombras.", [])
+    assert out == [{"id": "brennan", "nome": "Brennan"}]

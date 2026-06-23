@@ -87,9 +87,12 @@ _SYSTEM_NPC_EXTRACTOR = (
     "narração e que NÃO estão na lista de conhecidos. NUNCA inclua alguém apenas "
     "CITADO, mencionado de passagem, referido em conversa ou parado no fundo da "
     "cena sem interagir. NÃO inclua: o personagem do jogador, "
-    "multidões/figurantes sem nome, monstros/inimigos, lugares ou objetos. id em "
-    "kebab-case derivado do nome (ex: 'Velho Mercador' → 'velho-mercador'). Se "
-    "nenhum NPC novo nomeado apareceu, devolva npcs como lista vazia."
+    "multidões/figurantes sem nome, monstros/inimigos, lugares ou objetos. "
+    "APELIDOS/VOCATIVOS que um personagem usa para SE DIRIGIR ao jogador (2ª "
+    "pessoa: 'você/te/ti/teu') NÃO são NPCs — ex.: 'Ninguém te convidou, "
+    "ladrãozinho' → 'ladrãozinho' é o JOGADOR, não um NPC. id em kebab-case "
+    "derivado do nome (ex: 'Velho Mercador' → 'velho-mercador'). Se nenhum NPC "
+    "novo nomeado apareceu, devolva npcs como lista vazia."
 )
 
 
@@ -170,6 +173,48 @@ def _npc_fantasma(nid: str) -> bool:
     return tokens[-1] in _VERBOS_NPC_FRAGMENTO
 
 
+# Verbos de AÇÃO em 3ª pessoa — se o nome aparece como SUJEITO seguido de um
+# destes, ele AGE na cena → é NPC real, nunca tratado como alcunha do jogador.
+_VERBOS_ACAO_3P = _VERBOS_NPC_FRAGMENTO | {
+    "disse", "diz", "fez", "faz", "veio", "vem", "ataca", "atacou",
+    "saca", "sacou", "puxa", "puxou", "cai", "caiu", "morre", "morreu",
+}
+_RE_2P = r"voce|vc|te|ti|teu|tua|teus|tuas|contigo|vos|convosco"
+
+
+def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
+    """True se `nome` é uma alcunha que o Mestre usa pra SE DIRIGIR ao jogador
+    (vocativo em 2ª pessoa), não um NPC (NPC-APELIDO, playtest 21/06).
+
+    Ex.: "Ninguém te convidou, ladrãozinho" — 'ladrãozinho' é o jogador.
+
+    Conservador por design: só descarta quando há vocativo-ao-jogador FORTE E o
+    nome NUNCA aparece como sujeito de 3ª pessoa agindo. Assim um NPC que age na
+    cena ("Aldric recua") é sempre preservado, mesmo que também seja citado.
+    """
+    nome_ascii = _transliterar(nome).strip().lower()
+    # < 3 chars é ruidoso demais pra casar com segurança (evita falso positivo)
+    if len(nome_ascii) < 3:
+        return False
+    narr = _transliterar(narracao).lower()
+    nome_re = re.escape(nome_ascii)
+
+    # NPC real: o nome como SUJEITO seguido de verbo de ação 3ª pessoa.
+    verbos = "|".join(sorted(_VERBOS_ACAO_3P))
+    if re.search(rf"\b{nome_re}\s+(?:{verbos})\b", narr):
+        return False
+
+    # Vocativo direto: 2ª pessoa na mesma frase + ", <nome>" (vírgula vocativa).
+    # "...te convidou, ladrãozinho" / "Você não é bem-vindo, forasteiro"
+    if re.search(rf"\b(?:{_RE_2P})\b[^.!?\n]*,\s*{nome_re}\b", narr):
+        return True
+    # Vocativo invertido: "<nome>, ... <2ª pessoa>" no início de fala/frase.
+    # "Ladrãozinho, você acha que pode entrar aqui?"
+    if re.search(rf"(?:^|[.!?\"]\s*){nome_re}\s*,[^.!?\n]*\b(?:{_RE_2P})\b", narr):
+        return True
+    return False
+
+
 def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
     """Valida a saída do extractor de NPC — nunca confiar em JSON de modelo."""
     out: list[dict[str, str]] = []
@@ -232,7 +277,16 @@ async def extrair_npcs_cena(
     if bruto is None:
         log.warning("npc_extractor_json_invalido", amostra=(resposta or "")[:80])
         return None
-    return _sanitizar_npcs(bruto)
+    npcs = _sanitizar_npcs(bruto)
+    # NPC-APELIDO: descarta alcunhas que o Mestre usa pra dirigir-se ao jogador
+    # ("Ninguém te convidou, ladrãozinho") — vocativo de 2ª pessoa, não NPC.
+    filtrados: list[dict[str, str]] = []
+    for n in npcs:
+        if _e_apelido_do_jogador(n.get("nome") or n.get("id", ""), narracao):
+            log.info("npc_apelido_jogador_descartado", id=n.get("id"), nome=n.get("nome"))
+            continue
+        filtrados.append(n)
+    return filtrados
 
 
 def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
