@@ -1753,6 +1753,19 @@ export default function Home() {
       </div>
     );
 
+    // Launcher de painéis BG1 — definido fora do JSX pra alimentar o trilho
+    // (slot railLeft do AppShell) e o drawer (irmão do AppShell) com a mesma lista.
+    const paineisLauncher: PainelDef[] = [
+      { id: "ficha", label: "Ficha" },
+      { id: "inventario", label: "Inventário", badge: inventory.length },
+      { id: "party", label: "Party", badge: Object.keys(companions).length },
+      { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
+      { id: "cronica", label: "Crônica", badge: cronica.length },
+      { id: "mapa", label: "Mapa", badge: locaisVisitados.length },
+    ];
+    const labelPainel: Record<string, string> = Object.fromEntries(paineisLauncher.map((p) => [p.id, p.label]));
+    const mostrarLauncher = !cinemaMode && conectado;
+
     return (
       <div
         className={[
@@ -1765,6 +1778,9 @@ export default function Home() {
         <AppShell
           backgroundUrl={sceneImageUrl}
           topBar={topBarSlot}
+          railLeft={mostrarLauncher ? (
+            <PanelLauncher paineis={paineisLauncher} ativo={painelAberto} onSelect={setPainelAberto} />
+          ) : undefined}
           left={cinemaMode || painelEsqOculto ? undefined : (
             <ErrorBoundary nome="painel esquerdo">{leftSlot}</ErrorBoundary>
           )}
@@ -1778,27 +1794,15 @@ export default function Home() {
 
         {/* ── Overlays interativos — irmãos do AppShell (recebem cliques) ──── */}
 
-        {/* Launcher de painéis estilo BG1 — barra de ícones (esquerda) + drawer.
-            Consolida Crônica/Quests/etc. num sistema só (substitui chips soltos). */}
-        {!cinemaMode && conectado && (() => {
-          const PAINEIS: PainelDef[] = [
-            { id: "ficha", label: "Ficha" },
-            { id: "inventario", label: "Inventário", badge: inventory.length },
-            { id: "party", label: "Party", badge: Object.keys(companions).length },
-            { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
-            { id: "cronica", label: "Crônica", badge: cronica.length },
-            { id: "mapa", label: "Mapa", badge: locaisVisitados.length },
-          ];
-          const LABEL: Record<string, string> = Object.fromEntries(PAINEIS.map(p => [p.id, p.label]));
-          return (
+        {/* Drawer do launcher de painéis estilo BG1. O trilho de ícones vive no
+            gutter do AppShell (slot railLeft); aqui fica só o painel aberto.
+            Ancorado em left-16 pra começar logo após o gutter de 56px (w-14). */}
+        {mostrarLauncher && (
             <>
-              <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
-                <PanelLauncher paineis={PAINEIS} ativo={painelAberto} onSelect={setPainelAberto} />
-              </div>
               {painelAberto && (
                 <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="font-display text-base tracking-wide text-vox-text-primary">{LABEL[painelAberto]}</span>
+                    <span className="font-display text-base tracking-wide text-vox-text-primary">{labelPainel[painelAberto]}</span>
                     <button onClick={() => setPainelAberto(null)} title="Fechar" aria-label="Fechar painel"
                       className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary">✕</button>
                   </div>
@@ -1923,8 +1927,7 @@ export default function Home() {
                 </div>
               )}
             </>
-          );
-        })()}
+        )}
 
         {/* Palco-lite: toggles dos painéis laterais (persistidos). Escondidos
             em cinema mode — lá a HUD inteira já some. */}

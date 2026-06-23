@@ -35,6 +35,10 @@ import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 interface AppShellProps {
   /** Barra superior — SceneHeader, NpcsPresentes, InitiativeBar */
   topBar?: React.ReactNode;
+  /** Trilho de ícones na borda esquerda — launcher de painéis BG1.
+      Ocupa uma faixa fixa (gutter) ENTRE topBar e dock, à esquerda do grid,
+      pra nunca sobrepor o painel esquerdo. */
+  railLeft?: React.ReactNode;
   /** Painel esquerdo — companions, journal, timeline */
   left?: React.ReactNode;
   /** Centro — MasterResponse (chat) */
@@ -53,6 +57,7 @@ interface AppShellProps {
 
 export function AppShell({
   topBar,
+  railLeft,
   left,
   center,
   right,
@@ -112,9 +117,19 @@ export function AppShell({
         </div>
       )}
 
-      {/* Grid de 3 colunas redimensionáveis */}
-      <div className="relative z-0 flex-1 overflow-hidden">
-        <PanelGroup key={layoutKey} direction="horizontal" autoSaveId={layoutKey} className="h-full">
+      {/* Faixa principal: trilho de ícones (gutter) + grid de 3 colunas */}
+      <div className="relative z-0 flex flex-1 overflow-hidden">
+        {/* Gutter dedicado do launcher BG1 — largura fixa, full-height entre
+            topBar e dock. Reservar espaço aqui evita a sobreposição do trilho
+            `fixed` com o painel esquerdo (ACHADO 21/06). */}
+        {railLeft && (
+          <div className="z-20 flex w-14 shrink-0 items-center justify-center border-r border-vox-border-subtle bg-vox-bg-elevated/50 backdrop-blur-md">
+            {railLeft}
+          </div>
+        )}
+
+        <div className="relative flex-1 overflow-hidden">
+          <PanelGroup key={layoutKey} direction="horizontal" autoSaveId={layoutKey} className="h-full">
           {temLeft && (
             <>
               <Panel defaultSize={defaultLeft} minSize={15} maxSize={40} className="flex flex-col overflow-hidden">
@@ -140,7 +155,8 @@ export function AppShell({
               </Panel>
             </>
           )}
-        </PanelGroup>
+          </PanelGroup>
+        </div>
       </div>
 
       {/* Dock inferior — voz + dados + ações rápidas */}

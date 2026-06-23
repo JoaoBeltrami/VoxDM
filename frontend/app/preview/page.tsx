@@ -90,6 +90,20 @@ export default function PreviewPage() {
   return (
     <>
     <AppShell
+      railLeft={
+        <PanelLauncher
+          paineis={[
+            { id: "ficha", label: "Ficha" },
+            { id: "inventario", label: "Inventário" },
+            { id: "party", label: "Party", badge: 2 },
+            { id: "quests", label: "Quests", badge: 3 },
+            { id: "cronica", label: "Crônica", badge: 4 },
+            { id: "mapa", label: "Mapa" },
+          ]}
+          ativo={painelPreview}
+          onSelect={setPainelPreview}
+        />
+      }
       topBar={
         <div className={`flex items-center justify-between gap-4 px-4 py-2 ${dimChrome}`}>
           <div className="flex items-center gap-3">
@@ -327,21 +341,8 @@ export default function PreviewPage() {
       backgroundUrl="https://image.pollinations.ai/prompt/medieval%20norse%20port%20village%20at%20dawn%20foggy%20fantasy%20art?width=1920&height=1080&model=flux"
     />
 
-    {/* Launcher BG1 — verificação visual (rail + drawer da Crônica com mock) */}
-    <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
-      <PanelLauncher
-        paineis={[
-          { id: "ficha", label: "Ficha" },
-          { id: "inventario", label: "Inventário" },
-          { id: "party", label: "Party", badge: 2 },
-          { id: "quests", label: "Quests", badge: 3 },
-          { id: "cronica", label: "Crônica", badge: 4 },
-          { id: "mapa", label: "Mapa" },
-        ]}
-        ativo={painelPreview}
-        onSelect={setPainelPreview}
-      />
-    </div>
+    {/* Launcher BG1 — trilho agora vive no gutter (slot railLeft do AppShell);
+        aqui fica só o drawer da Crônica com mock pra verificação visual. */}
     {painelPreview && (
       <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md">
         <div className="mb-3 flex items-center justify-between">
