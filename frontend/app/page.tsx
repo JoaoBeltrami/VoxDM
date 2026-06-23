@@ -957,6 +957,12 @@ export default function Home() {
   const [szEmAndamento, setSzEmAndamento] = useState(false);
   // Launcher de painéis estilo BG1 — qual painel está aberto (null = nenhum).
   const [painelAberto, setPainelAberto] = useState<string | null>(null);
+  // Locais visitados (pro painel Mapa do launcher) — acumula o local atual.
+  const [locaisVisitados, setLocaisVisitados] = useState<string[]>([]);
+  useEffect(() => {
+    if (!locationNome) return;
+    setLocaisVisitados(prev => (prev.includes(locationNome) ? prev : [...prev, locationNome]));
+  }, [locationNome]);
   const [fichaFlash, setFichaFlash] = useState<string | null>(null);
   const handleSessionZero = useCallback(() => {
     setSzEmAndamento(true);
@@ -1777,11 +1783,11 @@ export default function Home() {
         {!cinemaMode && conectado && (() => {
           const PAINEIS: PainelDef[] = [
             { id: "ficha", label: "Ficha" },
-            { id: "inventario", label: "Inventário" },
+            { id: "inventario", label: "Inventário", badge: inventory.length },
             { id: "party", label: "Party", badge: Object.keys(companions).length },
             { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
             { id: "cronica", label: "Crônica", badge: cronica.length },
-            { id: "mapa", label: "Mapa" },
+            { id: "mapa", label: "Mapa", badge: locaisVisitados.length },
           ];
           const LABEL: Record<string, string> = Object.fromEntries(PAINEIS.map(p => [p.id, p.label]));
           return (
@@ -1876,6 +1882,40 @@ export default function Home() {
                           );
                         })}
                       </div>
+                    )
+                  ) : painelAberto === "inventario" ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between rounded-lg border border-vox-border-soft bg-vox-bg-elevated px-3 py-2">
+                        <span className="text-xs text-vox-text-secondary">🪙 Ouro</span>
+                        <span className="text-sm font-medium tabular-nums text-amber-400">{gold.toLocaleString()} PO</span>
+                      </div>
+                      {inventory.length === 0 ? (
+                        <p className="text-xs text-vox-text-muted">Inventário vazio.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {inventory.map((item, i) => (
+                            <li key={i} className="flex items-center gap-2 rounded-md border border-vox-border-subtle bg-vox-bg-elevated px-2.5 py-1.5 text-xs text-vox-text-secondary">
+                              <span className="text-vox-text-muted">◆</span>{item}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : painelAberto === "mapa" ? (
+                    locaisVisitados.length === 0 ? (
+                      <p className="text-xs text-vox-text-muted">Nenhum local visitado ainda.</p>
+                    ) : (
+                      <ol className="space-y-1.5">
+                        {locaisVisitados.map((local, i) => {
+                          const atual = local === locationNome;
+                          return (
+                            <li key={i} className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs ${atual ? "border-vox-accent-primary/40 bg-vox-accent-primary/10 text-vox-accent-glow" : "border-vox-border-subtle text-vox-text-secondary"}`}>
+                              <span>{atual ? "📍" : "·"}</span>{local}
+                              {atual && <span className="ml-auto text-[10px] text-vox-accent-glow">atual</span>}
+                            </li>
+                          );
+                        })}
+                      </ol>
                     )
                   ) : (
                     <p className="text-xs leading-relaxed text-vox-text-muted">Este painel entra no rebuild em breve — por ora a informação ainda vive no seu lugar antigo.</p>
