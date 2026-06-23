@@ -35,6 +35,7 @@ import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { PanelLauncher } from "@/components/PanelLauncher";
+import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 import { useViewMode, chromeOpacityClass } from "@/hooks/useViewMode";
 
 const ORB_STATES: OrbState[] = ["idle", "ouvindo", "processando", "falando"];
@@ -89,6 +90,8 @@ export default function PreviewPage() {
 
   return (
     <>
+    {/* Seletor de modo SEMPRE visível (irmão do AppShell) — nunca prende em TV. */}
+    <ViewModeSwitcher mode={mode} onChange={setMode} />
     <AppShell
       railLeft={
         <PanelLauncher
@@ -113,29 +116,8 @@ export default function PreviewPage() {
             <span className="text-xs text-vox-text-muted">☀️ Manhã</span>
           </div>
           <NpcsPresentes npcsTrust={NPCS_MOCK} />
-          <div className="flex items-center gap-2">
-            <Chip
-              tone={mode === "mesa" ? "violet" : "neutral"}
-              onClick={() => setMode("mesa")}
-              title="Ctrl+Shift+1"
-            >
-              Mesa
-            </Chip>
-            <Chip
-              tone={mode === "imersao" ? "violet" : "neutral"}
-              onClick={() => setMode("imersao")}
-              title="Ctrl+Shift+2"
-            >
-              Imersão
-            </Chip>
-            <Chip
-              tone={mode === "tv" ? "violet" : "neutral"}
-              onClick={() => setMode("tv")}
-              title="Ctrl+Shift+3"
-            >
-              TV
-            </Chip>
-          </div>
+          {/* Seletor de modo movido pro ViewModeSwitcher flutuante (irmão do
+              AppShell) — em TV o topBar fica `hidden` e prenderia os chips aqui. */}
         </div>
       }
       left={
