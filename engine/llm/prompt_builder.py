@@ -809,6 +809,19 @@ def montar_mensagens(
             "Estes fatos já foram narrados. Não repita — avance a história."
         )
 
+    # Repetition Guard SENSORIAL (REPETICAO-FRIO) — imagens de clima/ambiente já
+    # usadas. O Mestre tende a reabrir todo turno com a MESMA imagem ("frio
+    # cortante da noite"). Listamos as recentes pra ele variar ou omitir.
+    ambiente_recente = getattr(contexto.working_memory, "ambiente_recente", [])
+    if ambiente_recente:
+        lista_amb = "\n".join(f"• {a}" for a in ambiente_recente)
+        secoes.append(
+            f"\n=== AMBIENTAÇÃO JÁ DESCRITA (não repita estas imagens) ===\n{lista_amb}\n"
+            "Você já usou estas imagens de clima/sensação. Estabeleça o ambiente "
+            "UMA vez — não reabra o turno com a mesma frase. Ser sensorial não é "
+            "repetir a mesma imagem: varie a descrição ou apenas avance a cena."
+        )
+
     # Fase 5.7: instrução de visibilidade de rolagens do mestre.
     # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
     #   qualquer rolagem interna (ataque de NPC, teste secreto, evento aleatório).

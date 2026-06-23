@@ -57,6 +57,54 @@ _RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]",
 # Backend acumula max 5; prompt_builder injeta como "Não repetir narrativa já dita".
 _RE_ANCORA = re.compile(r"\[ANCORA:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# REPETICAO-FRIO (playtest 21/06): o Mestre re-descreve a MESMA imagem sensorial
+# (clima/frio/cheiro) a cada turno. Detectamos frases curtas de ambiente pra
+# alimentar o repetition guard sensorial (wm.ambiente_recente). Keywords em ASCII
+# (a frase é transliterada antes de casar) — cobrem clima, temperatura, olfato,
+# luz/escuridão e som ambiente.
+_KEYWORDS_AMBIENTE = frozenset({
+    "frio", "fria", "gelado", "gelada", "gelido", "gelida", "cortante",
+    "vento", "ventania", "brisa", "rajada", "nevoa", "neblina", "bruma",
+    "umidade", "umido", "umida", "chuva", "chuvisco", "garoa", "tempestade",
+    "calor", "quente", "abafado", "mormaco", "sol", "sufocante",
+    "cheiro", "fedor", "odor", "aroma", "fedido", "mofo",
+    "silencio", "silencioso", "escuridao", "escuro", "escura", "sombras",
+    "penumbra", "trevas", "poeira", "fumaca", "fuligem", "umidade",
+})
+# Frase = trecho entre pontuação forte. Captura curta (imagem, não ação longa).
+_RE_FRASE_AMBIENTE = re.compile(r"[^.!?…\n]+")
+
+
+def extrair_imagens_ambiente(narracao: str) -> list[str]:
+    """Extrai imagens sensoriais/de clima da narração (frio, vento, cheiro…).
+
+    Por que existe: REPETICAO-FRIO — o Mestre repete 'frio cortante da noite'
+    todo turno. Cada frase CURTA (≤12 palavras) com keyword atmosférica vira uma
+    assinatura, usada pra dizer ao LLM 'você já descreveu isto, varie ou omita'.
+    Conservador: ignora frases longas (ação/diálogo) e dedup case-insensitive.
+
+    Exemplo:
+        extrair_imagens_ambiente("O frio cortante da noite morde. Ele saca a espada.")
+        # → ["O frio cortante da noite morde"]
+    """
+    out: list[str] = []
+    vistos: set[str] = set()
+    for bruto in _RE_FRASE_AMBIENTE.findall(narracao or ""):
+        frase = bruto.strip()
+        if not frase or len(frase.split()) > 12:
+            continue
+        ascii_low = unicodedata.normalize("NFKD", frase.lower())
+        ascii_low = "".join(c for c in ascii_low if not unicodedata.combining(c))
+        toks = set(re.findall(r"[a-z]+", ascii_low))
+        if not (toks & _KEYWORDS_AMBIENTE):
+            continue
+        chave = ascii_low.strip()
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        out.append(frase[:80])
+    return out
+
 # Assinatura de voz de NPC: [VOZ: npc-id|pitch|rate]
 # Ex: "[VOZ: lyssa|+5Hz|-10%]" — armazenado em wm.npc_vozes para o restante da sessão.
 # Pitch: "+NHz" ou "-NHz". Rate: "+N%" ou "-N%".
@@ -998,6 +1046,12 @@ def aplicar_pos_turno(
         if ancora:
             working_mem.registrar_ancora(ancora)
             log.info("ancora_registrada", texto=ancora[:80])
+
+    # 15b. Repetition Guard SENSORIAL (REPETICAO-FRIO) — registra as imagens de
+    # ambiente/clima desta narração pra o prompt do próximo turno pedir variação.
+    for imagem in extrair_imagens_ambiente(resposta_completa):
+        if working_mem.registrar_ambiente(imagem):
+            log.info("ambiente_registrado", imagem=imagem[:80])
 
     # 16. Assinaturas de voz de NPC — [VOZ: npc-id|pitch|rate] define parâmetros TTS por NPC.
     # Cap: 20 vozes por sessão (eviction oldest). Sessão longa pode introduzir

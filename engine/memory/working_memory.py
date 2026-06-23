@@ -469,6 +469,11 @@ class WorkingMemory:
     def fatos_ancora(self, v: list[str]) -> None: self.narrative.fatos_ancora = v
 
     @property
+    def ambiente_recente(self) -> list[str]: return self.narrative.ambiente_recente
+    @ambiente_recente.setter
+    def ambiente_recente(self, v: list[str]) -> None: self.narrative.ambiente_recente = v
+
+    @property
     def quests_improvisadas(self) -> list[dict]: return self.narrative.quests_improvisadas
     @quests_improvisadas.setter
     def quests_improvisadas(self, v: list[dict]) -> None: self.narrative.quests_improvisadas = v
@@ -889,6 +894,9 @@ class WorkingMemory:
 
     def registrar_ancora(self, texto: str) -> None:
         self.narrative.registrar_ancora(texto)
+
+    def registrar_ambiente(self, texto: str) -> bool:
+        return self.narrative.registrar_ambiente(texto)
 
     # ── Composição do prompt ─────────────────────────────────────────────────
 

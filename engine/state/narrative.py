@@ -24,6 +24,7 @@ _MAX_CONSEQUENCIAS = 5
 _MAX_AGENDA = 8
 _MAX_VOZES = 20
 _MAX_QUESTS_IMPROV = 6
+_MAX_AMBIENTE = 4
 
 
 @dataclass
@@ -63,6 +64,12 @@ class NarrativeState:
 
     # Repetition guard — fatos já narrados
     fatos_ancora: list[str] = field(default_factory=list)
+
+    # REPETICAO-FRIO (playtest 21/06): o Mestre repete a MESMA imagem sensorial
+    # ("frio cortante da noite") TODO turno. Aqui ficam as últimas imagens de
+    # ambiente/clima que ele usou — injetadas no prompt como "já descrito, varie"
+    # (mesma ideia do fatos_ancora, mas pra clima/sensação). Rolling, cap pequeno.
+    ambiente_recente: list[str] = field(default_factory=list)
 
     # PLAY5-QUEST: quests improvisadas pelo Mestre (fora do catálogo do módulo).
     # O sistema [Q:id:stage] valida contra o catálogo e rejeita o que o autor
@@ -135,6 +142,19 @@ class NarrativeState:
         self.fatos_ancora.append(texto)
         if len(self.fatos_ancora) > _MAX_ANCORAS:
             self.fatos_ancora.pop(0)
+        return True
+
+    def registrar_ambiente(self, texto: str) -> bool:
+        """Adiciona imagem de ambiente já descrita (REPETICAO-FRIO), com dedup.
+
+        Retorna True se inserida. Rolling cap _MAX_AMBIENTE — só as mais recentes
+        importam (o LLM repete a última imagem usada, não as antigas)."""
+        texto = texto.strip()
+        if not texto or texto in self.ambiente_recente:
+            return False
+        self.ambiente_recente.append(texto)
+        if len(self.ambiente_recente) > _MAX_AMBIENTE:
+            self.ambiente_recente.pop(0)
         return True
 
     def registrar_quest_improvisada(self, quest_id: str, titulo: str, objetivo: str) -> bool:
