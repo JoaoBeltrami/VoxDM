@@ -1778,7 +1778,7 @@ export default function Home() {
           const PAINEIS: PainelDef[] = [
             { id: "ficha", label: "Ficha" },
             { id: "inventario", label: "Inventário" },
-            { id: "party", label: "Party" },
+            { id: "party", label: "Party", badge: Object.keys(companions).length },
             { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
             { id: "cronica", label: "Crônica", badge: cronica.length },
             { id: "mapa", label: "Mapa" },
@@ -1841,6 +1841,40 @@ export default function Home() {
                             </ul>
                           </div>
                         )}
+                      </div>
+                    )
+                  ) : painelAberto === "party" ? (
+                    Object.keys(companions).length === 0 ? (
+                      <p className="text-xs text-vox-text-muted">Nenhum aliado na party.</p>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {Object.entries(companions).map(([cid, c]) => {
+                          const pct = c.hp_max > 0 ? Math.max(0, Math.min(100, (c.hp / c.hp_max) * 100)) : 0;
+                          const morto = c.hp <= 0;
+                          return (
+                            <div key={cid} className="rounded-lg border border-vox-border-soft bg-vox-bg-elevated p-2.5">
+                              <div className="mb-1 flex items-center justify-between">
+                                <span className={`text-xs font-medium ${morto ? "text-vox-text-muted line-through" : "text-vox-text-primary"}`}>{c.nome}</span>
+                                <span className="text-[10px] text-vox-text-muted">{c.tipo}</span>
+                              </div>
+                              <div className="mb-1.5 flex items-center justify-between text-[10px] text-vox-text-muted">
+                                <span>{c.hp}/{c.hp_max} PV</span>
+                                <span>CA {c.ca} · {c.atq} {c.dano}</span>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-vox-bg-panel">
+                                <div className={`h-full rounded-full ${morto ? "bg-vox-text-muted" : pct < 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              {!morto && (
+                                <button
+                                  onClick={() => enviarComando(`${c.nome}, ${emCombate ? "ataque o inimigo mais próximo" : "fique de guarda"}.`)}
+                                  className="mt-2 w-full rounded border border-vox-border-soft py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-accent-primary/50 hover:text-vox-text-primary"
+                                >
+                                  {emCombate ? "⚔ comandar ataque" : "💬 ordenar"}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )
                   ) : (
