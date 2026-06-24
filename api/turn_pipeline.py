@@ -74,6 +74,20 @@ _KEYWORDS_AMBIENTE = frozenset({
 # Frase = trecho entre pontuação forte. Captura curta (imagem, não ação longa).
 _RE_FRASE_AMBIENTE = re.compile(r"[^.!?…\n]+")
 
+# Colocações FIGURADAS onde a keyword atmosférica NÃO descreve clima/ambiente —
+# descrevem temperamento/emoção ("sangue frio" = compostura, "olhar gelado" =
+# frieza emocional). Sem isto, viravam falsas "imagens de ambiente" e poluíam o
+# guard anti-repetição (achado no hardening adversarial). Strings transliteradas.
+_IDIOMAS_NAO_AMBIENTE = (
+    "sangue frio", "sangue-frio", "sangue quente",
+    "cabeca fria", "cabeca quente",
+    "olhar frio", "olhar gelado", "olhos frios", "olhos gelados",
+    "agua fria", "coracao frio", "coracao quente", "coracao gelado",
+    "calor humano", "pe frio", "guerra fria",
+    "sorriso frio", "sorriso gelado", "voz fria", "voz gelada",
+    "tom frio", "recepcao fria",
+)
+
 
 def extrair_imagens_ambiente(narracao: str) -> list[str]:
     """Extrai imagens sensoriais/de clima da narração (frio, vento, cheiro…).
@@ -97,6 +111,9 @@ def extrair_imagens_ambiente(narracao: str) -> list[str]:
         ascii_low = "".join(c for c in ascii_low if not unicodedata.combining(c))
         toks = set(re.findall(r"[a-z]+", ascii_low))
         if not (toks & _KEYWORDS_AMBIENTE):
+            continue
+        # Idioma figurado (sangue frio, olhar gelado…) — não é clima/ambiente.
+        if any(idioma in ascii_low for idioma in _IDIOMAS_NAO_AMBIENTE):
             continue
         chave = ascii_low.strip()
         if chave in vistos:

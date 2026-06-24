@@ -54,6 +54,20 @@ def test_ignora_frase_sem_keyword_ambiente():
     assert extrair_imagens_ambiente("Aldric saca a espada e avança contra o orc.") == []
 
 
+@pytest.mark.parametrize("frase", [
+    "O guarda mantém o sangue frio diante da ameaça.",
+    "Você precisa manter a cabeça fria agora.",
+    "Ele te lança um olhar frio e calculista.",
+    "A notícia caiu como um balde de água fria.",
+    "O rei governa com coração frio.",
+    "O mercador tem um calor humano genuíno.",
+])
+def test_ignora_idioma_figurado(frase):
+    # Keyword atmosférica usada como temperamento/emoção — não é clima/ambiente.
+    # (Regressão do hardening adversarial — poluía o guard anti-repetição.)
+    assert extrair_imagens_ambiente(frase) == []
+
+
 def test_ignora_frase_longa_de_acao():
     # > 12 palavras → provavelmente ação/diálogo, não imagem de ambiente curta.
     longa = (
