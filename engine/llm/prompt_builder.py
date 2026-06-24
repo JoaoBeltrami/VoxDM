@@ -524,6 +524,16 @@ def montar_mensagens(
             secoes.append(_bloco_social)
             chars_social = len(_bloco_social)
 
+        # Assinatura de voz por NPC (mestre veterano — NPCs distintos). Determinística
+        # por id (token-zero, estável), injetada só fora de combate e quando há NPC
+        # presente. Mantém o ferreiro soando diferente da bruxa entre sessões.
+        # Import local espelha o _id_para_nome lazy abaixo (evita ciclo de import).
+        from engine.memory.working_memory import _id_para_nome as _id_nome_voz
+        from engine.npc.persona import bloco_assinaturas
+        bloco_voz_npc = bloco_assinaturas(getattr(wm, "npcs_presentes", []), _id_nome_voz)
+        if bloco_voz_npc:
+            secoes.append(bloco_voz_npc)
+
     # Working memory sem diálogo — histórico vai como pares de mensagem abaixo.
     # Subclasse injetada separadamente para não inflar para_texto() com campo raro.
     wm_texto = contexto.working_memory.para_texto(incluir_dialogo=False)
