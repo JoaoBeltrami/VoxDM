@@ -1322,3 +1322,47 @@ def test_detectar_voz_npc_helper():
     ) == {"pitch": "+5Hz", "rate": "-10%"}
     # Sem o NPC presente → None
     assert _detectar_voz_npc("O goblin avançou.", npc_vozes) is None
+
+
+# ── U5 (PLAYTEST 24/06): cadência do thinking audio — não tocar TODO turno ───
+
+def test_thinking_cooldown_campo_e_constantes():
+    import dataclasses
+    from api.state import SessaoAtiva
+    import api.websocket as ws
+    campos = {f.name for f in dataclasses.fields(SessaoAtiva)}
+    assert "thinking_cooldown" in campos
+    assert ws._THINKING_DELAY_S >= 2.0   # subido de 1.2 (não dispara em turno borderline)
+    assert ws._THINKING_COOLDOWN >= 1     # pula ao menos 1 disparo consecutivo
+
+
+@pytest.mark.asyncio
+async def test_thinking_cadencia_pula_turnos_consecutivos(monkeypatch):
+    import asyncio
+    import api.websocket as ws
+    import engine.voice.thinking_cache as tc
+
+    monkeypatch.setattr(ws, "_THINKING_DELAY_S", 0.01)  # força timeout rápido
+    monkeypatch.setattr(tc, "garantir_voz", lambda *a, **k: None)
+    monkeypatch.setattr(tc, "pegar_random", lambda *a, **k: ("Hmm...", b"audio"))
+    enviados = []
+    async def _fake_send(websocket, payload):
+        enviados.append(payload)
+    monkeypatch.setattr(ws, "_send_text_seguro", _fake_send)
+
+    class _Sessao:
+        def __init__(self):
+            self.working_mem = type("WM", (), {"tts_voice": "pt-BR-AntonioNeural"})()
+            self.ultima_frase_thinking = ""
+            self.thinking_cooldown = 0
+    sessao = _Sessao()
+
+    async def _rodar_turno():
+        ev = asyncio.Event()  # nunca setado → timeout → tenta disparar
+        await ws._criar_task_thinking(None, ev, sessao)
+
+    await _rodar_turno()  # turno 1 → dispara, cooldown=1
+    await _rodar_turno()  # turno 2 → cooldown=1 → PULA
+    await _rodar_turno()  # turno 3 → dispara
+
+    assert len(enviados) == 2, "thinking deve tocar nos turnos 1 e 3, não no 2"

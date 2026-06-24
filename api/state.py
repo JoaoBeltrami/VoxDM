@@ -69,6 +69,9 @@ class SessaoAtiva:
     # Última frase de "thinking audio" enviada — evita repetição imediata.
     # Passada como `exceto` ao pegar_random() no próximo turno.
     ultima_frase_thinking: str = ""
+    # Cadência do thinking audio (PLAYTEST 24/06: tocava TODO turno porque a
+    # latência > limiar sempre). > 0 = pula este disparo e decrementa.
+    thinking_cooldown: int = 0
     # Chave da última imagem de cena enviada ao frontend — "{location}|{combate}".
     # Evita reenviar a mesma URL quando o estado de cena não mudou.
     ultima_imagem_chave: str = ""

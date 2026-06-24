@@ -362,9 +362,13 @@ async def _enviar_lampejo(
 # ---------------------------------------------------------------------------
 
 # Limiar pra disparar "Hmm... deixe-me ver" enquanto LLM monta a resposta.
-# 1.2s captura todo turno que cai em fallback de cascata (Groq → 8B → Gemini)
-# sem disparar em turnos rápidos (~500-900ms são comuns no caminho feliz).
-_THINKING_DELAY_S: float = 1.2
+# PLAYTEST 24/06: a 1.2s tocava TODO turno (latência alta sempre) e cansou.
+# Subido pra 2.0s (só mascara turno genuinamente lento) + cadência abaixo
+# (`_THINKING_COOLDOWN` pula disparos consecutivos). Com o prompt desinflado
+# pelo F1, a maioria dos turnos cai abaixo de 2.0s e nem dispara.
+_THINKING_DELAY_S: float = 2.0
+# Após disparar, pula os próximos N disparos — evita o "pensando" relentless.
+_THINKING_COOLDOWN: int = 1
 
 
 def _criar_task_thinking(
@@ -391,6 +395,11 @@ def _criar_task_thinking(
                 return  # token chegou a tempo — silêncio é OK
             except TimeoutError:
                 pass
+            # Cadência (PLAYTEST 24/06): não tocar em turnos consecutivos — o
+            # turno lento ainda é mascarado, mas não vira "pensando" todo turno.
+            if sessao and sessao.thinking_cooldown > 0:
+                sessao.thinking_cooldown -= 1
+                return
             from engine.voice.thinking_cache import garantir_voz, pegar_random
             # PT-5: aquece (bg) e usa a voz da sessão; fallback p/ a padrão até
             # ficar pronta — evita voz feminina sobre Mestre de voz masculina.
@@ -404,6 +413,7 @@ def _criar_task_thinking(
             frase, audio_bytes = resultado
             if sessao:
                 sessao.ultima_frase_thinking = frase  # registra para evitar repetição
+                sessao.thinking_cooldown = _THINKING_COOLDOWN  # cadência: pula próximos N
             await _send_text_seguro(websocket,
                 MensagemWS(
                     tipo="audio_chunk",
