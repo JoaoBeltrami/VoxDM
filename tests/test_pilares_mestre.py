@@ -223,7 +223,7 @@ def test_regex_relogio_e_avanca():
 def test_criar_relogio_idempotente_com_cap_e_clamp():
     wm = _wm()
     assert wm.narrative.criar_relogio("a", "Ameaça A", 2) is True
-    assert wm.narrative.relogios["a"]["max"] == 3  # clamp mínimo
+    assert wm.narrative.relogios["a"]["max"] == 4  # clamp mínimo (3→4, slow-burn)
     assert wm.narrative.criar_relogio("a", "Duplicado", 6) is False  # idempotente
     for rid in ("b", "c", "d"):
         wm.narrative.criar_relogio(rid, rid.upper(), 6)
@@ -232,10 +232,11 @@ def test_criar_relogio_idempotente_com_cap_e_clamp():
 
 def test_relogio_enche_e_gera_irrupcao_one_shot():
     wm = _wm()
-    wm.narrative.criar_relogio("ritual", "O ritual", 3)
+    wm.narrative.criar_relogio("ritual", "O ritual", 4)  # min é 4 agora
     assert wm.narrative.avancar_relogio("ritual") is False
     assert wm.narrative.avancar_relogio("ritual") is False
-    assert wm.narrative.avancar_relogio("ritual") is True  # encheu
+    assert wm.narrative.avancar_relogio("ritual") is False
+    assert wm.narrative.avancar_relogio("ritual") is True  # encheu (4/4)
     assert "ritual" not in wm.narrative.relogios  # removido
     assert wm.narrative.consumir_relogio_irrompido() == "O ritual"
     assert wm.narrative.consumir_relogio_irrompido() == ""  # one-shot
@@ -256,11 +257,15 @@ def test_descanso_longo_tica_todos_os_relogios():
     assert wm.narrative.relogios["ritual"]["atual"] == 1
 
 
-def test_viagem_tica_todos_os_relogios():
+def test_viagem_tica_relogios_com_cadencia():
+    # PLAYTEST 24/06: viagem tica relógios só a cada 2ª troca de cena (não a
+    # cada sala num hub social). 1ª viagem: cadência segura; 2ª: tica.
     wm = _wm()
     wm.narrative.criar_relogio("ritual", "O ritual", 6)
     aplicar_pos_turno(wm, "Sigo pra estrada.", "Vocês partem. [CENA: estrada|Estrada|dia]")
-    assert wm.narrative.relogios["ritual"]["atual"] == 1
+    assert wm.narrative.relogios["ritual"]["atual"] == 0  # 1ª viagem não tica
+    aplicar_pos_turno(wm, "Sigo pra vila.", "Vocês chegam. [CENA: vila|Vila|noite]")
+    assert wm.narrative.relogios["ritual"]["atual"] == 1  # 2ª viagem tica
 
 
 def test_relogios_aparecem_no_prompt_com_segmentos():
@@ -274,8 +279,8 @@ def test_relogios_aparecem_no_prompt_com_segmentos():
 
 def test_irrupcao_injetada_uma_vez_no_prompt():
     wm = _wm()
-    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 3)
-    wm.narrative.avancar_relogio("ritual", passos=3)
+    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 4)  # min é 4 agora
+    wm.narrative.avancar_relogio("ritual", passos=4)
     system1 = montar_mensagens(_ctx(wm))[0]["content"]
     assert "RELÓGIO ESTOUROU: O ritual sombrio" in system1
     system2 = montar_mensagens(_ctx(wm))[0]["content"]
@@ -807,8 +812,8 @@ def test_consequencia_espelha_na_cronica():
 
 def test_relogio_estourado_entra_na_cronica():
     wm = _wm()
-    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 3)
-    wm.narrative.avancar_relogio("ritual", passos=3)
+    wm.narrative.criar_relogio("ritual", "O ritual sombrio", 4)  # min é 4 agora
+    wm.narrative.avancar_relogio("ritual", passos=4)
     assert any("O ritual sombrio" in e for e in wm.narrative.cronica)
 
 

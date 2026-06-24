@@ -86,6 +86,9 @@ class NarrativeState:
     # Irrupção pendente (one-shot): nome do relógio que encheu, consumido
     # pelo prompt_builder no próximo turno.
     relogio_irrompido: str = ""
+    # Cadência do tick de viagem (PLAYTEST 24/06): só avança relógios a cada 2ª
+    # troca de cena — andar de sala em sala num hub social não enche a ameaça.
+    viagens_desde_tick_relogio: int = 0
 
     # PLAY5-FRONTS: ameaças latentes (fronts autorais do Schema v2) — id →
     # {nome, segmentos, filled}. Mostrar um front como relógio do HUD no turno 1
@@ -238,7 +241,9 @@ class NarrativeState:
             return False
         if len(self.relogios) >= 4:
             return False
-        seg_max = max(3, min(8, int(segmentos)))
+        # PLAYTEST 24/06: min subido 3→4 — relógio de ameaça é slow-burn, não pode
+        # encher em 3 ticks (o "relógio da guerra" disparava rápido demais).
+        seg_max = max(4, min(8, int(segmentos)))
         self.relogios[relogio_id] = {
             "nome": nome.strip()[:60] or relogio_id,
             "atual": max(0, min(seg_max - 1, int(inicial))),
@@ -262,7 +267,7 @@ class NarrativeState:
             return False
         self.fronts_latentes[front_id] = {
             "nome": nome.strip()[:60] or front_id,
-            "segmentos": max(3, min(8, int(segmentos))),
+            "segmentos": max(4, min(8, int(segmentos))),
             "filled": max(0, int(filled)),
         }
         return True
@@ -301,6 +306,17 @@ class NarrativeState:
             self.registrar_cronica(f"⏳ A ameaça se concretizou: {rel['nome']}")
             return True
         return False
+
+    def tick_relogios_viagem(self) -> list[str]:
+        """Tick de relógios por VIAGEM com cadência — avança só a cada 2ª troca de
+        cena (PLAYTEST 24/06: ticar todo [CENA], incl. sala-a-sala num hub social,
+        enchia a ameaça rápido demais). Descanso longo e [RELOGIO_AVANCA] seguem
+        ticando direto (tempo/drama reais). Retorna nomes que encheram."""
+        self.viagens_desde_tick_relogio += 1
+        if self.viagens_desde_tick_relogio < 2:
+            return []
+        self.viagens_desde_tick_relogio = 0
+        return self.avancar_todos_relogios(1)
 
     def avancar_todos_relogios(self, passos: int = 1) -> list[str]:
         """Tick global (descanso longo / viagem). Retorna nomes que encheram."""

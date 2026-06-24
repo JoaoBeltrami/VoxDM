@@ -1177,8 +1177,9 @@ def aplicar_pos_turno(
             if working_mem.em_combate:
                 working_mem.sair_combate()
                 log.info("combate_encerrado_mudanca_cena")
-            # Mundo Vivo: viagem custa tempo — relógios de ameaça avançam.
-            estourados = working_mem.narrative.avancar_todos_relogios(1)
+            # Mundo Vivo: viagem custa tempo — relógios avançam, mas com cadência
+            # (a cada 2ª troca de cena) pra não encher rápido num hub social.
+            estourados = working_mem.narrative.tick_relogios_viagem()
             if estourados:
                 log.info("relogios_tick_viagem", estourados=estourados)
         break
