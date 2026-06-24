@@ -696,6 +696,15 @@ def montar_mensagens(
             "\n[PACING: BAIXO] — Momento de respiro. Ambiente, detalhes sensoriais, "
             "personagens com textura. Pode haver silêncio significativo."
         )
+        # Reincorporação (mestre veterano #2): a calmaria é a hora de PUXAR um fio
+        # de volta — o mundo lembra e se conecta. Só dispara em lull real (pacing
+        # baixo) E com fio em aberto; custo-zero quando não há o que reincorporar.
+        if fios:
+            secoes.append(
+                "\n[REINCORPORAR] — O ritmo esfriou: use a calmaria pra puxar de volta "
+                "UM fio em aberto (acima). Um NPC o menciona, um detalhe o ressuscita, "
+                "uma consequência aparece. Reincorporar dá direção sem forçar ação."
+            )
 
     # Mundo Vivo — Relógios de Ameaça: o mundo anda sem o jogador. Invisíveis
     # pra ele; o LLM usa pra dosar presságios e urgência. Irrupção é one-shot.
@@ -729,6 +738,23 @@ def montar_mensagens(
                 "jogador ignora a ameaça ou ela ganha força. Semeie presságios "
                 "proporcionais ao preenchimento — quase cheio = sinais urgentes."
             )
+            # Presságio (mestre veterano #3): relógio quase cheio → telegrafar
+            # CONCRETO. O veterano mostra a fumaça antes do fogo. ≥70% e ainda não
+            # estourado (estouro tem o caminho próprio acima). Token-light: só
+            # quando há ameaça realmente iminente.
+            _quase = [
+                r for r in narrative.relogios.values()
+                if r.get("max", 0) > 0 and r.get("atual", 0) < r["max"]
+                and r["atual"] / r["max"] >= 0.7
+            ]
+            if _quase:
+                _mais = max(_quase, key=lambda r: r["atual"] / r["max"])
+                secoes.append(
+                    f"\n[PRESSÁGIO] — '{_mais['nome']}' está quase no limite. Plante "
+                    "NESTA cena um sinal CONCRETO de que a ameaça se aproxima: um "
+                    "presságio, um mensageiro ofegante, um tremor, um silêncio errado, "
+                    "algo que deveria estar ali e não está. Telegrafe sem revelar o relógio."
+                )
 
         # PLAY5-FRONTS — ameaças latentes (fronts autorais ainda não introduzidos).
         # Diferente dos relógios ativos: o jogador NÃO as vê e elas não andam até
