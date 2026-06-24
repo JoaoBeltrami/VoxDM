@@ -29,7 +29,7 @@ from typing import Any
 
 import structlog
 
-from engine.llm.extractor import _chave_dedup
+from engine.llm.extractor import _capar_npcs_presentes, _chave_dedup, _e_entidade_invalida
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
@@ -1192,6 +1192,8 @@ def aplicar_pos_turno(
     # NPC-DUP-2: dedup por chave tolerante a epíteto — '[NPC: brennan-sem-vila]'
     # quando 'brennan' já está na cena é o mesmo NPC com a alcunha do local.
     _presentes_chaves = {_chave_dedup(p) for p in working_mem.npcs_presentes}
+    _loc_id = str(getattr(working_mem, "location_id", "") or "")
+    _loc_nome = str(getattr(working_mem, "location_nome", "") or "")
     for m in _RE_NPC_ENTRA.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
         if not npc_id:
@@ -1199,11 +1201,19 @@ def aplicar_pos_turno(
         chave = _chave_dedup(npc_id)
         if chave in _presentes_chaves:
             continue  # mesmo NPC (talvez só com epíteto) já presente
+        # PLAYTEST 24/06: barra LUGAR/DEIDADE/anônimo virando NPC (mesmo via marcador).
+        if _e_entidade_invalida(npc_id, _loc_id, _loc_nome):
+            log.info("npc_marcador_entidade_invalida", id=npc_id)
+            continue
         working_mem.npcs_presentes.append(npc_id)
         _presentes_chaves.add(chave)
         working_mem.scene.npcs_apresentados.add(npc_id)
         working_mem.scene.npcs_introduzidos_turno.append(npc_id)
         log.info("npc_entrou_cena", npc=npc_id, nome=(m.group(2) or "").strip() or None)
+
+    # Teto de npcs_presentes (backstop pro que escapa do filtro) — evita os 15
+    # NPCs-lixo do playtest 24/06.
+    _capar_npcs_presentes(working_mem)
 
     return mudancas_trust
 

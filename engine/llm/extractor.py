@@ -87,7 +87,10 @@ _SYSTEM_NPC_EXTRACTOR = (
     "narração e que NÃO estão na lista de conhecidos. NUNCA inclua alguém apenas "
     "CITADO, mencionado de passagem, referido em conversa ou parado no fundo da "
     "cena sem interagir. NÃO inclua: o personagem do jogador, "
-    "multidões/figurantes sem nome, monstros/inimigos, lugares ou objetos. "
+    "multidões/figurantes sem nome, monstros/inimigos, **LUGARES/cidades/locais** "
+    "(ex: vilas, salões), **DEUSES/divindades/santos** (ex: 'a deusa da magia'), "
+    "figurantes ANÔNIMOS ('clérigo desconhecido'), nem nomes apenas CITADOS de "
+    "quem NÃO está fisicamente na cena agora. Objetos também não. "
     "APELIDOS/VOCATIVOS que um personagem usa para SE DIRIGIR ao jogador (2ª "
     "pessoa: 'você/te/ti/teu') NÃO são NPCs — ex.: 'Ninguém te convidou, "
     "ladrãozinho' → 'ladrãozinho' é o JOGADOR, não um NPC. id em kebab-case "
@@ -217,6 +220,51 @@ def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
     return False
 
 
+# PLAYTEST 24/06: o extractor inundava npcs_presentes com LUGARES (drevamor,
+# tharnvik), DEIDADES (mistra, "a deusa da magia") e figurantes anônimos
+# ("clerigo-desconhecido") — citados, não presentes. Entupia a cena, inflava o
+# prompt (29k!) e diluía a distinção de NPC. Filtro determinístico + cap (backstop).
+_TOKENS_NAO_NPC = frozenset({
+    "deus", "deusa", "deuses", "deusas", "deidade", "deidades", "divindade",
+    "divindades", "divino", "divina", "panteao",
+    "desconhecido", "desconhecida", "desconhecidos", "desconhecidas",
+    "alguem", "ninguem", "figura", "vulto", "silhueta", "multidao", "ninguem",
+})
+_MAX_NPCS_PRESENTES = 8
+
+
+def _e_entidade_invalida(nid: str, location_id: str = "", location_nome: str = "") -> bool:
+    """True se o id NÃO deve virar NPC presente: é o LOCAL atual, uma divindade/
+    conceito, ou um figurante anônimo. Conservador — só rejeita sinais claros."""
+    canon = _canonico(nid)
+    if not canon:
+        return True
+    if canon == _canonico(location_id) or (location_nome and canon == _canonico(location_nome)):
+        return True  # o próprio local virou "NPC"
+    tokens = {t for t in re.split(r"[\s-]+", _transliterar(nid).lower()) if t}
+    if tokens & _TOKENS_NAO_NPC:
+        return True
+    # Raízes de divindade — pega "adeusa" ('a deusa' colado pelo LLM), "divindade".
+    if any(("deus" in t or "divind" in t or "deidad" in t) for t in tokens):
+        return True
+    return False
+
+
+def _capar_npcs_presentes(wm: Any) -> None:
+    """Teto de npcs_presentes com eviction do background mais antigo (preserva os
+    APRESENTADOS — NPCs que o jogador conheceu). Backstop pro que escapa do filtro."""
+    pres = getattr(wm, "npcs_presentes", None)
+    if not pres or len(pres) <= _MAX_NPCS_PRESENTES:
+        return
+    apres = getattr(getattr(wm, "scene", None), "npcs_apresentados", set()) or set()
+    background = [n for n in pres if n not in apres]
+    excesso = len(pres) - _MAX_NPCS_PRESENTES
+    remover = set(background[:excesso])
+    if remover:
+        wm.npcs_presentes[:] = [n for n in pres if n not in remover]
+        log.info("npcs_presentes_capados", removidos=sorted(remover), restantes=len(wm.npcs_presentes))
+
+
 def _sanitizar_npcs(bruto: dict[str, Any]) -> list[dict[str, str]]:
     """Valida a saída do extractor de NPC — nunca confiar em JSON de modelo."""
     out: list[dict[str, str]] = []
@@ -300,11 +348,16 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     """
     jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
     presentes_canon = {_chave_dedup(p) for p in wm.npcs_presentes}
+    loc_id = str(getattr(wm, "location_id", "") or "")
+    loc_nome = str(getattr(wm, "location_nome", "") or "")
     adicionados: list[str] = []
     for npc in npcs:
         nid = npc.get("id", "")
         canon = _chave_dedup(nid)
         if not nid or not canon or canon == jogador_canon or canon in presentes_canon:
+            continue
+        if _e_entidade_invalida(nid, loc_id, loc_nome):
+            log.info("npc_entidade_invalida_descartada", id=nid)
             continue
         wm.npcs_presentes.append(nid)
         wm.scene.npcs_apresentados.add(nid)
@@ -312,6 +365,7 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
         adicionados.append(nid)
     if adicionados:
         log.info("npcs_extraidos_registrados", ids=adicionados)
+    _capar_npcs_presentes(wm)
     return adicionados
 
 

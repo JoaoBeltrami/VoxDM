@@ -9,7 +9,9 @@ import pytest
 
 from engine.llm.extractor import (
     _canonico,
+    _capar_npcs_presentes,
     _e_apelido_do_jogador,
+    _e_entidade_invalida,
     _kebab_id,
     _npc_fantasma,
     _sanitizar_npcs,
@@ -249,3 +251,66 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     groq = _FakeGroq('{"npcs": [{"id": "brennan", "nome": "Brennan"}]}')
     out = await extrair_npcs_cena(groq, "Você é tolo, Brennan recua para as sombras.", [])
     assert out == [{"id": "brennan", "nome": "Brennan"}]
+
+
+# ── _e_entidade_invalida + cap (PLAYTEST 24/06 — flood de NPC-lixo) ──────────
+
+@pytest.mark.parametrize("nid", [
+    "drevamor",              # o LOCAL atual
+    "adeusa-da-magia",       # "a deusa" colado → divindade
+    "deusa-da-guerra",
+    "clerigo-desconhecido",  # figurante anônimo
+    "figura-encapuzada",
+])
+def test_entidade_invalida_rejeita_lixo(nid):
+    assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True
+
+
+@pytest.mark.parametrize("nid", [
+    "aldric-drevasson",
+    "maren-drevadottir",
+    "velho-mercador",
+    "osmund-o-exilado",
+])
+def test_entidade_invalida_preserva_npc_real(nid):
+    assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is False
+
+
+def test_aplicar_descarta_local_e_divindade():
+    wm = _wm()  # location_id="drevamor"
+    extraidos = [
+        {"id": "drevamor", "nome": "Drevamor"},        # local
+        {"id": "adeusa-da-magia", "nome": "A Deusa"},   # divindade
+        {"id": "aldric-drevasson", "nome": "Aldric"},   # real
+    ]
+    add = aplicar_npcs_extraidos(wm, extraidos)
+    assert add == ["aldric-drevasson"]
+    assert "drevamor" not in wm.npcs_presentes
+    assert "adeusa-da-magia" not in wm.npcs_presentes
+
+
+class _WMCap:
+    """WM mínima pra testar o cap sem montar WorkingMemory inteira."""
+    class _Scene:
+        npcs_apresentados = {"aldric-drevasson", "maren-drevadottir"}
+    def __init__(self, pres):
+        self.scene = self._Scene()
+        self.npcs_presentes = list(pres)
+
+
+def test_cap_npcs_presentes_evicta_background_preserva_apresentados():
+    pres = ["aldric-drevasson", "maren-drevadottir", "velho-mercador",
+            "mistra", "tharnvik", "kaelmund", "dreva", "estrano", "x", "y"]
+    wm = _WMCap(pres)
+    _capar_npcs_presentes(wm)
+    assert len(wm.npcs_presentes) == 8
+    # NPCs que o jogador conheceu nunca são evictados
+    assert "aldric-drevasson" in wm.npcs_presentes
+    assert "maren-drevadottir" in wm.npcs_presentes
+
+
+def test_cap_nao_mexe_abaixo_do_teto():
+    pres = ["aldric-drevasson", "maren-drevadottir"]
+    wm = _WMCap(pres)
+    _capar_npcs_presentes(wm)
+    assert wm.npcs_presentes == pres
