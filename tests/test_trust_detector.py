@@ -123,3 +123,28 @@ def test_tracao_prevalece_sobre_ajuda_mesmo_turno():
 def test_primeiro_nome_reconhecido():
     resultado = detectar_mudancas_trust("salvo Fael do perigo", NPCS)
     assert ("fael-valdreksson", +1) in resultado
+
+
+# ── Regressões de hardening adversarial (23/06) — idiomas/ações não-sociais ───
+
+import pytest
+
+
+@pytest.mark.parametrize("texto", [
+    "desarmo a armadilha que protege a câmara de Osmund",  # desarmar TRAP, não pessoa
+    "acordo cedo e encontro Fael no pátio",                # acordar ≠ fazer acordo
+    "estou a salvo perto de Osmund",                       # "a salvo" adjetivo
+    "me apoio em Lyra para não cair",                      # apoiar-se físico
+    "denuncio o crime do bandido ao capitão da guarda",    # denúncia heroica ≠ traição
+])
+def test_acao_nao_social_nao_muda_trust(texto):
+    assert detectar_mudancas_trust(texto, NPCS) == []
+
+
+@pytest.mark.parametrize("texto,npc,delta", [
+    ("desarmo Osmund e tomo sua arma", "osmund-ferreiro", -1),  # desarmar PESSOA = hostil
+    ("faço um acordo com Fael", "fael-valdreksson", +1),        # acordo real
+    ("apoio Osmund na decisão dele", "osmund-ferreiro", +1),    # apoio real
+])
+def test_acao_social_real_preservada(texto, npc, delta):
+    assert (npc, delta) in detectar_mudancas_trust(texto, NPCS)

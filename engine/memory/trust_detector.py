@@ -26,7 +26,7 @@ _RE_POSITIVO = re.compile(
     r"\b("
     # ── Ação direta de benefício ───────────────────────────────────────────────
     r"ajudo|ajudei|ajudar|"
-    r"salvo|salvei|salvar|"
+    r"(?<!a )salvo|salvei|salvar|"  # "salvo Bjorn"; "estou a salvo" (adjetivo) NÃO conta
     r"protejo|protegi|proteger|"
     r"curo|curei|curar|"
     r"(?<!me )defend(?:o|i|er)|"  # "defendo/defendi Bjorn"; "me defendo/defendi" (autodefesa) NÃO conta
@@ -38,12 +38,12 @@ _RE_POSITIVO = re.compile(
     r"faço as pazes|"
     r"perdoo|perdoei|perdoar|"
     r"me reconcilio|me reconciliei|"
-    r"acordo|acord[oa]mos|"
+    r"acordo com|fa[çc]o (?:um |o )?acordo|"  # "acordo com X"/"faço um acordo"; "acordo cedo" (acordar) NÃO conta
     # ── Lealdade demonstrada ───────────────────────────────────────────────────
     r"confio (?:em|nele|nela)|"
     r"juro (?:lealdade|proteger|ajudar|defender)|"
     r"prometo (?:proteger|ajudar|defender|não trair)|"
-    r"apoio|apoiei|"
+    r"(?<!me )apoio|(?<!me )apoiei|"  # "apoio Bjorn"; "me apoio na parede" (físico) NÃO conta
     r"elogio|elogiei|"
     r"consolo|consolei|"
     r"fico ao lado (?:de|dele|dela)|"
@@ -72,7 +72,8 @@ _RE_NEGATIVO = re.compile(
     r"assassino|assassinei|"
     r"envenen[ao]|envenenei|envenenar|"
     r"intoxic[ao]|intoxiquei|intoxicar|"
-    r"desarmo|desarmei|"               # tomar a arma de alguém
+    # tomar a arma de ALGUÉM; "desarmo a armadilha/trava" (ação D&D comum) NÃO conta
+    r"(?:desarmo|desarmei)(?!\s+(?:(?:a|o|as|os)\s+)?(?:armadilha|cilada|trava|mecanismo|alarme|engenhoca|fechadura)s?\b)|"
     # ── Engano e manipulação ───────────────────────────────────────────────────
     r"minto (?:para|pra)|menti (?:para|pra)|"   # mentira dirigida
     r"ameaço|ameac[eo]i|amea[cç]ar|"
@@ -99,7 +100,9 @@ _RE_REVELAR_SEGREDO = re.compile(
     r"\b("
     r"revelo o segredo|conto o segredo|revelo tudo|"
     r"traio a confiança|traio o segredo|"
-    r"delato|denuncio|"
+    # delatar/denunciar exige objeto de TRAIÇÃO do grupo — "denuncio o crime do
+    # bandido ao guarda" (heroico) NÃO penaliza os aliados presentes.
+    r"(?:delato|denuncio) (?:o grupo|os aliados|meus companheiros|os companheiros|o plano|a localiza[çc][ãa]o|n[óo]s|todos|voc[êe]s?)|"
     r"entrego (?:o grupo|o plano|a localização|tudo)|"
     r"conto tudo (?:para|pra)|"
     r"revelo (?:o plano|a identidade|o esconderijo)"
