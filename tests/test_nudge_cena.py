@@ -58,6 +58,11 @@ def test_viagem_detecta_deslocamento(texto):
     "examino a porta trancada",
     "pergunto ao ferreiro sobre a espada",
     "rolo um teste de percepção",
+    # Regressões de idioma (achadas no hardening adversarial) — NÃO são viagem:
+    "vou ao que interessa",          # "ao que" relativo, não um lugar
+    "volto a perguntar",             # "a"+infinitivo = "de novo", não destino
+    "me dirijo a ele com respeito",  # falar COM alguém, não viajar
+    "vou ver o que tem na mesa",
 ])
 def test_viagem_ignora_nao_deslocamento(texto):
     assert not _RE_VIAGEM.search(texto), f"não deveria casar: {texto}"

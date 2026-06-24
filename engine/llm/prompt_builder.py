@@ -80,11 +80,17 @@ _PROMPT_MIN_CHARS = 100
 # destino) pra injetar um lembrete de [CENA] nesse turno. Conservador: exige
 # preposição de destino — "vou atacar"/"vamos lutar" (sem destino) NÃO casam.
 _RE_VIAGEM = re.compile(
+    # Verbo de movimento + preposição de DESTINO. Sem o "a" pelado (ambíguo com
+    # "a"+infinitivo: "volto a perguntar") e excluindo "ao/à que" relativo
+    # ("vou ao que interessa" não é viagem).
     r"\b(?:vou|vamos|sigo|seguimos|viajo|viajamos|parto|partimos|volto|voltamos|"
-    r"retorno|retornamos)\s+(?:para|pra|at[ée]|ao|à|aos|às|a|rumo|de\s+volta|"
-    r"em\s+direção)\b"
+    r"retorno|retornamos)\s+(?:para|pra|at[ée]|aos?|às?|rumo|de\s+volta|"
+    r"em\s+direção)\b(?!\s+que\b)"
     r"|\brumo\s+a[oô]?\b"
-    r"|\b(?:me\s+dirijo|nos\s+dirigimos)\b"
+    # "me dirijo a/ao <lugar>" — o destino NÃO pode ser pronome ("me dirijo a
+    # ele" = falar com alguém, não viajar).
+    r"|\b(?:me\s+dirijo|nos\s+dirigimos)\s+(?:a|ao|à|aos|às|para|pra|at[ée])\s+"
+    r"(?!ele\b|ela\b|eles\b|elas\b|voc[êe]\b|vc\b|mim\b|ti\b|si\b|n[óo]s\b)"
     r"|\b(?:entro|entramos|adentro|adentramos)\s+(?:n[oa]s?|em)\b"
     r"|\b(?:saio|sa[íi]mos)\s+d[oae]s?\b"
     r"|\b(?:atravesso|atravessamos|cruzo|cruzamos)\b"

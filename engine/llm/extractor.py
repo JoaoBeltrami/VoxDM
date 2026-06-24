@@ -208,9 +208,11 @@ def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
     # "...te convidou, ladrãozinho" / "Você não é bem-vindo, forasteiro"
     if re.search(rf"\b(?:{_RE_2P})\b[^.!?\n]*,\s*{nome_re}\b", narr):
         return True
-    # Vocativo invertido: "<nome>, ... <2ª pessoa>" no início de fala/frase.
-    # "Ladrãozinho, você acha que pode entrar aqui?"
-    if re.search(rf"(?:^|[.!?\"]\s*){nome_re}\s*,[^.!?\n]*\b(?:{_RE_2P})\b", narr):
+    # Vocativo invertido: "<nome>, você ..." — exige o pronome-SUJEITO "você/vc"
+    # LOGO após a vírgula. Sem essa âncora, "Gareth, o ferreiro, te entrega a
+    # espada" (te = objeto, Gareth = sujeito) virava falso-apelido e dropava um
+    # NPC real. "Ladrãozinho, você acha que pode entrar?" segue casando.
+    if re.search(rf"(?:^|[.!?\"]\s*){nome_re}\s*,\s*(?:voc[êe]|vc)\b", narr):
         return True
     return False
 

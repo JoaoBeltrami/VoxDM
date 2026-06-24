@@ -221,6 +221,10 @@ def test_apelido_do_jogador_vocativo(nome, narracao):
     ("Mira", "Mira se aproxima do balcão e observa a sala."),
     # Nome ausente da narração — não há como julgar, mantém.
     ("Vyrmathax", "O porto cheira a sal e peixe podre."),
+    # Regressão: "<Nome>, <aposto>, te <verbo>" — Nome é SUJEITO, "te" é objeto.
+    # Antes virava falso-apelido e dropava o NPC (achado no hardening adversarial).
+    ("Gareth", "Gareth, o ferreiro, te entrega a espada."),
+    ("Aldric", "Aldric, o velho guarda, te observa em silêncio."),
 ])
 def test_apelido_do_jogador_mantem_npc(nome, narracao):
     assert _e_apelido_do_jogador(nome, narracao) is False
