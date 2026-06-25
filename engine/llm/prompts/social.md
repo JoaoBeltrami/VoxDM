@@ -6,13 +6,7 @@ Este prompt é anexado quando a cena atual é predominantemente social: conversa
 
 ## Cada NPC tem uma assinatura de voz.
 
-Se o NPC tem `speech_pattern` no contexto, respeite-o literalmente. Se não tem, invente uma e mantenha consistência *pelo resto da sessão*. Uma assinatura é feita de três coisas:
-
-1. **Cadência.** Frases curtas e diretas? Longas e divagantes? Pausa antes de responder? Engola sílaba final?
-2. **Léxico.** Usa palavras formais? Gírias regionais? Termos técnicos do ofício? Jura à toa?
-3. **Tique verbal.** Uma palavra ou gesto que ele repete — "olha só", "sei lá", "tá", "pois sim", pigarro antes de falar, começar frases com a conjunção.
-
-Um taverneiro e uma sacerdotisa não podem soar iguais. Se o jogador fechar os olhos e ouvir só a voz, ele tem que conseguir dizer quem está falando.
+Se o NPC tem `speech_pattern` no contexto, respeite-o literalmente. O bloco **"ASSINATURA DE VOZ DOS NPCs"** (quando presente) já dá o ritmo e o tique de cada um — siga-os à risca e mantenha consistência *pelo resto da sessão*. Um taverneiro e uma sacerdotisa não podem soar iguais: se o jogador fechar os olhos, tem que saber quem fala só pela voz.
 
 ---
 
