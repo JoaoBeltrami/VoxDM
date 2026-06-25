@@ -69,6 +69,8 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   const chunksRef     = useRef<Blob[]>([]);
   const inputRef      = useRef<HTMLTextAreaElement>(null);
   const espacoSeguradoRef = useRef(false);
+  // U7 (playtest 24/06): cancelar a fala (Ctrl) — para o STT e NÃO envia.
+  const cancelarRef   = useRef(false);
 
   const temMediaRec = typeof window !== "undefined" && !!window.MediaRecorder && !!sessionId;
   const temWebSpeech = typeof window !== "undefined" &&
@@ -96,6 +98,13 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         _setOuvindo(false);
+        // U7: cancelado pelo jogador — descarta o áudio, não transcreve nem envia.
+        if (cancelarRef.current) {
+          cancelarRef.current = false;
+          chunksRef.current = [];
+          setPreview("");
+          return;
+        }
         const blob = new Blob(chunksRef.current, { type: mimeType });
         // STT-SILENCIO-1 (teste 09/06): silêncio era engolido sem feedback —
         // "falei e nada aconteceu". Aviso efêmero no preview resolve.
@@ -201,6 +210,25 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // U7 (playtest 24/06): cancela a fala em andamento — para o STT e DESCARTA
+  // (não envia). MediaRecorder: flag + stop (onstop vê o flag e bail). Web Speech:
+  // abort() não dispara onresult, então nada é enviado.
+  const cancelarGravacao = useCallback(() => {
+    if (!ouvindo) return;
+    if (mediaRecRef.current) {
+      cancelarRef.current = true;
+      mediaRecRef.current.stop();
+      mediaRecRef.current = null;
+    } else if (recRef.current) {
+      recRef.current.abort?.();
+      recRef.current = null;
+      _setOuvindo(false);
+      setPreview("");
+    }
+    setPausado(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvindo]);
+
   // ── Toggle unificado ────────────────────────────────────────────────────────
 
   const toggleVoz = () => {
@@ -258,6 +286,11 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           if (temMediaRec) iniciarMediaRec();
           else if (temWebSpeech) iniciarWebSpeech();
         }
+      } else if (e.key === "Control" && ouvindo) {
+        // U7: Ctrl durante a fala = cancela (para o STT, não envia). Guard em
+        // `ouvindo` deixa combos Ctrl+X normais funcionarem fora da gravação.
+        e.preventDefault();
+        cancelarGravacao();
       } else if (e.key === "Enter" && !ehInterativo(e.target)) {
         e.preventDefault();
         inputRef.current?.focus();
@@ -278,7 +311,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
       window.removeEventListener("keyup", onUp);
     };
   }, [semVoz, desabilitado, ouvindo, temMediaRec, temWebSpeech,
-      iniciarMediaRec, iniciarWebSpeech, pararMediaRec, pararWebSpeech]);
+      iniciarMediaRec, iniciarWebSpeech, pararMediaRec, pararWebSpeech, cancelarGravacao]);
 
   return (
     <div className="flex w-full flex-col items-center gap-1.5">
@@ -310,6 +343,21 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
                   <rect x="9" y="2" width="4" height="12" rx="1" />
                 </svg>
               )}
+            </button>
+          )}
+
+          {/* U7: botão de cancelar a fala — aparece só enquanto gravando. Para o
+              STT e DESCARTA (não envia). Hotkey: Ctrl. */}
+          {ouvindo && (
+            <button
+              onClick={cancelarGravacao}
+              title="Cancelar a fala — não envia (Ctrl)"
+              aria-label="Cancelar a fala"
+              className="flex items-center justify-center rounded-full w-10 h-10 border border-red-600/50 bg-red-900/20 text-red-400 transition-all duration-200 hover:border-red-500 hover:text-red-300"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 4 L12 12 M12 4 L4 12" />
+              </svg>
             </button>
           )}
 
@@ -407,6 +455,8 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
       {!semVoz && (
         <p className="text-[10px] tracking-wide text-vox-text-muted/70">
           <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Espaço</kbd> segure pra falar
+          <span className="mx-1.5">·</span>
+          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Ctrl</kbd> cancela
           <span className="mx-1.5">·</span>
           <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Enter</kbd> Mestre
         </p>

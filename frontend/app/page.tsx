@@ -2095,10 +2095,11 @@ export default function Home() {
           {cinemaMode ? "🎬" : "🛠️"}
         </button>
 
-        {/* Controle de volume da voz — só no modo cinema (PT-7, playtest #7).
-            Na HUD normal ele competia com mic/dado no canto; em cinema, onde a
-            HUD utilitária some, permanece como único controle acessível. */}
-        {cinemaMode && <VolumeControl volume={volume} onChange={handleVolumeChange} />}
+        {/* Controle de volume da voz — sempre acessível (playtest 24/06: Beltrami
+            quer o volume no modo normal também, não só no cinema). Fica no cluster
+            flutuante bottom-right, ao lado do toggle de cinema — longe do dock
+            (mic/dado) no centro, então não compete. */}
+        <VolumeControl volume={volume} onChange={handleVolumeChange} />
       </div>
     );
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PersonagemConfig, SpellSlot } from "@/lib/api";
 import type { RolagemLog } from "@/hooks/useGameSession";
 import { nivelDaSpell } from "@/lib/spells";
@@ -532,7 +533,11 @@ export function CharacterSheet({
         <span aria-hidden>⚔️</span> {aberto ? "Fechar detalhes" : "Detalhes"}
       </button>
 
-      {aberto && (
+      {/* Portal pro body: o popover é `fixed`, mas um ancestral com scroll/transform
+          (painel redimensionável da direita) o clipava (cortava topo/base — playtest
+          24/06). No body, o `fixed top-16 bottom-3 overflow-y-auto` é relativo à
+          viewport de verdade e rola o conteúdo inteiro. */}
+      {aberto && typeof document !== "undefined" && createPortal(
         <Card variant="strong" elevation={3} padding="lg" rounded="xl" className="fixed right-3 top-16 bottom-3 z-50 w-80 overflow-y-auto">
 
           {/* Cabeçalho do painel de detalhes com botão de fechar */}
@@ -1304,7 +1309,8 @@ export function CharacterSheet({
               </div>
             )}
           </div>
-        </Card>
+        </Card>,
+        document.body,
       )}
     </div>
   );
