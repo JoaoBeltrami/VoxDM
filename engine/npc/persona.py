@@ -77,21 +77,32 @@ def assinatura_voz(npc_id: str) -> str:
     return f"{registro}; {tique}"
 
 
+# Baldes QUANTIZADOS e bem-espaçados de pitch/rate. Antes (faixa fina -8..+8 /
+# -12..+12) dois NPCs caíam a 1Hz/2% um do outro → indistinguíveis ao ouvido. Em
+# baldes, vozes adjacentes diferem por ≥4Hz ou ≥6% (claramente distintas). Dentro
+# dos caps do turn_pipeline (±10Hz / ±15%). 5×5 = 25 combos (colisão baixa numa
+# cena de ≤8 NPCs).
+_PITCH_BUCKETS: tuple[int, ...] = (-8, -4, 0, 4, 8)
+_RATE_BUCKETS: tuple[int, ...] = (-12, -6, 0, 6, 12)
+
+
 def assinatura_tts(npc_id: str) -> dict[str, str]:
-    """Pitch/rate DETERMINÍSTICOS por NPC pra o TTS (N2/F3, playtest 24/06).
+    """Pitch/rate DETERMINÍSTICOS e CLARAMENTE distintos por NPC (N2/F3, 24/06).
 
     Gênero-safe DE PROPÓSITO: varia a VOZ-BASE do Mestre (pitch/rate), não troca
-    de voz — então nunca mis-genera um NPC (a queixa do playtest: "misturou as
-    vozes por gênero"). Faixas dentro dos caps do turn_pipeline (±10Hz / ±15%):
-    pitch em [-8, +8] Hz, rate em [-12, +12] %. Sais distintos pra variarem
-    independente. Determinístico = mesmo NPC soa igual entre sessões, sem storage.
+    de voz — nunca mis-genera (queixa do playtest "misturou por gênero"). Baldes
+    bem-espaçados (≥4Hz / ≥6% entre adjacentes) pra serem audivelmente diferentes.
+    Determinístico = mesmo NPC soa igual entre sessões, sem storage. Evita (0,0)
+    pra nenhum NPC soar idêntico ao narrador.
 
-    Retorna {} para id vazio. Ex.: {"pitch": "+5Hz", "rate": "-8%"}.
+    Retorna {} para id vazio. Ex.: {"pitch": "+4Hz", "rate": "-6%"}.
     """
     if not npc_id or not npc_id.strip():
         return {}
-    pitch = _idx(npc_id, 17, "pitch") - 8   # 0..16 → -8..+8 Hz
-    rate = _idx(npc_id, 25, "rate") - 12     # 0..24 → -12..+12 %
+    pitch = _PITCH_BUCKETS[_idx(npc_id, len(_PITCH_BUCKETS), "pitch")]
+    rate = _RATE_BUCKETS[_idx(npc_id, len(_RATE_BUCKETS), "rate")]
+    if pitch == 0 and rate == 0:  # idêntico ao narrador — desempata p/ um lado
+        rate = 6 if _idx(npc_id, 2, "tie") == 0 else -6
     return {
         "pitch": f"{'+' if pitch >= 0 else ''}{pitch}Hz",
         "rate": f"{'+' if rate >= 0 else ''}{rate}%",
