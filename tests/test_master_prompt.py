@@ -561,6 +561,27 @@ def test_saves_md_dentro_do_budget():
     )
 
 
+def test_social_md_dentro_do_budget():
+    """social.md comprimido: máx 5 200 chars (~1 485 tokens).
+
+    social.md é injetado em TODA cena não-combate com NPC presente — era o maior
+    bloco dinâmico fora de combate (6 382 chars, maior que combat.md+saves juntos)
+    e o gargalo de token que estourava o guard de 20k em cenas sociais densas
+    (raiz da cascata Groq→Gemini no playtest #7). Comprimido cirurgicamente para
+    ~4 720 chars preservando toda a calibração de trust/emoção/corpo e o marcador
+    [COMPANION_ADD]. Teto aqui é 5 200 para margem de edição sem reabrir a cascata.
+    """
+    social_path = _COMBAT_PATH.parent / "social.md"
+    conteudo = social_path.read_text(encoding="utf-8")
+    assert len(conteudo) <= 5_200, (
+        f"social.md com {len(conteudo)} chars excede teto de 5 200 chars — "
+        "cena social densa volta a estourar o guard de 20k e cascateia pro Gemini"
+    )
+    # Garantia funcional preservada na compressão (test_prompt_wiring depende disso).
+    assert "assinatura de voz" in conteudo
+    assert "COMPANION_ADD" in conteudo
+
+
 def test_master_system_dentro_do_budget():
     """master_system.md: máx 11 500 chars (~3 285 tokens).
 
