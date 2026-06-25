@@ -24,6 +24,7 @@ venv/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/launch.json
 
 # Benchmark — saídas geradas
 benchmark/results*.json
