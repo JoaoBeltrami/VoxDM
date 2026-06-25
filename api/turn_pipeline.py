@@ -1219,7 +1219,32 @@ def aplicar_pos_turno(
     # NPCs-lixo do playtest 24/06.
     _capar_npcs_presentes(working_mem)
 
+    # N2/F3: garante voz TTS determinística pra cada NPC presente (gênero-safe).
+    garantir_vozes_npcs(working_mem)
+
     return mudancas_trust
+
+
+def garantir_vozes_npcs(working_mem: Any) -> int:
+    """Atribui voz TTS DETERMINÍSTICA (pitch/rate) a cada NPC presente sem voz.
+
+    N2/F3 (playtest 24/06): `npc_vozes` ficava VAZIO porque o LLM esquece de
+    emitir `[VOZ]` → tudo soava como o narrador. Aqui a engine preenche de forma
+    determinística (engine/npc/persona.assinatura_tts) — gênero-safe (varia a
+    voz-base, não troca de voz). Só atribui a quem ainda NÃO tem voz: um `[VOZ]`
+    explícito do Mestre, se vier, é respeitado. Retorna quantas vozes atribuiu.
+    """
+    from engine.npc.persona import assinatura_tts
+    jogador = _chave_dedup(str(getattr(working_mem, "player_name", "")))
+    atribuidas = 0
+    for nid in list(getattr(working_mem, "npcs_presentes", [])):
+        if nid in working_mem.npc_vozes or _chave_dedup(nid) == jogador:
+            continue
+        assn = assinatura_tts(nid)
+        if assn:
+            working_mem.npc_vozes[nid] = assn
+            atribuidas += 1
+    return atribuidas
 
 
 async def reinferir_npcs_se_mudou_cena(

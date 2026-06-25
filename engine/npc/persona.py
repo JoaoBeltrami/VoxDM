@@ -77,6 +77,27 @@ def assinatura_voz(npc_id: str) -> str:
     return f"{registro}; {tique}"
 
 
+def assinatura_tts(npc_id: str) -> dict[str, str]:
+    """Pitch/rate DETERMINÍSTICOS por NPC pra o TTS (N2/F3, playtest 24/06).
+
+    Gênero-safe DE PROPÓSITO: varia a VOZ-BASE do Mestre (pitch/rate), não troca
+    de voz — então nunca mis-genera um NPC (a queixa do playtest: "misturou as
+    vozes por gênero"). Faixas dentro dos caps do turn_pipeline (±10Hz / ±15%):
+    pitch em [-8, +8] Hz, rate em [-12, +12] %. Sais distintos pra variarem
+    independente. Determinístico = mesmo NPC soa igual entre sessões, sem storage.
+
+    Retorna {} para id vazio. Ex.: {"pitch": "+5Hz", "rate": "-8%"}.
+    """
+    if not npc_id or not npc_id.strip():
+        return {}
+    pitch = _idx(npc_id, 17, "pitch") - 8   # 0..16 → -8..+8 Hz
+    rate = _idx(npc_id, 25, "rate") - 12     # 0..24 → -12..+12 %
+    return {
+        "pitch": f"{'+' if pitch >= 0 else ''}{pitch}Hz",
+        "rate": f"{'+' if rate >= 0 else ''}{rate}%",
+    }
+
+
 def bloco_assinaturas(
     npcs_presentes: list[str] | set[str],
     id_para_nome: Callable[[str], str] | None = None,
