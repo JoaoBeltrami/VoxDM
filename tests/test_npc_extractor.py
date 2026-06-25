@@ -271,6 +271,12 @@ def test_entidade_invalida_rejeita_lixo(nid):
     "maren-drevadottir",
     "velho-mercador",
     "osmund-o-exilado",
+    # Regressão (hardening adversarial 24/06): NÃO podem ser rejeitados — "deus"
+    # como substring pegava nomes próprios; "divino/divina" são epítetos de pessoa.
+    "amadeus",
+    "deusdedit-o-velho",
+    "aldric-o-divino",
+    "divina-cantora",
 ])
 def test_entidade_invalida_preserva_npc_real(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is False

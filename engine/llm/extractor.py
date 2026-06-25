@@ -225,10 +225,11 @@ def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
 # ("clerigo-desconhecido") — citados, não presentes. Entupia a cena, inflava o
 # prompt (29k!) e diluía a distinção de NPC. Filtro determinístico + cap (backstop).
 _TOKENS_NAO_NPC = frozenset({
-    "deus", "deusa", "deuses", "deusas", "deidade", "deidades", "divindade",
-    "divindades", "divino", "divina", "panteao",
+    "deus", "deusa", "deuses", "deusas", "adeusa", "adeusas",  # adeusa = "a deusa" colado
+    "deidade", "deidades", "divindade", "divindades", "panteao",
     "desconhecido", "desconhecida", "desconhecidos", "desconhecidas",
-    "alguem", "ninguem", "figura", "vulto", "silhueta", "multidao", "ninguem",
+    "alguem", "ninguem", "figura", "vulto", "silhueta", "multidao",
+    # NÃO incluir "divino"/"divina": são epítetos de pessoa ("Aldric, o Divino").
 })
 _MAX_NPCS_PRESENTES = 8
 
@@ -244,8 +245,10 @@ def _e_entidade_invalida(nid: str, location_id: str = "", location_nome: str = "
     tokens = {t for t in re.split(r"[\s-]+", _transliterar(nid).lower()) if t}
     if tokens & _TOKENS_NAO_NPC:
         return True
-    # Raízes de divindade — pega "adeusa" ('a deusa' colado pelo LLM), "divindade".
-    if any(("deus" in t or "divind" in t or "deidad" in t) for t in tokens):
+    # Raízes SEGURAS de divindade-conceito — "divindade"/"deidade". NÃO usar "deus"
+    # como substring: pegava nomes próprios ("Amadeus", "Deusdedit"). A forma colada
+    # "adeusa" já está em _TOKENS_NAO_NPC.
+    if any(("divind" in t or "deidad" in t) for t in tokens):
         return True
     return False
 
