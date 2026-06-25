@@ -17,7 +17,6 @@ import { FichaViva } from "@/components/FichaViva";
 import { PanelLauncher, type PainelDef } from "@/components/PanelLauncher";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
-import { CompanionsPanel } from "@/components/CompanionsPanel";
 import { SceneHeader } from "@/components/SceneHeader";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
@@ -333,8 +332,6 @@ export default function Home() {
     isProcessing, isSpeaking,
     personagemRestaurado,
     serverHp, serverHpMax,
-    novoCompanionFlash, dispensarCompanionFlash,
-    partyRestorada, dispensarPartyBanner,
     cascadeAtivo, limparCascade,
     pacingNivel,
   } = useGameSession();
@@ -636,24 +633,10 @@ export default function Home() {
   const [rodadaSplash, setRodadaSplash] = useState<number | null>(null);
   const rodadaSplashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const critTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Auto-dismiss: glow de companion some após 1.5s (coincide com duração da animação).
-  const companionFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!novoCompanionFlash) return;
-    if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current);
-    companionFlashTimerRef.current = setTimeout(() => dispensarCompanionFlash(), 1500);
-    return () => { if (companionFlashTimerRef.current) clearTimeout(companionFlashTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [novoCompanionFlash]);
-  // Auto-dismiss: banner "Party recuperada" some após 5s.
-  const partyBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (partyRestorada.length === 0) return;
-    if (partyBannerTimerRef.current) clearTimeout(partyBannerTimerRef.current);
-    partyBannerTimerRef.current = setTimeout(() => dispensarPartyBanner(), 5000);
-    return () => { if (partyBannerTimerRef.current) clearTimeout(partyBannerTimerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyRestorada]);
+  // (Dedup 25/06) Os auto-dismiss de glow-de-companion e banner "Party recuperada"
+  // viviam no CompanionsPanel, que saiu do slot esquerdo (a aba Party é a casa
+  // canônica). Estados ainda existem no useGameSession — re-pluga no painel Party
+  // quando o visual for ajustado.
 
   const { tocarCritico, tocarFalha } = useCombatSounds();
   const dispararCritFlash = useCallback((tipo: "crit" | "falha") => {
@@ -1309,17 +1292,12 @@ export default function Home() {
     );
 
     // Painel esquerdo — diário + companions. Colapsa em cinema mode.
+    // Dedup (Beltrami 25/06): CompanionsPanel saiu do slot esquerdo — a aba "Party"
+    // do launcher BG1 é a casa canônica dos companions agora (HP/stats/comandar).
+    // Evita a "repetição da HUD com as abas". O slot esquerdo fica só com o diário.
     const leftSlot = (
       <div className="space-y-3">
         <PlayerJournal sessionId={sessionId} />
-        <CompanionsPanel
-          companions={companions}
-          emCombate={emCombate}
-          onComandar={(cmd) => enviarComando(cmd)}
-          novoCompanionId={novoCompanionFlash}
-          partyRestorada={partyRestorada}
-          onDispensarParty={dispensarPartyBanner}
-        />
       </div>
     );
 
