@@ -363,6 +363,13 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
         wm.scene.npcs_apresentados.add(nid)
         presentes_canon.add(canon)
         adicionados.append(nid)
+        # F6 (playtest 24/06): crônica vazia em sessão social — registra o
+        # ENCONTRO (evento determinístico, não depende de marcador do Mestre).
+        nome = (npc.get("nome") or nid.replace("-", " ").title()).strip()[:60]
+        try:
+            wm.narrative.registrar_cronica(f"🤝 Conheceu {nome}")
+        except Exception:  # narrative ausente em stub de teste — não crítico
+            pass
     if adicionados:
         log.info("npcs_extraidos_registrados", ids=adicionados)
     _capar_npcs_presentes(wm)

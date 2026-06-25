@@ -1211,6 +1211,9 @@ def aplicar_pos_turno(
         working_mem.scene.npcs_apresentados.add(npc_id)
         working_mem.scene.npcs_introduzidos_turno.append(npc_id)
         log.info("npc_entrou_cena", npc=npc_id, nome=(m.group(2) or "").strip() or None)
+        # F6: registra o encontro na crônica (evento determinístico).
+        _nome_npc = ((m.group(2) or "").strip() or npc_id.replace("-", " ").title())[:60]
+        working_mem.narrative.registrar_cronica(f"🤝 Conheceu {_nome_npc}")
 
     # Teto de npcs_presentes (backstop pro que escapa do filtro) — evita os 15
     # NPCs-lixo do playtest 24/06.

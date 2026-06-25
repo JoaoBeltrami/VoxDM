@@ -314,3 +314,19 @@ def test_cap_nao_mexe_abaixo_do_teto():
     wm = _WMCap(pres)
     _capar_npcs_presentes(wm)
     assert wm.npcs_presentes == pres
+
+
+# ── F6 (PLAYTEST 24/06): conhecer NPC popula a crônica (sessão social) ───────
+
+def test_conhecer_npc_registra_na_cronica():
+    wm = _wm()
+    aplicar_npcs_extraidos(wm, [{"id": "garrek", "nome": "Garrek"}])
+    assert any("Garrek" in e for e in wm.narrative.cronica)
+    assert any("🤝" in e for e in wm.narrative.cronica)
+
+
+def test_conhecer_npc_nao_duplica_lixo_filtrado():
+    # entidade inválida (o local) não vira NPC NEM entra na crônica
+    wm = _wm()  # location_id="drevamor"
+    aplicar_npcs_extraidos(wm, [{"id": "drevamor", "nome": "Drevamor"}])
+    assert not any("Drevamor" in e for e in wm.narrative.cronica)
