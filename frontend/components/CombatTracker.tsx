@@ -103,7 +103,7 @@ export function CombatTracker({
           <span className="font-display text-[9px] uppercase tracking-widest text-vox-text-muted">
             Movimento
           </span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800/80">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-vox-bg-elevated">
             <div
               className="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-500"
               style={{

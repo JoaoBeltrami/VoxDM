@@ -328,7 +328,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
               className={`flex items-center justify-center rounded-full w-10 h-10 transition-all duration-200 border
                 ${pausado
                   ? "bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_2px_rgba(245,158,11,0.3)]"
-                  : "bg-zinc-800/80 border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200"
+                  : "bg-vox-bg-elevated border-vox-border-strong text-vox-text-secondary hover:border-vox-border-strong hover:text-vox-text-primary"
                 }`}
             >
               {pausado ? (
@@ -380,7 +380,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
                 ? "bg-violet-800 animate-pulse"
                 : mestreAudioTocando
                 ? "bg-orange-900/80 border border-orange-700/60 hover:bg-orange-800/80 shadow-[0_0_12px_2px_rgba(234,88,12,0.2)]"
-                : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-600"
+                : "bg-vox-bg-elevated hover:bg-vox-bg-elevated border border-vox-border-strong"
               }
               disabled:opacity-30 disabled:cursor-not-allowed`}
           >
@@ -394,7 +394,7 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
             ) : (
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                   className="text-zinc-300">
+                   className="text-vox-text-secondary">
                 <rect x="9" y="2" width="6" height="12" rx="3" />
                 <path d="M5 10a7 7 0 0 0 14 0" />
                 <line x1="12" y1="20" x2="12" y2="23" />

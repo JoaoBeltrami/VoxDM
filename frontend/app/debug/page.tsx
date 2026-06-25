@@ -164,7 +164,7 @@ function ChartTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-xl">
+    <div className="rounded-lg border border-vox-border-soft bg-vox-bg-panel px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 font-mono text-zinc-500">Turno #{label}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.color }} className="font-semibold">
@@ -183,7 +183,7 @@ function LatencyTooltip({ active, payload, label }: {
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + (p.value || 0), 0);
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-xl">
+    <div className="rounded-lg border border-vox-border-soft bg-vox-bg-panel px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 font-mono text-zinc-500">Turno #{label} — {total}ms total</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.color }}>{p.name}: {p.value}ms</p>
@@ -206,10 +206,10 @@ function TrustBar({ npcId, trust }: { npcId: string; trust: number }) {
   return (
     <div title={label}>
       <div className="mb-0.5 flex justify-between text-xs">
-        <span className="text-zinc-300">{nome}</span>
-        <span className="text-zinc-600">{trust}/3</span>
+        <span className="text-vox-text-secondary">{nome}</span>
+        <span className="text-vox-text-muted">{trust}/3</span>
       </div>
-      <div className="h-1.5 rounded-full bg-zinc-800">
+      <div className="h-1.5 rounded-full bg-vox-bg-elevated">
         <div className={`h-1.5 rounded-full transition-all duration-500 ${color}`} style={{ width: `${fill}%` }} />
       </div>
     </div>
@@ -222,12 +222,12 @@ function HpBar({ hp, max, label }: { hp: number; max: number; label?: string }) 
   return (
     <div>
       <div className="mb-1 flex justify-between text-sm">
-        <span className="font-semibold text-zinc-300">{label ?? "HP"}</span>
+        <span className="font-semibold text-vox-text-secondary">{label ?? "HP"}</span>
         <span className={`font-mono font-bold ${pct <= 30 ? "text-rose-400" : pct <= 50 ? "text-amber-400" : "text-emerald-400"}`}>
           {hp} / {max}
         </span>
       </div>
-      <div className="h-2.5 rounded-full bg-zinc-800">
+      <div className="h-2.5 rounded-full bg-vox-bg-elevated">
         <div className={`h-2.5 rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -238,29 +238,29 @@ function EnemyCard({ nome, estado, hp_rel, distancia }: {
   nome: string; estado: string; hp_rel?: string; distancia?: number;
 }) {
   const [bg, text, bar] =
-    estado === "morto"             ? ["bg-zinc-900/50", "text-zinc-600", "bg-zinc-700"]   :
+    estado === "morto"             ? ["bg-vox-bg-panel", "text-vox-text-muted", "bg-vox-bg-elevated"]   :
     estado === "gravemente ferido" ? ["bg-rose-950/40", "text-rose-400", "bg-rose-700"]   :
     estado === "ferido"            ? ["bg-amber-950/30","text-amber-400","bg-amber-600"]  :
-                                     ["bg-zinc-900/40", "text-zinc-300", "bg-emerald-700"];
+                                     ["bg-vox-bg-panel", "text-vox-text-secondary", "bg-emerald-700"];
   const pct =
     estado === "morto"             ? 0   :
     estado === "gravemente ferido" ? 20  :
     estado === "ferido"            ? 50  : 100;
   return (
-    <div className={`rounded-lg border border-zinc-800 p-2.5 ${bg}`}>
+    <div className={`rounded-lg border border-vox-border-subtle p-2.5 ${bg}`}>
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className={`text-sm font-semibold ${text}`}>{nome}</span>
         <div className="flex items-center gap-1.5">
           {distancia !== undefined && (
-            <span className="font-mono text-[10px] text-zinc-600">{distancia}ft</span>
+            <span className="font-mono text-[10px] text-vox-text-muted">{distancia}ft</span>
           )}
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${text} border border-current/30`}>{estado}</span>
         </div>
       </div>
-      <div className="h-1.5 rounded-full bg-zinc-800">
+      <div className="h-1.5 rounded-full bg-vox-bg-elevated">
         <div className={`h-1.5 rounded-full transition-all duration-700 ${bar}`} style={{ width: `${pct}%` }} />
       </div>
-      {hp_rel && <p className="mt-1 text-[10px] text-zinc-600 italic">{hp_rel}</p>}
+      {hp_rel && <p className="mt-1 text-[10px] text-vox-text-muted italic">{hp_rel}</p>}
     </div>
   );
 }
@@ -269,8 +269,8 @@ function Section({ title, icon, children, accent }: {
   title: string; icon?: string; children: React.ReactNode; accent?: string;
 }) {
   return (
-    <div className={`rounded-xl border ${accent ?? "border-zinc-800 bg-zinc-900/40"}`}>
-      <div className="border-b border-zinc-800/60 px-4 py-2">
+    <div className={`rounded-xl border ${accent ?? "border-vox-border-subtle bg-vox-bg-panel"}`}>
+      <div className="border-b border-vox-border-subtle px-4 py-2">
         <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
           {icon && <span className="mr-1.5">{icon}</span>}{title}
         </span>
@@ -282,9 +282,9 @@ function Section({ title, icon, children, accent }: {
 
 function StatBox({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2 text-center">
-      <div className="text-[10px] text-zinc-600 uppercase tracking-wide">{label}</div>
-      <div className="text-base font-bold text-zinc-200">{value}</div>
+    <div className="rounded-lg border border-vox-border-subtle bg-vox-bg-base p-2 text-center">
+      <div className="text-[10px] text-vox-text-muted uppercase tracking-wide">{label}</div>
+      <div className="text-base font-bold text-vox-text-primary">{value}</div>
       {sub && <div className="text-[10px] text-zinc-500">{sub}</div>}
     </div>
   );
@@ -307,7 +307,7 @@ function PacingMeter({ value }: { value: number }) {
       <div className="mb-1.5 flex items-center justify-between text-xs">
         <span className="font-semibold text-zinc-400">Pacing</span>
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-zinc-300">{value.toFixed(1)}</span>
+          <span className="font-mono font-bold text-vox-text-secondary">{value.toFixed(1)}</span>
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
             value >= 8 ? "bg-rose-950/50 text-rose-400" :
             value >= 5 ? "bg-amber-950/50 text-amber-400" :
@@ -316,13 +316,13 @@ function PacingMeter({ value }: { value: number }) {
           }`}>{label}</span>
         </div>
       </div>
-      <div className="h-2 rounded-full bg-zinc-800">
+      <div className="h-2 rounded-full bg-vox-bg-elevated">
         <div
           className={`h-2 rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="mt-0.5 flex justify-between text-[9px] text-zinc-700">
+      <div className="mt-0.5 flex justify-between text-[9px] text-vox-text-muted">
         <span>0</span><span>CALMO</span><span>ALTO</span><span>CLÍMAX</span><span>10</span>
       </div>
     </div>
@@ -342,15 +342,15 @@ function CompanionCard({ data }: { data: CompanionData }) {
       <div className="mb-1.5 flex items-center gap-2">
         <span>{icon}</span>
         <span className="font-semibold text-emerald-300 text-sm">{data.nome}</span>
-        <span className="ml-auto text-[10px] text-zinc-600">{data.tipo}</span>
+        <span className="ml-auto text-[10px] text-vox-text-muted">{data.tipo}</span>
       </div>
-      <div className="mb-1 h-1.5 rounded-full bg-zinc-800">
+      <div className="mb-1 h-1.5 rounded-full bg-vox-bg-elevated">
         <div
           className={`h-1.5 rounded-full transition-all ${pct <= 30 ? "bg-rose-600" : pct <= 60 ? "bg-amber-500" : "bg-emerald-600"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="flex items-center justify-between text-[10px] text-zinc-600">
+      <div className="flex items-center justify-between text-[10px] text-vox-text-muted">
         <span className="font-mono text-emerald-400">{hp}/{hpMax} HP</span>
         <span>CA {data.ca}</span>
         <span>{data.atq} · {data.dano}</span>
@@ -377,7 +377,7 @@ function ProviderBadge({ provider }: { provider: string }) {
 
 function TaskBadge({ task }: { task: string }) {
   return (
-    <span className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${TASK_CLASS[task] ?? "border-zinc-700 bg-zinc-900 text-zinc-400"}`}>
+    <span className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${TASK_CLASS[task] ?? "border-vox-border-soft bg-vox-bg-panel text-zinc-400"}`}>
       {TASK_LABEL[task] ?? task}
     </span>
   );
@@ -387,7 +387,7 @@ function TaskBadge({ task }: { task: string }) {
 
 function SessionHistoryChart({ historico }: { historico: TurnoHistorico[] }) {
   if (historico.length < 2) return (
-    <div className="flex h-40 items-center justify-center text-xs text-zinc-700">
+    <div className="flex h-40 items-center justify-center text-xs text-vox-text-muted">
       Aguardando 2+ turnos para exibir gráfico…
     </div>
   );
@@ -418,7 +418,7 @@ function SessionHistoryChart({ historico }: { historico: TurnoHistorico[] }) {
 
 function LatencyHistoryChart({ historico }: { historico: TurnoHistorico[] }) {
   if (historico.length < 2) return (
-    <div className="flex h-40 items-center justify-center text-xs text-zinc-700">
+    <div className="flex h-40 items-center justify-center text-xs text-vox-text-muted">
       Aguardando turnos…
     </div>
   );
@@ -448,7 +448,7 @@ function LatencyHistoryChart({ historico }: { historico: TurnoHistorico[] }) {
 
 function ProviderPieChart({ historico }: { historico: TurnoHistorico[] }) {
   if (!historico.length) return (
-    <div className="flex h-24 items-center justify-center text-xs text-zinc-700">Sem dados</div>
+    <div className="flex h-24 items-center justify-center text-xs text-vox-text-muted">Sem dados</div>
   );
 
   const counts: Record<string, number> = {};
@@ -466,7 +466,7 @@ function ProviderPieChart({ historico }: { historico: TurnoHistorico[] }) {
         <Tooltip
           content={({ active, payload }) =>
             active && payload?.length ? (
-              <div className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs">
+              <div className="rounded border border-vox-border-soft bg-vox-bg-panel px-2 py-1 text-xs">
                 <span style={{ color: PROVIDER_COLOR[payload[0].name as keyof typeof PROVIDER_COLOR] ?? "#a1a1aa" }}>
                   {payload[0].name}: {payload[0].value} turnos
                 </span>
@@ -506,10 +506,10 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
             )}
             {wm.movimento_total_ft > 0 && (
               <span className="ml-auto text-xs text-zinc-500">
-                Mov <span className="font-mono text-zinc-300">{wm.movimento_restante_ft}/{wm.movimento_total_ft}ft</span>
+                Mov <span className="font-mono text-vox-text-secondary">{wm.movimento_restante_ft}/{wm.movimento_total_ft}ft</span>
               </span>
             )}
-            <span className="text-xs text-zinc-600">{Object.keys(wm.inimigos_combate).length} inimigo(s)</span>
+            <span className="text-xs text-vox-text-muted">{Object.keys(wm.inimigos_combate).length} inimigo(s)</span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {Object.entries(wm.inimigos_combate).map(([id, d]) => (
@@ -531,7 +531,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
       {/* Gráfico de sessão */}
       {historico.length >= 2 && (
         <Section title="Histórico da Sessão" icon="📈">
-          <div className="mb-1 flex items-center gap-4 text-[10px] text-zinc-600">
+          <div className="mb-1 flex items-center gap-4 text-[10px] text-vox-text-muted">
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded" style={{ background: C.hp }} />HP %</span>
             <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 rounded border-t-2 border-dashed" style={{ borderColor: C.pacing }} />Pacing</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-rose-500/20" />Combate</span>
@@ -549,7 +549,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
             <div className="space-y-4">
               {wm.player_name && (
                 <div>
-                  <p className="text-base font-bold text-zinc-200">{wm.player_name}</p>
+                  <p className="text-base font-bold text-vox-text-primary">{wm.player_name}</p>
                   <p className="text-xs text-zinc-500">
                     {wm.player_race} {wm.player_class} · Nível {wm.player_level}
                   </p>
@@ -557,7 +557,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               )}
               <HpBar hp={wm.player_hp} max={wm.player_hp_max} />
               {(wm.death_saves_successes > 0 || wm.death_saves_failures > 0 || wm.player_hp === 0) && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 text-xs">
+                <div className="rounded-lg border border-vox-border-subtle bg-vox-bg-base p-2.5 text-xs">
                   <p className="mb-1 font-semibold text-zinc-400">Death Saves</p>
                   <div className="flex gap-4">
                     <span className="text-emerald-500">{"●".repeat(wm.death_saves_successes)}{"○".repeat(3 - wm.death_saves_successes)} Suc</span>
@@ -575,9 +575,9 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               </div>
               <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
                 {[["CA", wm.ca], ["Prof", `+${wm.prof_bonus}`], ["PP", wm.passive_perception]].map(([k, v]) => (
-                  <div key={String(k)} className="rounded-lg border border-zinc-800 bg-zinc-950 p-1.5">
-                    <div className="text-[10px] text-zinc-600">{k}</div>
-                    <div className="font-bold text-zinc-300">{v}</div>
+                  <div key={String(k)} className="rounded-lg border border-vox-border-subtle bg-vox-bg-base p-1.5">
+                    <div className="text-[10px] text-vox-text-muted">{k}</div>
+                    <div className="font-bold text-vox-text-secondary">{v}</div>
                   </div>
                 ))}
               </div>
@@ -597,10 +597,10 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
                     {Object.entries(wm.spell_slots).map(([lvl, s]) => (
                       <div key={lvl}>
                         <div className="mb-0.5 flex justify-between text-[10px]">
-                          <span className="text-zinc-600">Nível {lvl}</span>
+                          <span className="text-vox-text-muted">Nível {lvl}</span>
                           <span className="font-mono text-violet-400">{s.current}/{s.max}</span>
                         </div>
-                        <div className="h-1 rounded-full bg-zinc-800">
+                        <div className="h-1 rounded-full bg-vox-bg-elevated">
                           <div className="h-1 rounded-full bg-violet-600 transition-all" style={{ width: `${s.max > 0 ? (s.current / s.max) * 100 : 0}%` }} />
                         </div>
                       </div>
@@ -609,7 +609,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
                 </div>
               )}
               <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-600">Hit Dice</span>
+                <span className="text-vox-text-muted">Hit Dice</span>
                 <span className="font-mono text-zinc-400">{wm.hit_dice_current}/{wm.hit_dice_max}d{wm.hit_dice_type}</span>
               </div>
               <div className="flex gap-3 text-sm">
@@ -619,10 +619,10 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               </div>
               {wm.player_inventory.length > 0 && (
                 <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Inventário</p>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Inventário</p>
                   <div className="flex flex-wrap gap-1">
                     {wm.player_inventory.map(item => (
-                      <span key={item} className="rounded border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 text-[10px] text-zinc-500">{item}</span>
+                      <span key={item} className="rounded border border-vox-border-subtle bg-vox-bg-base px-1.5 py-0.5 text-[10px] text-zinc-500">{item}</span>
                     ))}
                   </div>
                 </div>
@@ -642,16 +642,16 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               {wm.cliffhanger_pendente && (
                 <div className="rounded-lg border border-rose-900/50 bg-rose-950/20 p-3">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-rose-500">⚡ Cliffhanger</p>
-                  <p className="text-xs text-zinc-300 italic">{wm.cliffhanger_pendente}</p>
+                  <p className="text-xs text-vox-text-secondary italic">{wm.cliffhanger_pendente}</p>
                 </div>
               )}
 
               {hasFios && (
                 <div>
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Fios Narrativos</p>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Fios Narrativos</p>
                   <div className="space-y-1.5">
                     {(wm.fios_soltos ?? []).map((fio, i) => (
-                      <div key={i} className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                      <div key={i} className="flex items-start gap-2 rounded-lg border border-vox-border-subtle bg-vox-bg-base p-2">
                         <span className="mt-0.5 text-violet-500">◈</span>
                         <p className="text-xs text-zinc-400">{fio}</p>
                       </div>
@@ -662,11 +662,11 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
 
               {hasFatos && (
                 <div>
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Âncoras (anti-repetição)</p>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Âncoras (anti-repetição)</p>
                   <div className="space-y-1">
                     {(wm.fatos_ancora ?? []).map((fato, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs text-zinc-500">
-                        <span className="text-zinc-700">·</span>
+                        <span className="text-vox-text-muted">·</span>
                         <span>{fato}</span>
                       </div>
                     ))}
@@ -676,10 +676,10 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
 
               {hasAgenda && (
                 <div>
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Agenda NPCs</p>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Agenda NPCs</p>
                   <div className="space-y-1.5">
                     {Object.entries(wm.agenda_npcs ?? {}).map(([npc, plano]) => (
-                      <div key={npc} className="rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                      <div key={npc} className="rounded-lg border border-vox-border-subtle bg-vox-bg-base p-2">
                         <p className="text-[10px] font-semibold text-violet-400">
                           {npc.split("-").map(p => p[0].toUpperCase() + p.slice(1)).join(" ")}
                         </p>
@@ -691,7 +691,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               )}
 
               {!hasFios && !hasFatos && !hasAgenda && !wm.cliffhanger_pendente && (
-                <p className="text-xs text-zinc-700 italic">Nenhum elemento narrativo ativo ainda.</p>
+                <p className="text-xs text-vox-text-muted italic">Nenhum elemento narrativo ativo ainda.</p>
               )}
             </div>
           </Section>
@@ -711,9 +711,9 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
           {turno && (
             <Section title="Último Turno" icon="💬">
               <div className="space-y-3">
-                <div className="rounded-lg bg-zinc-950 p-3">
+                <div className="rounded-lg bg-vox-bg-base p-3">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500/70">Jogador</p>
-                  <p className="text-sm leading-relaxed text-zinc-300">{turno.texto_jogador || "—"}</p>
+                  <p className="text-sm leading-relaxed text-vox-text-secondary">{turno.texto_jogador || "—"}</p>
                 </div>
                 {(() => {
                   const ultima = wm.dialogo_recente
@@ -722,7 +722,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
                   return ultima ? (
                     <div className="rounded-lg bg-violet-950/20 p-3">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-violet-500/70">Mestre</p>
-                      <p className="text-sm italic leading-relaxed text-zinc-300">{ultima.texto}</p>
+                      <p className="text-sm italic leading-relaxed text-vox-text-secondary">{ultima.texto}</p>
                     </div>
                   ) : null;
                 })()}
@@ -736,7 +736,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
               <div className="space-y-2">
                 {wm.log_consequencias.map((c, i) => (
                   <div key={i} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 text-zinc-600">·</span>
+                    <span className="mt-0.5 text-vox-text-muted">·</span>
                     <p className="text-sm text-zinc-400">{c}</p>
                   </div>
                 ))}
@@ -755,12 +755,12 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
                   return (
                     <div key={i}>
                       <div className="mb-0.5 flex items-center justify-between text-xs">
-                        <span className="text-zinc-600">#{ev.iteracao}
-                          {ev.texto_jogador && <span className="ml-2 text-zinc-700">{ev.texto_jogador.slice(0, 28)}…</span>}
+                        <span className="text-vox-text-muted">#{ev.iteracao}
+                          {ev.texto_jogador && <span className="ml-2 text-vox-text-muted">{ev.texto_jogador.slice(0, 28)}…</span>}
                         </span>
                         <span className={`font-mono font-semibold ${ok ? "text-emerald-400" : "text-rose-400"}`}>{ms}ms</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-zinc-800">
+                      <div className="h-1.5 rounded-full bg-vox-bg-elevated">
                         <div className={`h-1.5 rounded-full transition-all ${ok ? "bg-emerald-700" : "bg-rose-700"}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -781,7 +781,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
                   <div key={npcId}>
                     <TrustBar npcId={npcId} trust={trust} />
                     {wm.npc_estados_emocionais[npcId] && (
-                      <p className="mt-0.5 text-[10px] italic text-zinc-600">{wm.npc_estados_emocionais[npcId]}</p>
+                      <p className="mt-0.5 text-[10px] italic text-vox-text-muted">{wm.npc_estados_emocionais[npcId]}</p>
                     )}
                   </div>
                 ))}
@@ -805,12 +805,12 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
             <Section title="Quests Ativas" icon="📋">
               <div className="space-y-3">
                 {wm.active_quest_hooks.map(q => (
-                  <div key={q} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                  <div key={q} className="rounded-lg border border-vox-border-subtle bg-vox-bg-base p-3">
                     <p className="text-xs font-semibold text-violet-400">{q}</p>
                     {wm.quest_stages[q] && (
                       <div className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-500">
                         <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                        <span>Estágio: <span className="text-zinc-300">{wm.quest_stages[q]}</span></span>
+                        <span>Estágio: <span className="text-vox-text-secondary">{wm.quest_stages[q]}</span></span>
                       </div>
                     )}
                   </div>
@@ -842,7 +842,7 @@ function Tab1EstadoVivo({ wm, turno, eventos, historico }: {
             <Section title="Perícias" icon="🎯">
               <div className="flex flex-wrap gap-1.5">
                 {wm.skill_profs.map(sk => (
-                  <span key={sk} className="rounded border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-400">{sk}</span>
+                  <span key={sk} className="rounded border border-vox-border-subtle bg-vox-bg-base px-2 py-0.5 text-[10px] text-zinc-400">{sk}</span>
                 ))}
               </div>
               {wm.save_profs.length > 0 && (
@@ -881,8 +881,8 @@ function Tab2UltimoTurno({ turno, historico }: {
 
   if (!turno) return (
     <div className="flex flex-col items-center gap-2 pt-24 text-center">
-      <p className="text-sm text-zinc-600">Nenhum turno registrado ainda.</p>
-      <p className="text-xs text-zinc-700">Inicie uma sessão e faça o primeiro turno.</p>
+      <p className="text-sm text-vox-text-muted">Nenhum turno registrado ainda.</p>
+      <p className="text-xs text-vox-text-muted">Inicie uma sessão e faça o primeiro turno.</p>
     </div>
   );
 
@@ -909,35 +909,35 @@ function Tab2UltimoTurno({ turno, historico }: {
         <Section title="Latência do Turno" icon="⏱">
           <div className="flex flex-wrap gap-4 text-xs">
             <div>
-              <div className="text-zinc-600">Total</div>
+              <div className="text-vox-text-muted">Total</div>
               <div className={`text-xl font-bold font-mono ${totalOk ? "text-emerald-400" : "text-rose-400"}`}>
                 {lat?.total_ms ?? "—"}ms
               </div>
             </div>
             <div>
-              <div className="text-zinc-600">Contexto RAG</div>
-              <div className="font-mono text-zinc-300">{lat?.context_ms ?? "—"}ms</div>
+              <div className="text-vox-text-muted">Contexto RAG</div>
+              <div className="font-mono text-vox-text-secondary">{lat?.context_ms ?? "—"}ms</div>
             </div>
             <div>
-              <div className="text-zinc-600">LLM 1º token</div>
+              <div className="text-vox-text-muted">LLM 1º token</div>
               <div className="font-mono text-violet-400">{lat?.llm_first_token_ms ?? "—"}ms</div>
             </div>
             <div>
-              <div className="text-zinc-600">TTS</div>
+              <div className="text-vox-text-muted">TTS</div>
               <div className="font-mono text-amber-400">{lat?.tts_ms ?? "—"}ms</div>
             </div>
           </div>
         </Section>
 
         <Section title="Jogador disse" icon="🎙">
-          <p className="max-w-xs text-sm leading-relaxed text-zinc-300">{turno.texto_jogador || "—"}</p>
+          <p className="max-w-xs text-sm leading-relaxed text-vox-text-secondary">{turno.texto_jogador || "—"}</p>
         </Section>
       </div>
 
       {/* Gráfico de latência histórica */}
       {historico.length >= 2 && (
         <Section title="Histórico de Latência (últimos 10 turnos)" icon="📊">
-          <div className="mb-1 flex items-center gap-4 text-[10px] text-zinc-600">
+          <div className="mb-1 flex items-center gap-4 text-[10px] text-vox-text-muted">
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded" style={{ background: C.llm }} />{"< 1.2s"}</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded bg-amber-500" />{"1.2s–2s"}</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded bg-rose-500" />{"> 2s"}</span>
@@ -966,12 +966,12 @@ function Tab2UltimoTurno({ turno, historico }: {
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
                   >
                     <span className={`text-xs font-bold uppercase tracking-wider ${roleColor}`}>{m.role}</span>
-                    <span className="text-[10px] text-zinc-600">{chars} chars</span>
-                    <span className="text-[10px] text-zinc-700">~{estimatedTokens} tokens</span>
-                    <span className="ml-auto text-zinc-700">{isOpen ? "▲" : "▼"}</span>
+                    <span className="text-[10px] text-vox-text-muted">{chars} chars</span>
+                    <span className="text-[10px] text-vox-text-muted">~{estimatedTokens} tokens</span>
+                    <span className="ml-auto text-vox-text-muted">{isOpen ? "▲" : "▼"}</span>
                   </button>
                   {isOpen && (
-                    <div className="border-t border-zinc-800/50 px-4 pb-4 pt-3">
+                    <div className="border-t border-vox-border-subtle px-4 pb-4 pt-3">
                       <pre className="max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-zinc-400">
                         {m.content}
                       </pre>
@@ -989,14 +989,14 @@ function Tab2UltimoTurno({ turno, historico }: {
         <div className="grid grid-cols-2 gap-4">
           <Section title="Lore Recuperada (Qdrant)" icon="🔎">
             {turno.rag.chunks_lore.length === 0
-              ? <p className="text-xs text-zinc-700">Nenhum chunk recuperado</p>
+              ? <p className="text-xs text-vox-text-muted">Nenhum chunk recuperado</p>
               : turno.rag.chunks_lore.map((c, i) => (
                 <details key={i} className="mb-2">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-zinc-500 hover:text-vox-text-secondary">
                     <ScoreDot score={c.score} />
                     <span className="truncate">{c.text.slice(0, 80)}</span>
                   </summary>
-                  <p className="mt-1 border-l-2 border-zinc-700 pl-3 text-xs leading-relaxed text-zinc-500">{c.text}</p>
+                  <p className="mt-1 border-l-2 border-vox-border-soft pl-3 text-xs leading-relaxed text-zinc-500">{c.text}</p>
                 </details>
               ))
             }
@@ -1005,34 +1005,34 @@ function Tab2UltimoTurno({ turno, historico }: {
           <Section title="Regras SRD + Neo4j" icon="📚">
             {turno.rag.chunks_regras.length > 0 && (
               <div className="mb-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Regras</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Regras</p>
                 {turno.rag.chunks_regras.map((c, i) => (
                   <details key={i} className="mb-1.5">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-zinc-500 hover:text-vox-text-secondary">
                       <ScoreDot score={c.score} />
                       <span className="truncate">{c.text.slice(0, 70)}</span>
                     </summary>
-                    <p className="mt-1 border-l-2 border-zinc-700 pl-3 text-xs leading-relaxed text-zinc-500">{c.text}</p>
+                    <p className="mt-1 border-l-2 border-vox-border-soft pl-3 text-xs leading-relaxed text-zinc-500">{c.text}</p>
                   </details>
                 ))}
               </div>
             )}
             {turno.rag.relacoes_neo4j.length > 0 && (
               <div>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Grafo</p>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-vox-text-muted">Grafo</p>
                 <div className="flex flex-wrap gap-1.5">
                   {turno.rag.relacoes_neo4j.map((r, i) => (
-                    <span key={i} className="rounded border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-xs">
+                    <span key={i} className="rounded border border-vox-border-subtle bg-vox-bg-base px-2 py-0.5 text-xs">
                       <span className="text-violet-400">{r.alvo_nome ?? r.alvo_id}</span>
-                      <span className="mx-1 text-zinc-700">[{r.tipo}]</span>
-                      <span className="text-zinc-600">w={r.weight?.toFixed(1)}</span>
+                      <span className="mx-1 text-vox-text-muted">[{r.tipo}]</span>
+                      <span className="text-vox-text-muted">w={r.weight?.toFixed(1)}</span>
                     </span>
                   ))}
                 </div>
               </div>
             )}
             {turno.rag.chunks_regras.length === 0 && turno.rag.relacoes_neo4j.length === 0 && (
-              <p className="text-xs text-zinc-700">Nenhum dado recuperado</p>
+              <p className="text-xs text-vox-text-muted">Nenhum dado recuperado</p>
             )}
           </Section>
         </div>
@@ -1046,7 +1046,7 @@ function Tab2UltimoTurno({ turno, historico }: {
 export default function MonitorPageWrapper() {
   return (
     <Suspense fallback={
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-xs text-zinc-600">
+      <main className="flex min-h-screen items-center justify-center bg-vox-bg-base text-xs text-vox-text-muted">
         Carregando monitor…
       </main>
     }>
@@ -1127,12 +1127,12 @@ function MonitorPage() {
   const totalOk = (lat?.total_ms ?? 0) < 2000;
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-300">
+    <main className="min-h-screen bg-vox-bg-base text-vox-text-secondary">
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-20 border-b border-zinc-800/70 bg-zinc-950/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-vox-border-subtle bg-vox-bg-floating backdrop-blur">
         <div className="flex items-center gap-4 px-5 py-2.5">
-          <Link href="/" className="text-xs text-zinc-600 transition hover:text-zinc-400">← Jogo</Link>
+          <Link href="/" className="text-xs text-vox-text-muted transition hover:text-zinc-400">← Jogo</Link>
           <span className="text-sm font-bold tracking-widest text-violet-400">VOXDM MONITOR</span>
 
           {apiOk === false && (
@@ -1145,7 +1145,7 @@ function MonitorPage() {
           {wm?.task_type_ultimo && <TaskBadge task={wm.task_type_ultimo} />}
 
           <div className="ml-auto flex items-center gap-3">
-            {ts && <span className="text-[10px] text-zinc-700">{ts}</span>}
+            {ts && <span className="text-[10px] text-vox-text-muted">{ts}</span>}
 
             {lat && (
               <span className={`rounded border px-2 py-0.5 font-mono text-xs font-bold ${
@@ -1158,7 +1158,7 @@ function MonitorPage() {
             <select
               value={sid}
               onChange={e => setSid(e.target.value)}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 outline-none focus:border-violet-600"
+              className="rounded-lg border border-vox-border-soft bg-vox-bg-panel px-2.5 py-1 text-xs text-vox-text-secondary outline-none focus:border-violet-600"
             >
               <option value="">— sessão —</option>
               {sessoes.map(s => (
@@ -1173,7 +1173,7 @@ function MonitorPage() {
               title={auto ? "Pausar auto-refresh" : "Retomar auto-refresh"}
               className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
                 auto ? "border-violet-700 bg-violet-950/30 text-violet-400"
-                     : "border-zinc-700 text-zinc-600 hover:text-zinc-300"
+                     : "border-vox-border-soft text-vox-text-muted hover:text-vox-text-secondary"
               }`}
             >
               <span className={auto ? "inline-block animate-spin" : ""}>⟳</span>
@@ -1184,25 +1184,25 @@ function MonitorPage() {
 
         {/* Scene bar */}
         {wm && (
-          <div className="flex items-center gap-4 border-t border-zinc-800/40 bg-zinc-900/40 px-5 py-1.5 text-xs">
-            <span className="text-zinc-500">📍 <span className="text-zinc-300">{wm.location_nome}</span></span>
-            <span className="text-zinc-700">·</span>
+          <div className="flex items-center gap-4 border-t border-vox-border-subtle bg-vox-bg-panel px-5 py-1.5 text-xs">
+            <span className="text-zinc-500">📍 <span className="text-vox-text-secondary">{wm.location_nome}</span></span>
+            <span className="text-vox-text-muted">·</span>
             <span className="text-zinc-500">{wm.time_of_day}</span>
-            <span className="text-zinc-700">·</span>
+            <span className="text-vox-text-muted">·</span>
             <span className="text-zinc-500">{wm.weather}</span>
             {wm.em_combate && (
               <>
-                <span className="text-zinc-700">·</span>
+                <span className="text-vox-text-muted">·</span>
                 <span className="animate-pulse font-semibold text-rose-400">⚔ COMBATE — Rodada {wm.rodada_combate}</span>
               </>
             )}
-            <span className="ml-auto text-zinc-600">turno #{wm.iteracoes}</span>
+            <span className="ml-auto text-vox-text-muted">turno #{wm.iteracoes}</span>
           </div>
         )}
 
         {/* Tabs */}
         {sid && (
-          <div className="flex border-t border-zinc-800/40 bg-zinc-900/20">
+          <div className="flex border-t border-vox-border-subtle bg-vox-bg-panel">
             {(["estado", "turno"] as const).map(tab => (
               <button
                 key={tab}
@@ -1210,7 +1210,7 @@ function MonitorPage() {
                 className={`px-6 py-2 text-xs font-semibold uppercase tracking-widest transition-colors ${
                   aba === tab
                     ? "border-b-2 border-violet-500 text-violet-400"
-                    : "text-zinc-600 hover:text-zinc-400"
+                    : "text-vox-text-muted hover:text-zinc-400"
                 }`}
               >
                 {tab === "estado" ? "🎮 Estado ao Vivo" : "🧠 Último Turno"}
@@ -1223,7 +1223,7 @@ function MonitorPage() {
       {/* Empty state */}
       {!sid && (
         <div className="flex flex-col items-center gap-3 pt-24 text-center">
-          {apiOk === null && <p className="text-sm text-zinc-600">Conectando…</p>}
+          {apiOk === null && <p className="text-sm text-vox-text-muted">Conectando…</p>}
           {apiOk === false && (
             <p className="max-w-sm text-sm text-zinc-500">
               Backend com <code className="text-violet-400">DEBUG=True</code> não encontrado.

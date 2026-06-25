@@ -92,7 +92,7 @@ const PERICIA_SCORE: Record<string, keyof PersonagemConfig> = {
 
 const TRUST_LABEL: Record<number, string> = { 0: "Neutro", 1: "Amigável", 2: "Confiante", 3: "Aliado" };
 const TRUST_COLOR: Record<number, string> = {
-  0: "text-zinc-500", 1: "text-emerald-500", 2: "text-violet-400", 3: "text-yellow-400",
+  0: "text-vox-text-muted", 1: "text-emerald-500", 2: "text-violet-400", 3: "text-yellow-400",
 };
 
 // ── Spell slots (SRD 5e) ──────────────────────────────────────────────────────
@@ -551,21 +551,21 @@ export function CharacterSheet({
           </div>
 
           {/* Identidade */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <p className="text-sm font-semibold text-violet-300">{player_name || "Sem nome"}</p>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-vox-text-secondary">
               {[player_race, player_class, player_level ? `Nível ${player_level}` : ""].filter(Boolean).join(" · ")}
             </p>
-            {player_background && <p className="mt-0.5 text-xs text-zinc-600">Background: {player_background}</p>}
+            {player_background && <p className="mt-0.5 text-xs text-vox-text-muted">Background: {player_background}</p>}
             {locationNome && (
-              <p className="mt-1.5 text-xs text-zinc-500">
+              <p className="mt-1.5 text-xs text-vox-text-muted">
                 📍 {locationNome}{timeOfDay ? ` · ${timeOfDay}` : ""}
               </p>
             )}
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-vox-text-muted">
               <span>📅 Dia {diaDaJornada}</span>
-              <button onClick={() => mudarDia(-1)} className="text-zinc-700 hover:text-zinc-400 transition">−</button>
-              <button onClick={() => mudarDia(+1)} className="text-zinc-700 hover:text-zinc-400 transition">+</button>
+              <button onClick={() => mudarDia(-1)} className="text-vox-text-muted hover:text-vox-text-secondary transition">−</button>
+              <button onClick={() => mudarDia(+1)} className="text-vox-text-muted hover:text-vox-text-secondary transition">+</button>
             </div>
           </div>
 
@@ -578,28 +578,28 @@ export function CharacterSheet({
               {!deathSaves.stable && (
                 <>
                   <div className="mb-1.5 flex items-center gap-2">
-                    <span className="w-16 text-xs text-zinc-500">Sucesso</span>
+                    <span className="w-16 text-xs text-vox-text-muted">Sucesso</span>
                     <div className="flex gap-1">
                       {[0,1,2].map(i => (
                         <button key={i} onClick={() => toggleDeathSave("successes")}
                           className={`h-5 w-5 rounded-full border transition ${
                             i < deathSaves.successes
                               ? "border-emerald-500 bg-emerald-500"
-                              : "border-zinc-600 bg-zinc-800 hover:border-emerald-500"
+                              : "border-vox-border-strong bg-vox-bg-elevated hover:border-emerald-500"
                           }`}
                         />
                       ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-16 text-xs text-zinc-500">Falha</span>
+                    <span className="w-16 text-xs text-vox-text-muted">Falha</span>
                     <div className="flex gap-1">
                       {[0,1,2].map(i => (
                         <button key={i} onClick={() => toggleDeathSave("failures")}
                           className={`h-5 w-5 rounded-full border transition ${
                             i < deathSaves.failures
                               ? "border-red-500 bg-red-500"
-                              : "border-zinc-600 bg-zinc-800 hover:border-red-500"
+                              : "border-vox-border-strong bg-vox-bg-elevated hover:border-red-500"
                           }`}
                         />
                       ))}
@@ -609,7 +609,7 @@ export function CharacterSheet({
                     <p className="mt-1.5 text-xs font-bold text-red-400">MORTO</p>
                   )}
                   <button onClick={estabilizar}
-                    className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 py-1 text-xs text-zinc-400 transition hover:border-emerald-500 hover:text-emerald-400"
+                    className="mt-2 w-full rounded border border-vox-border-soft bg-vox-bg-elevated py-1 text-xs text-vox-text-secondary transition hover:border-emerald-500 hover:text-emerald-400"
                   >
                     Estabilizar (1 HP)
                   </button>
@@ -625,41 +625,41 @@ export function CharacterSheet({
             ""
           } ${hpFlash ? "px-2 py-1.5" : ""}`}>
             <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">HP</span>
+              <span className="text-vox-text-secondary">HP</span>
               {inconsciente && !deathSaves.stable
                 ? <span className="font-bold text-red-400">Inconsciente</span>
                 : <span className={`font-semibold transition-colors ${
                     hpFlash === "dano" ? "text-red-300" :
                     hpFlash === "cura" ? "text-emerald-300" :
-                    "text-zinc-200"
+                    "text-vox-text-primary"
                   }`}>{hpAtual} / {hpMax}</span>
               }
             </div>
             <HpBar current={hpAtual} max={hpMax} showNumber={false} size="sm" className="mb-2" />
             <div className="flex items-center gap-1.5">
               <button onClick={() => ajustarHP(-1)} disabled={hpAtual <= 0}
-                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
+                className="flex h-7 w-7 items-center justify-center rounded border border-vox-border-soft bg-vox-bg-elevated text-sm text-vox-text-secondary transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
               >−</button>
               <input type="number" value={hpInput}
                 onChange={e => setHpInput(e.target.value)}
                 onBlur={confirmarHpInput}
                 onKeyDown={e => { if (e.key === "Enter") confirmarHpInput(); }}
                 placeholder={String(hpAtual)}
-                className="h-7 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-800 px-1 text-center text-xs text-zinc-200 outline-none focus:border-violet-500"
+                className="h-7 min-w-0 flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated px-1 text-center text-xs text-vox-text-primary outline-none focus:border-violet-500"
               />
               <button onClick={() => ajustarHP(+1)} disabled={hpAtual >= hpMax}
-                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-30"
+                className="flex h-7 w-7 items-center justify-center rounded border border-vox-border-soft bg-vox-bg-elevated text-sm text-vox-text-secondary transition hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-30"
               >+</button>
             </div>
           </div>
 
           {/* Inspiração */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <button onClick={toggleInspiration}
               className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs transition ${
                 inspiration
                   ? "border-yellow-500/60 bg-yellow-900/20 text-yellow-300"
-                  : "border-zinc-700 bg-zinc-800/50 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                  : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
               }`}
             >
               <span>✨ Inspiração</span>
@@ -668,7 +668,7 @@ export function CharacterSheet({
           </div>
 
           {/* Concentração */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <button onClick={() => {
               const novo = !concentrando;
               setConcentrando(novo);
@@ -677,7 +677,7 @@ export function CharacterSheet({
               className={`flex w-full items-center justify-between rounded-lg border px-3 py-1.5 text-xs transition ${
                 concentrando
                   ? "border-blue-500/60 bg-blue-900/20 text-blue-300"
-                  : "border-zinc-700 bg-zinc-800/50 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                  : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
               }`}
             >
               <span>🔮 Concentração</span>
@@ -689,20 +689,20 @@ export function CharacterSheet({
                 onChange={e => setFeiticoConcentracao(e.target.value)}
                 placeholder="Nome do feitiço…"
                 maxLength={40}
-                className="mt-1.5 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-blue-500"
+                className="mt-1.5 w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-blue-500"
               />
             )}
           </div>
 
           {/* Ações de turno */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <button onClick={() => setAcoesAberto(a => !a)}
-              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
             >
               <span>
                 Ações de Turno
                 {(acaoUsada || acaoBonusUsada || reacaoUsada) && (
-                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                  <span className="ml-1.5 rounded bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary">
                     {[acaoUsada && "Ação", acaoBonusUsada && "Bônus", reacaoUsada && "Reação"].filter(Boolean).join(", ")}
                   </span>
                 )}
@@ -719,8 +719,8 @@ export function CharacterSheet({
                   <button key={label} onClick={() => set(!state)}
                     className={`flex w-full items-center justify-between rounded border px-3 py-1.5 text-xs transition ${
                       state
-                        ? "border-zinc-600 bg-zinc-700/50 text-zinc-400 line-through"
-                        : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-violet-500"
+                        ? "border-vox-border-strong bg-vox-bg-elevated text-vox-text-secondary line-through"
+                        : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-violet-500"
                     }`}
                   >
                     <span>{label}</span>
@@ -728,7 +728,7 @@ export function CharacterSheet({
                   </button>
                 ))}
                 <button onClick={resetarTurno}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 py-1 text-xs text-zinc-600 transition hover:border-zinc-600 hover:text-zinc-400"
+                  className="w-full rounded border border-vox-border-subtle bg-vox-bg-panel py-1 text-xs text-vox-text-muted transition hover:border-vox-border-strong hover:text-vox-text-secondary"
                 >
                   Reset Turno
                 </button>
@@ -737,27 +737,27 @@ export function CharacterSheet({
           </div>
 
           {/* Hit Dice + Descanso */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Dados de Vida (d{hitDiceType})</span>
-              <span className="text-zinc-500">{hitDiceAtual}/{player_level}</span>
+              <span className="text-vox-text-secondary">Dados de Vida (d{hitDiceType})</span>
+              <span className="text-vox-text-muted">{hitDiceAtual}/{player_level}</span>
             </div>
             <div className="flex gap-1.5">
               <button onClick={usarHitDice}
                 disabled={hitDiceAtual <= 0 || hpAtual >= hpMax}
-                className="flex-1 rounded border border-zinc-700 bg-zinc-800 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-30"
+                className="flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated py-1 text-xs text-vox-text-secondary transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-30"
                 title="Usa 1 HD, rola e recupera HP (Descanso Curto)"
               >
                 Usar HD
               </button>
               <button onClick={descansoCurto}
-                className="flex-1 rounded border border-zinc-700 bg-zinc-800 py-1 text-xs text-zinc-300 transition hover:border-amber-500 hover:text-amber-300"
+                className="flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated py-1 text-xs text-vox-text-secondary transition hover:border-amber-500 hover:text-amber-300"
                 title="Descanso Curto — recupera slots do Bruxo"
               >
                 Desc. Curto
               </button>
               <button onClick={descansoLongo}
-                className="flex-1 rounded border border-zinc-700 bg-zinc-800 py-1 text-xs text-zinc-300 transition hover:border-emerald-500 hover:text-emerald-300"
+                className="flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated py-1 text-xs text-vox-text-secondary transition hover:border-emerald-500 hover:text-emerald-300"
                 title="Descanso Longo — restaura HP, HD e todos os slots"
               >
                 Desc. Longo
@@ -767,9 +767,9 @@ export function CharacterSheet({
 
           {/* Spell Slots */}
           {ehConjurador(player_class ?? "") && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setSpellsAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>Spell Slots</span>
                 <span>{spellsAberto ? "▲" : "▼"}</span>
@@ -782,7 +782,7 @@ export function CharacterSheet({
                       const nivel = Number(nivelStr);
                       return (
                         <div key={nivel} className="flex items-center gap-2">
-                          <span className="w-12 text-xs text-zinc-500">Nível {nivel}</span>
+                          <span className="w-12 text-xs text-vox-text-muted">Nível {nivel}</span>
                           <div className="flex flex-1 gap-1">
                             {Array.from({ length: slot.max }).map((_, i) => (
                               <button key={i}
@@ -790,13 +790,13 @@ export function CharacterSheet({
                                 className={`h-5 flex-1 rounded border transition ${
                                   i < slot.current
                                     ? "border-violet-500 bg-violet-600/40 hover:bg-violet-600/60"
-                                    : "border-zinc-700 bg-zinc-800 hover:border-violet-500"
+                                    : "border-vox-border-soft bg-vox-bg-elevated hover:border-violet-500"
                                 }`}
                                 title={i < slot.current ? "Clique para usar" : "Clique para restaurar"}
                               />
                             ))}
                           </div>
-                          <span className="w-8 text-right text-xs text-zinc-600">{slot.current}/{slot.max}</span>
+                          <span className="w-8 text-right text-xs text-vox-text-muted">{slot.current}/{slot.max}</span>
                         </div>
                       );
                     })}
@@ -807,9 +807,9 @@ export function CharacterSheet({
 
           {/* Magias Conhecidas — exibidas apenas para personagens com spells selecionadas */}
           {knownSpells.length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setMagiasAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>Magias ({knownSpells.length})</span>
                 <span>{magiasAberto ? "▲" : "▼"}</span>
@@ -836,7 +836,7 @@ export function CharacterSheet({
                       return (
                         <div key={lv}>
                           <div className="mb-1 flex items-center gap-2">
-                            <span className="text-[10px] font-semibold text-zinc-500">
+                            <span className="text-[10px] font-semibold text-vox-text-muted">
                               {lv === 0 ? "Truques" : `Nível ${lv}`}
                             </span>
                             {/* Indicador de slots para magias com nível > 0 */}
@@ -848,7 +848,7 @@ export function CharacterSheet({
                                     className={`inline-block h-2 w-2 rounded-full border ${
                                       i < slotNivel.current
                                         ? "border-violet-400 bg-violet-500"
-                                        : "border-zinc-600 bg-zinc-800"
+                                        : "border-vox-border-strong bg-vox-bg-elevated"
                                     }`}
                                   />
                                 ))}
@@ -863,9 +863,9 @@ export function CharacterSheet({
                                   key={nome}
                                   className={`inline-block rounded-full border px-2 py-0.5 text-[10px] transition ${
                                     semSlot
-                                      ? "border-zinc-700 text-zinc-600"
+                                      ? "border-vox-border-soft text-vox-text-muted"
                                       : lv === 0
-                                        ? "border-zinc-600 text-zinc-400"
+                                        ? "border-vox-border-strong text-vox-text-secondary"
                                         : "border-violet-700/50 text-violet-300"
                                   }`}
                                   title={nome}
@@ -880,10 +880,10 @@ export function CharacterSheet({
                     })}
                     {semNivel.length > 0 && (
                       <div>
-                        <span className="text-[10px] text-zinc-600">Outras:</span>
+                        <span className="text-[10px] text-vox-text-muted">Outras:</span>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {semNivel.map(nome => (
-                            <span key={nome} className="inline-block rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500">{nome}</span>
+                            <span key={nome} className="inline-block rounded-full border border-vox-border-soft px-2 py-0.5 text-[10px] text-vox-text-muted">{nome}</span>
                           ))}
                         </div>
                       </div>
@@ -895,14 +895,14 @@ export function CharacterSheet({
           )}
 
           {/* XP */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">XP</span>
-              <span className={`font-semibold ${subiuNivel ? "text-yellow-400 animate-pulse" : "text-zinc-500"}`}>
+              <span className="text-vox-text-secondary">XP</span>
+              <span className={`font-semibold ${subiuNivel ? "text-yellow-400 animate-pulse" : "text-vox-text-muted"}`}>
                 {xp.toLocaleString()} {subiuNivel ? "— SUBIU DE NÍVEL!" : `/ ${xpProxNivel.toLocaleString()}`}
               </span>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-vox-bg-elevated mb-2">
               <div
                 className="h-full rounded-full bg-amber-500 transition-all duration-500"
                 style={{ width: `${Math.min(100, xpPorcentagem)}%` }}
@@ -914,44 +914,44 @@ export function CharacterSheet({
                 onKeyDown={e => { if (e.key === "Enter") adicionarXP(); }}
                 placeholder="+ XP"
                 min={1}
-                className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-violet-500"
+                className="min-w-0 flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-violet-500"
               />
               <button onClick={adicionarXP} disabled={!xpInput.trim()}
-                className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-amber-500 hover:text-amber-300 disabled:opacity-30"
+                className="rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-secondary transition hover:border-amber-500 hover:text-amber-300 disabled:opacity-30"
               >+</button>
             </div>
           </div>
 
           {/* Ouro */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">🪙 Ouro (PO)</span>
+              <span className="text-vox-text-secondary">🪙 Ouro (PO)</span>
               <span className="font-semibold text-amber-400">{gold.toLocaleString()} PO</span>
             </div>
             <div className="flex items-center gap-1.5">
               <button onClick={() => ajustarGold(-1)} disabled={gold <= 0}
-                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
+                className="flex h-7 w-7 items-center justify-center rounded border border-vox-border-soft bg-vox-bg-elevated text-sm text-vox-text-secondary transition hover:border-red-500 hover:text-red-400 disabled:opacity-30"
               >−</button>
               <input type="number" value={goldInput}
                 onChange={e => setGoldInput(e.target.value)}
                 onBlur={confirmarGoldInput}
                 onKeyDown={e => { if (e.key === "Enter") confirmarGoldInput(); }}
                 placeholder={String(gold)}
-                className="h-7 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-800 px-1 text-center text-xs text-zinc-200 outline-none focus:border-violet-500"
+                className="h-7 min-w-0 flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated px-1 text-center text-xs text-vox-text-primary outline-none focus:border-violet-500"
               />
               <button onClick={() => ajustarGold(+1)}
-                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 bg-zinc-800 text-sm text-zinc-300 transition hover:border-amber-500 hover:text-amber-400"
+                className="flex h-7 w-7 items-center justify-center rounded border border-vox-border-soft bg-vox-bg-elevated text-sm text-vox-text-secondary transition hover:border-amber-500 hover:text-amber-400"
               >+</button>
             </div>
           </div>
 
           {/* Dados — slot-machine */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
-            <p className="mb-2 text-xs text-zinc-500">Rolar dado:</p>
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
+            <p className="mb-2 text-xs text-vox-text-muted">Rolar dado:</p>
             <div className="flex flex-wrap gap-1.5">
               {DADOS_DND.map(d => (
                 <button key={d} onClick={() => rolarDado(d)} disabled={animando}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-40"
+                  className="rounded-lg border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-secondary transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-40"
                 >
                   d{d}
                 </button>
@@ -959,16 +959,16 @@ export function CharacterSheet({
             </div>
             {(animando || resultado) && (
               <div className={`mt-3 rounded-lg border px-3 py-2 text-center transition-all ${
-                animando ? "border-zinc-700 bg-zinc-800" : "border-violet-800/50 bg-violet-900/20"
+                animando ? "border-vox-border-soft bg-vox-bg-elevated" : "border-violet-800/50 bg-violet-900/20"
               }`}>
                 {animando ? (
                   <>
-                    <p className="text-xs text-zinc-600">d{resultado?.dado ?? "?"}</p>
-                    <p className="animate-pulse text-2xl font-bold tabular-nums text-zinc-400">{displayValue ?? "·"}</p>
+                    <p className="text-xs text-vox-text-muted">d{resultado?.dado ?? "?"}</p>
+                    <p className="animate-pulse text-2xl font-bold tabular-nums text-vox-text-secondary">{displayValue ?? "·"}</p>
                   </>
                 ) : resultado ? (
                   <>
-                    <p className="text-xs text-zinc-400">d{resultado.dado}</p>
+                    <p className="text-xs text-vox-text-secondary">d{resultado.dado}</p>
                     <p className="text-2xl font-bold text-violet-300">{resultado.valor}</p>
                     {resultado.dado === 20 && resultado.valor === 20 && <p className="text-xs font-bold text-yellow-400">CRÍTICO!</p>}
                     {resultado.dado === 20 && resultado.valor === 1 && <p className="text-xs font-bold text-red-400">FALHA CRÍTICA!</p>}
@@ -979,9 +979,9 @@ export function CharacterSheet({
           </div>
 
           {/* Atributos D&D 5e */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <button onClick={() => setAtributosAberto(a => !a)}
-              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
             >
               <span>Atributos & Perícias</span>
               <span>{atributosAberto ? "▲" : "▼"}</span>
@@ -993,21 +993,21 @@ export function CharacterSheet({
                     const sv = scoreMap[key] ?? 10;
                     const isSave = save_profs.includes(SCORE_KEY_TO_SAVE[key]);
                     return (
-                      <div key={key} className={`rounded border px-2 py-1 text-center ${isSave ? "border-violet-700/50 bg-violet-900/10" : "border-zinc-800 bg-zinc-800/50"}`}>
-                        <p className="text-[10px] text-zinc-500">{abrev}{isSave ? " ★" : ""}</p>
-                        <p className="text-sm font-bold text-zinc-200">{sv}</p>
-                        <p className={`text-[10px] font-semibold ${isSave ? "text-violet-400" : "text-zinc-500"}`}>{fmod(sv)}</p>
+                      <div key={key} className={`rounded border px-2 py-1 text-center ${isSave ? "border-violet-700/50 bg-violet-900/10" : "border-vox-border-subtle bg-vox-bg-elevated"}`}>
+                        <p className="text-[10px] text-vox-text-muted">{abrev}{isSave ? " ★" : ""}</p>
+                        <p className="text-sm font-bold text-vox-text-primary">{sv}</p>
+                        <p className={`text-[10px] font-semibold ${isSave ? "text-violet-400" : "text-vox-text-muted"}`}>{fmod(sv)}</p>
                       </div>
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-500">
+                <div className="flex items-center gap-3 text-xs text-vox-text-muted">
                   <span>CA {10 + fmodNum(dex_score)}</span>
                   <span>Proef +{profBon}</span>
                 </div>
                 {skill_profs.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">Perícias</p>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-vox-text-muted">Perícias</p>
                     <div className="space-y-0.5">
                       {skill_profs.map(sk => {
                         const scoreKey = PERICIA_SCORE[sk] as string ?? "int_score";
@@ -1015,7 +1015,7 @@ export function CharacterSheet({
                         const total = fmodNum(sv) + profBon;
                         return (
                           <div key={sk} className="flex justify-between text-xs">
-                            <span className="text-zinc-400">{sk}</span>
+                            <span className="text-vox-text-secondary">{sk}</span>
                             <span className="font-semibold text-violet-400">{total >= 0 ? `+${total}` : `${total}`}</span>
                           </div>
                         );
@@ -1025,7 +1025,7 @@ export function CharacterSheet({
                 )}
                 {save_profs.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">Saves</p>
+                    <p className="mb-1 text-[10px] uppercase tracking-wider text-vox-text-muted">Saves</p>
                     <div className="flex flex-wrap gap-1.5">
                       {save_profs.map(sv => {
                         const scoreKey = Object.entries(SCORE_KEY_TO_SAVE).find(([, a]) => a === sv)?.[0];
@@ -1045,9 +1045,9 @@ export function CharacterSheet({
           </div>
 
           {/* Condições */}
-          <div className="mb-3 border-b border-zinc-800 pb-3">
+          <div className="mb-3 border-b border-vox-border-subtle pb-3">
             <button onClick={() => setCondicoesAberto(a => !a)}
-              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
             >
               <span>
                 Condições
@@ -1064,7 +1064,7 @@ export function CharacterSheet({
                     className={`rounded-lg border px-2 py-1 text-[11px] transition ${
                       condicoes.includes(cond)
                         ? "border-orange-600/60 bg-orange-900/30 text-orange-300"
-                        : "border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+                        : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
                     }`}
                   >
                     {cond}
@@ -1076,10 +1076,10 @@ export function CharacterSheet({
 
           {/* Class Features — chips de recursos de classe (Fase 6) */}
           {classFeatures && Object.keys(classFeatures).length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
-              <p className="mb-2 text-xs text-zinc-500">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
+              <p className="mb-2 text-xs text-vox-text-muted">
                 Features de Classe
-                <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                <span className="ml-1.5 rounded bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary">
                   {Object.keys(classFeatures).length}
                 </span>
               </p>
@@ -1096,7 +1096,7 @@ export function CharacterSheet({
                         transition-all
                         ${feat.disponivel
                           ? "border-violet-700/50 bg-violet-900/30 text-violet-200"
-                          : "border-zinc-700/30 bg-zinc-800/50 text-zinc-500 line-through opacity-60"
+                          : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-muted line-through opacity-60"
                         }
                       `}
                     >
@@ -1118,7 +1118,7 @@ export function CharacterSheet({
                         <button
                           onClick={() => onUsarFeature!(fid, feat.usos_atual + 1)}
                           title="Restaurar 1 uso"
-                          className="ml-0.5 rounded bg-zinc-700/50 px-1 text-[10px] hover:bg-zinc-600/60 transition"
+                          className="ml-0.5 rounded bg-vox-bg-elevated px-1 text-[10px] hover:bg-vox-bg-elevated transition"
                         >+</button>
                       )}
                     </div>
@@ -1130,13 +1130,13 @@ export function CharacterSheet({
 
           {/* Histórico de rolagens — últimas 5 ações com d20/dano/etc */}
           {rolagens.length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setRolagensAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>
                   Últimas rolagens
-                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{rolagens.length}</span>
+                  <span className="ml-1.5 rounded bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary">{rolagens.length}</span>
                 </span>
                 <span>{rolagensAberto ? "▲" : "▼"}</span>
               </button>
@@ -1147,12 +1147,12 @@ export function CharacterSheet({
                       ? "text-violet-400 font-bold"
                       : r.resultado === 1 && r.tipo.startsWith("d20")
                         ? "text-red-500 font-bold"
-                        : "text-zinc-200";
+                        : "text-vox-text-primary";
                     return (
                       <li key={r.id} className="flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-400">
+                        <span className="text-vox-text-secondary">
                           {r.tipo}
-                          {r.motivo && <span className="ml-1 text-zinc-500">· {r.motivo}</span>}
+                          {r.motivo && <span className="ml-1 text-vox-text-muted">· {r.motivo}</span>}
                         </span>
                         <span className={cor}>{r.resultado}</span>
                       </li>
@@ -1165,13 +1165,13 @@ export function CharacterSheet({
 
           {/* NPCs presentes */}
           {Object.keys(npcsTrust).length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setNpcsAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>
                   NPCs na cena
-                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{Object.keys(npcsTrust).length}</span>
+                  <span className="ml-1.5 rounded bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary">{Object.keys(npcsTrust).length}</span>
                 </span>
                 <span>{npcsAberto ? "▲" : "▼"}</span>
               </button>
@@ -1181,8 +1181,8 @@ export function CharacterSheet({
                     const nome = npcId.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
                     return (
                       <div key={npcId} className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-400">{nome}</span>
-                        <span className={`text-[10px] font-medium ${TRUST_COLOR[trust] ?? "text-zinc-500"}`}>
+                        <span className="text-xs text-vox-text-secondary">{nome}</span>
+                        <span className={`text-[10px] font-medium ${TRUST_COLOR[trust] ?? "text-vox-text-muted"}`}>
                           {TRUST_LABEL[trust] ?? trust}
                         </span>
                       </div>
@@ -1195,9 +1195,9 @@ export function CharacterSheet({
 
           {/* Quests */}
           {activeQuests.length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setQuestsAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>
                   Quests
@@ -1213,7 +1213,7 @@ export function CharacterSheet({
                     return (
                       <div key={qid} className="rounded border border-violet-800/30 bg-violet-900/10 px-2 py-1.5">
                         <p className="text-xs font-medium text-violet-300">{nomeQuest}</p>
-                        {stage && <p className="mt-0.5 text-[10px] text-zinc-500">{stage.replace(/-/g, " ")}</p>}
+                        {stage && <p className="mt-0.5 text-[10px] text-vox-text-muted">{stage.replace(/-/g, " ")}</p>}
                       </div>
                     );
                   })}
@@ -1224,13 +1224,13 @@ export function CharacterSheet({
 
           {/* Mapa de texto */}
           {locaisVisitados.length > 0 && (
-            <div className="mb-3 border-b border-zinc-800 pb-3">
+            <div className="mb-3 border-b border-vox-border-subtle pb-3">
               <button onClick={() => setMapaAberto(a => !a)}
-                className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
               >
                 <span>
                   Locais Visitados
-                  <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{locaisVisitados.length}</span>
+                  <span className="ml-1.5 rounded bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary">{locaisVisitados.length}</span>
                 </span>
                 <span>{mapaAberto ? "▲" : "▼"}</span>
               </button>
@@ -1241,7 +1241,7 @@ export function CharacterSheet({
                       className={`flex items-center gap-2 rounded px-2 py-1 text-xs ${
                         local === locationNome
                           ? "bg-violet-900/30 text-violet-300"
-                          : "text-zinc-500"
+                          : "text-vox-text-muted"
                       }`}
                     >
                       <span>{local === locationNome ? "📍" : "·"}</span>
@@ -1257,7 +1257,7 @@ export function CharacterSheet({
           {/* Inventário */}
           <div>
             <button onClick={() => setInventarioAberto(a => !a)}
-              className="flex w-full items-center justify-between text-xs text-zinc-500 hover:text-zinc-300 transition"
+              className="flex w-full items-center justify-between text-xs text-vox-text-muted hover:text-vox-text-secondary transition"
             >
               <span className="flex items-center gap-1.5">
                 Inventário ({itens.length}/{MAX_ITENS})
@@ -1276,19 +1276,19 @@ export function CharacterSheet({
                     onKeyDown={e => { if (e.key === "Enter") adicionarItem(); }}
                     placeholder="Espada Longa, Poção ×2…"
                     maxLength={60} disabled={itens.length >= MAX_ITENS}
-                    className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-violet-500 disabled:opacity-40"
+                    className="min-w-0 flex-1 rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-violet-500 disabled:opacity-40"
                   />
                   <button onClick={adicionarItem} disabled={!novoItem.trim() || itens.length >= MAX_ITENS}
-                    className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-30"
+                    className="rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-secondary transition hover:border-violet-500 hover:text-violet-300 disabled:opacity-30"
                   >+</button>
                 </div>
                 {itens.length === 0
-                  ? <p className="text-xs text-zinc-700">Nenhum item.</p>
+                  ? <p className="text-xs text-vox-text-muted">Nenhum item.</p>
                   : (
                     <ul className="max-h-32 space-y-1 overflow-y-auto">
                       {itens.map((item, idx) => (
                         <li key={idx} className="flex items-center justify-between gap-1">
-                          <span className="truncate text-xs text-zinc-400">{item}</span>
+                          <span className="truncate text-xs text-vox-text-secondary">{item}</span>
                           <div className="flex shrink-0 items-center gap-1">
                             {emMercado && onVenderItem && (
                               <button
@@ -1299,7 +1299,7 @@ export function CharacterSheet({
                                 vender
                               </button>
                             )}
-                            <button onClick={() => removerItem(idx)} className="text-xs text-zinc-700 transition hover:text-red-400">×</button>
+                            <button onClick={() => removerItem(idx)} className="text-xs text-vox-text-muted transition hover:text-red-400">×</button>
                           </div>
                         </li>
                       ))}

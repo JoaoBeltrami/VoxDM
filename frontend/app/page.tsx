@@ -269,7 +269,7 @@ function TelaTransicao() {
     return () => clearInterval(t);
   }, []);
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-950">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-vox-bg-base">
       <VoxOrb estado="processando" tamanho={120} />
       <p
         key={frase}
@@ -1048,7 +1048,7 @@ export default function Home() {
 
         {/* Scene reveal — overlay escuro durante a troca de cena (1.8s) */}
         {revealCena && (
-          <div className="pointer-events-none absolute inset-0 z-10 bg-zinc-950/65 transition-opacity duration-700" />
+          <div className="pointer-events-none absolute inset-0 z-10 bg-vox-bg-floating transition-opacity duration-700" />
         )}
 
         {/* Feature 6: Toasts flutuantes de XP/ouro — sobem e dissolvem em 2s */}
@@ -1166,10 +1166,10 @@ export default function Home() {
             />
             {rollVisibility === "result_only" && (
               <div className="inline-flex flex-col items-center gap-1 select-none animate-fade-in">
-                <span className="text-[9px] font-medium text-zinc-500 uppercase tracking-widest">
+                <span className="text-[9px] font-medium text-vox-text-muted uppercase tracking-widest">
                   {dadoAtivo.tipo}
                 </span>
-                <div className="w-16 h-16 rounded-xl flex items-center justify-center font-bold font-mono text-2xl border-2 bg-zinc-900 border-zinc-600 text-zinc-100">
+                <div className="w-16 h-16 rounded-xl flex items-center justify-center font-bold font-mono text-2xl border-2 bg-vox-bg-panel border-vox-border-strong text-vox-text-primary">
                   {dadoAtivo.resultado}
                 </div>
               </div>
@@ -1195,7 +1195,7 @@ export default function Home() {
     const topBarSlot = (
       <>
         <header className={`flex items-center justify-between border-b px-4 py-3 transition-colors duration-500 ${
-          emCombate ? "border-red-900/40 bg-red-950/10" : "border-zinc-800/60"
+          emCombate ? "border-red-900/40 bg-red-950/10" : "border-vox-border-subtle"
         }`}>
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full transition-colors duration-500 ${
@@ -1203,10 +1203,10 @@ export default function Home() {
               orbEstado === "ouvindo" ? "bg-violet-400 animate-pulse" :
                                        "bg-violet-300 animate-pulse"
             }`} />
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-vox-text-muted">
               {sessionId}{playerName ? ` · ${playerName}` : ""}
               {ownerEmail && (
-                <span className="ml-2 text-zinc-600" title={`Autenticado como ${ownerEmail}`}>
+                <span className="ml-2 text-vox-text-muted" title={`Autenticado como ${ownerEmail}`}>
                   · {ownerEmail.split("@")[0]}
                   {ownerAdmin && <span className="ml-1 text-violet-500/70" title="Admin">★</span>}
                 </span>
@@ -1221,7 +1221,7 @@ export default function Home() {
             <button
               onClick={() => window.open(`/debug?s=${encodeURIComponent(sessionId ?? "")}`, "_blank")}
               title="Abrir monitor de jogo (segunda tela)"
-              className="text-xs text-zinc-600 transition hover:text-violet-400"
+              className="text-xs text-vox-text-muted transition hover:text-violet-400"
             >
               ⬡
             </button>
@@ -1229,7 +1229,7 @@ export default function Home() {
               onClick={toggleAmbiente}
               title={ambienteAtivo ? `Ambiente: ${ambienteCena} (clique para pausar)` : "Ligar música ambiente"}
               className={`text-xs transition ${
-                ambienteAtivo ? "text-violet-400 hover:text-violet-300" : "text-zinc-600 hover:text-zinc-400"
+                ambienteAtivo ? "text-violet-400 hover:text-violet-300" : "text-vox-text-muted hover:text-vox-text-secondary"
               }`}
             >
               {ambienteAtivo ? "♫" : "♩"}
@@ -1254,13 +1254,13 @@ export default function Home() {
                 URL.revokeObjectURL(url);
               }}
               title="Exportar transcript"
-              className="text-xs text-zinc-600 transition hover:text-zinc-400"
+              className="text-xs text-vox-text-muted transition hover:text-vox-text-secondary"
             >
               ↓
             </button>
             <button
               onClick={handleEncerrar}
-              className="text-xs text-zinc-600 transition hover:text-zinc-400"
+              className="text-xs text-vox-text-muted transition hover:text-vox-text-secondary"
             >
               Encerrar
             </button>
@@ -1278,7 +1278,7 @@ export default function Home() {
                   }
                 }}
                 title={`Sair (${ownerEmail})`}
-                className="text-xs text-zinc-600 transition hover:text-red-400"
+                className="text-xs text-vox-text-muted transition hover:text-red-400"
               >
                 Sair
               </button>
@@ -1372,7 +1372,7 @@ export default function Home() {
     const centerSlot = (
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
         {historico.length === 0 && !respostaAtual && (
-          <p className="mt-6 text-center text-xs text-zinc-700">
+          <p className="mt-6 text-center text-xs text-vox-text-muted">
             Sessão iniciada — aguardando o mestre...
           </p>
         )}
@@ -1504,7 +1504,7 @@ export default function Home() {
                     className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
                       esperandoRolagem && dadoPedido === null
                         ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_12px_2px_rgba(139,92,246,0.35)]"
-                        : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                        : "border-vox-border-soft bg-vox-bg-panel text-vox-text-secondary hover:border-vox-border-strong hover:text-vox-text-primary"
                     }`}
                   >
                     🎲 d20
@@ -1513,14 +1513,14 @@ export default function Home() {
                 <button
                   onClick={() => rolarD20("vantagem")}
                   title="Vantagem: 2d20, usa o maior"
-                  className="rounded-full border border-emerald-900 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 transition hover:border-emerald-600 hover:text-emerald-400"
+                  className="rounded-full border border-emerald-900 bg-vox-bg-base px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 transition hover:border-emerald-600 hover:text-emerald-400"
                 >
                   ▲d20
                 </button>
                 <button
                   onClick={() => rolarD20("desvantagem")}
                   title="Desvantagem: 2d20, usa o menor"
-                  className="rounded-full border border-rose-950 bg-zinc-950 px-2.5 py-1.5 text-[10px] font-semibold text-rose-800 transition hover:border-rose-700 hover:text-rose-500"
+                  className="rounded-full border border-rose-950 bg-vox-bg-base px-2.5 py-1.5 text-[10px] font-semibold text-rose-800 transition hover:border-rose-700 hover:text-rose-500"
                 >
                   ▼d20
                 </button>
@@ -1535,7 +1535,7 @@ export default function Home() {
                       className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
                         dadoPedido === f
                           ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_10px_2px_rgba(139,92,246,0.35)]"
-                          : "border-zinc-800 bg-zinc-950 text-zinc-600 hover:border-zinc-600 hover:text-zinc-300"
+                          : "border-vox-border-subtle bg-vox-bg-base text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
                       }`}
                     >
                       d{f}
@@ -1551,7 +1551,7 @@ export default function Home() {
                     </span>
                   )}
                   {motivoCheck && (
-                    <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-zinc-400">
+                    <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-vox-text-secondary">
                       {motivoCheck}
                     </p>
                   )}
@@ -1575,7 +1575,7 @@ export default function Home() {
               </summary>
               <ul className="mt-1.5 space-y-1.5 pl-3.5 border-l border-red-900/40">
                 {Object.entries(relogios).map(([id, rel]) => (
-                  <li key={id} className="text-[10px] text-zinc-500 leading-snug">
+                  <li key={id} className="text-[10px] text-vox-text-muted leading-snug">
                     <span className="italic">{rel.nome}</span>
                     <span className="ml-2 font-mono tracking-tighter text-red-400/80">
                       {"▓".repeat(rel.atual)}{"░".repeat(Math.max(0, rel.max - rel.atual))}
@@ -1599,7 +1599,7 @@ export default function Home() {
               </summary>
               <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-rose-900/40">
                 {cicatrizes.map((cic, i) => (
-                  <li key={i} className="text-[10px] italic text-zinc-500 leading-snug">
+                  <li key={i} className="text-[10px] italic text-vox-text-muted leading-snug">
                     {cic}
                   </li>
                 ))}
@@ -1651,7 +1651,7 @@ export default function Home() {
               <div className={`flex items-center gap-4 rounded-xl border px-5 py-1.5 transition-colors duration-300 ${
                 actionEconomyFlash
                   ? "border-emerald-600/60 bg-emerald-950/30 shadow-[0_0_8px_1px_rgba(16,185,129,0.2)]"
-                  : "border-zinc-800/50 bg-zinc-900/40"
+                  : "border-vox-border-subtle bg-vox-bg-panel"
               }`}>
                 {actionEconomyFlash && (
                   <span className="text-[9px] font-semibold uppercase tracking-widest text-emerald-500 animate-fade-in">
@@ -1668,7 +1668,7 @@ export default function Home() {
                         onChange={e => setActionEconomy(prev => ({ ...prev, [k]: e.target.checked }))}
                         className="h-3 w-3 accent-violet-500"
                       />
-                      <span className={actionEconomy[k] ? "text-zinc-600 line-through" : "text-zinc-400"}>
+                      <span className={actionEconomy[k] ? "text-vox-text-muted line-through" : "text-vox-text-secondary"}>
                         {labels[k]}
                       </span>
                     </label>
@@ -1695,7 +1695,7 @@ export default function Home() {
                 <button
                   onClick={() => dispensarCondicaoDetectada(cond)}
                   title="Ignorar"
-                  className="text-zinc-600 hover:text-zinc-400"
+                  className="text-vox-text-muted hover:text-vox-text-secondary"
                 >×</button>
               </div>
             ))}
@@ -1947,7 +1947,7 @@ export default function Home() {
         {/* Feature 1: Tela de encerramento de sessão — 8s ou clique */}
         {sessionEndStats && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/95 backdrop-blur-sm cursor-pointer"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-vox-bg-floating backdrop-blur-sm cursor-pointer"
             onClick={() => { setSessionEndStats(null); }}
           >
             <div className="flex flex-col items-center gap-6 max-w-sm w-full px-6 text-center">
@@ -1955,24 +1955,24 @@ export default function Home() {
                 ✦ Fim de Aventura ✦
               </div>
               <div className="grid grid-cols-3 gap-4 w-full">
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-vox-bg-panel border border-vox-border-subtle px-3 py-4">
                   <span className="text-2xl font-bold text-amber-300">{sessionEndStats.xp}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">XP</span>
+                  <span className="text-[10px] text-vox-text-muted uppercase tracking-widest">XP</span>
                 </div>
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-vox-bg-panel border border-vox-border-subtle px-3 py-4">
                   <span className="text-2xl font-bold text-yellow-400">{sessionEndStats.gold}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Ouro</span>
+                  <span className="text-[10px] text-vox-text-muted uppercase tracking-widest">Ouro</span>
                 </div>
-                <div className="flex flex-col items-center gap-1 rounded-xl bg-zinc-900/60 border border-zinc-800 px-3 py-4">
+                <div className="flex flex-col items-center gap-1 rounded-xl bg-vox-bg-panel border border-vox-border-subtle px-3 py-4">
                   <span className="text-2xl font-bold text-violet-300">{sessionEndStats.turnosJogados}</span>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Turnos</span>
+                  <span className="text-[10px] text-vox-text-muted uppercase tracking-widest">Turnos</span>
                 </div>
               </div>
               {sessionEndStats.consequencias.length > 0 && (
                 <div className="w-full text-left">
                   <div className="text-[10px] text-orange-400/70 uppercase tracking-widest mb-2">Consequências no mundo</div>
                   {sessionEndStats.consequencias.slice(0, 3).map((c, i) => (
-                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">• {c}</div>
+                    <div key={i} className="text-xs text-vox-text-secondary py-1 border-b border-vox-border-subtle">• {c}</div>
                   ))}
                 </div>
               )}
@@ -1980,11 +1980,11 @@ export default function Home() {
                 <div className="w-full text-left">
                   <div className="text-[10px] text-violet-400/70 uppercase tracking-widest mb-2">Fios em aberto</div>
                   {sessionEndStats.fiosSoltos.slice(0, 2).map((f, i) => (
-                    <div key={i} className="text-xs text-zinc-400 py-1 border-b border-zinc-800/50">⋯ {f}</div>
+                    <div key={i} className="text-xs text-vox-text-secondary py-1 border-b border-vox-border-subtle">⋯ {f}</div>
                   ))}
                 </div>
               )}
-              <div className="text-[10px] text-zinc-600 mt-2">clique para continuar</div>
+              <div className="text-[10px] text-vox-text-muted mt-2">clique para continuar</div>
             </div>
           </div>
         )}
@@ -2013,15 +2013,15 @@ export default function Home() {
               </p>
 
               <div className="mt-6 space-y-3 text-sm">
-                <div className="flex items-center justify-between rounded-lg bg-zinc-900/50 px-4 py-2">
-                  <span className="text-zinc-300">❤️ HP máximo</span>
+                <div className="flex items-center justify-between rounded-lg bg-vox-bg-panel px-4 py-2">
+                  <span className="text-vox-text-secondary">❤️ HP máximo</span>
                   <span className="font-mono text-emerald-300">
-                    +{levelUp.hp_ganho} <span className="text-zinc-500">(→ {levelUp.hp_max_novo})</span>
+                    +{levelUp.hp_ganho} <span className="text-vox-text-muted">(→ {levelUp.hp_max_novo})</span>
                   </span>
                 </div>
                 {levelUp.slots_novos.length > 0 && (
-                  <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
-                    <p className="text-zinc-300">✨ Spell slots</p>
+                  <div className="rounded-lg bg-vox-bg-panel px-4 py-2">
+                    <p className="text-vox-text-secondary">✨ Spell slots</p>
                     <ul className="mt-1 ml-4 text-violet-300 text-xs list-disc">
                       {levelUp.slots_novos.map((s, i) => (
                         <li key={i}>{s}</li>
@@ -2030,8 +2030,8 @@ export default function Home() {
                   </div>
                 )}
                 {levelUp.features_novas.length > 0 && (
-                  <div className="rounded-lg bg-zinc-900/50 px-4 py-2">
-                    <p className="text-zinc-300">⚔️ Novas features</p>
+                  <div className="rounded-lg bg-vox-bg-panel px-4 py-2">
+                    <p className="text-vox-text-secondary">⚔️ Novas features</p>
                     <ul className="mt-1 ml-4 text-amber-300 text-xs list-disc">
                       {levelUp.features_novas.map((f, i) => (
                         <li key={i}>{f}</li>
@@ -2039,7 +2039,7 @@ export default function Home() {
                     </ul>
                   </div>
                 )}
-                <p className="text-center text-xs text-zinc-500 italic">
+                <p className="text-center text-xs text-vox-text-muted italic">
                   Features renovadas. Dado de vida restaurado.
                 </p>
               </div>
@@ -2067,7 +2067,7 @@ export default function Home() {
           className={`fixed bottom-3 right-3 z-30 flex h-9 w-9 items-center justify-center rounded-full border text-base transition ${
             cinemaMode
               ? "border-violet-600/60 bg-violet-950/80 text-violet-300 shadow-[0_0_12px_rgba(139,92,246,0.35)] hover:bg-violet-900/80"
-              : "border-zinc-800 bg-zinc-900/80 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+              : "border-vox-border-subtle bg-vox-bg-panel text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
           }`}
         >
           {cinemaMode ? "🎬" : "🛠️"}
@@ -2180,7 +2180,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setTela("menu")}
-              className="text-sm text-zinc-500 transition hover:text-zinc-300"
+              className="text-sm text-vox-text-muted transition hover:text-vox-text-secondary"
             >
               ← Voltar
             </button>
@@ -2194,12 +2194,12 @@ export default function Home() {
             className="w-full rounded-xl border border-violet-700/60 bg-violet-950/30 py-3 text-sm font-semibold text-violet-300 transition hover:bg-violet-900/40 disabled:opacity-40"
           >
             🎙 Criar conversando com o Mestre
-            <span className="block text-[10px] font-normal text-zinc-500">
+            <span className="block text-[10px] font-normal text-vox-text-muted">
               Sessão Zero por voz — sem formulário; o mestre pergunta, você responde
             </span>
           </button>
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-600">
-            <span className="h-px flex-1 bg-zinc-800" /> ou preencha a ficha <span className="h-px flex-1 bg-zinc-800" />
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-vox-text-muted">
+            <span className="h-px flex-1 bg-vox-bg-elevated" /> ou preencha a ficha <span className="h-px flex-1 bg-vox-bg-elevated" />
           </div>
 
           <CharacterForm onChange={setPersonagem} />
@@ -2241,7 +2241,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { setSessaoSelecionada(null); setTela("menu"); }}
-              className="text-sm text-zinc-500 transition hover:text-zinc-300"
+              className="text-sm text-vox-text-muted transition hover:text-vox-text-secondary"
             >
               ← Voltar
             </button>
@@ -2256,12 +2256,12 @@ export default function Home() {
           {sessaoSelecionada && (
             <div className="rounded-xl border border-violet-800/40 bg-violet-900/10 p-3 space-y-2">
               <p className="text-xs font-semibold text-violet-300">Sessão selecionada</p>
-              <p className="text-xs text-zinc-400">{sessaoSelecionada.session_id}</p>
+              <p className="text-xs text-vox-text-secondary">{sessaoSelecionada.session_id}</p>
               {sessaoSelecionada.location_final && (
-                <p className="text-xs text-zinc-500">📍 {sessaoSelecionada.location_final}</p>
+                <p className="text-xs text-vox-text-muted">📍 {sessaoSelecionada.location_final}</p>
               )}
               {sessaoSelecionada.resumo_curto && (
-                <p className="line-clamp-3 text-xs text-zinc-600">{sessaoSelecionada.resumo_curto}</p>
+                <p className="line-clamp-3 text-xs text-vox-text-muted">{sessaoSelecionada.resumo_curto}</p>
               )}
             </div>
           )}
@@ -2317,7 +2317,7 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-zinc-600">Escolha salva automaticamente.</p>
+          <p className="text-xs text-vox-text-muted">Escolha salva automaticamente.</p>
         </div>
 
         {/* Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md */}
@@ -2338,11 +2338,11 @@ export default function Home() {
                   <span className="font-semibold">{p.label}</span>
                   {dmProfile === p.id && <span className="text-violet-400">✓</span>}
                 </span>
-                <span className="text-[11px] text-zinc-500">{p.descricao}</span>
+                <span className="text-[11px] text-vox-text-muted">{p.descricao}</span>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Aplicado na próxima sessão que você iniciar.
           </p>
         </div>
@@ -2365,11 +2365,11 @@ export default function Home() {
                   <span className="font-semibold">{b.label}</span>
                   {llmBackend === b.id && <span className="text-violet-400">✓</span>}
                 </span>
-                <span className="text-[11px] text-zinc-500">{b.descricao}</span>
+                <span className="text-[11px] text-vox-text-muted">{b.descricao}</span>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Aplicado imediatamente na sessão ativa. Quando o limite diário do Groq
             estourar, troque pra Ollama daqui sem perder o jogo.
           </p>
@@ -2393,11 +2393,11 @@ export default function Home() {
                   <span className="font-semibold">{o.label}</span>
                   {rollVisibility === o.id && <span className="text-violet-400">✓</span>}
                 </span>
-                <span className="text-[11px] text-zinc-500">{o.descricao}</span>
+                <span className="text-[11px] text-vox-text-muted">{o.descricao}</span>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Controla o que você vê quando o mestre rola dados internamente.
           </p>
         </div>
@@ -2420,11 +2420,11 @@ export default function Home() {
                 }`}
               >
                 <span className="font-semibold">{o.label}{deathPolicy === o.id && " ✓"}</span>
-                <span className="text-[10px] text-zinc-500">{o.desc}</span>
+                <span className="text-[10px] text-vox-text-muted">{o.desc}</span>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Vale pra próxima sessão criada. A 0 PV: narrativo = captura/perda/cicatriz; mortal = salvaguardas contra a morte.
           </p>
         </div>
@@ -2437,18 +2437,18 @@ export default function Home() {
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               modoEpisodio
                 ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+                : "border-vox-border-subtle bg-vox-bg-panel text-vox-text-muted hover:border-vox-border-strong"
             }`}
           >
             <span>
               🎬 Modo episódio
-              <span className="ml-2 text-[10px] text-zinc-500">mestre propõe fecho pós-clímax + gancho</span>
+              <span className="ml-2 text-[10px] text-vox-text-muted">mestre propõe fecho pós-clímax + gancho</span>
             </span>
-            <span className={`text-xs font-semibold ${modoEpisodio ? "text-violet-400" : "text-zinc-600"}`}>
+            <span className={`text-xs font-semibold ${modoEpisodio ? "text-violet-400" : "text-vox-text-muted"}`}>
               {modoEpisodio ? "ON" : "OFF"}
             </span>
           </button>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Desligado = sessão livre, o mestre nunca sugere parar.
           </p>
         </div>
@@ -2461,14 +2461,14 @@ export default function Home() {
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               idleNudgeAtivo
                 ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+                : "border-vox-border-subtle bg-vox-bg-panel text-vox-text-muted hover:border-vox-border-strong"
             }`}
           >
             <span>
               🤫 Mestre quebra o silêncio
-              <span className="ml-2 text-[10px] text-zinc-500">empurrão atmosférico após ~75s parado</span>
+              <span className="ml-2 text-[10px] text-vox-text-muted">empurrão atmosférico após ~75s parado</span>
             </span>
-            <span className={`text-xs font-semibold ${idleNudgeAtivo ? "text-violet-400" : "text-zinc-600"}`}>
+            <span className={`text-xs font-semibold ${idleNudgeAtivo ? "text-violet-400" : "text-vox-text-muted"}`}>
               {idleNudgeAtivo ? "ON" : "OFF"}
             </span>
           </button>
@@ -2482,18 +2482,18 @@ export default function Home() {
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               somCritico
                 ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+                : "border-vox-border-subtle bg-vox-bg-panel text-vox-text-muted hover:border-vox-border-strong"
             }`}
           >
             <span>
               🎺 Crítico / 🥁 Falha
-              <span className="ml-2 text-[10px] text-zinc-500">som curto em natural 20 / 1</span>
+              <span className="ml-2 text-[10px] text-vox-text-muted">som curto em natural 20 / 1</span>
             </span>
-            <span className={`text-xs font-semibold ${somCritico ? "text-violet-400" : "text-zinc-600"}`}>
+            <span className={`text-xs font-semibold ${somCritico ? "text-violet-400" : "text-vox-text-muted"}`}>
               {somCritico ? "ON" : "OFF"}
             </span>
           </button>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Sintético, sem download. Default ligado — desligue se for atrapalhar o vídeo.
           </p>
         </div>
@@ -2510,18 +2510,18 @@ export default function Home() {
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
               syncAtivo
                 ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-600"
+                : "border-vox-border-subtle bg-vox-bg-panel text-vox-text-muted hover:border-vox-border-strong"
             }`}
           >
             <span>
               🎤 Karaokê reverso
-              <span className="ml-2 text-[10px] text-zinc-500">texto acompanha o áudio</span>
+              <span className="ml-2 text-[10px] text-vox-text-muted">texto acompanha o áudio</span>
             </span>
-            <span className={`text-xs font-semibold ${syncAtivo ? "text-violet-400" : "text-zinc-600"}`}>
+            <span className={`text-xs font-semibold ${syncAtivo ? "text-violet-400" : "text-vox-text-muted"}`}>
               {syncAtivo ? "ON" : "OFF"}
             </span>
           </button>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-vox-text-muted">
             Revela o texto do mestre no ritmo da fala (~300ms à frente do áudio).
             Desligue se preferir ver o texto completo antes de ouvir.
           </p>
