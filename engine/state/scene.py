@@ -74,6 +74,15 @@ class SceneState:
     locais_visitados: set[str] = field(default_factory=set)
     retorno_local_conhecido: bool = False
 
+    # Anti-repetição do clima (FRIO-DREVAMOR-1): o clima estático do local
+    # (ex.: weather="frio") era injetado como "Clima: frio" em TODO turno,
+    # re-primando o clichê que o master_system.md proíbe ("o frio de Drevamor"
+    # a cada resposta). Esta chave guarda o "local|clima" já escrito no prompt;
+    # o clima entra UMA vez ao chegar no local (ou quando o clima muda de fato)
+    # e some nos turnos seguintes — a Hora (que muda) permanece. Transiente:
+    # NÃO é serializado (a persistência restaura só location_id/nome).
+    _clima_no_prompt_chave: str = ""
+
     # ── Operações ────────────────────────────────────────────────────────────
 
     def aplicar_cena(self, location_id: str, location_nome: str = "", time_of_day: str = "") -> bool:
@@ -175,10 +184,15 @@ class SceneState:
         """
         from engine.memory.working_memory import _id_para_nome  # evita ciclo
 
-        linhas = [
-            f"Local: {self.location_nome} ({self.location_id})",
-            f"Hora: {self.time_of_day} | Clima: {self.weather}",
-        ]
+        linhas = [f"Local: {self.location_nome} ({self.location_id})"]
+        # Clima estático entra só quando é NOVO (local ou clima mudou) — evita
+        # re-primar o clichê todo turno (FRIO-DREVAMOR-1). Hora sempre entra.
+        chave_clima = f"{self.location_id}|{self.weather}"
+        if self.weather and chave_clima != self._clima_no_prompt_chave:
+            linhas.append(f"Hora: {self.time_of_day} | Clima: {self.weather}")
+            self._clima_no_prompt_chave = chave_clima
+        else:
+            linhas.append(f"Hora: {self.time_of_day}")
 
         if self.npcs_presentes:
             conhecidos = [n for n in self.npcs_presentes if n in self.npcs_apresentados]
