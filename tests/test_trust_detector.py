@@ -148,3 +148,41 @@ def test_acao_nao_social_nao_muda_trust(texto):
 ])
 def test_acao_social_real_preservada(texto, npc, delta):
     assert (npc, delta) in detectar_mudancas_trust(texto, NPCS)
+
+
+# ── TRUST-IMUTAVEL-1: alvo único inequívoco quando o jogador não nomeia (voz) ──
+
+UM = ["fael-valdreksson"]
+
+
+@pytest.mark.parametrize("texto", [
+    "agradeço pela ajuda",          # gesto de boa-fé sem nomear (caso típico de voz)
+    "ofereço minha ajuda",
+    "ajudo a se levantar",
+    "curo os ferimentos",
+    "prometo proteger",
+])
+def test_positivo_sem_nome_atribui_ao_unico_npc(texto):
+    # Com UM único NPC presente o alvo é inequívoco → +1 a ele
+    assert (UM[0], +1) in detectar_mudancas_trust(texto, UM)
+
+
+def test_positivo_sem_nome_com_dois_npcs_permanece_ambiguo():
+    # 2+ NPCs e sem nome → ambíguo → nada muda (conservador, sem chutar alvo)
+    dois = ["fael-valdreksson", "osmund-ferreiro"]
+    assert detectar_mudancas_trust("agradeço pela ajuda", dois) == []
+
+
+def test_negativo_sem_nome_com_unico_npc_permanece_estrito():
+    # Caminho negativo NÃO ganha fallback de alvo único: não punir por engano
+    assert detectar_mudancas_trust("minto para enganar", UM) == []
+
+
+def test_positivo_com_nome_e_unico_npc_ainda_funciona():
+    # Regressão: nomear o NPC continua funcionando com lista de 1
+    assert (UM[0], +1) in detectar_mudancas_trust("ajudo Fael a se levantar", UM)
+
+
+def test_unico_npc_sem_acao_nao_muda_trust():
+    # Sem verbo de boa-fé, o NPC único não recebe +1 só por estar presente
+    assert detectar_mudancas_trust("olho ao redor da taverna", UM) == []

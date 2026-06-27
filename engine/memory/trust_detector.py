@@ -163,6 +163,15 @@ def detectar_mudancas_trust(
     # Ações positivas em favor de NPC específico
     if _RE_POSITIVO.search(texto_jogador):
         alvo = _extrair_npc_mencionado(texto_jogador, npcs_presentes)
+        # TRUST-IMUTAVEL-1: em jogo por voz o jogador raramente NOMEIA o NPC
+        # ("agradeço pela ajuda", "ofereço minha ajuda") → alvo=None → o trust
+        # nunca mudava a sessão inteira. Quando há UM ÚNICO NPC na cena o alvo é
+        # inequívoco, então a ação de boa-fé é atribuída a ele. Restrito ao
+        # caminho POSITIVO de propósito: um falso-positivo aqui é benigno (o NPC
+        # gosta +1), enquanto a filosofia do detector prefere NÃO punir por
+        # engano — o caminho negativo continua exigindo nome explícito.
+        if not alvo and len(npcs_presentes) == 1:
+            alvo = npcs_presentes[0]
         if alvo:
             # Não adicionar +1 se o mesmo NPC já recebeu -1 neste turno (traição prevalece)
             npcs_negativos = {npc for npc, delta in mudancas if delta < 0}
