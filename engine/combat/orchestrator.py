@@ -24,7 +24,18 @@ import random
 from typing import Any
 
 from engine.combat.enemy_turn import resolver_turno_inimigos
+from engine.combat.narration import (
+    linha_ataque_jogador,
+    linha_dano_jogador,
+    linha_turno_inimigos,
+)
 from engine.combat.resolver import ResultadoAtaque, resolver_ataque, resolver_dano
+
+# Dado de arma genérico quando a engine rola o dano do jogador (v1 da task 7).
+# O jogador rola o d20 do ATAQUE na UI (decisão travada 19/06); o dado de DANO
+# é rolado pela engine aqui pra evitar um 3º round-trip de mensagem. d8 ≈ arma
+# marcial média — calibrar com a arma real no playtest/frontend (task 9).
+_DADO_ARMA_PADRAO = 8
 
 
 def resolver_ataque_do_jogador(wm: Any, alvo_id: str, d20: int) -> ResultadoAtaque | None:
@@ -65,3 +76,66 @@ def executar_turno_inimigos(wm: Any, rng: random.Random | None = None) -> dict[s
         wm.character.aplicar_dano(res["dano_total"])
     res["hp_jogador"] = wm.player_hp
     return res
+
+
+def resolver_turno_ataque_jogador(
+    wm: Any,
+    alvo_id: str,
+    d20: int,
+    *,
+    dado_arma: int = _DADO_ARMA_PADRAO,
+    rng: random.Random | None = None,
+) -> dict[str, Any]:
+    """Resolve um turno de combate COMPLETO do jogador, engine-autoritativo (task 7).
+
+    Sequência (o LLM NÃO decide nem rola, só narra o resultado):
+      1. ataque do jogador: d20 (da UI) + mod vs a CA do alvo;
+      2. se acerta, dano: a engine rola o dado da arma + mod (crit dobra o dado);
+      3. consome a AÇÃO do jogador (action economy);
+      4. turno dos inimigos: cada vivo rola vs a CA do jogador, dano aplicado no PJ;
+      5. avança a rodada (renova ação/bônus/movimento).
+
+    Devolve o CONTEXTO factual em linhas "ENGINE: ..." pro Mestre narrar, mais as
+    flags dos beats. PURO de IO (só muta a WM + formata texto). `valido=False`
+    quando o alvo não existe ou já está morto — o caller trata como alvo inválido
+    (cai no fluxo antigo). RNG injetável pra teste determinístico.
+    """
+    rng = rng or random.Random()
+    r = resolver_ataque_do_jogador(wm, alvo_id, d20)
+    if r is None:
+        return {"valido": False, "contexto": ""}
+
+    alvo = wm.inimigos_combate.get(alvo_id, {})
+    nome = str(alvo.get("nome") or alvo_id)
+    linhas = [linha_ataque_jogador(nome, r)]
+
+    dano = 0
+    estado = str(alvo.get("estado", ""))
+    if r.acertou:
+        rolado = rng.randint(1, max(2, int(dado_arma)))
+        dano, estado = aplicar_dano_do_jogador(wm, alvo_id, rolado, critico=r.critico)
+        linhas.append(linha_dano_jogador(nome, dano, estado))
+
+    # Action economy: a ação do jogador foi gasta nesta rodada.
+    wm.usar_acao()
+
+    # Turno dos inimigos (engine rola vs a CA do jogador e aplica o dano no PJ).
+    res_inim = executar_turno_inimigos(wm, rng)
+    linhas.append(linha_turno_inimigos(res_inim))
+
+    # Nova rodada — renova ação/bônus/movimento.
+    wm.avancar_rodada()
+
+    vivos = [d for d in wm.inimigos_combate.values() if d.get("estado") != "morto"]
+    return {
+        "valido": True,
+        "contexto": "\n".join(linhas),
+        "acertou": r.acertou,
+        "critico": r.critico,
+        "falha_critica": r.falha_critica,
+        "estado_alvo": estado,
+        "dano": dano,
+        "dano_inimigos": int(res_inim.get("dano_total", 0)),
+        "hp_jogador": wm.player_hp,
+        "fim_combate": len(vivos) == 0,
+    }

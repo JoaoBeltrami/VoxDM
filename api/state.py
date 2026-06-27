@@ -82,6 +82,12 @@ class SessaoAtiva:
     # (no fim do pipeline). Se o turno falhar, o slot não é perdido.
     spell_pending: tuple[str, int] | None = None
 
+    # Task 7 (combate engine-autoritativo): alvo do ataque declarado, aguardando
+    # a rolagem d20 do jogador. {"tipo": "ataque", "alvo": npc_id}. Setado quando
+    # o jogador declara "ataco o X" em combate; consumido quando o [Rolagem:] chega
+    # e a engine resolve. Inerte quando COMBATE_ENGINE_ATIVO=False.
+    combate_pendente: dict | None = None
+
     # Dashboard admin: histórico de turnos para gráficos (max 50, rolling).
     # Cada entry: {turno, pacing, hp, hp_max, em_combate, provider, task_type,
     #              latencia_ms, erros}. Populado em websocket.py após cada fim.

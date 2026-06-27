@@ -476,6 +476,37 @@ def _encontrar_id_inimigo(
     return candidatos[0][1]
 
 
+def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str | None:
+    """Id do inimigo que o jogador está atacando, ou None se ambíguo/ausente.
+
+    Usado pela costura de combate engine-autoritativo (task 7) ANTES do LLM, pra
+    saber contra quem resolver a rolagem. Estratégia:
+      1. nome explícito no texto (`_RE_ALVO_ATAQUE`, ignorando pronomes) →
+         registra o inimigo se ainda não existir e devolve o id;
+      2. sem nome, mas há UM ÚNICO inimigo vivo → mira nele ("ataco ele");
+      3. senão None (ambíguo — caller pede alvo ou cai no fluxo antigo).
+    """
+    for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
+        nome = m.group(1).strip().rstrip(".,!?")
+        if not nome:
+            continue
+        primeira = nome.split()[0].lower() if nome.split() else ""
+        if nome.lower() in _PRONOMES or primeira in _PRONOMES:
+            continue
+        iid = _slugify(nome)
+        if not iid:
+            continue
+        if iid not in working_mem.inimigos_combate:
+            working_mem.registrar_inimigo(iid, nome.title(), "intacto")
+        return iid
+
+    vivos = [
+        iid for iid, d in working_mem.inimigos_combate.items()
+        if d.get("estado") != "morto"
+    ]
+    return vivos[0] if len(vivos) == 1 else None
+
+
 def sincronizar_inimigos_combate(
     working_mem: WorkingMemory,
     texto_jogador: str,

@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     DEFAULT_MODULE_PATH: str = "./modulo_teste/modulo_teste_v1.2.json"
 
+    # Task 7 — combate engine-autoritativo wirado no websocket. Kill-switch: a
+    # engine resolve ataque/dano/turno-dos-inimigos e o Mestre só narra. False
+    # volta 100% ao fluxo antigo (LLM narra combate livre). Default True pra o
+    # playtest; setar VOXDM... COMBATE_ENGINE_ATIVO=false no .env desliga na hora.
+    COMBATE_ENGINE_ATIVO: bool = True
+
     # Fase 1 — Regras SRD
     SRD_DATA_DIR: str = "./srd_data"
     QDRANT_COLECAO_RULES: str = "voxdm_rules"

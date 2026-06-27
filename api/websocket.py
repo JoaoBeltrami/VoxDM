@@ -218,6 +218,14 @@ _RE_ROLAGEM_FABRICADA = re.compile(
     re.IGNORECASE,
 )
 
+# Task 7: a rolagem que o JOGADOR envia da UI — captura faces e valor.
+# `[Rolagem: d20 = 15]`. Usada pela costura de combate pra interceptar o d20 do
+# ataque quando há um alvo pendente e deixar a ENGINE resolver (em vez do LLM).
+_RE_ROLAGEM_JOGADOR = re.compile(
+    r"\[Rolagem\s*:\s*d(\d+)\s*=\s*(\d+)\]",
+    re.IGNORECASE,
+)
+
 # Os regexes de combate e o sync de inimigos vivem em api/turn_pipeline para que
 # o endpoint REST `/turn` e o WebSocket usem a MESMA implementação. Re-exportados
 # aqui só por compat com tests legados que importam de api.websocket.
@@ -239,8 +247,12 @@ from api.turn_pipeline import (  # noqa: E402
     reinferir_npcs_se_mudou_cena,
 )
 from api.turn_pipeline import (
+    extrair_alvo_ataque as _extrair_alvo_ataque,
+)
+from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
+from engine.combat.orchestrator import resolver_turno_ataque_jogador
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
@@ -1556,6 +1568,72 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     sessao.working_mem.entrar_combate()
             elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
                 sessao.working_mem.sair_combate()
+
+            # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
+            # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
+            # ataque do jogador (d20+mod vs CA), o dano e o turno dos inimigos; o
+            # Mestre só NARRA o resultado (linhas "ENGINE: ..."). Sem alvo pendente
+            # o fluxo antigo (LLM narra combate livre) segue 100% intacto.
+            if settings.COMBATE_ENGINE_ATIVO and not sessao.working_mem.session_zero_ativa:
+                _m_rol = _RE_ROLAGEM_JOGADOR.search(texto_jogador)
+                _eh_d20 = bool(_m_rol and _m_rol.group(1) == "20")
+                if sessao.combate_pendente:
+                    # Há um ataque declarado aguardando a rolagem.
+                    _pend = sessao.combate_pendente
+                    sessao.combate_pendente = None
+                    if _eh_d20 and sessao.working_mem.em_combate:
+                        _d20 = int(_m_rol.group(2))
+                        try:
+                            _res = resolver_turno_ataque_jogador(
+                                sessao.working_mem, str(_pend.get("alvo", "")), _d20
+                            )
+                        except Exception as _e:  # nunca derruba o turno
+                            log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
+                            _res = {"valido": False}
+                        if _res.get("valido"):
+                            log.info(
+                                "combate_engine_resolveu", session_id=session_id,
+                                alvo=_pend.get("alvo"), acertou=_res.get("acertou"),
+                                dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
+                                fim=_res.get("fim_combate"),
+                            )
+                            if _res.get("fim_combate"):
+                                sessao.working_mem.sair_combate()
+                            # O resultado da engine vira instrução de NARRAÇÃO.
+                            texto_jogador = (
+                                "(Narre este turno de combate dando corpo às decisões da "
+                                "ENGINE abaixo. NÃO invente nem repita números crus de "
+                                "rolagem/CA/HP — são finais. Vívido nos momentos-chave "
+                                "(crítico, abate, virada), seco nas ações triviais. 2-4 "
+                                "frases.)\n" + str(_res.get("contexto", ""))
+                            )
+                        # _res inválido (alvo morto/inexistente) → segue com o texto
+                        # cru da rolagem no fluxo antigo (fallback seguro).
+                    # rolagem não-d20 / fora de combate → pendência descartada, segue normal
+                elif (
+                    sessao.working_mem.em_combate
+                    and not _m_rol
+                    and _RE_COMBATE.search(texto_jogador)
+                ):
+                    # Declaração de ataque em combate → fixa o alvo e deixa o LLM
+                    # PEDIR a rolagem (a engine resolve quando o d20 chegar). Sem
+                    # alvo claro (ambíguo), cai no fluxo antigo.
+                    _alvo = _extrair_alvo_ataque(texto_jogador, sessao.working_mem)
+                    if _alvo:
+                        try:
+                            from engine.bestiary.bestiary import enriquecer_fichas_inimigos
+                            await enriquecer_fichas_inimigos(sessao.working_mem)
+                        except Exception:
+                            pass  # stats default (CA 12) se o bestiário falhar
+                        sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
+                        _nome_alvo = sessao.working_mem.inimigos_combate.get(_alvo, {}).get("nome", _alvo)
+                        texto_jogador = (
+                            f"{texto_jogador}\n(O jogador ataca {_nome_alvo}. Descreva a "
+                            "investida em 1-2 frases e PEÇA a rolagem de ataque (d20) — "
+                            "NÃO resolva o golpe nem invente o resultado; a engine "
+                            "resolve quando o dado chegar.)"
+                        )
+                        log.info("combate_engine_pendente", session_id=session_id, alvo=_alvo)
 
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
             contexto = None
