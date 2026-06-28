@@ -239,8 +239,13 @@ class MensagemWS(BaseModel):
     cronica: list[str] = Field(default_factory=list)
     # Estado de combate — enviado no "fim" para sincronizar CombatTracker
     em_combate: bool = False
-    # inimigo_id → {nome, estado, hp_rel} — espelha working_mem.inimigos_combate
-    inimigos_combate: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # inimigo_id → {nome, estado, hp_rel, ca, hp_max, hp_atual, ...} — espelha
+    # working_mem.inimigos_combate. Valores MISTOS: nome/estado/hp_rel são str,
+    # mas ca/hp_max/hp_atual vêm INT do bestiário (aplicar_stats_inimigo). Tipar
+    # como `str` quebrava a validação do payload `fim` quando o bestiário achava
+    # uma ficha real → ValidationError → WS fechava → loop infinito de reconexão
+    # (playtest 27/06, inimigo "capuz"=cultist com ca=12/hp=9). `Any` aceita o mix.
+    inimigos_combate: dict[str, dict[str, Any]] = Field(default_factory=dict)
     # Rodada real de combate (incrementada por avancar_rodada()) — NÃO é o turno da sessão
     rodada_combate: int = 0
     # Rodada esperada pelo backend no momento do "fim" — permite que o frontend detecte
