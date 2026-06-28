@@ -230,6 +230,37 @@ _TOKENS_NAO_NPC = frozenset({
     "desconhecido", "desconhecida", "desconhecidos", "desconhecidas",
     "alguem", "ninguem", "figura", "vulto", "silhueta", "multidao",
     # NÃO incluir "divino"/"divina": são epítetos de pessoa ("Aldric, o Divino").
+    # NPC-LIXO (playtest 27/06): OBJETOS que o 8B registrou como NPC ("barril").
+    # Nunca são personagens, mesmo em id de 1 token só.
+    "barril", "frasco", "garrafa", "caixa", "bau", "objeto", "amuleto", "tocha",
+})
+
+# NPC-LIXO (playtest 27/06): o 8B registrava DESCRITORES como NPC presente —
+# "velho-mercador", "homem-esguio", "mulher-fragil", "homem-de-capuz",
+# "sombra-contorcida", "recem-chegado", "pequena-bruxa", "sussurro-da-esquerda".
+# Um NPC REAL tem NOME PRÓPRIO (≥1 token fora desta lista). Um id de 2+ tokens
+# 100% comuns é descrição genérica, não personagem. NÃO incluir papéis que são
+# NPCs LEGÍTIMOS do módulo (ex: "historiador") — só artigos/descritores/genéricos.
+_PALAVRAS_COMUNS = frozenset({
+    # estruturais (artigos, preposições)
+    "o", "a", "os", "as", "de", "da", "do", "das", "dos", "e", "com", "sem",
+    "em", "no", "na", "ao", "um", "uma", "que",
+    # genéricos de pessoa
+    "homem", "mulher", "velho", "velha", "crianca", "jovem", "rapaz", "moca",
+    "moco", "menino", "menina", "pessoa", "gente", "sujeito", "individuo",
+    "cara", "criatura", "ser", "coisa", "voz", "bruxa", "bruxo",
+    # papéis GENÉRICOS (não específicos do módulo)
+    "guarda", "soldado", "mercador", "comerciante", "vendedor", "viajante",
+    "forasteiro", "estranho", "estranha", "estrangeiro", "aldeao", "camponos",
+    "servo", "criado", "mendigo", "encapuzado", "amigo", "amiga",
+    # descritores
+    "esguio", "fragil", "pequeno", "pequena", "grande", "alto", "baixo",
+    "magro", "gordo", "misterioso", "misteriosa", "recem", "chegado", "chegada",
+    "contorcido", "contorcida", "noturno", "noturna", "escuro", "escura",
+    "sombrio", "sombria", "conhecido", "conhecida",
+    # objetos/fenômenos que aparecem em id composto
+    "sussurro", "assobio", "eco", "grito", "murmurio", "sombra", "vulto",
+    "figura", "esquerda", "direita", "fundo", "capuz", "capa",
 })
 _MAX_NPCS_PRESENTES = 8
 
@@ -249,6 +280,11 @@ def _e_entidade_invalida(nid: str, location_id: str = "", location_nome: str = "
     # como substring: pegava nomes próprios ("Amadeus", "Deusdedit"). A forma colada
     # "adeusa" já está em _TOKENS_NAO_NPC.
     if any(("divind" in t or "deidad" in t) for t in tokens):
+        return True
+    # NPC-LIXO (playtest 27/06): id de 2+ tokens, TODOS palavras comuns (sem nome
+    # próprio) = descritor genérico, não NPC ("velho-mercador", "homem-de-capuz").
+    # Single-token fica de fora (preserva papéis legítimos do módulo: "historiador").
+    if len(tokens) >= 2 and tokens <= _PALAVRAS_COMUNS:
         return True
     return False
 
