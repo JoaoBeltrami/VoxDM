@@ -261,6 +261,20 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     "deusa-da-guerra",
     "clerigo-desconhecido",  # figurante anônimo
     "figura-encapuzada",
+    # NPC-LIXO (playtest 27/06): DESCRITORES sem nome próprio que o 8B registrou
+    # como NPC presente. "velho-mercador" era a decisão de produto pendente (PT-3);
+    # o Beltrami decidiu rejeitar descritores. Objetos ("barril") também.
+    "velho-mercador",
+    "homem-esguio",
+    "mulher-fragil",
+    "homem-de-capuz",
+    "sombra-contorcida",
+    "recem-chegado",
+    "pequena-bruxa",
+    "sussurro-da-esquerda",
+    "guarda-noturno",
+    "velho-amigo",
+    "barril",                # objeto, id de 1 token só
 ])
 def test_entidade_invalida_rejeita_lixo(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True
@@ -269,8 +283,9 @@ def test_entidade_invalida_rejeita_lixo(nid):
 @pytest.mark.parametrize("nid", [
     "aldric-drevasson",
     "maren-drevadottir",
-    "velho-mercador",
     "osmund-o-exilado",
+    "gharen-braco-de-ferro",  # nome próprio + descritor → preserva
+    "historiador",            # papel legítimo do módulo, id de 1 token
     # Regressão (hardening adversarial 24/06): NÃO podem ser rejeitados — "deus"
     # como substring pegava nomes próprios; "divino/divina" são epítetos de pessoa.
     "amadeus",
