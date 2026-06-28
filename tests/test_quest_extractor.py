@@ -9,6 +9,7 @@ Cobrem também a persistência (dm_state) e a injeção no prompt. Mock do groq 
 import pytest
 
 from engine.llm.extractor import (
+    _quest_reativa,
     _sanitizar_quests,
     aplicar_quests_extraidas,
     extrair_quests_cena,
@@ -140,6 +141,48 @@ def test_sanitizar_quests_cap_e_dedup():
 def test_sanitizar_quests_vazio():
     out = _sanitizar_quests({}, ids_abertos=set())
     assert out == {"novas": [], "concluidas": []}
+
+
+# ── QUEST-SPAM (playtest 27/06): movimento/ação física momentânea ≠ missão ────
+
+@pytest.mark.parametrize("qid,titulo", [
+    ("subir-ao-andar-superior", "Subir ao andar superior"),
+    ("continuar-no-corredor", "Continuar no corredor"),
+    ("acender-fosforo", "Acender o fósforo"),
+    ("hesita-um-segundo", "Hesita um segundo"),
+    ("sentir-que-esta-escondendo-algo", "Sentir que está escondendo algo"),
+    ("pegar-o-amuleto", "Pegar o amuleto"),
+    ("abrir-a-porta", "Abrir a porta"),
+])
+def test_quest_momentanea_e_reativa(qid, titulo):
+    assert _quest_reativa(qid, titulo) is True
+
+
+@pytest.mark.parametrize("qid,titulo", [
+    ("investigar-as-luzes-da-torre", "Investigar as luzes da torre"),
+    ("encontrar-o-ferreiro-sumido", "Encontrar o ferreiro sumido"),
+    ("descobrir-quem-matou-o-prefeito", "Descobrir quem matou o prefeito"),
+    ("explorar-as-catacumbas", "Explorar as catacumbas"),
+])
+def test_quest_objetivo_real_nao_e_reativa(qid, titulo):
+    # Verbos ambíguos (investigar/encontrar/descobrir/explorar) PODEM ser objetivo
+    # real — não foram adicionados ao filtro, pra não matar missão legítima.
+    assert _quest_reativa(qid, titulo) is False
+
+
+def test_sanitizar_quests_filtra_momentaneas_preserva_objetivo():
+    out = _sanitizar_quests(
+        {"novas": [
+            {"id": "subir-ao-andar-superior", "titulo": "Subir ao andar superior", "objetivo": "ir pra cima"},
+            {"id": "acender-fosforo", "titulo": "Acender o fósforo", "objetivo": "iluminar"},
+            {"id": "investigar-a-torre", "titulo": "Investigar a torre", "objetivo": "descobrir o que há lá"},
+        ]},
+        ids_abertos=set(),
+    )
+    ids = [q["id"] for q in out["novas"]]
+    assert "subir-ao-andar-superior" not in ids
+    assert "acender-fosforo" not in ids
+    assert "investigar-a-torre" in ids  # objetivo real sobrevive
 
 
 # ── aplicar_quests_extraidas ─────────────────────────────────────────────────────

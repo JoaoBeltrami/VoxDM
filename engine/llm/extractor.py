@@ -444,6 +444,16 @@ _VERBOS_REATIVOS = frozenset({
     "responder", "abordar", "acalmar", "falar", "perguntar", "conversar",
     "dizer", "contar", "ouvir", "escutar", "cumprimentar", "saudar",
     "agradecer", "reagir", "decidir", "esperar", "observar", "olhar",
+    # QUEST-SPAM (playtest 27/06): movimento e ação física MOMENTÂNEA também
+    # viravam "missão" — "subir-ao-andar-superior", "continuar-no-corredor",
+    # "acender-fosforo", "hesita-um-segundo", "sentir-que-esta-escondendo-algo".
+    # São o passo do turno, não objetivo multi-turno. SÓ verbos inequívocos de
+    # 1 turno: NÃO incluir investigar/descobrir/explorar/encontrar (podem ser
+    # objetivos reais: "investigar as luzes na torre", "encontrar o ferreiro").
+    "subir", "descer", "entrar", "sair", "continuar", "seguir", "voltar",
+    "avancar", "atravessar", "recuar", "aproximar", "correr", "caminhar",
+    "acender", "pegar", "agarrar", "segurar", "cheirar", "tocar", "apalpar",
+    "guardar", "soltar", "largar", "sentir", "hesitar", "hesita", "abrir", "fechar",
 })
 
 
