@@ -244,6 +244,7 @@ from api.turn_pipeline import (  # noqa: E402
     aplicar_afeto_npcs,
     aplicar_pos_turno,
     aplicar_xp_e_detectar_level_up,
+    deve_auto_registrar_generico,
     reinferir_npcs_se_mudou_cena,
 )
 from api.turn_pipeline import (
@@ -2006,11 +2007,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 resposta_limpa,
             )
 
-            # F0 (teste #3): combate SEM nenhum inimigo registrado = beat
-            # dormente + tracker vazio a sessão inteira (o LLM nunca emitiu
-            # [INIMIGO]). A engine não espera mais: registra um oponente
-            # genérico; o extractor estruturado refina nome/estado em seguida.
-            if sessao.working_mem.em_combate and not sessao.working_mem.inimigos_combate:
+            # F0 (teste #3): combate SEM inimigo registrado = beat dormente +
+            # tracker vazio (o LLM nunca emitiu [INIMIGO]). A engine registra um
+            # oponente genérico; o extractor refina nome/estado.
+            # COMBATE-FANTASMA (29/06): NÃO cria o genérico quando há NPCs
+            # presentes — o inimigo é um deles, registrado por nome no ataque
+            # (ALVO-FANTASMA). Sem isso, matar o fantasma encerrava o combate.
+            if deve_auto_registrar_generico(sessao.working_mem):
                 sessao.working_mem.registrar_inimigo("oponente-1", "Oponente", "intacto")
                 log.info("inimigo_generico_auto_registrado", session_id=session_id)
 
