@@ -40,6 +40,29 @@ def _wm_em_combate():
     return wm
 
 
+# ── mod_ataque/mod_dano — cobrir conjurador (playtest 29/06) ──────────────────
+
+def test_mod_ataque_usa_atributo_de_conjurador():
+    # Bruxo nv3: CHA alta, físico baixo. Antes mod_ataque usava só FOR/DES → 0+2=2
+    # e o Bruxo errava tudo. Agora usa o MELHOR atributo (CHA) → +3+2 = 5.
+    wm = WorkingMemory.nova_sessao(location_id="x", location_nome="X", session_id="bruxo")
+    wm.character.str_score = 10   # mod 0
+    wm.character.dex_score = 10   # mod 0
+    wm.character.cha_score = 16   # mod +3
+    wm.character.player_level = 3  # prof +2
+    assert wm.mod_ataque() == 5
+    assert wm.mod_dano() == 3
+
+
+def test_mod_ataque_marcial_inalterado():
+    # Guerreiro FOR 16 continua usando FOR (regressão).
+    wm = WorkingMemory.nova_sessao(location_id="x", location_nome="X", session_id="guer")
+    wm.character.str_score = 16   # +3
+    wm.character.cha_score = 8     # -1
+    wm.character.player_level = 3  # prof +2
+    assert wm.mod_ataque() == 5   # +3 FOR + 2 prof
+
+
 # ── resolver_ataque_do_jogador ───────────────────────────────────────────────
 
 def test_ataque_acerta_vs_ca_do_alvo():

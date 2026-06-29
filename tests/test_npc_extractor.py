@@ -275,6 +275,9 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     "guarda-noturno",
     "velho-amigo",
     "barril",                # objeto, id de 1 token só
+    "ela",                   # PRONOME (playtest 29/06: "ela" virou NPC e entrou no combate)
+    "ele",
+    "voce",
 ])
 def test_entidade_invalida_rejeita_lixo(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True

@@ -233,6 +233,10 @@ _TOKENS_NAO_NPC = frozenset({
     # NPC-LIXO (playtest 27/06): OBJETOS que o 8B registrou como NPC ("barril").
     # Nunca são personagens, mesmo em id de 1 token só.
     "barril", "frasco", "garrafa", "caixa", "bau", "objeto", "amuleto", "tocha",
+    # PRONOMES (playtest 29/06): o 8B registrou "ela" como NPC e ela entrou no
+    # combate. Pronome NUNCA é nome próprio de NPC.
+    "ela", "ele", "eles", "elas", "voce", "voces", "vc", "eu", "mim", "nos",
+    "isso", "isto", "aquilo", "lhe", "lhes", "ti", "si",
 })
 
 # NPC-LIXO (playtest 27/06): o 8B registrava DESCRITORES como NPC presente —
