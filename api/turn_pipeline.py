@@ -29,6 +29,7 @@ from typing import Any
 
 import structlog
 
+from config import settings
 from engine.llm.extractor import _capar_npcs_presentes, _chave_dedup, _e_entidade_invalida
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
@@ -886,10 +887,27 @@ def aplicar_pos_turno(
         working_mem.sair_combate()
         log.info("combate_encerrado_fuga")
 
-    # 7a. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync
+    # 7a. Fim de combate detectado na narração — POR ÚLTIMO, depois do sync.
+    # Engine-first (29/06): a ENGINE é a AUTORIDADE sobre o fim de combate
+    # (orchestrator.fim_combate e o step 7b exigem TODOS os inimigos mortos).
+    # Quando COMBATE_ENGINE_ATIVO e há inimigos registrados VIVOS, a narração do
+    # LLM NÃO encerra o combate — só o step 7b (todos mortos), o [FUGIU] do
+    # jogador (step 7) ou o timeout (7c) podem. Sem essa trava, o lite narrando
+    # "a área está segura" enquanto a família do patriarca ainda luta (registrada,
+    # hp>0) abandonava combatentes vivos — o "dois donos"/família-bystander do
+    # playtest 29/06. Quando NÃO há inimigos vivos registrados (combate
+    # fantasma/legado sem [INIMIGO]) OU a engine está desligada, a narração segue
+    # sendo o sinal de fim — 7a mantém o comportamento antigo.
     if working_mem.em_combate and _RE_FIM_COMBATE_LLM.search(resposta_completa):
-        working_mem.sair_combate()
-        log.info("combate_encerrado_por_llm")
+        algum_inimigo_vivo = any(
+            d.get("estado") != "morto"
+            for d in working_mem.inimigos_combate.values()
+        )
+        if settings.COMBATE_ENGINE_ATIVO and algum_inimigo_vivo:
+            log.info("combate_fim_llm_ignorado_inimigos_vivos")
+        else:
+            working_mem.sair_combate()
+            log.info("combate_encerrado_por_llm")
 
     # 7b. Auto-encerrar combate quando TODOS os inimigos estão mortos.
     # Garante que combates terminam mesmo quando o LLM usa frases de morte fora

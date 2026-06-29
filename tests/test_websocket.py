@@ -891,6 +891,85 @@ def test_stab3_auto_sair_combate_quando_todos_mortos():
     assert len(wm.inimigos_combate) == 0, "inimigos_combate deveria estar vazio"
 
 
+# ── Engine-first: o fim de combate é AUTORIDADE da engine (29/06) ───────────
+def test_fim_llm_nao_encerra_combate_com_inimigo_vivo(monkeypatch):
+    """Engine-first: a narração do LLM NÃO encerra o combate enquanto há inimigo
+    registrado vivo (família-bystander / "dois donos" do playtest 29/06).
+
+    O lite narrando "a área está segura" enquanto a família do patriarca ainda
+    luta (registrada, hp>0) abandonava combatentes vivos. Com COMBATE_ENGINE_ATIVO,
+    só o step 7b (todos mortos), o [FUGIU] ou o timeout 7c podem encerrar.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-fim-vivo")
+    wm.entrar_combate()
+    wm.registrar_inimigo("bjorn", "Bjorn", "morto")
+    wm.registrar_inimigo("runa-tharnsdottir", "Runa", "intacto")  # família viva
+
+    # Narração com frase de fim de combate (_RE_FIM_COMBATE_LLM), sem verbo de
+    # morte que mencione Runa.
+    aplicar_pos_turno(wm, "ataco bjorn", "A poeira baixa e a área está segura.")
+
+    assert wm.em_combate, "combate não pode encerrar com a família ainda viva"
+    assert "runa-tharnsdottir" in wm.inimigos_combate
+
+
+def test_fim_llm_encerra_quando_todos_mortos_com_engine(monkeypatch):
+    """Engine-first: com TODOS os inimigos mortos, a narração de fim encerra o
+    combate (consistente com o step 7b — a autoridade da engine é respeitada)."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-fim-mortos")
+    wm.entrar_combate()
+    wm.registrar_inimigo("bjorn", "Bjorn", "morto")
+    wm.registrar_inimigo("runa-tharnsdottir", "Runa", "morto")
+
+    aplicar_pos_turno(wm, "ataco", "O combate termina. Silêncio retorna ao salão.")
+    assert not wm.em_combate
+
+
+def test_fim_llm_encerra_combate_fantasma_sem_inimigos(monkeypatch):
+    """Engine-first: combate fantasma/legado SEM inimigos registrados — a
+    narração de fim segue sendo o único sinal (comportamento antigo preservado)."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = WorkingMemory.nova_sessao("rua", "Rua", "sess-fim-fantasma")
+    wm.entrar_combate()  # combate sem inimigo registrado (marcadores dormentes)
+    assert not wm.inimigos_combate
+
+    # Fala NÃO-atacante: não registra alvo. Sem inimigo vivo conhecido, a
+    # narração de fim continua sendo o único sinal de encerramento.
+    aplicar_pos_turno(wm, "olho ao redor, cauteloso", "A ameaça foi neutralizada e o caos cessa.")
+    assert not wm.inimigos_combate
+    assert not wm.em_combate
+
+
+def test_fim_llm_encerra_com_inimigo_vivo_quando_engine_desligada(monkeypatch):
+    """Engine OFF: o fluxo legado (LLM narra combate livre) fica intacto — a
+    narração de fim encerra o combate mesmo com inimigo registrado vivo."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", False)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-fim-legado")
+    wm.entrar_combate()
+    wm.registrar_inimigo("bandido-1", "Bandido", "intacto")
+
+    aplicar_pos_turno(wm, "ataco o bandido", "O combate termina, a área está segura.")
+    assert not wm.em_combate, "fluxo legado deve encerrar combate via narração"
+
+
 def test_stab4_inventario_exibido_com_cap_no_para_texto():
     """STAB-4: para_texto() deve mostrar no máx 20 itens do inventário.
 
