@@ -241,6 +241,7 @@ from api.turn_pipeline import (  # noqa: E402
     _RE_INIMIGO_MORTO,
     _RE_LAMPEJO,
     _slugify,
+    aliados_presentes_para_hostil,
     aplicar_afeto_npcs,
     aplicar_pos_turno,
     aplicar_xp_e_detectar_level_up,
@@ -1626,6 +1627,32 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             await enriquecer_fichas_inimigos(sessao.working_mem)
                         except Exception:
                             pass  # stats default (CA 12) se o bestiário falhar
+                        # HOSTILIDADE POR GRAFO (Neo4j ativo, 29/06): atacar um NPC
+                        # traz seus ALIADOS presentes pro combate (a família defende
+                        # o patriarca); rivais NÃO. Timeout curto + falha silenciosa
+                        # (Neo4j offline → só o alvo vira inimigo). Os aliados ganham
+                        # stats no enriquecer pós-turno.
+                        try:
+                            _neo4j = getattr(sessao.context_builder, "_neo4j", None)
+                            if _neo4j is not None:
+                                _rels = await asyncio.wait_for(
+                                    _neo4j.buscar_relacionamentos(_alvo), timeout=2.0
+                                )
+                                _aliados = aliados_presentes_para_hostil(
+                                    _rels,
+                                    list(sessao.working_mem.npcs_presentes),
+                                    set(sessao.working_mem.inimigos_combate),
+                                    set(getattr(sessao.working_mem, "companions", {}) or {}),
+                                )
+                                for _a in _aliados:
+                                    sessao.working_mem.registrar_inimigo(
+                                        _a, str(_a).replace("-", " ").title(), "intacto"
+                                    )
+                                if _aliados:
+                                    log.info("hostilidade_grafo", session_id=session_id,
+                                             alvo=_alvo, aliados=_aliados)
+                        except Exception:
+                            pass  # Neo4j offline/lento → só o alvo atacado é inimigo
                         sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
                         _nome_alvo = sessao.working_mem.inimigos_combate.get(_alvo, {}).get("nome", _alvo)
                         texto_jogador = (
