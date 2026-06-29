@@ -69,7 +69,7 @@ _KEYWORDS_AMBIENTE = frozenset({
     "calor", "quente", "abafado", "mormaco", "sol", "sufocante",
     "cheiro", "fedor", "odor", "aroma", "fedido", "mofo",
     "silencio", "silencioso", "escuridao", "escuro", "escura", "sombras",
-    "penumbra", "trevas", "poeira", "fumaca", "fuligem", "umidade",
+    "penumbra", "trevas", "poeira", "fumaca", "fuligem",
 })
 # Frase = trecho entre pontuação forte. Captura curta (imagem, não ação longa).
 _RE_FRASE_AMBIENTE = re.compile(r"[^.!?…\n]+")
@@ -442,11 +442,28 @@ _PRONOMES: frozenset[str] = frozenset({
 })
 
 
+# ALVO-FANTASMA-1 (playtest 29/06): "corto a cabeça de aldric" tem alvo "aldric",
+# NÃO "cabeça". Partes do corpo nunca são o alvo-NPC — se o regex pegar uma delas,
+# descarta e tenta o NPC presente (scan da cena).
+_ALVO_NAO_NPC: frozenset[str] = frozenset({
+    "cabeca", "braco", "bracos", "perna", "pernas", "peito", "pescoco", "rosto",
+    "cara", "mao", "maos", "costas", "barriga", "ventre", "torax", "ombro",
+    "ombros", "olho", "olhos", "garganta", "coracao", "joelho", "pe", "pes",
+    "dedo", "dedos", "nuca", "corpo", "tronco", "flanco",
+})
+
+
 def _slugify(nome: str) -> str:
     """Converte nome livre para id kebab-case."""
     normalizado = unicodedata.normalize("NFD", nome.strip().lower())
     sem_acento = "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
     return re.sub(r"[^a-z0-9]+", "-", sem_acento).strip("-")
+
+
+def _sem_acento(s: str) -> str:
+    """minúsculo + sem acento (pra casar nomes de NPC no texto do ataque)."""
+    n = unicodedata.normalize("NFD", str(s).lower())
+    return "".join(c for c in n if unicodedata.category(c) != "Mn")
 
 
 def _encontrar_id_inimigo(
@@ -480,11 +497,14 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
     """Id do inimigo que o jogador está atacando, ou None se ambíguo/ausente.
 
     Usado pela costura de combate engine-autoritativo (task 7) ANTES do LLM, pra
-    saber contra quem resolver a rolagem. Estratégia:
-      1. nome explícito no texto (`_RE_ALVO_ATAQUE`, ignorando pronomes) →
-         registra o inimigo se ainda não existir e devolve o id;
-      2. sem nome, mas há UM ÚNICO inimigo vivo → mira nele ("ataco ele");
-      3. senão None (ambíguo — caller pede alvo ou cai no fluxo antigo).
+    saber contra quem resolver a rolagem. Estratégia (em ordem):
+      1. `_RE_ALVO_ATAQUE` clássico ("ataco o goblin") — registra e devolve;
+         ignora pronome e PARTE DO CORPO ("a cabeça");
+      2. ALVO-FANTASMA (playtest 29/06): NPC PRESENTE nomeado no texto — "corto a
+         cabeça de aldric" mira aldric porque ele está em npcs_presentes (mais
+         robusto que o regex e EVITA cair no genérico "oponente-1");
+      3. sem nome → único inimigo VIVO ("ataco ele");
+      4. senão None (ambíguo — caller pede alvo ou cai no fluxo antigo).
     """
     for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
         nome = m.group(1).strip().rstrip(".,!?")
@@ -493,12 +513,25 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
         primeira = nome.split()[0].lower() if nome.split() else ""
         if nome.lower() in _PRONOMES or primeira in _PRONOMES:
             continue
+        if _sem_acento(primeira) in _ALVO_NAO_NPC:
+            continue  # "a cabeça de X" — a parte do corpo não é o alvo; tenta o NPC
         iid = _slugify(nome)
         if not iid:
             continue
         if iid not in working_mem.inimigos_combate:
             working_mem.registrar_inimigo(iid, nome.title(), "intacto")
         return iid
+
+    # 2. NPC presente nomeado no ataque (pega o que o regex perde: "corto a cabeça
+    #    de aldric", "decapito o velho aldric"). Registra-o como inimigo — quem o
+    #    jogador ataca por nome VIRA combatente, em vez do fantasma "oponente-1".
+    texto_norm = _sem_acento(texto_jogador)
+    for nid in list(working_mem.npcs_presentes):
+        primeiro = _sem_acento(str(nid).split("-")[0])
+        if len(primeiro) >= 3 and re.search(rf"\b{re.escape(primeiro)}\b", texto_norm):
+            if nid not in working_mem.inimigos_combate:
+                working_mem.registrar_inimigo(nid, str(nid).replace("-", " ").title(), "intacto")
+            return nid
 
     vivos = [
         iid for iid, d in working_mem.inimigos_combate.items()

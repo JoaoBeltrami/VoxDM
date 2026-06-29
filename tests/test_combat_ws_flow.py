@@ -116,3 +116,41 @@ def test_inimigo_morto_nao_conta_para_alvo_unico():
     wm = _wm_combate()
     wm.atualizar_estado_inimigo("goblin", "morto", "sem vida")
     assert extrair_alvo_ataque("ataco", wm) is None
+
+
+# ── ALVO-FANTASMA-1 (playtest 29/06) — atacar NPC presente nomeado ─────────────
+
+def test_alvo_fantasma_npc_presente_vence_generico():
+    # O bug exato: jogador ataca "aldric" (NPC presente), mas existe um "oponente-1"
+    # genérico registrado → antes o engine mirava o fantasma. Agora mira aldric.
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
+    wm.entrar_combate()
+    wm.npcs_presentes = ["aldric-drevasson", "maren-drevadottir"]
+    wm.registrar_inimigo("oponente-1", "Oponente", "intacto")
+    alvo = extrair_alvo_ataque("vou tentar cortar a cabeça de aldric com a espada", wm)
+    assert alvo == "aldric-drevasson"
+    assert "aldric-drevasson" in wm.inimigos_combate  # NPC virou combatente
+
+
+def test_parte_do_corpo_com_verbo_nao_vira_alvo():
+    # "ataco a cabeça de aldric" — "ataco" casa o regex e pega "cabeça"; é parte do
+    # corpo (descartada) → cai no scan de NPC presente → aldric.
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
+    wm.entrar_combate()
+    wm.npcs_presentes = ["aldric-drevasson"]
+    assert extrair_alvo_ataque("ataco a cabeça de aldric", wm) == "aldric-drevasson"
+    assert "cabeca" not in wm.inimigos_combate
+
+
+def test_parte_do_corpo_sem_npc_cai_no_unico_inimigo():
+    wm = _wm_combate()  # só "goblin" registrado, sem npcs_presentes
+    assert extrair_alvo_ataque("ataco a cabeça dele", wm) == "goblin"
+    assert "cabeca" not in wm.inimigos_combate
+
+
+def test_ataca_npc_presente_sem_artigo():
+    # "ataco osmund" (sem artigo) não casa o regex → scan acha o NPC presente.
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
+    wm.entrar_combate()
+    wm.npcs_presentes = ["osmund-o-exilado"]
+    assert extrair_alvo_ataque("ataco osmund agora", wm) == "osmund-o-exilado"
