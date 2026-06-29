@@ -5,7 +5,6 @@ Garante que cada NPC ganha uma voz DISTINTA e ESTÁVEL (determinística por id),
 que o bloco entra no prompt em cena social e fica FORA do combate (dieta).
 """
 
-import pytest
 
 from engine.llm.prompt_builder import (
     ContextoMontado,
@@ -14,7 +13,6 @@ from engine.llm.prompt_builder import (
 )
 from engine.memory.working_memory import WorkingMemory
 from engine.npc.persona import assinatura_voz, bloco_assinaturas
-
 
 # ── assinatura_voz ──────────────────────────────────────────────────────────
 
@@ -99,8 +97,8 @@ def test_nao_injeta_em_combate():
 
 # ── assinatura_tts + garantir_vozes_npcs (N2/F3 — voz de NPC determinística) ──
 
-from engine.npc.persona import assinatura_tts
 from api.turn_pipeline import garantir_vozes_npcs
+from engine.npc.persona import assinatura_tts
 
 
 def test_assinatura_tts_deterministica_e_estavel():

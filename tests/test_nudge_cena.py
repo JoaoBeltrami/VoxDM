@@ -9,8 +9,8 @@ nudge de compliance — não muda estado, sem risco de "teleporte" falso.
 import pytest
 
 from engine.llm.prompt_builder import (
-    ContextoMontado,
     _RE_VIAGEM,
+    ContextoMontado,
     invalidar_cache,
     montar_mensagens,
 )

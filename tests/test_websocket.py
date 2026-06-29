@@ -1407,8 +1407,9 @@ def test_detectar_voz_npc_helper():
 
 def test_thinking_cooldown_campo_e_constantes():
     import dataclasses
-    from api.state import SessaoAtiva
+
     import api.websocket as ws
+    from api.state import SessaoAtiva
     campos = {f.name for f in dataclasses.fields(SessaoAtiva)}
     assert "thinking_cooldown" in campos
     assert ws._THINKING_DELAY_S >= 2.0   # subido de 1.2 (não dispara em turno borderline)
@@ -1418,6 +1419,7 @@ def test_thinking_cooldown_campo_e_constantes():
 @pytest.mark.asyncio
 async def test_thinking_cadencia_pula_turnos_consecutivos(monkeypatch):
     import asyncio
+
     import api.websocket as ws
     import engine.voice.thinking_cache as tc
 
