@@ -13,7 +13,7 @@ independentes de CA/mod).
 
 import random
 
-from api.turn_pipeline import extrair_alvo_ataque
+from api.turn_pipeline import deve_auto_registrar_generico, extrair_alvo_ataque
 from engine.combat.orchestrator import resolver_turno_ataque_jogador
 from engine.memory.working_memory import WorkingMemory
 
@@ -154,3 +154,30 @@ def test_ataca_npc_presente_sem_artigo():
     wm.entrar_combate()
     wm.npcs_presentes = ["osmund-o-exilado"]
     assert extrair_alvo_ataque("ataco osmund agora", wm) == "osmund-o-exilado"
+
+
+# ── COMBATE-FANTASMA — guard do auto-register genérico ────────────────────────
+
+def test_generico_so_em_combate_sem_npcs():
+    # luta de monstro puro (sem NPC na cena) e sem inimigo → cria o genérico
+    wm = WorkingMemory.nova_sessao("masmorra", "Masmorra", "s")
+    wm.entrar_combate()
+    assert deve_auto_registrar_generico(wm) is True
+
+
+def test_generico_nao_cria_com_npcs_presentes():
+    # com a família na cena, o inimigo é um deles (nomeado) — NÃO cria o fantasma
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
+    wm.entrar_combate()
+    wm.npcs_presentes = ["aldric-drevasson", "maren-drevadottir"]
+    assert deve_auto_registrar_generico(wm) is False
+
+
+def test_generico_nao_cria_se_ja_ha_inimigo():
+    wm = _wm_combate()  # já tem "goblin"
+    assert deve_auto_registrar_generico(wm) is False
+
+
+def test_generico_nao_cria_fora_de_combate():
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
+    assert deve_auto_registrar_generico(wm) is False

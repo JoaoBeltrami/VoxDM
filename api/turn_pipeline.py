@@ -466,6 +466,25 @@ def _sem_acento(s: str) -> str:
     return "".join(c for c in n if unicodedata.category(c) != "Mn")
 
 
+def deve_auto_registrar_generico(working_mem: WorkingMemory) -> bool:
+    """True se a engine deve criar o inimigo genérico "oponente-1" (fallback de
+    combate sem nenhuma info de inimigo).
+
+    COMBATE-FANTASMA (playtest 29/06): o genérico era criado SEMPRE que o combate
+    não tinha inimigo — inclusive quando havia NPCs presentes (a família). Aí o
+    jogador atacava "aldric" mas a engine resolvia o fantasma, e matar o fantasma
+    encerrava o combate. Regra nova: se há NPCs PRESENTES, o inimigo é um deles —
+    registrado por nome quando o jogador o ataca (extrair_alvo_ataque/ALVO-FANTASMA).
+    O genérico só entra em luta SEM NPCs na cena (monstro puro que o LLM esqueceu
+    de declarar com [INIMIGO]).
+    """
+    return bool(
+        working_mem.em_combate
+        and not working_mem.inimigos_combate
+        and not working_mem.npcs_presentes
+    )
+
+
 def _encontrar_id_inimigo(
     trecho: str, nomes_registrados: dict[str, str]
 ) -> str | None:
