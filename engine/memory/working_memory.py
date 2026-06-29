@@ -623,16 +623,21 @@ class WorkingMemory:
         self.combat.reset_economia()
 
     def mod_ataque(self) -> int:
-        """Bônus de ataque básico do jogador: melhor de FOR/DES + proficiência.
+        """Bônus de ataque do jogador: MELHOR modificador relevante + proficiência.
 
-        Simplificação de task 2: martial/finesse usa o melhor atributo físico.
-        A engine soma isto ao d20 do jogador (resolver_ataque), não o LLM.
+        Playtest 29/06: antes usava só max(FOR, DES) — um Bruxo nv3 (ataque por
+        CHA) atacava com mod ~0 e ERRAVA tudo. Agora usa o melhor de TODOS os
+        atributos de ataque (FOR/DES marcial; INT/SAB/CAR conjurador) — cobre
+        marcial E caster sem precisar saber a arma/magia exata. A engine soma
+        isto ao d20 do jogador (resolver_ataque), não o LLM.
         """
-        return max(self.character.mod_for, self.character.mod_des) + self.character.prof_bonus
+        c = self.character
+        return max(c.mod_for, c.mod_des, c.mod_int, c.mod_sab, c.mod_car) + c.prof_bonus
 
     def mod_dano(self) -> int:
-        """Mod de dano básico: melhor de FOR/DES (sem proficiência no dano)."""
-        return max(self.character.mod_for, self.character.mod_des)
+        """Mod de dano: melhor modificador relevante (sem proficiência no dano)."""
+        c = self.character
+        return max(c.mod_for, c.mod_des, c.mod_int, c.mod_sab, c.mod_car)
 
     def mod_atributo(self, attr: str) -> int:
         """Modificador de um atributo por código (FOR/DES/CON/INT/SAB/CAR). 0 se inválido.
