@@ -10,6 +10,7 @@ dev com parâmetros nomeados.
 | Script | O que faz | Quando usar |
 |--------|-----------|-------------|
 | `start.bat` | Sobe API (:8000) + frontend (:3000), libera as portas, limpa cache do Next, abre o browser | Começar a jogar |
+| `playtest.bat` | Igual ao `start.bat`, mas a API grava TODO o log em `.internal\playtest.log` (fresco a cada run). A janela da API fica **em branco** de propósito — tudo vai pro arquivo. | Sessão de `/playtest` — é desse log que o Claude lê o blow-by-blow ao vivo (`combate_engine_*`, budget, cascata) |
 | `monitor.bat` | Sobe o Dashboard Streamlit (:8501, aba "Decisões LLM") + `watch_teste.py` (tail do telemetry.jsonl) | Observar durante o teste — rodar **depois** do `start.bat` |
 | `ingest.bat` | Ingestão do módulo no Qdrant + Neo4j. Aceita flags: `--dry-run`, `--skip-neo4j`, `--skip-qdrant` | Recarregar o módulo |
 | `ingest.ps1` | Mesma ingestão com params nomeados: `-DryRun`, `-SkipNeo4j`, `-SkipQdrant`, `-Input <path>` | Ingestão controlada (dev) |
