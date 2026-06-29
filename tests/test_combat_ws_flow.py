@@ -13,7 +13,11 @@ independentes de CA/mod).
 
 import random
 
-from api.turn_pipeline import deve_auto_registrar_generico, extrair_alvo_ataque
+from api.turn_pipeline import (
+    aliados_presentes_para_hostil,
+    deve_auto_registrar_generico,
+    extrair_alvo_ataque,
+)
 from engine.combat.orchestrator import resolver_turno_ataque_jogador
 from engine.memory.working_memory import WorkingMemory
 
@@ -181,3 +185,43 @@ def test_generico_nao_cria_se_ja_ha_inimigo():
 def test_generico_nao_cria_fora_de_combate():
     wm = WorkingMemory.nova_sessao("vila", "Vila", "s")
     assert deve_auto_registrar_generico(wm) is False
+
+
+# ── Hostilidade por grafo (Neo4j) — a família defende o patriarca ─────────────
+
+_PRESENTES = ["bjorn-tharnsson", "runa-tharnsdottir", "halvard-o-cinza"]
+_RELS_BJORN = [
+    {"tipo": "ally", "alvo_id": "runa-tharnsdottir", "alvo_nome": "Runa"},
+    {"tipo": "family", "alvo_id": "halvard-o-cinza", "alvo_nome": "Halvard"},
+    {"tipo": "rival", "alvo_id": "torvin-kaelsson", "alvo_nome": "Torvin"},  # rival, e ausente
+]
+
+
+def test_aliados_presentes_viram_hostis():
+    out = aliados_presentes_para_hostil(_RELS_BJORN, _PRESENTES)
+    assert set(out) == {"runa-tharnsdottir", "halvard-o-cinza"}
+
+
+def test_rival_nao_vira_hostil():
+    out = aliados_presentes_para_hostil(_RELS_BJORN, _PRESENTES)
+    assert "torvin-kaelsson" not in out
+
+
+def test_aliado_ausente_nao_entra():
+    rels = [{"tipo": "ally", "alvo_id": "soren-tharnsson", "alvo_nome": "Soren"}]  # não presente
+    assert aliados_presentes_para_hostil(rels, _PRESENTES) == []
+
+
+def test_companion_nao_vira_hostil():
+    out = aliados_presentes_para_hostil(
+        _RELS_BJORN, _PRESENTES, companions={"runa-tharnsdottir"}
+    )
+    assert "runa-tharnsdottir" not in out
+    assert "halvard-o-cinza" in out
+
+
+def test_ja_inimigo_nao_duplica():
+    out = aliados_presentes_para_hostil(
+        _RELS_BJORN, _PRESENTES, ja_inimigos={"runa-tharnsdottir"}
+    )
+    assert "runa-tharnsdottir" not in out

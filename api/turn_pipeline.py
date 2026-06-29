@@ -559,6 +559,48 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
     return vivos[0] if len(vivos) == 1 else None
 
 
+# Tipos de relação (edges do módulo) que indicam ALIANÇA — o NPC defende o atacado.
+# "rival"/"enemy" NÃO defendem. Cobre variações PT/EN do schema v1.2.
+_TIPOS_ALIADO_HOSTIL: frozenset[str] = frozenset({
+    "ally", "aliado", "aliada", "mentor", "family", "familia", "kin",
+    "parente", "irmao", "irma", "filho", "filha", "pai", "mae", "leal", "loyal",
+})
+
+
+def aliados_presentes_para_hostil(
+    relacoes: list[dict[str, Any]],
+    npcs_presentes: list[str],
+    ja_inimigos: set[str] | None = None,
+    companions: set[str] | None = None,
+) -> list[str]:
+    """NPCs PRESENTES que viram hostis quando o jogador ataca um NPC (família-29/06).
+
+    HOSTILIDADE POR GRAFO (Neo4j ativo): atacar X traz pro combate os ALIADOS de X
+    (edges type ally/mentor/family) que estão NA CENA — a família defende o
+    patriarca. RIVAIS não defendem. Companions e quem já é inimigo ficam de fora.
+    `relacoes` = saída de `neo4j_client.buscar_relacionamentos(alvo)`. PURO/testável.
+    """
+    ja_inimigos = ja_inimigos or set()
+    companions = companions or set()
+    presentes = set(npcs_presentes)
+    saida: list[str] = []
+    vistos: set[str] = set()
+    for r in relacoes:
+        tipo = str(r.get("tipo", "")).strip().lower()
+        alvo = str(r.get("alvo_id", "")).strip()
+        if (
+            tipo in _TIPOS_ALIADO_HOSTIL
+            and alvo
+            and alvo in presentes
+            and alvo not in ja_inimigos
+            and alvo not in companions
+            and alvo not in vistos
+        ):
+            vistos.add(alvo)
+            saida.append(alvo)
+    return saida
+
+
 def sincronizar_inimigos_combate(
     working_mem: WorkingMemory,
     texto_jogador: str,
