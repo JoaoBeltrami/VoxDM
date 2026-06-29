@@ -23,7 +23,7 @@ Exemplo:
 """
 
 import hashlib
-from typing import Callable
+from collections.abc import Callable
 
 # Registros de RITMO/maneira de falar — fiction-safe (cabem em qualquer NPC).
 _REGISTROS: tuple[str, ...] = (
@@ -60,7 +60,7 @@ _TIQUES: tuple[str, ...] = (
 
 def _idx(npc_id: str, n: int, sal: str) -> int:
     """Índice determinístico em [0, n) a partir do id (sha1 estável)."""
-    bruto = f"{sal}:{npc_id.strip().lower()}".encode("utf-8")
+    bruto = f"{sal}:{npc_id.strip().lower()}".encode()
     return int(hashlib.sha1(bruto).hexdigest()[:8], 16) % n
 
 
