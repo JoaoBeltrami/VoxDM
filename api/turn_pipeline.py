@@ -650,9 +650,24 @@ def sincronizar_inimigos_combate(
 
     for m in _RE_INIMIGO_MORTO.finditer(resposta_llm):
         iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)
-        if iid and iid not in _ja_mortos:
-            working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
-            log.info("combate_inimigo_morto", id=iid)
+        if not iid or iid in _ja_mortos:
+            continue
+        # Engine-first: se a ENGINE rastreia o HP deste inimigo e ele está VIVO
+        # (hp_max>0 e hp_atual>0), a autoridade da morte é da engine
+        # (`aplicar_dano_inimigo`, morte determinística em HP≤0) — NÃO da regex de
+        # prosa. Sem isso, o Mestre narrando "o goblin caiu/tombou" mata um inimigo
+        # que a engine tem a 5 de HP — o HP-desync/over-kill do playtest 29/06
+        # (mesma classe do fix de fim-de-combate 7a). Inimigo sem stats aplicados
+        # (hp_max ausente) OU engine desligada mantêm a regex como sinal de morte
+        # (fallback legado intacto).
+        _d = working_mem.inimigos_combate.get(iid, {})
+        _hp_max = int(_d.get("hp_max", 0) or 0)
+        _hp_atual = int(_d.get("hp_atual", 0) or 0)
+        if settings.COMBATE_ENGINE_ATIVO and _hp_max > 0 and _hp_atual > 0:
+            log.info("combate_morte_prosa_ignorada_engine_hp", id=iid, hp_atual=_hp_atual)
+            continue
+        working_mem.atualizar_estado_inimigo(iid, "morto", "sem vida")
+        log.info("combate_inimigo_morto", id=iid)
 
     for m in _RE_INIMIGO_GRAVE.finditer(resposta_llm):
         iid = _encontrar_id_inimigo(m.group(1), nomes_registrados)

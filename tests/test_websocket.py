@@ -970,6 +970,64 @@ def test_fim_llm_encerra_com_inimigo_vivo_quando_engine_desligada(monkeypatch):
     assert not wm.em_combate, "fluxo legado deve encerrar combate via narração"
 
 
+# ── Engine-first: a morte do inimigo é AUTORIDADE da engine (HP), não da prosa ──
+def test_morte_prosa_nao_mata_inimigo_que_engine_tem_vivo(monkeypatch):
+    """Engine-first: a regex de morte na prosa NÃO mata um inimigo que a ENGINE
+    rastreia VIVO (hp>0). Cura o HP-desync/over-kill (playtest 29/06): o Mestre
+    narrando "o goblin caiu" não pode matar quem a engine tem a 8 de HP — a
+    autoridade da morte é `aplicar_dano_inimigo` (HP≤0), não a prosa.
+    """
+    from api.turn_pipeline import sincronizar_inimigos_combate
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-morte-prosa")
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=13, hp_max=20)
+    wm.aplicar_dano_inimigo("goblin", 12)  # hp_atual=8 → "ferido" (engine, vivo)
+    assert wm.inimigos_combate["goblin"]["estado"] == "ferido"
+
+    # Mestre over-narra a morte de um inimigo que a engine tem VIVO.
+    sincronizar_inimigos_combate(wm, "ataco o goblin", "O Goblin caiu, sem vida no chão.")
+    assert wm.inimigos_combate["goblin"]["estado"] == "ferido", "engine é a autoridade do HP"
+
+
+def test_morte_prosa_funciona_sem_stats_da_engine(monkeypatch):
+    """Inimigo SEM stats da engine (hp_max ausente) — a regex de morte na prosa
+    segue sendo o sinal de morte (fallback legado preservado)."""
+    from api.turn_pipeline import sincronizar_inimigos_combate
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-morte-legado")
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")  # sem aplicar_stats_inimigo
+
+    sincronizar_inimigos_combate(wm, "ataco o goblin", "O Goblin caiu, sem vida no chão.")
+    assert wm.inimigos_combate["goblin"]["estado"] == "morto"
+
+
+def test_morte_prosa_respeita_engine_desligada(monkeypatch):
+    """Engine OFF: o fluxo legado fica intacto — a regex de morte mata mesmo com
+    HP>0 (a engine não é a autoridade quando o kill-switch está desligado)."""
+    from api.turn_pipeline import sincronizar_inimigos_combate
+    from config import settings
+    from engine.memory.working_memory import WorkingMemory
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", False)
+    wm = WorkingMemory.nova_sessao("salao", "Salão", "sess-morte-off")
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=13, hp_max=20)
+    wm.aplicar_dano_inimigo("goblin", 12)  # hp_atual=8
+
+    sincronizar_inimigos_combate(wm, "ataco o goblin", "O Goblin caiu, sem vida no chão.")
+    assert wm.inimigos_combate["goblin"]["estado"] == "morto", "legado: a prosa mata"
+
+
 def test_stab4_inventario_exibido_com_cap_no_para_texto():
     """STAB-4: para_texto() deve mostrar no máx 20 itens do inventário.
 
