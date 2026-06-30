@@ -1554,6 +1554,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Usado ao final do turno para disparar imagem de cena quando necessário.
             _location_antes = sessao.working_mem.location_id
             _combate_antes = sessao.working_mem.em_combate
+            # Engine-first: True quando o resolver aplica o turno dos inimigos
+            # (dano no PJ) NESTE turno. Gateia o `dano_ao_jogador` do extractor de
+            # prosa abaixo pra ele não re-aplicar o que a engine já aplicou (HP-desync).
+            _engine_resolveu_turno = False
 
             # Detecta entrada/saída de combate pelo texto do jogador.
             # Condicional ("ataco SE aparecerem") NÃO entra — teste 10/06 virou
@@ -1593,6 +1597,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
                             _res = {"valido": False}
                         if _res.get("valido"):
+                            # A engine é a autoridade do dano do PJ neste turno —
+                            # o extractor de prosa abaixo NÃO deve re-aplicar.
+                            _engine_resolveu_turno = True
                             log.info(
                                 "combate_engine_resolveu", session_id=session_id,
                                 alvo=_pend.get("alvo"), acertou=_res.get("acertou"),
@@ -2055,7 +2062,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 and not idle_nudge
             ):
                 try:
-                    from api.turn_pipeline import _RE_DANO as _RE_DANO_MARKER
+                    from api.turn_pipeline import deve_zerar_dano_extractor
                     from engine.llm.extractor import (
                         aplicar_estado_extraido,
                         extrair_estado_combate,
@@ -2069,8 +2076,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         timeout=8.0,
                     )
                     if estado_ext:
-                        # [DANO] explícito já aplicou no pipeline — não duplicar
-                        if _RE_DANO_MARKER.search(resposta_completa):
+                        # Não duplicar o dano do PJ: a engine (resolver) ou um
+                        # [DANO] explícito já o aplicaram — a prosa não re-aplica.
+                        if deve_zerar_dano_extractor(resposta_completa, _engine_resolveu_turno):
                             estado_ext["dano_ao_jogador"] = 0
                         aplicar_estado_extraido(sessao.working_mem, estado_ext)
                         log.info(

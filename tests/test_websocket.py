@@ -1028,6 +1028,32 @@ def test_morte_prosa_respeita_engine_desligada(monkeypatch):
     assert wm.inimigos_combate["goblin"]["estado"] == "morto", "legado: a prosa mata"
 
 
+# ── Engine-first: dano do PJ não conta 2× (engine resolve + extractor de prosa) ─
+def test_dano_extractor_zerado_quando_engine_resolveu():
+    """Engine-first: se a engine resolveu o turno (aplicou o dano do inimigo no PJ),
+    o `dano_ao_jogador` lido da prosa é descartado — senão o jogador toma ~2× o dano
+    (HP-desync do playtest 29/06)."""
+    from api.turn_pipeline import deve_zerar_dano_extractor
+
+    # Engine resolveu E a narração descreve o dano → descarta o da prosa.
+    assert deve_zerar_dano_extractor("O guarda te golpeia, 5 de dano.", True) is True
+
+
+def test_dano_extractor_zerado_com_marker_dano_explicito():
+    """Compat: o marker [DANO] explícito já aplicou no pipeline → não duplicar."""
+    from api.turn_pipeline import deve_zerar_dano_extractor
+
+    assert deve_zerar_dano_extractor("Você é atingido. [DANO: -6 espada]", False) is True
+
+
+def test_dano_extractor_aplicado_quando_engine_nao_resolveu_e_sem_marker():
+    """Fluxo legado/sem engine: sem resolução da engine e sem [DANO], o dano lido
+    da prosa pelo extractor é a ÚNICA fonte — não pode ser descartado."""
+    from api.turn_pipeline import deve_zerar_dano_extractor
+
+    assert deve_zerar_dano_extractor("O lobo crava as presas no seu braço.", False) is False
+
+
 def test_stab4_inventario_exibido_com_cap_no_para_texto():
     """STAB-4: para_texto() deve mostrar no máx 20 itens do inventário.
 
