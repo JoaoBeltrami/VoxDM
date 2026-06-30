@@ -526,23 +526,23 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personagemRestaurado]);
 
-  // Propaga HP máximo do servidor para o personagem local.
-  // Caso de uso principal: level up — hp_max_novo chega via fim→serverHpMax e
-  // CharacterSheet precisa do novo valor na prop player_hp_max para exibir
-  // a barra corretamente e calcular o ganho de HP no efeito local.
+  // Propaga HP autoritativo do servidor (serverHp/serverHpMax) pro personagem
+  // local que a FichaViva renderiza. Reage a `serverHp` E `serverHpMax` — antes
+  // só reagia a `serverHpMax`, então dano de combate (HP cai, máximo intacto)
+  // nunca chegava na ficha (playtest 30/06: "HP perdido no chat e não na
+  // ficha"). O backend já aplicava o dano certo (working_memory/historico
+  // confirmam); só a UI ficava presa no valor da primeira sincronização —
+  // o efeito só disparava de novo em level up (quando o máximo também muda).
   useEffect(() => {
     if (serverHpMax !== null && serverHpMax > 0) {
       setPersonagem(prev => ({
         ...prev,
         player_hp_max: serverHpMax,
-        // Só atualiza player_hp se o servidor enviou (não-null) E se o valor
-        // local ainda é o máximo anterior (player não ajustou manualmente).
-        // Evita sobrescrever HP que o jogador editou na ficha.
         ...(serverHp !== null ? { player_hp: serverHp } : {}),
       }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverHpMax]);
+  }, [serverHp, serverHpMax]);
 
   const [ouvindo, setOuvindo] = useState(false);
 

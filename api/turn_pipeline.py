@@ -574,6 +574,37 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
     return vivos[0] if len(vivos) == 1 else None
 
 
+# Rolagem de d20 que o JOGADOR envia da UI — tolerante a DOIS formatos legítimos
+# do frontend (frontend/app/page.tsx):
+#   - toolbar simples:  "[Rolagem: d20 = 18]"                  → já o BRUTO
+#   - chip contextual:  "[Rolagem: Iniciativa (+3) d20+3 = 9]" → TOTAL com mod
+# O chip contextual aparece sempre que o Mestre pede um atributo NOMEADO — ex:
+# "Iniciativa", "Persuasão" — inclusive durante combate, se o prompt falhar em
+# manter o pedido restrito ao ataque puro. Sem essa tolerância, o regex antigo
+# (só casava o formato simples) descartava silenciosamente o `combate_pendente`
+# quando o jogador rolava pelo chip — playtest 30/06: "a iniciativa rolou um
+# ataque" (a pendência sumia sem nunca resolver o turno pela engine).
+_RE_D20_JOGADOR = re.compile(
+    r"\[Rolagem\s*:\s*(?:[^\[\]]*?\s)?d(\d+)\s*([+-]\d+)?\s*=\s*(-?\d+)",
+    re.IGNORECASE,
+)
+
+
+def extrair_d20_jogador(texto_jogador: str) -> int | None:
+    """Extrai o valor BRUTO (1-20) de uma rolagem de d20 enviada pelo jogador.
+
+    Aceita o formato simples (já bruto) e o formato rico do chip contextual
+    (subtrai o modificador do total pra recuperar o bruto). Retorna None se o
+    texto não contiver `[Rolagem: ...]` ou se a face não for d20.
+    """
+    m = _RE_D20_JOGADOR.search(texto_jogador)
+    if not m or m.group(1) != "20":
+        return None
+    modificador = int(m.group(2)) if m.group(2) else 0
+    total = int(m.group(3))
+    return total - modificador
+
+
 # Tipos de relação (edges do módulo) que indicam ALIANÇA — o NPC defende o atacado.
 # "rival"/"enemy" NÃO defendem. Cobre variações PT/EN do schema v1.2.
 _TIPOS_ALIADO_HOSTIL: frozenset[str] = frozenset({

@@ -17,6 +17,7 @@ from api.turn_pipeline import (
     aliados_presentes_para_hostil,
     deve_auto_registrar_generico,
     extrair_alvo_ataque,
+    extrair_d20_jogador,
 )
 from engine.combat.orchestrator import resolver_turno_ataque_jogador
 from engine.memory.working_memory import WorkingMemory
@@ -158,6 +159,44 @@ def test_ataca_npc_presente_sem_artigo():
     wm.entrar_combate()
     wm.npcs_presentes = ["osmund-o-exilado"]
     assert extrair_alvo_ataque("ataco osmund agora", wm) == "osmund-o-exilado"
+
+
+# ── extrair_d20_jogador — playtest 30/06 (iniciativa "comeu" a pendência) ──────
+
+def test_d20_formato_simples_toolbar():
+    assert extrair_d20_jogador("[Rolagem: d20 = 18]") == 18
+
+
+def test_d20_formato_simples_com_sufixo_vantagem():
+    assert extrair_d20_jogador("[Rolagem: d20 = 18 — VANTAGEM]") == 18
+
+
+def test_d20_formato_simples_falha_critica():
+    assert extrair_d20_jogador("[Rolagem: d20 = 1 — FALHA CRÍTICA!]") == 1
+
+
+def test_d20_formato_rico_chip_contextual_subtrai_modificador():
+    # O bug exato do playtest: chip contextual de "Iniciativa" manda o TOTAL já
+    # somado ao modificador — o bruto precisa ser recuperado (total - mod).
+    assert extrair_d20_jogador("[Rolagem: Iniciativa (+3) d20+3 = 9]") == 6
+
+
+def test_d20_formato_rico_modificador_negativo():
+    assert extrair_d20_jogador("[Rolagem: Furtividade (-1) d20-1 = 5]") == 6
+
+
+def test_d20_formato_rico_com_vs_cd_e_critico():
+    texto = "[Rolagem: Persuasão (+5) d20+5 = 25 vs CD 15 — CRÍTICO!]"
+    assert extrair_d20_jogador(texto) == 20
+
+
+def test_d20_dano_nao_e_confundido_com_d20():
+    # Dado de dano (ex: d8) não é uma rolagem de d20 — None, não vaza pro resolver.
+    assert extrair_d20_jogador("[Rolagem: d8 = 5]") is None
+
+
+def test_d20_sem_rolagem_no_texto():
+    assert extrair_d20_jogador("Eu ataco o goblin com a espada.") is None
 
 
 # ── COMBATE-FANTASMA — guard do auto-register genérico ────────────────────────

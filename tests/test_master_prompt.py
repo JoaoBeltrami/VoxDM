@@ -78,6 +78,20 @@ def test_master_system_menciona_rolagem():
     assert "[Rolagem:" in conteudo, "master_system.md deve referenciar o formato [Rolagem:]"
 
 
+def test_master_system_nao_contradiz_combat_md_sobre_iniciativa():
+    """Playtest 30/06: master_system.md ensinava o protocolo antigo de 3 paradas
+    ("Iniciativa → Ataque → Dano"), contradizendo combat.md ("Iniciativa é da
+    engine — você não decide nem rerola"). O Mestre, confuso entre os dois, pediu
+    Iniciativa no meio de um ataque pendente → o chip de rolagem mandou um
+    formato que o regex do engine não reconhecia → combate_pendente descartado
+    silenciosamente (ALVO-FANTASMA-2/INICIATIVA-PERDIDA). Trava: nunca mais
+    instruir o Mestre a pedir rolagem de Iniciativa em combate.
+    """
+    conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
+    assert "Iniciativa → Ataque → Dano" not in conteudo
+    assert "nunca peça rolagem de iniciativa" in conteudo.lower()
+
+
 def test_dice_md_existe():
     assert _DICE_PATH.exists(), "dice.md não encontrado"
 
