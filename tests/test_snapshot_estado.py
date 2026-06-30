@@ -23,8 +23,36 @@ def test_snapshot_contem_campos_criticos():
         "player_level", "iniciativa_ordem", "location_nome", "time_of_day",
         "em_combate", "pacing_nivel", "companions", "fios_soltos",
         "consequencias", "class_features", "rodada_esperada",
+        # B1 (roadmap_ux_gaps) — contrato Quest/Crônica/XP que o frontend (Palco)
+        # precisa pra separar as 3 superfícies (quest log / timeline / level).
+        # Sem este guard, alguém editando _snapshot_estado podia derrubar um
+        # destes campos sem teste pegar — mesma classe de bug do ROB-1/2.
+        "quest_stages", "active_quest_hooks", "quests_improvisadas",
+        "cronica", "xp",
     ):
         assert campo in snap, f"campo crítico ausente do snapshot: {campo}"
+
+
+def test_snapshot_quest_cronica_xp_refletem_estado():
+    """B1: Quest/Crônica/XP no snapshot não são só presentes — refletem o estado
+    real da WorkingMemory (não um valor congelado/default)."""
+    wm = _wm()
+    wm.quest_stages = {"quest-bjorn": "iniciada"}
+    wm.active_quest_hooks = ["fale-com-bjorn"]
+    wm.xp = 250
+    wm.narrative.quests_improvisadas = [
+        {"id": "achar-cajado", "titulo": "Achar o Cajado", "status": "ativa"}
+    ]
+    wm.narrative.registrar_cronica("Conheceu Bjorn Tharnsson em Tharnvik.")
+
+    snap = _snapshot_estado(wm)
+    assert snap["quest_stages"] == {"quest-bjorn": "iniciada"}
+    assert snap["active_quest_hooks"] == ["fale-com-bjorn"]
+    assert snap["xp"] == 250
+    assert snap["quests_improvisadas"] == [
+        {"id": "achar-cajado", "titulo": "Achar o Cajado", "status": "ativa"}
+    ]
+    assert "Conheceu Bjorn Tharnsson em Tharnvik." in snap["cronica"]
 
 
 def test_snapshot_reflete_estado_atual():

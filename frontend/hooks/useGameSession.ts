@@ -126,6 +126,9 @@ interface EstadoSessao {
   // Imersão P4: crônica (timeline) + retratos de NPC por id
   cronica: string[];
   npcRetratos: Record<string, string>;
+  // PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo do módulo) —
+  // dado já existia no snapshot do backend mas não tinha campo aqui (B1, 30/06).
+  questsImprovisadas: { id: string; titulo: string; objetivo: string; status: string }[];
   // Class features — chips interativos de recursos de classe (Fase 6)
   classFeatures: Record<string, { nome: string; disponivel: boolean; usos_atual: number; usos_max: number; restaura?: string }>;
   // Fase 5.7: dado do mestre ativo — exibido como animação no frontend.
@@ -221,6 +224,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   relogios: {},
   cronica: [],
   npcRetratos: {},
+  questsImprovisadas: [],
   classFeatures: {},
   dadoAtivo: null,
   sceneImageUrl: "",
@@ -596,6 +600,7 @@ export function useGameSession() {
           cicatrizes: msg.cicatrizes ?? [],
           relogios: (msg.relogios ?? {}) as Record<string, { nome: string; atual: number; max: number }>,
           cronica: msg.cronica ?? [],
+          questsImprovisadas: msg.quests_improvisadas ?? [],
         };
 
         const novoTurnoBase = {
@@ -786,6 +791,8 @@ export function useGameSession() {
             classFeatures: Object.keys(rpgUpdate.classFeatures).length ? rpgUpdate.classFeatures : s.classFeatures,
             cicatrizes: rpgUpdate.cicatrizes.length ? rpgUpdate.cicatrizes : s.cicatrizes,
             cronica: rpgUpdate.cronica.length ? rpgUpdate.cronica : s.cronica,
+            questsImprovisadas: rpgUpdate.questsImprovisadas.length
+              ? rpgUpdate.questsImprovisadas : s.questsImprovisadas,
             // Relógios: payload presente substitui SEMPRE (relógio que estourou
             // sai do dict — manter o antigo mostraria ameaça já consumida).
             relogios: rpgUpdate.relogios,

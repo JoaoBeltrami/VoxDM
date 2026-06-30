@@ -111,6 +111,8 @@ export interface MensagemWS {
   // Imersão P4: crônica da sessão (timeline) + retrato de NPC (tipo="npc_retrato")
   cronica?: string[];
   npc_id?: string;
+  // PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo do módulo)
+  quests_improvisadas?: { id: string; titulo: string; objetivo: string; status: string }[];
   // Feature 3: Consequências visíveis — efeitos duradouros no mundo (máx 5)
   consequencias?: string[];
   // Class features — sincronizadas no "fim" para atualizar chips na ficha
