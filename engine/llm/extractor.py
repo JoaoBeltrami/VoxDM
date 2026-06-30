@@ -25,6 +25,7 @@ from typing import Any
 
 import structlog
 
+from config import settings
 from engine.llm.tasks import TaskType
 
 log = structlog.get_logger()
@@ -667,10 +668,24 @@ def aplicar_estado_extraido(wm: Any, estado: dict[str, Any]) -> None:
         if reais and "oponente-1" in wm.inimigos_combate:
             wm.remover_inimigo("oponente-1")
         for i in inimigos:
-            if i["id"] in wm.inimigos_combate:
-                wm.atualizar_estado_inimigo(i["id"], i["estado"])
-            else:
-                wm.registrar_inimigo(i["id"], i["nome"], i["estado"])
+            iid = i["id"]
+            if iid not in wm.inimigos_combate:
+                wm.registrar_inimigo(iid, i["nome"], i["estado"])
+                continue
+            # Engine-first: a prosa (8B) NÃO mata um inimigo que a engine rastreia
+            # VIVO (hp_max>0 e hp_atual>0) — a morte é autoridade da engine
+            # (aplicar_dano_inimigo, HP≤0), igual ao gate do _RE_INIMIGO_MORTO
+            # (8acdcd7). Demais estados (ferido/grave/intacto) seguem aplicando.
+            _d = wm.inimigos_combate[iid]
+            if (
+                i["estado"] == "morto"
+                and settings.COMBATE_ENGINE_ATIVO
+                and int(_d.get("hp_max", 0) or 0) > 0
+                and int(_d.get("hp_atual", 0) or 0) > 0
+            ):
+                log.info("extractor_morte_ignorada_engine_hp", id=iid)
+                continue
+            wm.atualizar_estado_inimigo(iid, i["estado"])
     dano = int(estado.get("dano_ao_jogador", 0))
     if dano > 0:
         antes = wm.player_hp

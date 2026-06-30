@@ -1028,6 +1028,84 @@ def test_aplicar_estado_extraido_substitui_generico_e_aplica_dano():
     assert wm.player_hp == 15
 
 
+def test_extractor_nao_mata_inimigo_que_engine_tem_vivo(monkeypatch):
+    """Engine-first: o estado lido da prosa (8B) NÃO mata um inimigo que a engine
+    rastreia VIVO (hp>0) — mesma autoridade do gate do _RE_INIMIGO_MORTO (8acdcd7).
+    Sem isso, o 8B lendo 'o goblin tomba' encerraria um inimigo a 8 de HP."""
+    from config import settings
+    from engine.llm.extractor import aplicar_estado_extraido
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=13, hp_max=20)
+    wm.aplicar_dano_inimigo("goblin", 12)  # hp_atual=8 → "ferido" (engine, vivo)
+
+    aplicar_estado_extraido(wm, {
+        "inimigos": [{"id": "goblin", "nome": "Goblin", "estado": "morto"}],
+        "dano_ao_jogador": 0,
+    })
+    assert wm.inimigos_combate["goblin"]["estado"] == "ferido", "engine é a autoridade da morte"
+
+
+def test_extractor_aplica_estado_nao_letal_em_inimigo_engine(monkeypatch):
+    """O gate bloqueia SÓ a morte: ferido/grave da prosa ainda aplicam num inimigo
+    que a engine rastreia vivo (estado narrativo do tracker continua útil)."""
+    from config import settings
+    from engine.llm.extractor import aplicar_estado_extraido
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=13, hp_max=20)  # hp_atual=20, "intacto"
+
+    aplicar_estado_extraido(wm, {
+        "inimigos": [{"id": "goblin", "nome": "Goblin", "estado": "gravemente ferido"}],
+        "dano_ao_jogador": 0,
+    })
+    assert wm.inimigos_combate["goblin"]["estado"] == "gravemente ferido"
+
+
+def test_extractor_mata_inimigo_sem_stats_da_engine(monkeypatch):
+    """Inimigo SEM stats da engine (hp_max ausente) — o estado 'morto' da prosa
+    segue valendo (fallback legado: a engine não tem opinião sobre o HP dele)."""
+    from config import settings
+    from engine.llm.extractor import aplicar_estado_extraido
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", True)
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")  # sem aplicar_stats_inimigo
+
+    aplicar_estado_extraido(wm, {
+        "inimigos": [{"id": "goblin", "nome": "Goblin", "estado": "morto"}],
+        "dano_ao_jogador": 0,
+    })
+    assert wm.inimigos_combate["goblin"]["estado"] == "morto"
+
+
+def test_extractor_morte_respeita_engine_desligada(monkeypatch):
+    """Engine OFF: o fluxo legado fica intacto — a prosa pode marcar 'morto' mesmo
+    com HP>0 (a engine não é a autoridade quando o kill-switch está desligado)."""
+    from config import settings
+    from engine.llm.extractor import aplicar_estado_extraido
+
+    monkeypatch.setattr(settings, "COMBATE_ENGINE_ATIVO", False)
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=13, hp_max=20)
+    wm.aplicar_dano_inimigo("goblin", 12)  # hp_atual=8
+
+    aplicar_estado_extraido(wm, {
+        "inimigos": [{"id": "goblin", "nome": "Goblin", "estado": "morto"}],
+        "dano_ao_jogador": 0,
+    })
+    assert wm.inimigos_combate["goblin"]["estado"] == "morto", "legado: a prosa mata"
+
+
 @pytest.mark.asyncio
 async def test_extrair_estado_combate_end_to_end_com_fake_llm():
     from engine.llm.extractor import extrair_estado_combate
