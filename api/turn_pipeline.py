@@ -253,6 +253,20 @@ _RE_CURA = re.compile(r"\[CURA:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
 _DANO_MAX_INIMIGO_IMPROVISADO = 8
 
 
+def deve_zerar_dano_extractor(resposta: str, engine_resolveu_turno: bool) -> bool:
+    """Decide se o `dano_ao_jogador` do extractor de prosa deve ser DESCARTADO.
+
+    Engine-first: quando a ENGINE já resolveu o turno de combate (o resolver rodou
+    `executar_turno_inimigos` e aplicou o dano do inimigo no PJ) OU quando há um
+    marker `[DANO]` explícito na resposta, o extractor lendo a MESMA narração
+    aplicaria o dano DE NOVO — o HP-desync/double-count do playtest 29/06 (o jogador
+    tomava ~2× o dano do inimigo, porque o engine resolvia e a prosa re-aplicava).
+    Nesses casos o dano lido da prosa é descartado; a engine / o marker `[DANO]` são
+    a autoridade do HP do jogador.
+    """
+    return engine_resolveu_turno or bool(_RE_DANO.search(resposta))
+
+
 def _combate_sem_ficha_srd(working_mem: Any) -> bool:
     """True quando há combate ativo e NENHUM inimigo vivo tem ficha SRD.
 
