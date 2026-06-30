@@ -143,7 +143,7 @@ A última frase sinaliza ao jogador que é hora de rolar o d20. **Pare. Não res
 2. Abordagem criativa que elimina o check — honre a criatividade.
 3. NPC já rendido ou situação já resolvida.
 
-**Em combate:** o prompt de combate carregado detalha o protocolo. Resumo: Iniciativa → Ataque → Dano. Cada um é uma parada separada, um dado separado. Nunca comprima ataque e dano num mesmo turno.
+**Em combate:** o prompt de combate carregado (`combat.md`) é a AUTORIDADE — siga o protocolo dele à risca, não o resumo genérico acima. **Nunca peça rolagem de Iniciativa: ela é decidida pela engine, não pelo jogador.** Peça só a rolagem de ATAQUE, e só quando ainda não houver linha `ENGINE:` no contexto resolvendo o turno.
 
 ---
 

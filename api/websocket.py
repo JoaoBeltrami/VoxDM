@@ -218,14 +218,6 @@ _RE_ROLAGEM_FABRICADA = re.compile(
     re.IGNORECASE,
 )
 
-# Task 7: a rolagem que o JOGADOR envia da UI — captura faces e valor.
-# `[Rolagem: d20 = 15]`. Usada pela costura de combate pra interceptar o d20 do
-# ataque quando há um alvo pendente e deixar a ENGINE resolver (em vez do LLM).
-_RE_ROLAGEM_JOGADOR = re.compile(
-    r"\[Rolagem\s*:\s*d(\d+)\s*=\s*(\d+)\]",
-    re.IGNORECASE,
-)
-
 # Os regexes de combate e o sync de inimigos vivem em api/turn_pipeline para que
 # o endpoint REST `/turn` e o WebSocket usem a MESMA implementação. Re-exportados
 # aqui só por compat com tests legados que importam de api.websocket.
@@ -246,6 +238,7 @@ from api.turn_pipeline import (  # noqa: E402
     aplicar_pos_turno,
     aplicar_xp_e_detectar_level_up,
     deve_auto_registrar_generico,
+    extrair_d20_jogador,
     reinferir_npcs_se_mudou_cena,
 )
 from api.turn_pipeline import (
@@ -1581,17 +1574,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Mestre só NARRA o resultado (linhas "ENGINE: ..."). Sem alvo pendente
             # o fluxo antigo (LLM narra combate livre) segue 100% intacto.
             if settings.COMBATE_ENGINE_ATIVO and not sessao.working_mem.session_zero_ativa:
-                _m_rol = _RE_ROLAGEM_JOGADOR.search(texto_jogador)
-                _eh_d20 = bool(_m_rol and _m_rol.group(1) == "20")
+                _d20_jogador = extrair_d20_jogador(texto_jogador)
                 if sessao.combate_pendente:
                     # Há um ataque declarado aguardando a rolagem.
                     _pend = sessao.combate_pendente
                     sessao.combate_pendente = None
-                    if _eh_d20 and sessao.working_mem.em_combate:
-                        _d20 = int(_m_rol.group(2))
+                    if _d20_jogador is not None and sessao.working_mem.em_combate:
                         try:
                             _res = resolver_turno_ataque_jogador(
-                                sessao.working_mem, str(_pend.get("alvo", "")), _d20
+                                sessao.working_mem, str(_pend.get("alvo", "")), _d20_jogador
                             )
                         except Exception as _e:  # nunca derruba o turno
                             log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
@@ -1621,7 +1612,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # rolagem não-d20 / fora de combate → pendência descartada, segue normal
                 elif (
                     sessao.working_mem.em_combate
-                    and not _m_rol
+                    and _d20_jogador is None
                     and _RE_COMBATE.search(texto_jogador)
                 ):
                     # Declaração de ataque em combate → fixa o alvo e deixa o LLM
