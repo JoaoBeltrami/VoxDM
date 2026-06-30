@@ -75,6 +75,71 @@ def _criar_sessao_ws(client: TestClient) -> str:
     return resp.json()["session_id"]
 
 
+# ── Autoridade do handshake WS (Fase 4.6) — origin → auth → ownership ─────────
+# A sequência (api/websocket.py:handle_game_ws, passos 1-5) existe desde 16/05
+# mas nunca tinha teste direto cobrindo os 3 caminhos de REJEIÇÃO — só o
+# caminho feliz era exercitado (implicitamente, por todo teste que conecta com
+# sucesso). Sem isso, uma regressão nesses 5 passos (ex: alguém move a
+# ownership check pra depois do accept, ou troca 1008 por aceitar de qualquer
+# jeito) passava despercebida pelos testes. Guarda o pré-requisito de
+# segurança antes de qualquer exposição pública (Cloudflare Tunnel, Fase 4.7).
+
+def test_ws_origin_fora_da_allowlist_fecha_1008(client):
+    """Origin que não está em CORS_ORIGINS (default "http://localhost:3000" em
+    config.py) é rejeitada ANTES do accept() — nunca chega no session check."""
+    from fastapi import WebSocketDisconnect
+
+    sid = _criar_sessao_ws(client)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(
+            f"/ws/game/{sid}", headers={"origin": "https://site-malicioso.com"}
+        ) as ws:
+            ws.receive_text()
+    assert exc_info.value.code == 1008
+
+
+def test_ws_sem_identidade_fecha_1008(client, monkeypatch):
+    """Sem JWT do Cloudflare Access E sem DEV_USER_EMAIL (DEBUG fallback) —
+    get_owner_ws levanta 401, o handler captura e fecha sem aceitar a conexão."""
+    from fastapi import WebSocketDisconnect
+
+    from config import settings
+
+    sid = _criar_sessao_ws(client)
+    monkeypatch.setattr(settings, "DEV_USER_EMAIL", "")
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws/game/{sid}") as ws:
+            ws.receive_text()
+    assert exc_info.value.code == 1008
+
+
+def test_ws_ownership_negada_fecha_1008_sem_revelar_existencia(client):
+    """Usuário autenticado mas que NÃO é dono da sessão recebe 1008 sem
+    mensagem — evita enumeração (intruso não sabe se a sessão existe ou não)."""
+    from fastapi import WebSocketDisconnect
+
+    from engine.auth.identity import Owner
+
+    sid = _criar_sessao_ws(client)  # dona: DEV_USER_EMAIL (test@voxdm.test)
+    intruso = Owner(email="intruso@voxdm.test", is_admin=False)
+
+    with patch("api.auth.get_owner_ws", AsyncMock(return_value=intruso)):
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(f"/ws/game/{sid}") as ws:
+                ws.receive_text()
+    assert exc_info.value.code == 1008
+
+
+def test_ws_dono_da_sessao_conecta_normalmente(client):
+    """Sanity check: o mesmo usuário que criou a sessão (DEV_USER_EMAIL) conecta
+    sem ser bloqueado por nenhum dos 3 guards acima."""
+    sid = _criar_sessao_ws(client)
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "oi"})
+        msg = ws.receive_json()
+    assert msg["tipo"] in ("token", "fim", "audio_chunk")
+
+
 def test_ws_turno_streaming_tokens(client):
     """Fluxo completo: criar sessão → WS → 4 tokens → mensagem fim."""
     sid = _criar_sessao_ws(client)
