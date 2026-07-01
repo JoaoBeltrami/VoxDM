@@ -140,6 +140,55 @@ def test_ws_dono_da_sessao_conecta_normalmente(client):
     assert msg["tipo"] in ("token", "fim", "audio_chunk")
 
 
+# ── Rolagem-solta-resolve (decisão 01/07) — teste de perícia não consome ataque ──
+
+def test_ws_rolagem_solta_teste_pericia_preserva_combate_pendente(client):
+    """Se a ÚLTIMA fala do Mestre pediu um teste de perícia (não o ataque em
+    si), o d20 do jogador NÃO deve consumir combate_pendente — a pendência de
+    ataque fica intacta esperando a rolagem de verdade."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "goblin"}
+    sessao.working_mem.registrar_fala(
+        "mestre", "A sombra se move, mas a distância é grande (Furtividade)."
+    )
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    assert sessions[sid].combate_pendente == {"tipo": "ataque", "alvo": "goblin"}, \
+        "teste de perícia confirmado não pode consumir a pendência de ataque"
+
+
+def test_ws_rolagem_solta_ambigua_consome_pendencia_como_sempre(client):
+    """Contraste: SEM sinal de teste de perícia na última fala do Mestre
+    (ambíguo), o d20 solto continua sendo tratado como confirmação do ataque —
+    comportamento de sempre, sem chamada de LLM extra pra desambiguar."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "goblin"}
+    sessao.working_mem.registrar_fala("mestre", "O goblin avança, espada em punho.")
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    assert sessions[sid].combate_pendente is None, \
+        "sem sinal de teste, a pendência deve ser consumida como ataque (comportamento de sempre)"
+
+
 def test_ws_turno_streaming_tokens(client):
     """Fluxo completo: criar sessão → WS → 4 tokens → mensagem fim."""
     sid = _criar_sessao_ws(client)
