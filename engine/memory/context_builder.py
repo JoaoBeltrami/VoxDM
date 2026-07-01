@@ -324,12 +324,24 @@ class ContextBuilder:
     # ── Warmup e inferência ───────────────────────────────────────────────────
 
     async def inferir_npcs_presentes(self, location_id: str) -> list[str]:
-        """Retorna ids dos NPCs/Companions presentes no local via grafo Neo4j."""
+        """Retorna ids dos NPCs/Companions presentes no local via grafo Neo4j.
+
+        Timeout de 2s (mesmo padrão de `_buscar_rels_cached`): sem isto, uma
+        conexão AuraDB free-tier stale (`ConnectionResetError` após ficar idle)
+        bloqueia o turno inteiro por ~20s até o driver desistir sozinho —
+        travando o WebSocket e derrubando a resposta do jogador em silêncio
+        (playtest 01/07, sess-7893f3bdbd28).
+        """
         try:
-            npcs = await self._neo4j.buscar_npcs_no_local(location_id)
+            npcs = await asyncio.wait_for(
+                self._neo4j.buscar_npcs_no_local(location_id), timeout=2.0
+            )
             ids = [n["id"] for n in npcs if n.get("id")]
             log.info("npcs_inferidos", location=location_id, total=len(ids))
             return ids
+        except TimeoutError:
+            log.warning("neo4j_timeout", entidade=location_id)
+            return []
         except Exception as e:
             log.warning("npcs_inferir_falhou", location=location_id, erro=str(e))
             return []
