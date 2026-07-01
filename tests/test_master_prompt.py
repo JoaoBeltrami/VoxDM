@@ -581,20 +581,20 @@ def test_saves_md_dentro_do_budget():
 
 
 def test_social_md_dentro_do_budget():
-    """social.md comprimido: máx 5 200 chars (~1 485 tokens).
+    """social.md comprimido: máx 3 400 chars (~970 tokens).
 
     social.md é injetado em TODA cena não-combate com NPC presente — era o maior
-    bloco dinâmico fora de combate (6 382 chars, maior que combat.md+saves juntos)
-    e o gargalo de token que estourava o guard de 20k em cenas sociais densas
-    (raiz da cascata Groq→Gemini no playtest #7). Comprimido cirurgicamente para
-    ~4 720 chars preservando toda a calibração de trust/emoção/corpo e o marcador
-    [COMPANION_ADD]. Teto aqui é 5 200 para margem de edição sem reabrir a cascata.
+    bloco dinâmico fora de combate (6 382 → 4 775 → 2 965 chars na dieta de
+    01/07, decisão "campanha completa" do Beltrami pós-playtest com
+    prompt_excede_budget em 24/25 turnos). Toda a calibração de trust/emoção/
+    corpo e o [COMPANION_ADD] preservados. Teto 3 400 = margem de edição pequena;
+    crescer além disso exige cortar em outro lugar.
     """
     social_path = _COMBAT_PATH.parent / "social.md"
     conteudo = social_path.read_text(encoding="utf-8")
-    assert len(conteudo) <= 5_200, (
-        f"social.md com {len(conteudo)} chars excede teto de 5 200 chars — "
-        "cena social densa volta a estourar o guard de 20k e cascateia pro Gemini"
+    assert len(conteudo) <= 3_400, (
+        f"social.md com {len(conteudo)} chars excede teto de 3 400 chars — "
+        "cena social densa volta a inflar o prompt e cascatear pro Gemini"
     )
     # Garantia funcional preservada na compressão (test_prompt_wiring depende disso).
     assert "assinatura de voz" in conteudo
@@ -602,32 +602,34 @@ def test_social_md_dentro_do_budget():
 
 
 def test_master_system_dentro_do_budget():
-    """master_system.md: máx 11 500 chars (~3 285 tokens).
+    """master_system.md: máx 7 500 chars (~2 140 tokens).
 
     Histórico:
     - 10 500 antes dos marcadores ANCORA/VOZ/AFETO
-    - 11 000 após (margem pra mexer)
-    - 11 500 após (27/05) inclusão da voz dupla refinada + regra NPC progressivo
-      — ambas resolveram feedback de jogo, valem o custo de tokens.
+    - 11 000 → 11 500 (27/05) com voz dupla refinada + NPC progressivo
+    - 7 500 (01/07) — dieta "campanha completa" decidida pelo Beltrami após
+      playtest com prompt_excede_budget em 24/25 turnos (21,5k–27,4k chars,
+      73% de overhead fixo). Compressão de -32% (9 808 → 6 658) preservando
+      TODA regra; só a prosa explicativa saiu. Tom revisado em playtest.
 
-    Acima de 11 500: pausar, justificar, e considerar gating condicional
+    Acima de 7 500: pausar, justificar, e considerar gating condicional
     (injetar só quando relevante) em vez de adicionar.
     """
     conteudo = _MASTER_SYSTEM_PATH.read_text(encoding="utf-8")
-    assert len(conteudo) <= 11_500, (
-        f"master_system.md com {len(conteudo)} chars excede teto de 11 500 chars — "
-        "injeta >3 285 tokens em todo turno; comprimir ou gating condicional"
+    assert len(conteudo) <= 7_500, (
+        f"master_system.md com {len(conteudo)} chars excede teto de 7 500 chars — "
+        "injeta >2 140 tokens em todo turno; comprimir ou gating condicional"
     )
 
 
 def test_prompt_combate_dentro_do_budget_de_tokens():
-    """Prompt de combate completo deve ficar abaixo de 18 800 chars (~5 370 tokens).
+    """Prompt de combate completo deve ficar abaixo de 16 000 chars (~4 570 tokens).
 
     Budget alvo: turno de combate (system + user) ≤ 6 000 TPM @ 1 turn/min
-    no Groq 70B. Teto 18 800 (master ~10 150 — instruções [CENA], OOC-vocativo e
-    NPC-react do teste ao vivo 09/06 — + combat ~3 530 + markers_frag ~2 240 com
-    [FEATURE_GASTA] e doc anti-"srd" do [INIMIGO] + saves ~1 400 + wm ~500 +
-    lembrete ~180). Continua 1 200 chars abaixo do guard de runtime (20 000).
+    no Groq 70B. Dieta 01/07 ("campanha completa", decisão Beltrami pós-playtest
+    com prompt_excede_budget em 24/25 turnos): master 9 808 → 6 658 derrubou o
+    kitchen-sink de ~18,3k pra ~15,1k — abaixo da meta de <15k do roadmap
+    engine-first pela primeira vez. Teto 16 000 = margem de ~900 chars.
     Subir este teto de novo exige cortar gordura em vez de empilhar instrução.
     """
     invalidar_cache()
@@ -657,8 +659,8 @@ def test_prompt_combate_dentro_do_budget_de_tokens():
     )
     mensagens = montar_mensagens(contexto)
     system = mensagens[0]["content"]
-    assert len(system) <= 18_800, (
-        f"System prompt de combate com {len(system)} chars excede teto de 18 800 — "
+    assert len(system) <= 16_000, (
+        f"System prompt de combate com {len(system)} chars excede teto de 16 000 — "
         f"turn total estimado: ~{(len(system)/3.5 + 400):.0f} tokens"
     )
 

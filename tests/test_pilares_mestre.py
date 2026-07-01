@@ -947,7 +947,10 @@ def test_budget_kitchen_sink_combate_com_tudo_ligado():
     for i in range(8):
         wm.narrative.atualizar_agenda(f"npc-{i}", f"plano de fundo elaborado número {i}")
     system = montar_mensagens(_ctx(wm, "ataco o guarda zero com minha espada"))[0]["content"]
-    assert len(system) <= 20_500, (
+    # Dieta 01/07 ("campanha completa"): master 9 808 → 6 658 derrubou o
+    # kitchen-sink de ~19,7k pra ~16,5k. Teto apertado 20 500 → 17 500 pra
+    # guardar o ganho — subir de novo exige cortar gordura, não empilhar.
+    assert len(system) <= 17_500, (
         f"Kitchen sink: system com {len(system)} chars — blocos dos Pilares "
         "estouraram o teto; cortar gordura nos blocos dinâmicos"
     )

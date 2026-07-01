@@ -103,8 +103,11 @@ def test_fragmento_markers_lista_carregavel():
 
 # Strings UNICAS dos fragmentos — nao aparecem nos stubs deixados no master_system.md.
 # Garantem que o teste checa o FRAGMENTO completo injetado, nao o stub resumido.
-_MARKER_UNICO_VOZ_DUPLA = "passa de raspão"  # exemplo dentro do fragmento
-_MARKER_UNICO_MARKERS = "CR≤¼=25"             # tabela de XP no fragmento
+_MARKER_UNICO_VOZ_DUPLA = "passa de raspão"   # exemplo dentro do fragmento
+# [RELOGIO_AVANCA: só existe na lista completa — o master_system menciona apenas
+# FIO/CONSEQUÊNCIA/XP/CENA/NPC. (Era "CR≤¼=25", removida na dieta 01/07: a tabela
+# de XP por CR saiu do prompt porque a engine paga abate/quest sozinha agora.)
+_MARKER_UNICO_MARKERS = "[RELOGIO_AVANCA:"
 
 
 def test_cena_calma_omite_ambos_fragmentos():
