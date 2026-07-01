@@ -1626,12 +1626,21 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 if _res.get("fim_combate"):
                                     sessao.working_mem.sair_combate()
                                 # O resultado da engine vira instrução de NARRAÇÃO.
+                                # Task 8 (prosa em camadas): tier explícito POR TURNO —
+                                # antes o Mestre tinha só o lembrete genérico "vívido nos
+                                # momentos-chave, seco no resto" e precisava inferir da
+                                # prosa das linhas ENGINE se ESTE turno era um deles.
+                                _instrucao_tier = (
+                                    "Este é um MOMENTO-CHAVE (crítico/abate/virada) — "
+                                    "3-4 frases, vívido, dê peso ao instante."
+                                    if _res.get("tier") == "epico" else
+                                    "Ação trivial — 1-2 frases secas e mecânicas, sem florear."
+                                )
                                 texto_jogador = (
                                     "(Narre este turno de combate dando corpo às decisões da "
                                     "ENGINE abaixo. NÃO invente nem repita números crus de "
-                                    "rolagem/CA/HP — são finais. Vívido nos momentos-chave "
-                                    "(crítico, abate, virada), seco nas ações triviais. 2-4 "
-                                    "frases.)\n" + str(_res.get("contexto", ""))
+                                    "rolagem/CA/HP — são finais. " + _instrucao_tier + ")\n"
+                                    + str(_res.get("contexto", ""))
                                 )
                             # _res inválido (alvo morto/inexistente) → segue com o texto
                             # cru da rolagem no fluxo antigo (fallback seguro).

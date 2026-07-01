@@ -45,6 +45,8 @@ def test_acerto_aplica_dano_e_avanca_rodada():
     assert wm.inimigos_combate["goblin"]["hp_atual"] < 30
     # ação consumida + rodada avançada
     assert wm.rodada_combate == rodada_antes + 1
+    # task 8: crítico do jogador é sempre épico
+    assert res["tier"] == "epico"
 
 
 def test_erro_nao_aplica_dano_mas_roda_turno_inimigo():
@@ -57,12 +59,26 @@ def test_erro_nao_aplica_dano_mas_roda_turno_inimigo():
     assert wm.inimigos_combate["goblin"]["hp_atual"] == 30  # intacto
     # o turno dos inimigos sempre é narrado
     assert "turno dos inimigos" in res["contexto"]
+    # task 8: falha crítica é sempre épico
+    assert res["tier"] == "epico"
+
+
+def test_acerto_normal_sem_abate_e_seco():
+    """task 8: ataque comum que acerta (sem crit, sem abater) não é épico —
+    o Mestre deve narrar seco/mecânico, não florear cada golpe trivial."""
+    wm = _wm_combate(ca_inimigo=5, hp_inimigo=100)  # HP alto — não abate
+    res = resolver_turno_ataque_jogador(wm, "goblin", d20=15, rng=random.Random(3))
+    assert res["acertou"] is True and res["critico"] is False
+    assert res["estado_alvo"] != "morto"
+    assert res["tier"] == "seco"
 
 
 def test_abate_marca_morto_e_encerra_se_unico():
     wm = _wm_combate(ca_inimigo=5, hp_inimigo=1)  # 1 HP → crit mata
     res = resolver_turno_ataque_jogador(wm, "goblin", d20=20, rng=random.Random(2))
     assert res["estado_alvo"] == "morto"
+    # task 8: abate é sempre épico
+    assert res["tier"] == "epico"
     assert res["fim_combate"] is True
     assert "sem vida" in res["contexto"]
 

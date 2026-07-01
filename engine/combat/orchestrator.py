@@ -25,6 +25,7 @@ from typing import Any
 
 from engine.combat.enemy_turn import resolver_turno_inimigos
 from engine.combat.narration import (
+    classificar_tier,
     linha_ataque_jogador,
     linha_dano_jogador,
     linha_turno_inimigos,
@@ -127,6 +128,18 @@ def resolver_turno_ataque_jogador(
     wm.avancar_rodada()
 
     vivos = [d for d in wm.inimigos_combate.values() if d.get("estado") != "morto"]
+    fim_combate = len(vivos) == 0
+    # Task 8 do roadmap original ("prosa em camadas"): sinal explícito de tier
+    # pro caller instruir o Mestre a variar densidade — épico só nos momentos-
+    # chave (crítico, abate, fim de combate, inimigo critando no PJ), seco no
+    # resto (não precisa mais inferir da prosa das linhas ENGINE).
+    tier = classificar_tier(
+        critico=r.critico,
+        falha_critica=r.falha_critica,
+        estado_alvo=estado,
+        fim_combate=fim_combate,
+        ataques_inimigos=res_inim.get("ataques"),
+    )
     return {
         "valido": True,
         "contexto": "\n".join(linhas),
@@ -137,5 +150,6 @@ def resolver_turno_ataque_jogador(
         "dano": dano,
         "dano_inimigos": int(res_inim.get("dano_total", 0)),
         "hp_jogador": wm.player_hp,
-        "fim_combate": len(vivos) == 0,
+        "fim_combate": fim_combate,
+        "tier": tier,
     }

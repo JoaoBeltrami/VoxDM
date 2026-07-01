@@ -84,3 +84,26 @@ def linha_turno_inimigos(res: dict[str, Any]) -> str:
     hp = res.get("hp_jogador")
     cauda = f" Seu HP: {int(hp)}." if hp is not None else ""
     return f"{_PREFIXO} turno dos inimigos — " + "; ".join(partes) + "." + cauda
+
+
+def classificar_tier(
+    critico: bool,
+    falha_critica: bool,
+    estado_alvo: str,
+    fim_combate: bool,
+    ataques_inimigos: list[dict[str, Any]] | None = None,
+) -> str:
+    """"epico" se o turno tem um momento-chave, senão "seco" (task 8 do roadmap
+    original do combate: "prosa em camadas" — o Mestre já é instruído a variar
+    densidade, mas sem um sinal EXPLÍCITO por turno; esta função fornece o sinal.
+
+    Épico: crítico do jogador, falha crítica, abate (estado_alvo=="morto"),
+    fim de combate, ou QUALQUER inimigo acertando crítico no jogador. Todo o
+    resto (ataque comum acerta/erra, dano sem abate) é seco — 1-2 frases
+    mecânicas, sem florear.
+    """
+    if critico or falha_critica or estado_alvo == "morto" or fim_combate:
+        return "epico"
+    if ataques_inimigos and any(a.get("critico") for a in ataques_inimigos):
+        return "epico"
+    return "seco"
