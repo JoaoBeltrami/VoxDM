@@ -232,6 +232,7 @@ from api.turn_pipeline import (  # noqa: E402
     _RE_INIMIGO_GRAVE,
     _RE_INIMIGO_MORTO,
     _RE_LAMPEJO,
+    _encontrar_id_inimigo,
     _slugify,
     aliados_presentes_para_hostil,
     aplicar_afeto_npcs,
@@ -248,12 +249,64 @@ from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
 from engine.authority.resolve import resolver_turno_ataque_jogador
-from engine.combat.intent import eh_teste_pericia
+from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
 _LAMPEJO_RATE: str = "-25%"
 _LAMPEJO_PITCH: str = "-3Hz"
+
+
+def _ultima_fala_do_mestre(working_mem: Any) -> str:
+    """Texto da última fala do Mestre no diálogo recente ('' se não houver)."""
+    for turno in reversed(working_mem.dialogo_recente):
+        if turno.falante == "mestre":
+            return turno.texto
+    return ""
+
+
+def _resolver_ataque_engine(
+    sessao: Any, session_id: str, alvo: str, d20: int
+) -> str | None:
+    """Resolve o turno de ataque via engine; devolve a instrução de narração.
+
+    None quando o resolve é inválido (alvo morto/inexistente ou falha interna)
+    — o caller cai no fluxo antigo. Muta a WM (dano, action economy, turno dos
+    inimigos) e fecha o combate quando o resolver decide fim. Usado nos DOIS
+    caminhos de rolagem: pendência declarada ("ataco X" → d20) e d20 solto com
+    pedido de ataque do Mestre (regra ampliada, 01/07).
+    """
+    try:
+        _res = resolver_turno_ataque_jogador(sessao.working_mem, alvo, d20)
+    except Exception as _e:  # nunca derruba o turno
+        log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
+        return None
+    if not _res.get("valido"):
+        return None
+    log.info(
+        "combate_engine_resolveu", session_id=session_id,
+        alvo=alvo, acertou=_res.get("acertou"),
+        dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
+        fim=_res.get("fim_combate"),
+    )
+    if _res.get("fim_combate"):
+        sessao.working_mem.sair_combate()
+    # O resultado da engine vira instrução de NARRAÇÃO. Task 8 (prosa em
+    # camadas): tier explícito POR TURNO — antes o Mestre tinha só o lembrete
+    # genérico "vívido nos momentos-chave, seco no resto" e precisava inferir
+    # da prosa das linhas ENGINE se ESTE turno era um deles.
+    _instrucao_tier = (
+        "Este é um MOMENTO-CHAVE (crítico/abate/virada) — "
+        "3-4 frases, vívido, dê peso ao instante."
+        if _res.get("tier") == "epico" else
+        "Ação trivial — 1-2 frases secas e mecânicas, sem florear."
+    )
+    return (
+        "(Narre este turno de combate dando corpo às decisões da "
+        "ENGINE abaixo. NÃO invente nem repita números crus de "
+        "rolagem/CA/HP — são finais. " + _instrucao_tier + ")\n"
+        + str(_res.get("contexto", ""))
+    )
 
 
 # ── Helper de TTS com timeout ────────────────────────────────────────────────
@@ -1584,11 +1637,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # meio do combate). Só desvia no caso CONFIRMADO (alta
                     # confiança) — ambíguo mantém o comportamento de sempre
                     # (trata como confirmação do ataque), sem chamada de LLM extra.
-                    _ultima_fala_mestre = ""
-                    for _turno in reversed(sessao.working_mem.dialogo_recente):
-                        if _turno.falante == "mestre":
-                            _ultima_fala_mestre = _turno.texto
-                            break
+                    _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
                     _e_teste_pericia_solto = (
                         _d20_jogador is not None
                         and eh_teste_pericia(_ultima_fala_mestre) is not None
@@ -1606,49 +1655,33 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         _pend = sessao.combate_pendente
                         sessao.combate_pendente = None
                         if _d20_jogador is not None and sessao.working_mem.em_combate:
-                            try:
-                                _res = resolver_turno_ataque_jogador(
-                                    sessao.working_mem, str(_pend.get("alvo", "")), _d20_jogador
-                                )
-                            except Exception as _e:  # nunca derruba o turno
-                                log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
-                                _res = {"valido": False}
-                            if _res.get("valido"):
+                            _texto_engine = _resolver_ataque_engine(
+                                sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
+                            )
+                            if _texto_engine is not None:
                                 # A engine é a autoridade do dano do PJ neste turno —
                                 # o extractor de prosa abaixo NÃO deve re-aplicar.
                                 _engine_resolveu_turno = True
-                                log.info(
-                                    "combate_engine_resolveu", session_id=session_id,
-                                    alvo=_pend.get("alvo"), acertou=_res.get("acertou"),
-                                    dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
-                                    fim=_res.get("fim_combate"),
-                                )
-                                if _res.get("fim_combate"):
-                                    sessao.working_mem.sair_combate()
-                                # O resultado da engine vira instrução de NARRAÇÃO.
-                                # Task 8 (prosa em camadas): tier explícito POR TURNO —
-                                # antes o Mestre tinha só o lembrete genérico "vívido nos
-                                # momentos-chave, seco no resto" e precisava inferir da
-                                # prosa das linhas ENGINE se ESTE turno era um deles.
-                                _instrucao_tier = (
-                                    "Este é um MOMENTO-CHAVE (crítico/abate/virada) — "
-                                    "3-4 frases, vívido, dê peso ao instante."
-                                    if _res.get("tier") == "epico" else
-                                    "Ação trivial — 1-2 frases secas e mecânicas, sem florear."
-                                )
-                                texto_jogador = (
-                                    "(Narre este turno de combate dando corpo às decisões da "
-                                    "ENGINE abaixo. NÃO invente nem repita números crus de "
-                                    "rolagem/CA/HP — são finais. " + _instrucao_tier + ")\n"
-                                    + str(_res.get("contexto", ""))
-                                )
-                            # _res inválido (alvo morto/inexistente) → segue com o texto
-                            # cru da rolagem no fluxo antigo (fallback seguro).
+                                texto_jogador = _texto_engine
+                            # resolve inválido (alvo morto/inexistente) → segue com o
+                            # texto cru da rolagem no fluxo antigo (fallback seguro).
                         # rolagem não-d20 / fora de combate → pendência descartada, segue normal
                 elif (
                     sessao.working_mem.em_combate
                     and _d20_jogador is None
-                    and _RE_COMBATE.search(texto_jogador)
+                    and (
+                        _RE_COMBATE.search(texto_jogador)
+                        # Regra ampliada (01/07): citar magia de DANO conhecida em
+                        # combate é declaração de ataque, independente da conjugação
+                        # ("vou usar a explosão eldritch" — infinitivo fora do RE).
+                        # Condicional ("SE ele atacar, uso...") continua fora.
+                        or (
+                            not RE_COMBATE_CONDICIONAL.search(texto_jogador)
+                            and menciona_magia_ofensiva(
+                                texto_jogador, sessao.spells_conhecidas
+                            )
+                        )
+                    )
                 ):
                     # Declaração de ataque em combate → fixa o alvo e deixa o LLM
                     # PEDIR a rolagem (a engine resolve quando o d20 chegar). Sem
@@ -1695,6 +1728,38 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             "resolve quando o dado chegar.)"
                         )
                         log.info("combate_engine_pendente", session_id=session_id, alvo=_alvo)
+                elif sessao.working_mem.em_combate and _d20_jogador is not None:
+                    # d20 SOLTO em combate SEM pendência (playtest 01/07: 4 rolagens
+                    # órfãs na sessão inteira — a declaração do jogador não tinha
+                    # sido reconhecida, mas o Mestre PEDIU a rolagem de ataque e o
+                    # jogador rolou). Regra pura (decisão 01/07): perícia nomeada
+                    # tem precedência; senão, se a última fala do Mestre pediu
+                    # ATAQUE, resolve contra o inimigo citado nela (ou o único
+                    # vivo). Ambíguo de verdade → fluxo antigo, como sempre.
+                    _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
+                    if (
+                        eh_teste_pericia(_ultima_fala_mestre) is None
+                        and eh_pedido_ataque(_ultima_fala_mestre)
+                    ):
+                        _vivos = {
+                            str(d.get("nome", iid)).lower(): iid
+                            for iid, d in sessao.working_mem.inimigos_combate.items()
+                            if d.get("estado") != "morto"
+                        }
+                        _alvo = _encontrar_id_inimigo(_ultima_fala_mestre, _vivos)
+                        if _alvo is None and len(_vivos) == 1:
+                            _alvo = next(iter(_vivos.values()))
+                        if _alvo:
+                            _texto_engine = _resolver_ataque_engine(
+                                sessao, session_id, _alvo, _d20_jogador
+                            )
+                            if _texto_engine is not None:
+                                _engine_resolveu_turno = True
+                                texto_jogador = _texto_engine
+                                log.info(
+                                    "combate_d20_solto_resolvido",
+                                    session_id=session_id, alvo=_alvo,
+                                )
 
             # Monta contexto RAG — falha silenciosa com fallback para prompt simples
             contexto = None

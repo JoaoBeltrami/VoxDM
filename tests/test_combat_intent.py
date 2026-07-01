@@ -91,3 +91,79 @@ def test_string_vazia():
 
 def test_string_so_pontuacao():
     assert eh_teste_pericia("...") is None
+
+
+# ── eh_pedido_ataque — regra ampliada (decisão 01/07, playtest sess-7893f3bdbd28) ──
+
+from engine.combat.intent import eh_pedido_ataque, menciona_magia_ofensiva  # noqa: E402
+
+
+def test_pedido_ataque_frase_do_wrapper_de_pendencia():
+    # É a instrução exata que o engine-first injeta pro Mestre ecoar.
+    assert eh_pedido_ataque("Descreva a investida e peça a rolagem de ataque.") is True
+
+
+def test_pedido_ataque_role_d20_de_ataque():
+    assert eh_pedido_ataque("Bjorn ergue o escudo. Role o d20 de ataque!") is True
+
+
+def test_pedido_ataque_jogue_o_dado_para_acertar():
+    assert eh_pedido_ataque("Jogue o dado para acertar o golpe.") is True
+
+
+def test_vocab_ataque_sem_rolagem_nao_e_pedido():
+    # Narração comum de combate: "ataque" aparece, mas ninguém pediu dado.
+    assert eh_pedido_ataque("O goblin desvia do seu ataque e recua.") is False
+
+
+def test_rolagem_sem_vocab_ataque_nao_e_pedido():
+    # Pedido de rolagem genérico/perícia — não é ataque.
+    assert eh_pedido_ataque("Role o d20 e me diga o resultado.") is False
+
+
+def test_pedido_ataque_string_vazia():
+    assert eh_pedido_ataque("") is False
+
+
+def test_precedencia_pericia_vence_pedido_ataque():
+    """Fala com vocab de ataque E perícia nomeada: o caller checa
+    eh_teste_pericia PRIMEIRO — este teste documenta o contrato de precedência."""
+    fala = "O goblin desvia do seu ataque. Role Percepção para notar a emboscada."
+    assert eh_teste_pericia(fala) == "Percepção"   # perícia vence
+    assert eh_pedido_ataque(fala) is True          # por isso a ordem importa
+
+
+# ── menciona_magia_ofensiva — magia de DANO conhecida citada = ataque ──────────
+
+def test_magia_ofensiva_conhecida_citada():
+    nome = menciona_magia_ofensiva(
+        "vou usar a explosão eldritch", ["Explosão Eldritch", "Mão Mágica"]
+    )
+    assert nome == "Explosão Eldritch"
+
+
+def test_magia_ofensiva_sem_acento_no_texto():
+    # STT costuma transcrever sem acento — o match é normalizado dos dois lados.
+    nome = menciona_magia_ofensiva("uso explosao eldritch nele", ["Explosão Eldritch"])
+    assert nome == "Explosão Eldritch"
+
+
+def test_magia_utilitaria_conhecida_nao_e_ataque():
+    # Mão Mágica não causa dano — citar não é declaração de ataque.
+    assert menciona_magia_ofensiva(
+        "uso mão mágica para pegar a chave", ["Mão Mágica"]
+    ) is None
+
+
+def test_magia_ofensiva_nao_conhecida_nao_conta():
+    # Só magia da FICHA conta — "bola de fogo" sem conhecê-la é fantasia do jogador.
+    assert menciona_magia_ofensiva("lanço bola de fogo", ["Explosão Eldritch"]) is None
+
+
+def test_magia_ofensiva_lista_vazia():
+    assert menciona_magia_ofensiva("uso explosão eldritch", []) is None
+    assert menciona_magia_ofensiva("uso explosão eldritch", None) is None
+
+
+def test_magia_ofensiva_texto_vazio():
+    assert menciona_magia_ofensiva("", ["Explosão Eldritch"]) is None

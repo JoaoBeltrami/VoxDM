@@ -364,3 +364,43 @@ class TestCantripsInvariantes:
         nomes = [s.nome_pt for s in spells_por_nivel("mago", 0)]
         assert "Dança das Luzes" in nomes
         assert "Taumaturgia do Mago" not in nomes
+
+
+# ── spell_e_ofensiva — magia de dano detectada pela desc_curta (01/07) ─────────
+
+from engine.magic.spell_list import spell_e_ofensiva  # noqa: E402
+
+
+def test_explosao_eldritch_e_ofensiva():
+    assert spell_e_ofensiva("Explosão Eldritch") is True
+
+
+def test_bola_de_fogo_e_ofensiva():
+    assert spell_e_ofensiva("Bola de Fogo") is True
+
+
+def test_missil_magico_e_ofensivo():
+    # desc "3 dardos 1d4+1 força" — o padrão tolera o "+N" do dado.
+    assert spell_e_ofensiva("Míssil Mágico") is True
+
+
+def test_escudo_arcano_nao_e_ofensivo():
+    assert spell_e_ofensiva("Escudo Arcano") is False
+
+
+def test_sono_nao_e_ofensivo():
+    # "5d8 PV de criaturas adormecidas" tem dado mas PV não é tipo de dano.
+    assert spell_e_ofensiva("Sono") is False
+
+
+def test_invisibilidade_nao_e_ofensiva():
+    assert spell_e_ofensiva("Invisibilidade") is False
+
+
+def test_magia_inexistente_nao_e_ofensiva():
+    assert spell_e_ofensiva("Magia Que Não Existe") is False
+    assert spell_e_ofensiva("") is False
+
+
+def test_case_insensitive():
+    assert spell_e_ofensiva("explosão eldritch") is True

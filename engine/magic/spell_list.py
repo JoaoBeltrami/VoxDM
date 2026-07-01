@@ -16,6 +16,7 @@ Exemplo:
     # → {"truques": 3, "magias": 10, "nivel_max": 2}
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -560,6 +561,35 @@ def nivel_da_spell(nome_pt: str, classe: str) -> int | None:
         if spell.nome_pt.lower() == nome_lower:
             return spell.nivel
     return None
+
+
+# Magia OFENSIVA = desc_curta menciona dado de dano com TIPO de dano ("1d10
+# força", "8d6 fogo"). "5d8 PV de criaturas" (Sono) não casa — PV não é tipo.
+# Usado pela regra ampliada de combate (decisão 01/07): citar uma magia de dano
+# conhecida em combate é declaração de ataque.
+_RE_DANO_TIPADO = re.compile(
+    r"\d+d\d+(?:\s*\+\s*\d+)?\s+"
+    r"(?:forca|força|fogo|frio|eletrico|elétrico|acido|ácido|radiante|"
+    r"necrotico|necrótico|trovao|trovão|veneno|cortante|perfurante|"
+    r"psiquico|psíquico|concussao|concussão)\b",
+    re.IGNORECASE,
+)
+
+
+def spell_e_ofensiva(nome_pt: str) -> bool:
+    """True se a magia (qualquer classe) causa dano direto pela desc_curta.
+
+    Case-insensitive; procura em TODAS as classes (o mesmo nome pode aparecer
+    em várias listas — basta uma versão ofensiva). Nome desconhecido → False.
+    """
+    nome_lower = nome_pt.strip().lower()
+    if not nome_lower:
+        return False
+    for lista in SPELLS_POR_CLASSE.values():
+        for spell in lista:
+            if spell.nome_pt.lower() == nome_lower and _RE_DANO_TIPADO.search(spell.desc_curta):
+                return True
+    return False
 
 
 # ── Tabelas de spell slots SRD 5e (espelha CharacterSheet.tsx) ───────────────
