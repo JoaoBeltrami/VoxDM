@@ -9,7 +9,7 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[CONSEQUÊNCIA: texto]` — efeito duradouro além da cena atual. Máx 1-2/turno.
 - `[ANCORA: texto]` — fato já narrado, não repetir.
 - `[RELOGIO_AVANCA: id]` — ameaça do relógio listado ganha força (jogador ignorou, vilão agiu).
-- `[XP: +N motivo]` — CR≤¼=25 | CR½=50 | CR1=100 | CR2=200 | quest/diplomacia=50–300.
+- `[XP: +N motivo]` — SÓ bônus narrativo (descoberta, diplomacia excepcional, 25–100). Abate e quest concluída a engine já paga sozinha — NUNCA dê XP por morte de inimigo.
 
 **Combate:**
 - `[COMBATE: iniciar]` — ação bélica fora de combate (sparring, "uso chama nele"). Engine ativa iniciativa e vinheta.
