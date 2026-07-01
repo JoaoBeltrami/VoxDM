@@ -866,6 +866,13 @@ def aplicar_pos_turno(
         working_mem, texto_jogador, resposta_completa,
         ids_ja_marcados_morte=ids_via_marker,
     )
+    # 2c. XP engine-first (decisão 01/07): abate detectado via marker/regex paga
+    #     XP determinístico ANTES da detecção de fim de combate abaixo — depois
+    #     de sair_combate() o dict some e o morto não pagaria. Dedup pela flag
+    #     xp_concedido (mortes já pagas pelo resolver não pagam de novo).
+    if working_mem.em_combate:
+        from engine.progression import conceder_xp_abates_pendentes
+        conceder_xp_abates_pendentes(working_mem)
 
     # 3. Iniciativa — engine é authority
     # Bug #8: cada chamada de pipeline = uma rodada COMPLETA (jogador age,
@@ -1507,13 +1514,15 @@ def aplicar_xp_e_detectar_level_up(
         _xp_vistos.add(chave)
         ganhos.append((qtd, motivo))
 
-    if not ganhos:
-        return None
+    if ganhos:
+        total = sum(q for q, _ in ganhos)
+        working_mem.xp += total
+        log.info("xp_ganho", total=total, ganhos=ganhos, xp_novo=working_mem.xp)
 
-    total = sum(q for q, _ in ganhos)
-    working_mem.xp += total
-    log.info("xp_ganho", total=total, ganhos=ganhos, xp_novo=working_mem.xp)
-
+    # XP engine-first (decisão 01/07): o level-up é calculado SEMPRE, não só
+    # quando o LLM emitiu [XP:] — a engine concede XP por conta própria (abate
+    # via conceder_xp_abates_pendentes, quest via extractor) e esse XP também
+    # precisa disparar o modal de level-up.
     novo_nivel = calcular_novo_nivel(working_mem.xp, working_mem.player_level)
     if novo_nivel > working_mem.player_level:
         # Imersão P4: level up é marco da crônica da sessão

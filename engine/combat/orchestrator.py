@@ -127,6 +127,12 @@ def resolver_turno_ataque_jogador(
     # Nova rodada — renova ação/bônus/movimento.
     wm.avancar_rodada()
 
+    # XP engine-first (decisão 01/07): abate paga XP determinístico AQUI —
+    # antes de fim_combate, porque sair_combate() (no caller) limpa o dict e
+    # o morto sumiria sem pagar. Dedup pela flag xp_concedido.
+    from engine.progression import conceder_xp_abates_pendentes
+    conceder_xp_abates_pendentes(wm)
+
     vivos = [d for d in wm.inimigos_combate.values() if d.get("estado") != "morto"]
     fim_combate = len(vivos) == 0
     # Task 8 do roadmap original ("prosa em camadas"): sinal explícito de tier

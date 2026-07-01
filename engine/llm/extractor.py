@@ -605,6 +605,14 @@ def aplicar_quests_extraidas(
     for cid in extraido.get("concluidas", []):
         if wm.narrative.concluir_quest_improvisada(cid):
             concluidas.append(cid)
+            # XP engine-first (decisão 01/07): quest concluída paga XP
+            # determinístico — concluir_quest_improvisada é idempotente (True
+            # só na 1ª vez), então a concessão nunca duplica. O level-up
+            # decorrente é detectado no próximo aplicar_xp_e_detectar_level_up
+            # (o extractor roda pós-turno; modal chega 1 turno depois, ok).
+            from engine.progression import XP_QUEST_CONCLUIDA
+            wm.xp += XP_QUEST_CONCLUIDA
+            log.info("xp_quest_concedido", quest=cid, xp=XP_QUEST_CONCLUIDA, xp_total=wm.xp)
     if adicionadas or concluidas:
         log.info(
             "quests_improvisadas_aplicadas", novas=adicionadas, concluidas=concluidas

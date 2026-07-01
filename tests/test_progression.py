@@ -215,3 +215,134 @@ def test_pipeline_xp_ignora_marcador_invalido():
     wm.xp = 0
     aplicar_xp_e_detectar_level_up(wm, "[XP: abc razão]")
     assert wm.xp == 0
+
+
+# ── XP engine-first (decisão 01/07) — abate paga XP determinístico ─────────────
+
+import random  # noqa: E402
+
+from engine.combat.orchestrator import resolver_turno_ataque_jogador  # noqa: E402
+from engine.progression import (  # noqa: E402
+    XP_ABATE_FALLBACK,
+    XP_QUEST_CONCLUIDA,
+    conceder_xp_abates_pendentes,
+    xp_do_inimigo,
+)
+
+
+def _wm_com_inimigo(estado: str = "morto", ficha: str = "") -> WorkingMemory:
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    if ficha:
+        wm.inimigos_combate["goblin"]["ficha"] = ficha
+    if estado != "intacto":
+        wm.atualizar_estado_inimigo("goblin", estado, "")
+    return wm
+
+
+def test_xp_do_inimigo_parseia_ficha_srd():
+    dados = {"ficha": "Goblin — Pequeno humanoide, CR 1/4 (50 XP). CA 15 | PV 7"}
+    assert xp_do_inimigo(dados) == 50
+
+
+def test_xp_do_inimigo_sem_ficha_usa_fallback():
+    assert xp_do_inimigo({}) == XP_ABATE_FALLBACK
+    assert xp_do_inimigo({"ficha": "texto sem xp nenhum"}) == XP_ABATE_FALLBACK
+
+
+def test_conceder_xp_abate_morto_paga_uma_vez():
+    wm = _wm_com_inimigo("morto")
+    xp_antes = wm.xp
+    total = conceder_xp_abates_pendentes(wm)
+    assert total == XP_ABATE_FALLBACK
+    assert wm.xp == xp_antes + XP_ABATE_FALLBACK
+    assert wm.inimigos_combate["goblin"]["xp_concedido"] is True
+    # 2ª chamada (outro caminho detectou a mesma morte) → 0, sem duplicar
+    assert conceder_xp_abates_pendentes(wm) == 0
+    assert wm.xp == xp_antes + XP_ABATE_FALLBACK
+
+
+def test_conceder_xp_ignora_inimigo_vivo():
+    wm = _wm_com_inimigo("ferido")
+    assert conceder_xp_abates_pendentes(wm) == 0
+    assert "xp_concedido" not in wm.inimigos_combate["goblin"]
+
+
+def test_conceder_xp_usa_valor_da_ficha():
+    wm = _wm_com_inimigo("morto", ficha="Orc — CR 1/2 (100 XP). CA 13 | PV 15")
+    assert conceder_xp_abates_pendentes(wm) == 100
+
+
+def test_conceder_xp_soma_multiplos_mortos():
+    wm = _wm_com_inimigo("morto")
+    wm.registrar_inimigo("orc", "Orc", "intacto")
+    wm.atualizar_estado_inimigo("orc", "morto", "")
+    assert conceder_xp_abates_pendentes(wm) == 2 * XP_ABATE_FALLBACK
+
+
+def test_abate_registra_cronica():
+    wm = _wm_com_inimigo("morto")
+    conceder_xp_abates_pendentes(wm)
+    assert any("Goblin" in c and "XP" in c for c in wm.narrative.cronica)
+
+
+def test_resolver_concede_xp_no_abate():
+    """Integração: matar pelo resolver paga XP ANTES de fim_combate limpar o
+    dict (playtest 01/07: 0 XP na sessão inteira com marker [XP:] dormente)."""
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=5, hp_max=1)  # 1 HP → qualquer acerto mata
+    xp_antes = wm.xp
+    res = resolver_turno_ataque_jogador(wm, "goblin", d20=20, rng=random.Random(1))
+    assert res["fim_combate"] is True
+    assert wm.xp == xp_antes + XP_ABATE_FALLBACK, \
+        "o abate deve pagar XP mesmo quando o combate encerra no mesmo golpe"
+
+
+def test_resolver_nao_paga_xp_sem_abate():
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin", ca=30, hp_max=100)  # d20=1 sempre erra
+    xp_antes = wm.xp
+    resolver_turno_ataque_jogador(wm, "goblin", d20=1, rng=random.Random(1))
+    assert wm.xp == xp_antes
+
+
+def test_pipeline_marker_inimigo_morto_paga_xp():
+    """Morte via [INIMIGO_MORTO] (marker do LLM) também paga XP — o step 2c
+    roda antes da detecção de fim de combate que limpa o dict."""
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm_com_inimigo("intacto")
+    xp_antes = wm.xp
+    aplicar_pos_turno(wm, "golpeio o goblin", "O golpe acerta. [INIMIGO_MORTO: goblin]")
+    assert wm.xp == xp_antes + XP_ABATE_FALLBACK
+
+
+def test_level_up_dispara_com_xp_da_engine_sem_marker():
+    """aplicar_xp_e_detectar_level_up calcula level-up SEMPRE — XP concedido
+    pela engine (sem nenhum [XP:] na resposta) também sobe de nível."""
+    from api.turn_pipeline import aplicar_xp_e_detectar_level_up
+
+    wm = _wm(nivel=3)
+    wm.xp = XP_THRESHOLDS[4] + 10  # engine concedeu XP em turnos anteriores
+    resumo = aplicar_xp_e_detectar_level_up(wm, "narração sem marcador nenhum")
+    assert resumo is not None
+    assert wm.player_level == 4
+
+
+def test_quest_concluida_paga_xp():
+    from engine.llm.extractor import aplicar_quests_extraidas
+
+    wm = _wm()
+    wm.narrative.registrar_quest_improvisada("achar-a-chave", "Achar a chave", "Procurar")
+    xp_antes = wm.xp
+    _, concluidas = aplicar_quests_extraidas(wm, {"novas": [], "concluidas": ["achar-a-chave"]})
+    assert concluidas == ["achar-a-chave"]
+    assert wm.xp == xp_antes + XP_QUEST_CONCLUIDA
+    # reprocessar a mesma conclusão não duplica (concluir é idempotente)
+    aplicar_quests_extraidas(wm, {"novas": [], "concluidas": ["achar-a-chave"]})
+    assert wm.xp == xp_antes + XP_QUEST_CONCLUIDA

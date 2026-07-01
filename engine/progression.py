@@ -23,6 +23,7 @@ Exemplo:
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import structlog
@@ -58,6 +59,58 @@ XP_THRESHOLDS: dict[int, int] = {
 }
 
 NIVEL_MAXIMO: int = 20
+
+
+# ── XP engine-first (decisão Beltrami 01/07) ──────────────────────────────────
+# Playtest sess-7893f3bdbd28: 0 XP em 25 turnos com duelo, subjugação de uma
+# família e liderança conquistada — o marcador [XP:] documentado no prompt
+# nunca foi emitido pelo LLM (mesma classe do BEAT-NUNCA-RODOU-1: marcador
+# opcional = feature dormente). A engine agora concede XP determinístico nos
+# eventos que ELA já detecta (abate, quest concluída); o [XP:] do LLM vira
+# bônus narrativo (diplomacia, descoberta).
+
+# "CR 1/4 (50 XP)" na ficha SRD em texto do bestiário.
+_RE_XP_FICHA = re.compile(r"\((\d+)\s*XP\)", re.IGNORECASE)
+
+# CR ~1/8 (guarda/bandido genérico) — coerente com stats_default() do combate.
+XP_ABATE_FALLBACK: int = 25
+
+# Quest improvisada concluída — mid-range da faixa "quest/diplomacia=50–300"
+# que o master_system.md documenta pro marcador [XP:].
+XP_QUEST_CONCLUIDA: int = 100
+
+
+def xp_do_inimigo(dados: dict) -> int:
+    """XP de abate de um inimigo pela ficha SRD, ou fallback CR ~1/8.
+
+    A ficha em texto do bestiário traz "CR 1/4 (50 XP)" — parseamos o valor
+    oficial. Inimigo sem ficha (NPC do módulo, genérico) vale o fallback.
+    """
+    m = _RE_XP_FICHA.search(str(dados.get("ficha", "")))
+    return int(m.group(1)) if m else XP_ABATE_FALLBACK
+
+
+def conceder_xp_abates_pendentes(wm: WorkingMemory) -> int:
+    """Concede XP de todo inimigo MORTO que ainda não pagou XP. Retorna o total.
+
+    Dedup pela flag `xp_concedido` no dict do inimigo — cada abate paga UMA vez,
+    independente de quantos caminhos marcaram a morte (resolver da engine,
+    marker [INIMIGO_MORTO], regex de prosa). Chamar ANTES de `sair_combate()`
+    limpar `inimigos_combate` (por isso os call-sites ficam no orchestrator e
+    no step de sync do pipeline, não no fim do turno).
+    """
+    total = 0
+    for iid, dados in wm.inimigos_combate.items():
+        if dados.get("estado") != "morto" or dados.get("xp_concedido"):
+            continue
+        xp = xp_do_inimigo(dados)
+        dados["xp_concedido"] = True
+        wm.xp += xp
+        total += xp
+        nome = str(dados.get("nome") or iid)
+        wm.narrative.registrar_cronica(f"⚔ {nome} abatido (+{xp} XP)")
+        log.info("xp_abate_concedido", inimigo=iid, xp=xp, xp_total=wm.xp)
+    return total
 
 
 def xp_para_nivel(nivel: int) -> int:
