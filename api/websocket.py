@@ -247,6 +247,7 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
+from engine.combat.intent import eh_teste_pericia
 from engine.combat.orchestrator import resolver_turno_ataque_jogador
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
@@ -1576,40 +1577,65 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             if settings.COMBATE_ENGINE_ATIVO and not sessao.working_mem.session_zero_ativa:
                 _d20_jogador = extrair_d20_jogador(texto_jogador)
                 if sessao.combate_pendente:
-                    # Há um ataque declarado aguardando a rolagem.
-                    _pend = sessao.combate_pendente
-                    sessao.combate_pendente = None
-                    if _d20_jogador is not None and sessao.working_mem.em_combate:
-                        try:
-                            _res = resolver_turno_ataque_jogador(
-                                sessao.working_mem, str(_pend.get("alvo", "")), _d20_jogador
-                            )
-                        except Exception as _e:  # nunca derruba o turno
-                            log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
-                            _res = {"valido": False}
-                        if _res.get("valido"):
-                            # A engine é a autoridade do dano do PJ neste turno —
-                            # o extractor de prosa abaixo NÃO deve re-aplicar.
-                            _engine_resolveu_turno = True
-                            log.info(
-                                "combate_engine_resolveu", session_id=session_id,
-                                alvo=_pend.get("alvo"), acertou=_res.get("acertou"),
-                                dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
-                                fim=_res.get("fim_combate"),
-                            )
-                            if _res.get("fim_combate"):
-                                sessao.working_mem.sair_combate()
-                            # O resultado da engine vira instrução de NARRAÇÃO.
-                            texto_jogador = (
-                                "(Narre este turno de combate dando corpo às decisões da "
-                                "ENGINE abaixo. NÃO invente nem repita números crus de "
-                                "rolagem/CA/HP — são finais. Vívido nos momentos-chave "
-                                "(crítico, abate, virada), seco nas ações triviais. 2-4 "
-                                "frases.)\n" + str(_res.get("contexto", ""))
-                            )
-                        # _res inválido (alvo morto/inexistente) → segue com o texto
-                        # cru da rolagem no fluxo antigo (fallback seguro).
-                    # rolagem não-d20 / fora de combate → pendência descartada, segue normal
+                    # Rolagem-solta-resolve (decisão 01/07, "regra pura"): antes de
+                    # consumir a pendência de ataque, confere se a ÚLTIMA fala do
+                    # Mestre pediu um TESTE DE PERÍCIA (não o ataque em si — ex:
+                    # interrompeu a resolução pra pedir Furtividade/Persuasão no
+                    # meio do combate). Só desvia no caso CONFIRMADO (alta
+                    # confiança) — ambíguo mantém o comportamento de sempre
+                    # (trata como confirmação do ataque), sem chamada de LLM extra.
+                    _ultima_fala_mestre = ""
+                    for _turno in reversed(sessao.working_mem.dialogo_recente):
+                        if _turno.falante == "mestre":
+                            _ultima_fala_mestre = _turno.texto
+                            break
+                    _e_teste_pericia_solto = (
+                        _d20_jogador is not None
+                        and eh_teste_pericia(_ultima_fala_mestre) is not None
+                    )
+                    if _e_teste_pericia_solto:
+                        log.info(
+                            "rolagem_solta_teste_pericia_preserva_pendencia",
+                            session_id=session_id,
+                            alvo=sessao.combate_pendente.get("alvo"),
+                        )
+                        # combate_pendente FICA intacto — este d20 não é a
+                        # confirmação do ataque; segue pro fluxo normal do LLM.
+                    else:
+                        # Há um ataque declarado aguardando a rolagem.
+                        _pend = sessao.combate_pendente
+                        sessao.combate_pendente = None
+                        if _d20_jogador is not None and sessao.working_mem.em_combate:
+                            try:
+                                _res = resolver_turno_ataque_jogador(
+                                    sessao.working_mem, str(_pend.get("alvo", "")), _d20_jogador
+                                )
+                            except Exception as _e:  # nunca derruba o turno
+                                log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
+                                _res = {"valido": False}
+                            if _res.get("valido"):
+                                # A engine é a autoridade do dano do PJ neste turno —
+                                # o extractor de prosa abaixo NÃO deve re-aplicar.
+                                _engine_resolveu_turno = True
+                                log.info(
+                                    "combate_engine_resolveu", session_id=session_id,
+                                    alvo=_pend.get("alvo"), acertou=_res.get("acertou"),
+                                    dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
+                                    fim=_res.get("fim_combate"),
+                                )
+                                if _res.get("fim_combate"):
+                                    sessao.working_mem.sair_combate()
+                                # O resultado da engine vira instrução de NARRAÇÃO.
+                                texto_jogador = (
+                                    "(Narre este turno de combate dando corpo às decisões da "
+                                    "ENGINE abaixo. NÃO invente nem repita números crus de "
+                                    "rolagem/CA/HP — são finais. Vívido nos momentos-chave "
+                                    "(crítico, abate, virada), seco nas ações triviais. 2-4 "
+                                    "frases.)\n" + str(_res.get("contexto", ""))
+                                )
+                            # _res inválido (alvo morto/inexistente) → segue com o texto
+                            # cru da rolagem no fluxo antigo (fallback seguro).
+                        # rolagem não-d20 / fora de combate → pendência descartada, segue normal
                 elif (
                     sessao.working_mem.em_combate
                     and _d20_jogador is None
