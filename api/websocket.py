@@ -247,8 +247,8 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
 )
+from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_teste_pericia
-from engine.combat.orchestrator import resolver_turno_ataque_jogador
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
