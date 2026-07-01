@@ -316,6 +316,44 @@ async def test_buscar_rels_timeout_sem_cache_retorna_vazio():
     assert "dalla" not in b._rels_cache  # não cacheia o timeout — retry permitido
 
 
+# ── Testes: inferir_npcs_presentes tem timeout (playtest 01/07, freeze) ────────
+
+@pytest.mark.asyncio
+async def test_inferir_npcs_presentes_sucesso():
+    """Caminho feliz: retorna os ids dos NPCs achados no local."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_npcs_no_local = AsyncMock(
+        return_value=[{"id": "bjorn-tharnsson"}, {"id": "runa-tharnsdottir"}]
+    )
+    ids = await b.inferir_npcs_presentes("tharnvik")
+    assert ids == ["bjorn-tharnsson", "runa-tharnsdottir"]
+
+
+@pytest.mark.asyncio
+async def test_inferir_npcs_presentes_timeout_nao_trava_turno():
+    """Conexão Neo4j travada (AuraDB free stale) não pode bloquear o turno inteiro.
+
+    Playtest 01/07 (sess-7893f3bdbd28): esta chamada ficou ~20s presa numa
+    conexão morta (ConnectionResetError), o turno inteiro travou, o WebSocket
+    caiu e a resposta do jogador se perdeu. Fix: mesmo timeout de 2s de
+    `_buscar_rels_cached` — timeout vira lista vazia (degradação graciosa),
+    nunca trava a resposta.
+    """
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_npcs_no_local = AsyncMock(side_effect=TimeoutError())
+    ids = await b.inferir_npcs_presentes("tharnvik")
+    assert ids == []
+
+
+@pytest.mark.asyncio
+async def test_inferir_npcs_presentes_erro_generico_nao_propaga():
+    """Qualquer outra falha do driver também degrada graciosamente (contrato antigo)."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_npcs_no_local = AsyncMock(side_effect=RuntimeError("boom"))
+    ids = await b.inferir_npcs_presentes("tharnvik")
+    assert ids == []
+
+
 # ── Testes: canon do módulo (Schema v2, bridge B2) ──────────────────────────────
 
 def test_carregar_canon_aceita_objetos_e_strings():
