@@ -245,7 +245,7 @@ from api.turn_pipeline import (
     extrair_alvo_ataque as _extrair_alvo_ataque,
 )
 from api.turn_pipeline import (
-    sincronizar_inimigos_combate as _sincronizar_inimigos_combate,
+    sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_teste_pericia
@@ -1100,9 +1100,9 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         # Cliffhanger — gancho de abertura na retomada (one-shot: limpa após uso).
         # Garante que a tensão final da sessão anterior abra a nova cena em vez
         # de apenas existir como instrução passiva no system prompt.
-        if wm.cliffhanger_pendente:
-            partes.append(f"A cena anterior terminou em: {wm.cliffhanger_pendente}")
-            wm.cliffhanger_pendente = ""
+        _cliffhanger = wm.consumir_cliffhanger()
+        if _cliffhanger:
+            partes.append(f"A cena anterior terminou em: {_cliffhanger}")
         partes.append("continuação." if eh_continuacao else "nova sessão.")
 
     intro_user = " ".join(partes) if partes else "—"
@@ -1161,7 +1161,7 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         try:
             await task_thinking_intro
         except Exception:
-            pass
+            pass  # thinking audio é só mascarar latência — falha aqui não deve derrubar a abertura
 
     # TTS-ABERTURA-1 (teste 09/06): a síntese single-shot de 600+ chars chegava
     # ~3s depois do texto completo — "áudio BEM atrasado". Agora a abertura usa

@@ -225,18 +225,3 @@ def selecionar_perfil(
         chave = "humano_f_b" if seed % 2 == 0 else "humano_f_a"
 
     return _CATALOGO.get(chave, _CATALOGO["humano_m"])
-
-
-def nomes_para_ids(
-    npc_ids: list[str],
-) -> dict[str, str]:
-    """
-    Retorna mapa nome_display → npc_id para lookup rápido na detecção de fala.
-
-    Ex: ["fael-valdreksson", "inn-keeper"] →
-        {"Fael Valdreksson": "fael-valdreksson", "Inn Keeper": "inn-keeper"}
-    """
-    return {
-        " ".join(p.capitalize() for p in nid.split("-")): nid
-        for nid in npc_ids
-    }

@@ -45,7 +45,7 @@ def _get_chave_por_usuario(request: Request) -> str:
         if settings.DEBUG and settings.DEV_USER_EMAIL:
             return settings.DEV_USER_EMAIL.strip().lower()
     except Exception:
-        pass
+        pass  # config ausente/corrompida — cai pro fallback por IP, nunca quebra o rate limit
 
     return get_remote_address(request)
 

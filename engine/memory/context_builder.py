@@ -345,7 +345,7 @@ class ContextBuilder:
         try:
             await self._neo4j.buscar_relacionamentos("__warmup__")
         except Exception:
-            pass
+            pass  # só warmup de conexão — Neo4j offline no boot não deve travar o startup
         log.info("context_builder_warmup", ms=int((time.perf_counter() - t0) * 1000))
 
     # ── Montagem do contexto completo ─────────────────────────────────────────

@@ -429,12 +429,16 @@ def test_iniciar_sessao_le_campo_text_nao_resumo_curto():
 
 
 def test_cliffhanger_limpo_apos_uso_na_abertura():
-    """wm.cliffhanger_pendente deve ser zerado após ser usado como gancho de abertura."""
+    """wm.cliffhanger_pendente deve ser zerado após ser usado como gancho de abertura.
+
+    Consumo via wm.consumir_cliffhanger() (NarrativeState) — única fonte de
+    verdade do one-shot, não mais um `= ""` inline duplicado aqui.
+    """
     import inspect
 
     from api.websocket import _enviar_abertura
     src = inspect.getsource(_enviar_abertura)
-    assert 'cliffhanger_pendente = ""' in src, (
+    assert "consumir_cliffhanger()" in src, (
         "Cliffhanger deve ser limpo (one-shot) após ser injetado no intro_user"
     )
 

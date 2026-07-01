@@ -399,7 +399,15 @@ class NarrativeState:
     # ── Pacing ────────────────────────────────────────────────────────────────
 
     def ajustar_pacing(self, em_combate: bool, saiu_combate_recentemente: bool, trust_mudou: bool) -> None:
-        """Aplica regras de pacing baseado no estado do turno."""
+        """Aplica regras de pacing baseado no estado do turno (calibração de playtest 09/06/26).
+
+        Combate eleva o pacing; ao sair do combate ele drena rápido (-1.5, não
+        -0.5 — testes mostraram o meter pinado em ~10 por 40min de exploração
+        pós-combate); um pico alto (>6) também drena sozinho mesmo sem combate
+        (evita platô artificial de clímax); turnos calmos consecutivos drenam
+        mais devagar (-0.6). Único ponto de verdade — chamado pelo pipeline,
+        nunca reimplementado inline.
+        """
         # Arco da sessão (modo episódio): turno real contado + pico registrado
         self.turnos_total += 1
         # Tensão narrativa
@@ -412,9 +420,11 @@ class NarrativeState:
         if em_combate:
             self.pacing_nivel = min(10.0, self.pacing_nivel + 1.5)
         elif saiu_combate_recentemente:
-            self.pacing_nivel = max(0.0, self.pacing_nivel - 0.5)
+            self.pacing_nivel = max(0.0, self.pacing_nivel - 1.5)
+        elif self.pacing_nivel > 6.0:
+            self.pacing_nivel = max(0.0, self.pacing_nivel - 1.2)
         elif self.turnos_sem_tensao > 3:
-            self.pacing_nivel = max(0.0, self.pacing_nivel - 0.3)
+            self.pacing_nivel = max(0.0, self.pacing_nivel - 0.6)
         else:
             self.pacing_nivel = min(10.0, self.pacing_nivel + 0.2)
         self.pico_pacing = max(self.pico_pacing, self.pacing_nivel)

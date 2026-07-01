@@ -506,9 +506,10 @@ def test_pico_pacing_acompanha_ajustes():
 
 
 def test_tracking_de_arco_roda_no_pipeline():
-    """Regressão do bug do pacote 1: o pipeline calcula pacing inline e não
-    chama ajustar_pacing() — turnos_total/pico_pacing nunca subiam em produção
-    e momento_de_fecho() jamais disparava."""
+    """O pipeline chama working_mem.ajustar_pacing() (delegando a
+    NarrativeState.ajustar_pacing(), única fonte de verdade — auditoria de
+    dead code de 01/07 removeu a duplicação inline que existia antes) —
+    turnos_total/pico_pacing sobem e momento_de_fecho() pode disparar."""
     wm = _wm()
     wm.entrar_combate()
     aplicar_pos_turno(wm, "Ataco o goblin!", "O aço encontra carne.")

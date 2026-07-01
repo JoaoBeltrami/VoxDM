@@ -125,10 +125,6 @@ class VoiceManager:
 
         return self._perfis[npc_id]
 
-    def perfil_por_id(self, npc_id: str) -> PerfilVoz | None:
-        """Retorna o perfil de voz de um NPC registrado, ou None."""
-        return self._perfis.get(npc_id)
-
     # ── Detecção por sentença ─────────────────────────────────────────────────
 
     def voz_para_sentenca(

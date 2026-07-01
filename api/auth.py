@@ -40,7 +40,6 @@ log = structlog.get_logger(__name__)
 
 # Header name conforme spec do Cloudflare Access
 _HEADER_JWT = "Cf-Access-Jwt-Assertion"
-_HEADER_EMAIL = "Cf-Access-Authenticated-User-Email"
 
 
 async def _resolver_email_via_jwt(jwt_token: str) -> str:
@@ -65,16 +64,17 @@ async def _resolver_email_via_jwt(jwt_token: str) -> str:
 async def get_owner(
     request: Request,
     cf_jwt: Annotated[str | None, Header(alias=_HEADER_JWT)] = None,
-    cf_email: Annotated[str | None, Header(alias=_HEADER_EMAIL)] = None,
 ) -> Owner:
     """Extrai o `Owner` autenticado da request.
 
     Ordem de tentativas:
-    1. JWT do header `Cf-Access-Jwt-Assertion` (canonical, mais seguro)
-    2. Header `Cf-Access-Authenticated-User-Email` PLUS o JWT presente
-       (CF garante que o email não está sozinho — sempre vem com o JWT)
-    3. Em DEBUG: fallback `DEV_USER_EMAIL`
-    4. Caso contrário: 401
+    1. JWT do header `Cf-Access-Jwt-Assertion` (única fonte de identidade —
+       o email já vem no payload validado, não há necessidade de cruzar com
+       o header `Cf-Access-Authenticated-User-Email`: ele é enviado pelo
+       Cloudflare Access mas não é assinado, então confiar nele direto seria
+       um passo ATRÁS em segurança, não uma defesa extra)
+    2. Em DEBUG: fallback `DEV_USER_EMAIL`
+    3. Caso contrário: 401
 
     Returns:
         Owner com email validado e flag is_admin computada.
