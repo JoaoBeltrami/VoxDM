@@ -30,8 +30,8 @@ from typing import Any
 import structlog
 
 from config import settings
-from engine.authority.economia import resolver_custo_ouro
 from engine.authority.intent import classificar_intent_economia
+from engine.authority.resolve import resolver_custo_ouro
 from engine.llm.extractor import _capar_npcs_presentes, _chave_dedup, _e_entidade_invalida
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
