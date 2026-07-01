@@ -53,11 +53,15 @@ def test_pipeline_ouro_subtrai():
     assert wm.gold == 20
 
 
-def test_pipeline_ouro_nao_fica_negativo():
+def test_pipeline_ouro_sem_fundos_e_rejeitado_nao_clampado():
+    """Autoridade-primeiro (30/06, engine/authority/economia.py): um custo maior
+    que o ouro disponível é REJEITADO por completo — o ouro fica intacto, não
+    mais clampado pra 0 em silêncio (o comportamento antigo fazia a narração
+    dizer "pagou 50" enquanto o jogador só perdia o que tinha, sem avisar)."""
     wm = _wm()
     wm.gold = 5
     aplicar_pos_turno(wm, "", "[OURO: -50 dívida]")
-    assert wm.gold == 0
+    assert wm.gold == 5, "sem fundos: a transação é rejeitada, ouro não muda"
 
 
 def test_pipeline_ouro_multiplos_marcadores():
