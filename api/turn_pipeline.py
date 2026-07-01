@@ -1032,12 +1032,8 @@ def aplicar_pos_turno(
     # Sem isso o prompt carrega 3 cartas (~260 chars) todo turno mesmo se o mestre
     # nunca as invoca, queimando 2-3k tokens em sessão de 1h.
     # CRIT-4: só decay em turno real do jogador — abertura/reconexão NÃO conta.
-    if working_mem.cartas_improviso and texto_jogador.strip():
-        working_mem.turnos_desde_cartas += 1
-        if working_mem.turnos_desde_cartas >= 5:
-            log.info("cartas_improviso_descartadas", motivo="decay 5 turnos sem uso")
-            working_mem.cartas_improviso = []
-            working_mem.turnos_desde_cartas = 0
+    if working_mem.cartas_improviso and texto_jogador.strip() and working_mem.decay_cartas():
+        log.info("cartas_improviso_descartadas", motivo="decay 5 turnos sem uso")
 
     # CRIT-4: steps 8 e 9 só rodam em turnos REAIS do jogador. A abertura e
     # reconexões chamam aplicar_pos_turno(wm, "", resposta_intro) — sem guard,
@@ -1045,49 +1041,17 @@ def aplicar_pos_turno(
     # ter havido ação do jogador, causando drift cumulativo em reconexões e
     # PACING [BAIXO] disparado cedo demais.
     if texto_jogador.strip():
-        # 8. Contador de tensão narrativa fora de combate.
-        # Zera também quando trust muda neste turno — cenas sociais com consequências
-        # (interrogatório, barganha, confronto) são tensas mesmo sem espadas.
-        # Sem isso, um roleplay dramático de 5 turnos recebe [PACING: BAIXO].
-        if working_mem.em_combate or mudancas_trust:
-            working_mem.turnos_sem_tensao = 0
-        else:
-            working_mem.turnos_sem_tensao += 1
-
-        # ── Features de Mestre Veterano ───────────────────────────────────────────
-
-        # 9. Pacing Meter (Feat 5) — ajusta nível de tensão narrativa
-        if working_mem.em_combate:
-            # Combate eleva o pacing
-            working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 1.5)
-        elif working_mem.saiu_combate_recentemente:
-            # Logo após combate: queda firme (respiração pós-batalha). Era -0.5;
-            # teste 09/06 mostrou pacing pinado em ~10 por 40min após o combate —
-            # markers_frag + roteamento CLIMAX ficaram ativos a sessão toda.
-            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 1.5)
-        elif working_mem.pacing_nivel > 6.0:
-            # Drenagem de pico (teste #3): pós-clímax sem combate, o pacing
-            # ficava 8-9 por 10+ turnos — markers_frag sempre injetado, routing
-            # CLIMAX à toa e 429 do 70B. Pico drena rápido até a faixa normal.
-            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 1.2)
-        elif working_mem.turnos_sem_tensao > 3:
-            # Muitos turnos calmos: reduz pacing gradualmente (era -0.3 — lento
-            # demais pra drenar um pico de 10 em sessão real)
-            working_mem.pacing_nivel = max(0.0, working_mem.pacing_nivel - 0.6)
-        else:
-            # Turno normal de exploração/social: leve aumento
-            working_mem.pacing_nivel = min(10.0, working_mem.pacing_nivel + 0.2)
-        log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
-
-        # 9a. Arco da sessão (modo episódio) — o pipeline calcula pacing INLINE
-        # (valores recalibrados 09/06), então ajustar_pacing() do NarrativeState
-        # não roda em produção. O tracking de arco precisa viver aqui — sem
-        # isto, turnos_total/pico_pacing nunca subiam e momento_de_fecho()
-        # jamais disparava (bug do pacote 1, pego no pacote 2).
-        working_mem.narrative.turnos_total += 1
-        working_mem.narrative.pico_pacing = max(
-            working_mem.narrative.pico_pacing, working_mem.pacing_nivel
+        # 8-9. Tensão narrativa + Pacing Meter (Feat 5), calibração 09/06/26
+        # (respiração pós-combate, drenagem de pico, arco da sessão) — tudo
+        # centralizado em NarrativeState.ajustar_pacing(), única fonte de
+        # verdade (era duplicado inline aqui, valores tinham divergido do
+        # método testado — auditoria de dead code de 01/07).
+        working_mem.ajustar_pacing(
+            em_combate=working_mem.em_combate,
+            saiu_combate_recentemente=working_mem.saiu_combate_recentemente,
+            trust_mudou=mudancas_trust,
         )
+        log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
 
         # 9b. Perfil do jogador (Ritual P2) — classifica o estilo do turno.
         # Combate > social (trust mudou OU verbo social) > exploração.
@@ -1107,11 +1071,7 @@ def aplicar_pos_turno(
     # 10. Fios Soltos (Feat 1) — coleta [FIO: ...] da resposta do LLM
     for m in _RE_FIO.finditer(resposta_completa):
         fio = m.group(1).strip()
-        if fio and fio not in working_mem.fios_soltos:
-            working_mem.fios_soltos.append(fio)
-            # Mantém lista circular de max 5 fios — remove o mais antigo se exceder
-            if len(working_mem.fios_soltos) > 5:
-                working_mem.fios_soltos.pop(0)
+        if fio and working_mem.adicionar_fio(fio):
             log.info("fio_solto_registrado", fio=fio[:60])
 
     # 11. Cliffhanger (Feat 2) — captura [CLIFFHANGER: ...] da resposta do LLM
@@ -1123,22 +1083,16 @@ def aplicar_pos_turno(
             break  # Máx 1 cliffhanger por turno — o último vence
 
     # 12. Agenda NPC (Feat 3) — coleta [AGENDA: npc-id → plano]
-    # Cap: máx 8 agendas ativas. Quando excede, remove a entrada mais antiga
-    # (primeira chave inserida no dict — Python 3.7+ preserva ordem de inserção).
-    # Sem esse teto, sessões longas com muitos NPCs namedropped acumulam agendas
-    # indefinidamente e inflam o prompt em ~30-50 tokens por entrada extra.
-    _MAX_AGENDA = 8
+    # Cap de 8 agendas ativas (eviction oldest-first) vive em
+    # NarrativeState.atualizar_agenda() — sem esse teto, sessões longas com
+    # muitos NPCs namedropped acumulam agendas indefinidamente e inflam o
+    # prompt em ~30-50 tokens por entrada extra.
     for m in _RE_AGENDA.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
         plano = m.group(2).strip()
         if npc_id and plano:
-            working_mem.agenda_npcs[npc_id] = plano
+            working_mem.atualizar_agenda(npc_id, plano)
             log.info("agenda_npc_atualizada", npc_id=npc_id, plano=plano[:60])
-            # Remove a agenda mais antiga se o teto for ultrapassado
-            while len(working_mem.agenda_npcs) > _MAX_AGENDA:
-                oldest = next(iter(working_mem.agenda_npcs))
-                del working_mem.agenda_npcs[oldest]
-                log.debug("agenda_npc_removida_por_limite", npc_id=oldest)
 
     # 13. Consequências visíveis (Feature 3) — coleta [CONSEQUÊNCIA: efeito duradouro]
     # Efeitos que persistem além da cena: NPCs mortos, alianças, locais destruídos,
@@ -1294,21 +1248,15 @@ def aplicar_pos_turno(
             log.info("ambiente_registrado", imagem=imagem[:80])
 
     # 16. Assinaturas de voz de NPC — [VOZ: npc-id|pitch|rate] define parâmetros TTS por NPC.
-    # Cap: 20 vozes por sessão (eviction oldest). Sessão longa pode introduzir
-    # 30+ NPCs falantes; sem cap, dict cresce indefinidamente.
-    _MAX_VOZES = 20
+    # Cap de 20 vozes por sessão (eviction oldest) vive em PartyState.registrar_voz_npc()
+    # — sessão longa pode introduzir 30+ NPCs falantes; sem cap, dict cresce indefinidamente.
     for m in _RE_VOZ.finditer(resposta_completa):
         npc_id = m.group(1).strip().lower()
         pitch_raw = m.group(2).strip()
         rate_raw = m.group(3).strip()
-        if npc_id and not working_mem.npc_vozes.get(npc_id):
-            if len(working_mem.npc_vozes) >= _MAX_VOZES:
-                # Remove a voz mais antiga (Python 3.7+ preserva ordem de inserção)
-                mais_antiga = next(iter(working_mem.npc_vozes))
-                del working_mem.npc_vozes[mais_antiga]
-            pitch = _clamp_pitch(pitch_raw)
-            rate = _clamp_rate(rate_raw)
-            working_mem.npc_vozes[npc_id] = {"pitch": pitch, "rate": rate}
+        pitch = _clamp_pitch(pitch_raw)
+        rate = _clamp_rate(rate_raw)
+        if npc_id and working_mem.registrar_voz_npc(npc_id, pitch, rate):
             log.info(
                 "voz_npc_registrada",
                 npc_id=npc_id, pitch=pitch, rate=rate,

@@ -161,35 +161,3 @@ def detectar_idioma(texto: str) -> Idioma:
         texto_preview=texto[:60],
     )
     return idioma
-
-
-def extrair_termos_en(texto: str) -> list[str]:
-    """
-    Extrai termos em inglês de um texto predominantemente PT-BR.
-
-    Usado pelo TTS para aplicar SSML de pronúncia nos termos D&D
-    que aparecem dentro de frases em português.
-
-    Critério de extração:
-      - Palavra com 4+ caracteres (evita preposições curtas compartilhadas)
-      - Não está no vocabulário PT-BR comum
-      - Está na lista de termos D&D neutros (é um termo técnico em EN)
-
-    Args:
-        texto: Texto para analisar.
-
-    Returns:
-        Lista de termos em inglês encontrados, preservando capitalização original.
-    """
-    # Encontra todas as palavras preservando capitalização
-    palavras_originais = re.findall(r"\b[a-zA-Z]{4,}\b", texto)
-
-    termos_en = [
-        p for p in palavras_originais
-        if p.lower() in _TERMOS_DND_NEUTROS
-    ]
-
-    if termos_en:
-        log.debug("Termos EN extraídos", termos=termos_en, total=len(termos_en))
-
-    return termos_en

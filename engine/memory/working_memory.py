@@ -892,6 +892,9 @@ class WorkingMemory:
     def remover_companion(self, companion_id: str) -> bool:
         return self.party.remover_companion(companion_id)
 
+    def registrar_voz_npc(self, npc_id: str, pitch: str, rate: str) -> bool:
+        return self.party.registrar_voz_npc(npc_id, pitch, rate)
+
     # ── Delegations: NarrativeState ──────────────────────────────────────────
 
     def registrar_consequencia(self, texto: str) -> None:
@@ -902,6 +905,21 @@ class WorkingMemory:
 
     def registrar_ambiente(self, texto: str) -> bool:
         return self.narrative.registrar_ambiente(texto)
+
+    def adicionar_fio(self, texto: str) -> bool:
+        return self.narrative.adicionar_fio(texto)
+
+    def atualizar_agenda(self, npc_id: str, plano: str) -> None:
+        self.narrative.atualizar_agenda(npc_id, plano)
+
+    def consumir_cliffhanger(self) -> str:
+        return self.narrative.consumir_cliffhanger()
+
+    def decay_cartas(self) -> bool:
+        return self.narrative.decay_cartas()
+
+    def ajustar_pacing(self, em_combate: bool, saiu_combate_recentemente: bool, trust_mudou: bool) -> None:
+        self.narrative.ajustar_pacing(em_combate, saiu_combate_recentemente, trust_mudou)
 
     # ── Composição do prompt ─────────────────────────────────────────────────
 

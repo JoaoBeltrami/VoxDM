@@ -22,7 +22,7 @@
  * Exemplo:
  *   <AppShell
  *     topBar={<HeaderBar />}
- *     left={<CompanionsPanel />}
+ *     left={<QuestPanel />}
  *     center={<MasterResponse />}
  *     right={<CharacterSheet />}
  *     dock={<VoiceButton />}

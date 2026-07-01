@@ -30,32 +30,9 @@ export interface SessaoInfo {
   personagem_restaurado?: PersonagemConfig | null;
 }
 
-export interface RespostaMestre {
-  texto: string;
-  chunks_lore: string[];
-  chunks_regras: string[];
-  relacoes_grafo: Record<string, unknown>[];
-  secrets_revelados: number;
-  latencia_ms: number;
-  iteracao: number;
-}
-
 export interface SpellSlot {
   current: number;
   max: number;
-}
-
-export interface CharacterStateClient {
-  spell_slots: Record<number, SpellSlot>;
-  hit_dice_current: number;
-  hit_dice_max: number;
-  hit_dice_type: number;
-  death_saves_successes: number;
-  death_saves_failures: number;
-  death_saves_stable: boolean;
-  gold: number;
-  xp: number;
-  inspiration: boolean;
 }
 
 export interface MensagemWS {
@@ -289,40 +266,11 @@ export function wsUrl(session_id: string): string {
   return `${API_BASE.replace("http", "ws")}/ws/game/${session_id}`;
 }
 
-export async function carregarEstadoPersonagem(session_id: string): Promise<CharacterStateClient | null> {
-  try {
-    const resp = await fetch(`${API_BASE}/session/${session_id}/character`);
-    if (!resp.ok) return null;
-    return resp.json();
-  } catch {
-    return null;
-  }
-}
-
-export async function salvarEstadoPersonagem(session_id: string, state: CharacterStateClient): Promise<void> {
-  await fetch(`${API_BASE}/session/${session_id}/character`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(state),
-  });
-}
-
 // ── LLM backend toggle ─────────────────────────────────────────────────────
 // "auto" deixa a cascata default rolar. Os outros valores põem aquele provider
 // como primeiro da cascata; se ele falhar com erro recuperável, a cascata
 // continua normalmente (não trava em "USE APENAS X").
 export type LlmBackend = "auto" | "groq" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
-
-export async function obterLlmBackend(session_id: string): Promise<LlmBackend | null> {
-  try {
-    const resp = await fetch(`${API_BASE}/session/${session_id}/llm-backend`);
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return (data.backend as LlmBackend) ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function trocarLlmBackend(session_id: string, backend: LlmBackend): Promise<boolean> {
   try {
