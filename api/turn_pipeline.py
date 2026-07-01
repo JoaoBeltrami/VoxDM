@@ -30,6 +30,8 @@ from typing import Any
 import structlog
 
 from config import settings
+from engine.authority.economia import resolver_custo_ouro
+from engine.authority.intent import classificar_intent_economia
 from engine.llm.extractor import _capar_npcs_presentes, _chave_dedup, _e_entidade_invalida
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
@@ -1151,6 +1153,19 @@ def aplicar_pos_turno(
     # Idempotência: cada marcador é processado uma vez por turno. Não há buffer
     # entre turnos, então re-aplicar a mesma resposta dobraria o efeito (ok pq
     # cada resposta é única no tempo).
+    #
+    # Autoridade-primeiro (Economia/Loot, 1ª instância fora do combate — decisão
+    # de 30/06): antes, [OURO: -N] aplicava `max(0, gold - N)` sem checar fundos —
+    # narração dizia "pagou 500", o jogador só perdia os 50 que tinha e ficava em
+    # 0, em silêncio (descolamento narração×estado, mesma classe do HP-desync do
+    # combate). Agora `resolver_custo_ouro` é a autoridade: ganho sempre aplica;
+    # custo só aplica INTEIRO se há fundos, senão REJEITA por completo (ouro
+    # intacto) em vez de clampar parcial. Preço/regateio continuam do Mestre —
+    # a engine só valida o valor já decidido, não inventa quanto custa nada.
+    _intent_economia = classificar_intent_economia(texto_jogador)
+    if _intent_economia:
+        log.info("intent_economia_detectada", intent=_intent_economia)
+
     for m in _RE_OURO.finditer(resposta_completa):
         sinal = m.group(1)
         try:
@@ -1159,9 +1174,14 @@ def aplicar_pos_turno(
             continue
         if sinal == "-":
             qtd = -qtd
-        working_mem.gold = max(0, working_mem.gold + qtd)
-        log.info("ouro_alterado", delta=qtd, novo=working_mem.gold,
-                 motivo=m.group(3)[:60])
+        novo_gold, sucesso = resolver_custo_ouro(working_mem.gold, qtd)
+        working_mem.gold = novo_gold
+        if sucesso:
+            log.info("ouro_alterado", delta=qtd, novo=working_mem.gold,
+                     motivo=m.group(3)[:60])
+        else:
+            log.warning("ouro_rejeitado_fundos_insuficientes", delta=qtd,
+                        gold_atual=working_mem.gold, motivo=m.group(3)[:60])
 
     # ROB-4: teto de 50 itens e truncamento em 80 chars para evitar prompt inflation.
     # O sync_inventory do WebSocket já aplica esses limites para edições manuais;
