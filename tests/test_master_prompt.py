@@ -402,6 +402,11 @@ def test_hot_reload_retorna_none_quando_arquivo_some(tmp_path):
     ("usei minha habilidade especial sobre o líder", True),
     ("uso a corda", False),                       # sem alvo → não combate
     ("uso o cajado para abrir a porta", False),   # propósito, não ataque
+    # ── Regra ampliada (01/07): infinitivo com auxiliar — comum na fala por voz ──
+    ("vou usar a explosão eldritch nele", True),
+    ("vou lançar bola de fogo no goblin", True),
+    ("quero usar meu raio contra ela", True),
+    ("vou usar a corda", False),                  # infinitivo sem alvo → não combate
     # ── Fix COMBATE-VERB-1: declarações explícitas de combate ─────────────────
     ("estamos em combate agora", True),
     ("entrei em combate com o guarda", True),

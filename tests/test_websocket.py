@@ -189,6 +189,150 @@ def test_ws_rolagem_solta_ambigua_consome_pendencia_como_sempre(client):
         "sem sinal de teste, a pendência deve ser consumida como ataque (comportamento de sempre)"
 
 
+# ── Regra ampliada (decisão 01/07) — d20 solto + declaração via magia ofensiva ──
+# Playtest sess-7893f3bdbd28: 4 rolagens de d20 em combate ficaram ÓRFÃS (sem
+# pendência) e combate_engine_resolveu = 0 na sessão inteira. Beltrami decidiu
+# "regra ampliada, sem LLM": d20 solto resolve quando o Mestre pediu ATAQUE;
+# citar magia de dano conhecida vira declaração de ataque.
+
+
+def test_ws_d20_solto_com_pedido_de_ataque_resolve(client):
+    """SEM pendência: o Mestre pediu a rolagem de ataque na última fala e o
+    jogador rolou — a engine resolve (antes: rolagem órfã ia pro LLM narrar
+    livre, e o dano nunca era aplicado de verdade)."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.combate_pendente = None  # explícito: nenhum ataque declarado antes
+    sessao.working_mem.registrar_fala(
+        "mestre", "O goblin rosna e avança. Role o d20 de ataque!"
+    )
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    hp = sessions[sid].working_mem.inimigos_combate["goblin"]["hp_atual"]
+    assert hp < 20, "d20=15 vs CA 5 acerta — a engine deve ter aplicado o dano"
+
+
+def test_ws_d20_solto_sem_pedido_de_ataque_nao_resolve(client):
+    """SEM pendência e SEM pedido de ataque na fala do Mestre: ambíguo de
+    verdade — segue pro fluxo antigo (LLM narra), a engine NÃO resolve."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.working_mem.registrar_fala("mestre", "O goblin avança, espada em punho.")
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    hp = sessions[sid].working_mem.inimigos_combate["goblin"]["hp_atual"]
+    assert hp == 20, "sem sinal positivo de ataque, o d20 solto não pode resolver"
+
+
+def test_ws_d20_solto_pericia_tem_precedencia_sobre_pedido_ataque(client):
+    """Fala do Mestre com vocab de ataque E perícia nomeada: perícia vence
+    (é o mesmo contrato de precedência da pendência declarada)."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.working_mem.registrar_fala(
+        "mestre", "O goblin desvia do seu ataque. Role Percepção para notar a emboscada."
+    )
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    hp = sessions[sid].working_mem.inimigos_combate["goblin"]["hp_atual"]
+    assert hp == 20, "perícia nomeada tem precedência — o d20 é o teste, não o ataque"
+
+
+def test_ws_d20_solto_resolve_alvo_citado_na_fala_do_mestre(client):
+    """Com VÁRIOS inimigos vivos, o alvo é o citado na fala do Mestre que pediu
+    o ataque — não o primeiro da lista."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("bjorn", "Bjorn", "intacto")
+    sessao.working_mem.registrar_inimigo("runa", "Runa", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("bjorn", ca=5, hp_max=20)
+    sessao.working_mem.aplicar_stats_inimigo("runa", ca=5, hp_max=20)
+    sessao.working_mem.registrar_fala(
+        "mestre", "Runa ergue o machado contra você. Role o d20 de ataque!"
+    )
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    wm = sessions[sid].working_mem
+    assert wm.inimigos_combate["runa"]["hp_atual"] < 20, "Runa é o alvo citado"
+    assert wm.inimigos_combate["bjorn"]["hp_atual"] == 20, "Bjorn não foi tocado"
+
+
+def test_ws_magia_ofensiva_conhecida_vira_declaracao_de_ataque(client):
+    """"Vou usar a explosão eldritch" (infinitivo, sem alvo explícito) — fora do
+    RE_COMBATE, mas a magia de DANO conhecida citada em combate é declaração de
+    ataque: a pendência é setada contra o único inimigo vivo."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.spells_conhecidas = ["Explosão Eldritch", "Mão Mágica"]
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "Vou usar a explosão eldritch"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    assert sessions[sid].combate_pendente == {"tipo": "ataque", "alvo": "goblin"}, \
+        "magia ofensiva conhecida citada em combate deve fixar a pendência de ataque"
+
+
+def test_ws_magia_utilitaria_nao_vira_declaracao(client):
+    """Contraste: magia conhecida mas NÃO ofensiva ("mão mágica") não declara
+    ataque — o jogador está usando utilidade em combate, não golpeando."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.spells_conhecidas = ["Explosão Eldritch", "Mão Mágica"]
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "Vou pegar a chave ali com a mão mágica"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    assert sessions[sid].combate_pendente is None, \
+        "magia utilitária não pode virar pendência de ataque"
+
+
 def test_ws_turno_streaming_tokens(client):
     """Fluxo completo: criar sessão → WS → 4 tokens → mensagem fim."""
     sid = _criar_sessao_ws(client)

@@ -70,17 +70,18 @@ RE_COMBATE = re.compile(
     # Bug R4-2: "lanço" sem alvo causava falso positivo em contexto não-combate:
     # "lanço um ritual de identificação", "lanço a corda", etc.
     # Com alvo: "lanço bola de fogo no goblin", "lanço raio contra o guarda" → OK.
-    r"lanç[ao]\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
-    r"lancei\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
+    # Infinitivo incluso (playtest 01/07): "VOU LANÇAR bola de fogo no goblin" /
+    # "vou USAR a explosão eldritch nele" — a forma com auxiliar (vou/quero/
+    # pretendo + infinitivo) é comum na fala por voz e ficava fora do RE, então
+    # a declaração de ataque nunca era reconhecida e o d20 seguinte ficava órfão.
+    r"(?:lanç[ao]|lancei|lançar)\s+(?:\w+\s+){0,3}(?:no|na|nos|nas|contra|sobre)\s+(?:o|a|os|as)?\s*\w+|"
     # ── Nível 2: usar magia/habilidade — análogo ao lanço ─────────────────────
     # Bug COMBATE-VERB-1 (26/05): "uso chama sagrada nele" não disparava combate.
     # Mesma restrição do lançar: precisa alvo explícito pra evitar "uso a corda".
     # Suporta preposição + alvo OU contração (nele/nela/neles/nelas).
-    r"us[ao]\s+(?:\w+\s+){0,4}(?:(?:no|na|nos|nas|contra|sobre|em)\s+(?:o|a|os|as)?\s*\w+|n[ae]l[ae]s?)|"
-    r"usei\s+(?:\w+\s+){0,4}(?:(?:no|na|nos|nas|contra|sobre|em)\s+(?:o|a|os|as)?\s*\w+|n[ae]l[ae]s?)|"
-    # Também o "lançar" original — adiciona contrações (faltavam em "lanço fogo nele")
-    r"lanç[ao]\s+(?:\w+\s+){0,3}n[ae]l[ae]s?|"
-    r"lancei\s+(?:\w+\s+){0,3}n[ae]l[ae]s?|"
+    r"(?:us[ao]|usei|usar)\s+(?:\w+\s+){0,4}(?:(?:no|na|nos|nas|contra|sobre|em)\s+(?:o|a|os|as)?\s*\w+|n[ae]l[ae]s?)|"
+    # Também o "lançar" com contrações (faltavam em "lanço fogo nele")
+    r"(?:lanç[ao]|lancei|lançar)\s+(?:\w+\s+){0,3}n[ae]l[ae]s?|"
     # ── Nível 1: declarações explícitas de combate ────────────────────────────
     # Bug COMBATE-VERB-1 (26/05): "estamos em combate", "iniciei o combate" etc.
     # eram declarações claras de intenção que a regex de verbos não pegava.
