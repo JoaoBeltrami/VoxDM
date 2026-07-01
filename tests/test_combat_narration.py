@@ -7,6 +7,7 @@ do alvo entra sem artigo (gênero-safe). Puro — sem WM, sem IO.
 """
 
 from engine.combat.narration import (
+    classificar_tier,
     linha_ataque_jogador,
     linha_dano_jogador,
     linha_turno_inimigos,
@@ -124,3 +125,65 @@ def test_turno_inimigos_fallback_id_sem_nome():
     res = {"ataques": [{"id": "guarda-2", "acertou": True, "dano": 3}]}
     linha = linha_turno_inimigos(res)
     assert "guarda-2 acertou" in linha
+
+
+# ── classificar_tier (task 8: prosa em camadas) ───────────────────────────────
+
+
+def test_tier_seco_no_ataque_comum():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="ferido", fim_combate=False,
+    )
+    assert tier == "seco"
+
+
+def test_tier_epico_no_critico_do_jogador():
+    tier = classificar_tier(
+        critico=True, falha_critica=False, estado_alvo="ferido", fim_combate=False,
+    )
+    assert tier == "epico"
+
+
+def test_tier_epico_na_falha_critica():
+    tier = classificar_tier(
+        critico=False, falha_critica=True, estado_alvo="ferido", fim_combate=False,
+    )
+    assert tier == "epico"
+
+
+def test_tier_epico_no_abate():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="morto", fim_combate=False,
+    )
+    assert tier == "epico"
+
+
+def test_tier_epico_no_fim_de_combate():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="ferido", fim_combate=True,
+    )
+    assert tier == "epico"
+
+
+def test_tier_epico_quando_inimigo_crita_no_jogador():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="intacto", fim_combate=False,
+        ataques_inimigos=[{"nome": "Ogro", "acertou": True, "critico": True, "dano": 14}],
+    )
+    assert tier == "epico"
+
+
+def test_tier_seco_quando_inimigo_so_acerta_sem_critico():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="intacto", fim_combate=False,
+        ataques_inimigos=[{"nome": "Goblin", "acertou": True, "critico": False, "dano": 5}],
+    )
+    assert tier == "seco"
+
+
+def test_tier_sem_ataques_inimigos_nao_quebra():
+    tier = classificar_tier(
+        critico=False, falha_critica=False, estado_alvo="ferido", fim_combate=False,
+        ataques_inimigos=None,
+    )
+    assert tier == "seco"
