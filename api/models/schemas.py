@@ -188,8 +188,12 @@ class TokenIniciativaPayload(BaseModel):
 class MensagemWS(BaseModel):
     """Envelope JSON para mensagens no canal WebSocket."""
 
-    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "cascade"
+    tipo: str  # "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "cascade" | "relacao"
     conteudo: str = ""
+    # Autoridade social (02/07): toast de mudança de relação decidida pela
+    # engine — {"npc_id", "nome", "direcao" ("down"|"up"), "motivo"}.
+    # Preenchido só em tipo="relacao"; sem números (decisão: discreto).
+    relacao: dict[str, Any] | None = None
     conteudo_b64: str = ""   # bytes MP3 em base64 — preenchido em audio_chunk
     sequencia: int = 0       # índice sequencial do chunk de áudio
     # CRIT-2: audio_chunk de thinking ("Hmm...") manda narrativo=false para que

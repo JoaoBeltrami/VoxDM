@@ -168,6 +168,9 @@ interface EstadoSessao {
   // UX-2: nome do provider de cascata ativo (ex: "gemini-flash") — null quando Groq normal.
   // Exibido como toast discreto no frontend, limpo após 5s.
   cascadeAtivo: string | null;
+  // Autoridade social (02/07): mudança de relação decidida pela engine
+  // (atacar NPC → despenca; virar companion → sobe). Toast discreto, sem números.
+  relacaoToast: { npc_id: string; nome: string; direcao: "down" | "up"; motivo: string } | null;
   // Nível de pacing narrativo atual (0–10) — espelha WorkingMemory.pacing_nivel.
   // Passado para useAmbientAudio para ajustar a intensidade da trilha em tempo real.
   pacingNivel: number;
@@ -240,6 +243,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   serverHp: null,
   serverHpMax: null,
   cascadeAtivo: null,
+  relacaoToast: null,
   pacingNivel: 3,
 };
 
@@ -509,6 +513,13 @@ export function useGameSession() {
       // para que o jogador entenda a demora sem quebrar a imersão.
       if (msg.tipo === "cascade" && msg.conteudo) {
         setEstado(s => ({ ...s, cascadeAtivo: msg.conteudo! }));
+      }
+
+      // Autoridade social (02/07): mudança de relação decidida pela engine
+      // (atacar NPC → despenca; virar companion → sobe). Toast discreto com
+      // motivo, sem números — o ícone de trust do chip atualiza via npcs_trust.
+      if (msg.tipo === "relacao" && msg.relacao) {
+        setEstado(s => ({ ...s, relacaoToast: msg.relacao! }));
       }
 
       if (msg.tipo === "lampejo" && msg.conteudo) {
@@ -1091,6 +1102,8 @@ export function useGameSession() {
     // Banner "Party recuperada" — companions da sessão anterior.
     partyRestorada,
     dispensarPartyBanner: () => setPartyRestorada([]),
+    // Autoridade social: limpar o toast de relação após exibição.
+    limparRelacaoToast: () => setEstado(s => ({ ...s, relacaoToast: null })),
     // UX-2: cascade toast — limpar após exibição
     limparCascade: () => setEstado(s => ({ ...s, cascadeAtivo: null })),
   };

@@ -1197,8 +1197,18 @@ def aplicar_pos_turno(
         except (ValueError, AttributeError):
             continue
         if cid:
+            ja_existia = cid in working_mem.companions
             working_mem.registrar_companion(cid, nome, tipo, hp, ca, atq, dano)
             log.info("companion_registrado", id=cid, nome=nome, tipo=tipo)
+            # Autoridade social (decisão 02/07): juntar-se à jornada é ato
+            # positivo — trust sobe e o afeto persiste. Evento acumulado pro
+            # websocket drenar (toast + afeto Neo4j). Só na 1ª vez — a
+            # re-declaração do mesmo companion não re-paga.
+            if not ja_existia:
+                from engine.authority.social import melhorar_relacao_companion
+                working_mem.scene.eventos_relacao_turno.append(
+                    melhorar_relacao_companion(working_mem, cid, nome)
+                )
 
     for m in _RE_COMPANION_HP.finditer(resposta_completa):
         cid = m.group(1).strip().lower()
@@ -1210,6 +1220,13 @@ def aplicar_pos_turno(
         if ok:
             log.info("companion_hp_ajustado", id=cid, delta=delta,
                      hp_novo=working_mem.companions[cid].get("hp"))
+            # Autoridade social: curar companion sobe afeto persistente
+            # (sem toast — micro-evento, toast a cada poção seria spam).
+            if delta > 0:
+                from engine.authority.social import registrar_cura_companion
+                working_mem.scene.eventos_relacao_turno.append(
+                    registrar_cura_companion(cid)
+                )
 
     for m in _RE_COMPANION_REMOVE.finditer(resposta_completa):
         cid = m.group(1).strip().lower()

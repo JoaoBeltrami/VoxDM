@@ -36,8 +36,10 @@ export interface SpellSlot {
 }
 
 export interface MensagemWS {
-  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato";
+  tipo: "token" | "fim" | "erro" | "metricas" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato" | "relacao";
   conteudo?: string;
+  // Autoridade social (02/07): toast de mudança de relação decidida pela engine.
+  relacao?: { npc_id: string; nome: string; direcao: "down" | "up"; motivo: string };
   conteudo_b64?: string;
   sequencia?: number;
   narrativo?: boolean;  // CRIT-2: false em chunks de thinking audio (não calibra karaokê)

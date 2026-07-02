@@ -333,6 +333,68 @@ def test_ws_magia_utilitaria_nao_vira_declaracao(client):
         "magia utilitária não pode virar pendência de ataque"
 
 
+# ── Autoridade social (02/07) — ataque emite toast tipo="relacao" ──────────────
+
+def test_ws_ataque_emite_toast_relacao(client):
+    """Declarar ataque → engine abala a relação (trust do alvo despenca) e o
+    frontend recebe tipo='relacao' com direcao=down antes do fim do turno.
+    Playtest 01/07: trust de Runa ficou parado em 0 a sessão toda apesar de
+    duelo+subjugação — atos agora mudam relação sem depender do LLM."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.trust_levels["goblin"] = 2
+
+    tipos: list[str] = []
+    relacao_msg = None
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "ataco o goblin com minha espada"})
+        while True:
+            msg = ws.receive_json()
+            tipos.append(msg["tipo"])
+            if msg["tipo"] == "relacao":
+                relacao_msg = msg
+            if msg["tipo"] == "fim":
+                break
+
+    assert "relacao" in tipos, "ataque deve emitir o toast de relação"
+    assert relacao_msg is not None
+    assert relacao_msg["relacao"]["direcao"] == "down"
+    assert relacao_msg["relacao"]["npc_id"] == "goblin"
+    assert sessions[sid].working_mem.trust_levels["goblin"] == 0
+
+
+def test_ws_segundo_ataque_no_mesmo_combate_nao_reemite_toast(client):
+    """Dedup por combate: re-atacar o mesmo alvo não re-emite o toast."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+
+    def _turno(ws_client, texto: str) -> list[str]:
+        tipos: list[str] = []
+        with ws_client.websocket_connect(f"/ws/game/{sid}") as ws:
+            ws.send_json({"texto": texto})
+            while True:
+                msg = ws.receive_json()
+                tipos.append(msg["tipo"])
+                if msg["tipo"] == "fim":
+                    break
+        return tipos
+
+    tipos1 = _turno(client, "ataco o goblin")
+    # A pendência do 1º ataque fica aberta; limpa pra re-declarar do zero.
+    sessions[sid].combate_pendente = None
+    tipos2 = _turno(client, "ataco o goblin de novo")
+    assert "relacao" in tipos1
+    assert "relacao" not in tipos2, "flag relacao_abalada deduplica no mesmo combate"
+
+
 def test_ws_turno_streaming_tokens(client):
     """Fluxo completo: criar sessão → WS → 4 tokens → mensagem fim."""
     sid = _criar_sessao_ws(client)
