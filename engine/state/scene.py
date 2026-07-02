@@ -68,6 +68,13 @@ class SceneState:
     # do step 17b de cada pipeline. NÃO é serializado.
     npcs_introduzidos_turno: list[str] = field(default_factory=list)
 
+    # Transiente (escopo de turno): EventoRelacao decididos pela engine no
+    # pipeline SYNC (ex: companion novo → trust sobe) — o websocket drena via
+    # drenar_eventos_relacao() pra emitir toasts + aplicar afeto Neo4j.
+    # Eventos decididos direto no websocket (ataque) não passam por aqui.
+    # NÃO é serializado. Tipo Any pra não acoplar o substate ao authority.
+    eventos_relacao_turno: list = field(default_factory=list)
+
     # Mundo Vivo P2 — ecos de consequência: locais por onde o jogador já
     # passou (persiste via dm_state). Voltar a um deles seta o flag one-shot
     # abaixo, e o prompt obriga o mestre a mostrar que o local LEMBRA dele.
@@ -119,6 +126,12 @@ class SceneState:
         v = self.cena_mudou_local
         self.cena_mudou_local = False
         return v
+
+    def drenar_eventos_relacao(self) -> list:
+        """Lê e limpa os eventos de relação do turno (one-shot)."""
+        eventos = list(self.eventos_relacao_turno)
+        self.eventos_relacao_turno.clear()
+        return eventos
 
     def consumir_retorno_local(self) -> bool:
         """Lê e reseta o flag de retorno a local conhecido (one-shot)."""

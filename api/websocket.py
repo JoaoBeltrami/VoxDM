@@ -265,6 +265,45 @@ def _ultima_fala_do_mestre(working_mem: Any) -> str:
     return ""
 
 
+async def _emitir_eventos_relacao(websocket: WebSocket, sessao: Any) -> None:
+    """Drena os eventos de relação do turno: toast + afeto Neo4j (ponto único).
+
+    Autoridade social (decisão 02/07): eventos vêm do websocket (ataque) e do
+    pipeline (companion/cura), acumulados em `scene.eventos_relacao_turno`.
+    Toast só pra evento com `motivo` (cura é silenciosa — micro-evento). Afeto
+    persiste no grafo fire-and-forget — Neo4j fora não bloqueia o turno.
+    """
+    try:
+        eventos = sessao.working_mem.drenar_eventos_relacao()
+    except Exception:
+        return
+    if not eventos:
+        return
+    _neo4j = getattr(sessao.context_builder, "_neo4j", None)
+    for ev in eventos:
+        if _neo4j is not None:
+            try:
+                for campo, delta in (getattr(ev, "afeto", {}) or {}).items():
+                    _criar_background_task(
+                        _neo4j.atualizar_afeto_npc(ev.npc_id, campo, delta)
+                    )
+            except Exception as e:
+                # Cliente inválido/mockado não pode derrubar o toast nem o turno.
+                log.warning("relacao_afeto_falhou", erro=str(e)[:120])
+        if getattr(ev, "motivo", ""):
+            try:
+                await _send_text_seguro(websocket, MensagemWS(
+                    tipo="relacao",
+                    relacao={
+                        "npc_id": ev.npc_id, "nome": ev.nome,
+                        "direcao": ev.direcao, "motivo": ev.motivo,
+                    },
+                ).model_dump_json())
+                log.info("relacao_toast_enviado", npc_id=ev.npc_id, direcao=ev.direcao)
+            except Exception as e:
+                log.warning("relacao_toast_falhou", erro=str(e)[:120])
+
+
 def _resolver_ataque_engine(
     sessao: Any, session_id: str, alvo: str, d20: int
 ) -> str | None:
@@ -1288,6 +1327,10 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
     # vem no snapshot — em sessão nova os campos são falsos/vazios, sem efeito.)
     await reinferir_npcs_se_mudou_cena(wm, sessao.context_builder)
 
+    # Autoridade social: abertura pode registrar companion ([COMPANION_ADD] na
+    # intro de continuação) — drena eventos pra não vazarem pro 1º turno real.
+    await _emitir_eventos_relacao(websocket, sessao)
+
     latencia_ms = int((time.perf_counter() - t0) * 1000)
     await _send_text_seguro(websocket,
         MensagemWS(
@@ -1698,6 +1741,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         # o patriarca); rivais NÃO. Timeout curto + falha silenciosa
                         # (Neo4j offline → só o alvo vira inimigo). Os aliados ganham
                         # stats no enriquecer pós-turno.
+                        _aliados: list[str] = []
                         try:
                             _neo4j = getattr(sessao.context_builder, "_neo4j", None)
                             if _neo4j is not None:
@@ -1720,6 +1764,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         except Exception:
                             pass  # Neo4j offline/lento → só o alvo atacado é inimigo
                         sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
+                        # Autoridade social (decisão 02/07, intensidade FORTE): o ATO
+                        # de atacar já abala as relações — trust do alvo despenca,
+                        # aliados presentes (os da hostilidade acima) caem junto.
+                        # Eventos acumulados no scene; o ponto único pós-turno emite
+                        # os toasts e aplica o afeto Neo4j.
+                        try:
+                            from engine.authority.social import abalar_relacoes_por_ataque
+                            sessao.working_mem.scene.eventos_relacao_turno.extend(
+                                abalar_relacoes_por_ataque(sessao.working_mem, _alvo, _aliados)
+                            )
+                        except Exception as _e_soc:
+                            log.warning("relacao_abalo_falhou", erro=str(_e_soc)[:120])
                         _nome_alvo = sessao.working_mem.inimigos_combate.get(_alvo, {}).get("nome", _alvo)
                         texto_jogador = (
                             f"{texto_jogador}\n(O jogador ataca {_nome_alvo}. Descreva a "
@@ -1750,6 +1806,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         if _alvo is None and len(_vivos) == 1:
                             _alvo = next(iter(_vivos.values()))
                         if _alvo:
+                            # Autoridade social: ataque sem declaração prévia
+                            # (d20 solto) também abala a relação do alvo — a
+                            # flag relacao_abalada deduplica se a declaração
+                            # já tiver abalado antes. Sem grafo aqui (aliados
+                            # já teriam vindo pela hostilidade da declaração).
+                            try:
+                                from engine.authority.social import abalar_relacoes_por_ataque
+                                sessao.working_mem.scene.eventos_relacao_turno.extend(
+                                    abalar_relacoes_por_ataque(sessao.working_mem, _alvo, [])
+                                )
+                            except Exception as _e_soc:
+                                log.warning("relacao_abalo_falhou", erro=str(_e_soc)[:120])
                             _texto_engine = _resolver_ataque_engine(
                                 sessao, session_id, _alvo, _d20_jogador
                             )
@@ -2295,6 +2363,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             await reinferir_npcs_se_mudou_cena(
                 sessao.working_mem, sessao.context_builder
             )
+
+            # Autoridade social (02/07): drena os eventos de relação do turno
+            # (ataque abalou / companion somou) — toast pro jogador + afeto Neo4j.
+            await _emitir_eventos_relacao(websocket, sessao)
 
             # Voz pros NPCs novos da cena: sem registro, voz_para_sentenca cai
             # no narrador e o NPC "perde a voz" (teste 10/06: só os NPCs do local

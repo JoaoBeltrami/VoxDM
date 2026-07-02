@@ -303,6 +303,37 @@ function CascadeToast({ provider, onDismiss }: { provider: string; onDismiss: ()
   );
 }
 
+/** Autoridade social (02/07): toast discreto de mudança de relação decidida
+ *  pela engine — sem números, só o motivo. Vermelho ao cair, esmeralda ao subir.
+ *  Auto-dismiss após 5s; clicável para fechar. */
+function RelacaoToast({
+  relacao, onDismiss,
+}: {
+  relacao: { nome: string; direcao: "down" | "up"; motivo: string };
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  const caiu = relacao.direcao === "down";
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 top-24 z-40 flex justify-center px-4">
+      <button
+        onClick={onDismiss}
+        className={`animate-slide-down rounded-xl border px-4 py-2 text-center text-xs shadow-lg backdrop-blur-sm transition ${
+          caiu
+            ? "border-red-800/50 bg-red-950/80 text-red-300/90 hover:bg-red-900/80"
+            : "border-emerald-800/50 bg-emerald-950/80 text-emerald-300/90 hover:bg-emerald-900/80"
+        }`}
+      >
+        {caiu ? "💔" : "🤝"} {relacao.motivo}
+      </button>
+    </div>
+  );
+}
+
 function lerVozStorage(): string {
   if (typeof window === "undefined") return VOZ_PADRAO;
   const salva = localStorage.getItem(LS_VOZ_KEY) ?? VOZ_PADRAO;
@@ -333,6 +364,7 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     cascadeAtivo, limparCascade,
+    relacaoToast, limparRelacaoToast,
     pacingNivel,
   } = useGameSession();
 
@@ -2058,6 +2090,11 @@ export default function Home() {
         {/* UX-2: toast de cascata LLM — clicável */}
         {cascadeAtivo && (
           <CascadeToast provider={cascadeAtivo} onDismiss={limparCascade} />
+        )}
+
+        {/* Autoridade social: toast de mudança de relação (engine decidiu) */}
+        {relacaoToast && (
+          <RelacaoToast relacao={relacaoToast} onDismiss={limparRelacaoToast} />
         )}
 
         {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}

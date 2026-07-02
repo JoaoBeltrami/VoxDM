@@ -592,6 +592,10 @@ class WorkingMemory:
     def atualizar_trust(self, npc_id: str, delta: int) -> None:
         self.scene.atualizar_trust(npc_id, delta)
 
+    def drenar_eventos_relacao(self) -> list:
+        """Eventos de relação do turno (autoridade social) — one-shot."""
+        return self.scene.drenar_eventos_relacao()
+
     def apresentar_npc(self, npc_id: str) -> None:
         self.scene.apresentar_npc(npc_id)
 
