@@ -886,9 +886,14 @@ def montar_mensagens(
     # MESTRE-MOVER-LOCAL — nudge de [CENA]. Quando o jogador declara deslocamento
     # explícito, lembra o LLM de marcar a troca de cena se a narração chegar a um
     # local novo. Não muda estado (sem risco de teleporte falso) — só reforça a
-    # emissão do marcador, que o LLM costuma esquecer. Fora de combate (mudança de
-    # cena mid-combate é rara e não vale o custo no turno mais pesado em tokens).
-    if not _em_combate_ativo and _RE_VIAGEM.search(contexto.transcricao_atual or ""):
+    # emissão do marcador, que o LLM costuma esquecer.
+    # SEM gate de combate (fix playtest 01/07, sess-7893f3bdbd28): "Eu entro na
+    # casa" aconteceu com em_combate=True (combate-conversa que não encerrava) e
+    # o nudge foi suprimido → [CENA] nunca veio → a engine achou que o jogador
+    # nunca saiu da estrada e a cena "voltou pro local inicial" sem sentido. O
+    # pressuposto "mudança de cena mid-combate é rara" foi refutado ao vivo;
+    # ~230 chars é barato perto de perder a troca de cena.
+    if _RE_VIAGEM.search(contexto.transcricao_atual or ""):
         secoes.append(
             "\n=== DESLOCAMENTO PEDIDO ===\n"
             "O jogador indicou ir a outro lugar. Se a cena chegar a um local NOVO, "
