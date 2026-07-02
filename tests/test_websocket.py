@@ -367,6 +367,62 @@ def test_ws_ataque_emite_toast_relacao(client):
     assert sessions[sid].working_mem.trust_levels["goblin"] == 0
 
 
+def test_ws_pendencia_persiste_ate_rolagem_de_verdade_chegar(client):
+    """BUGFIX playtest 02/07 (sess-6e2ff2a3f5ce): a pendência de ataque tinha
+    vida de exatamente 1 turno — se o turno seguinte à declaração não fosse
+    uma rolagem, era descartada em silêncio e combate_engine_resolveu nunca
+    disparava (confirmado em 2 sessões seguidas ao vivo). Agora a pendência
+    sobrevive a turnos de conversa até o d20 chegar de verdade."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "goblin"}
+    sessao.working_mem.registrar_fala(
+        "mestre", "O goblin rosna e avança. Role o d20 de ataque!"
+    )
+
+    # Turno 1: o jogador NÃO rola — só continua falando (dado não acendeu a
+    # tempo, ou ele simplesmente respondeu antes). Pendência deve sobreviver.
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "Espera, deixa eu ver uma coisa antes."})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+    assert sessions[sid].combate_pendente == {"tipo": "ataque", "alvo": "goblin"}, \
+        "pendência não pode sumir num turno que não é rolagem"
+
+    # Turno 2: agora sim o d20 chega — resolve contra o alvo original.
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "[Rolagem: d20 = 15]"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+    assert sessions[sid].combate_pendente is None
+    hp = sessions[sid].working_mem.inimigos_combate["goblin"]["hp_atual"]
+    assert hp < 20, "a rolagem tardia ainda deve resolver o ataque original"
+
+
+def test_ws_pendencia_descartada_ao_sair_de_combate(client):
+    """Fuga explícita ([FUGIU]/RE_FIM_COMBATE_JOGADOR) descarta a pendência —
+    não pode sobreviver pro próximo combate contra um alvo que já era."""
+    from api.state import sessions
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "goblin"}
+
+    with client.websocket_connect(f"/ws/game/{sid}") as ws:
+        ws.send_json({"texto": "eu saio de combate correndo"})
+        while ws.receive_json()["tipo"] != "fim":
+            pass
+
+    assert sessions[sid].combate_pendente is None
+
+
 def test_ws_segundo_ataque_no_mesmo_combate_nao_reemite_toast(client):
     """Dedup por combate: re-atacar o mesmo alvo não re-emite o toast."""
     from api.state import sessions

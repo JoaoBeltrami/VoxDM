@@ -1664,6 +1664,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     sessao.working_mem.entrar_combate()
             elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
                 sessao.working_mem.sair_combate()
+                sessao.combate_pendente = None  # fuga explícita descarta a pendência
 
             # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
             # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
@@ -1693,11 +1694,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         )
                         # combate_pendente FICA intacto — este d20 não é a
                         # confirmação do ataque; segue pro fluxo normal do LLM.
-                    else:
-                        # Há um ataque declarado aguardando a rolagem.
+                    elif _d20_jogador is not None:
+                        # Rolagem de verdade chegou (e não é teste de perícia) —
+                        # consome a pendência e resolve.
                         _pend = sessao.combate_pendente
                         sessao.combate_pendente = None
-                        if _d20_jogador is not None and sessao.working_mem.em_combate:
+                        if sessao.working_mem.em_combate:
                             _texto_engine = _resolver_ataque_engine(
                                 sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
                             )
@@ -1708,7 +1710,22 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 texto_jogador = _texto_engine
                             # resolve inválido (alvo morto/inexistente) → segue com o
                             # texto cru da rolagem no fluxo antigo (fallback seguro).
-                        # rolagem não-d20 / fora de combate → pendência descartada, segue normal
+                    else:
+                        # BUGFIX (playtest 02/07, sess-6e2ff2a3f5ce): este turno
+                        # NÃO é rolagem nenhuma (o dado não acendeu a tempo, ou o
+                        # jogador só continuou a falar) — ANTES deste fix, a
+                        # pendência era descartada aqui incondicionalmente, dando
+                        # à janela de rolagem vida de exatamente 1 turno. Log real:
+                        # pendência setada, resolve NUNCA disparou em 2 sessões
+                        # seguidas porque o jogador quase nunca rola no turno
+                        # EXATO seguinte à declaração. Fix: a pendência PERSISTE
+                        # até um d20 de verdade chegar ou o combate encerrar
+                        # (clear de segurança logo após o pipeline, abaixo).
+                        log.info(
+                            "combate_pendente_persiste_sem_rolagem",
+                            session_id=session_id,
+                            alvo=sessao.combate_pendente.get("alvo"),
+                        )
                 elif (
                     sessao.working_mem.em_combate
                     and _d20_jogador is None
@@ -2199,6 +2216,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "" if idle_nudge else texto_jogador,
                 resposta_limpa,
             )
+            # Trava de segurança: combate encerrou neste turno (timeout, LLM,
+            # mudança de cena) por QUALQUER via com uma pendência ainda aberta
+            # — descarta pra ela não vazar pro próximo combate contra um alvo
+            # que pode nem existir mais.
+            if sessao.combate_pendente and not sessao.working_mem.em_combate:
+                sessao.combate_pendente = None
 
             # F0 (teste #3): combate SEM inimigo registrado = beat dormente +
             # tracker vazio (o LLM nunca emitiu [INIMIGO]). A engine registra um
