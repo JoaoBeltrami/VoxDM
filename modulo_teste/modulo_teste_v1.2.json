@@ -1,11 +1,27 @@
 {
   "canon": [
-    { "fact": "Valdrek, o fundador, morreu há gerações — é lenda reverenciada, jamais pessoa viva. Um 'Valdrek' vivo é impostor ou o coração de um mistério, nunca um aliado casual.", "immutable": true },
-    { "fact": "Após a morte de Valdrek, o reino partiu-se em três vilas rivais: Tharnvik, Kaelmund e Drevamor.", "immutable": true }
+    {
+      "fact": "Valdrek, o fundador, morreu há gerações — é lenda reverenciada, jamais pessoa viva. Um 'Valdrek' vivo é impostor ou o coração de um mistério, nunca um aliado casual.",
+      "immutable": true
+    },
+    {
+      "fact": "Após a morte de Valdrek, o reino partiu-se em três vilas rivais: Tharnvik, Kaelmund e Drevamor.",
+      "immutable": true
+    }
   ],
   "fronts": [
-    { "id": "guerra-das-vilas", "name": "As três vilas marcham para a guerra", "segments": 6, "filled": 1 },
-    { "id": "divida-de-vyrmathax", "name": "Vyrmathax se prepara para cobrar a dívida antiga", "segments": 8, "filled": 0 }
+    {
+      "id": "guerra-das-vilas",
+      "name": "As três vilas marcham para a guerra",
+      "segments": 6,
+      "filled": 1
+    },
+    {
+      "id": "divida-de-vyrmathax",
+      "name": "Vyrmathax se prepara para cobrar a dívida antiga",
+      "segments": 8,
+      "filled": 0
+    }
   ],
   "_meta": {
     "schema_version": "1.2",
@@ -208,6 +224,9 @@
         "appearance": "Alto, largo, cicatrizes visíveis no rosto e braços. Marca de cinza ritual nas duas bochechas — desceu às gargantas duas vezes. Barba ruiva curta, sempre aparada. Olhos que avaliam antes de responder.",
         "motivation": "Tomar os artefatos de Drevamor — especialmente o Cajado, que neutralizaria a fraqueza defensiva de Tharnvik. Estabelecer Tharnvik como vila dominante.",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "berserker"
       }
     },
     {
@@ -230,6 +249,9 @@
         "appearance": "Mesma estrutura do irmão, mais ágil. Cabelo ruivo trançado apertado. Marca de cinza na testa — desceu às gargantas uma vez. Armadura de couro reforçado com placas de basalto.",
         "motivation": "Proteger Tharnvik de um confronto que pode destruí-la. Manter o canal com Kaëlmund como seguro contra catástrofe.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "veteran"
       }
     },
     {
@@ -253,6 +275,9 @@
         "appearance": "Enorme mesmo para um goliath. Pele acinzentada — origem do apelido, não a cinza vulcânica. Marcas de clã goliath desbotadas no crânio raspado. Claudicação leve no joelho direito — ferimento antigo.",
         "motivation": "Proteger Tharnvik. Lealdade à vila, não ao líder.",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "veteran"
       }
     },
     {
@@ -275,6 +300,9 @@
         "appearance": "Baixa, mãos fortes de quem trabalha com ervas. Cabelo grisalho solto. Cheiro permanente de camomila, alecrim, e algo amargo que ninguém identifica. Olhos gentis que ficam duros quando alguém fala em guerra.",
         "motivation": "Paz. Não lidera facção, mas é o nó que qualquer facção pacifista precisaria.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "priest"
       }
     },
     {
@@ -298,6 +326,9 @@
         "appearance": "Magra, postura impecável, cabelo escuro em coque funcional. Rosto que não entrega nada — poker face natural. Veste-se de forma prática mas limpa.",
         "motivation": "Segurança. Se tivesse o Cajado, não dependeria dos Grothmar. A Crônica poderia reabrir fronteiras injustas.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "knight"
       }
     },
     {
@@ -320,6 +351,9 @@
         "appearance": "Braços enormes, mãos sempre queimadas. Rosto aberto e simpático — oposto da irmã. Avental de couro sobre roupa simples. Suor permanente. Sorriso fácil.",
         "motivation": "Paz pelo exemplo. Comércio cria laços que política destrói.",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "thug"
       }
     },
     {
@@ -343,6 +377,9 @@
         "motivation": "Explorar. Entender. Perguntar por quê até alguém responder de verdade.",
         "narrative_weight": "ALTA — ameaça a Liiv ativa Mundr independente do pacto econômico",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "spy"
       }
     },
     {
@@ -365,6 +402,9 @@
         "appearance": "Pequena, curvada, olhos absolutamente lúcidos. Mãos com artrite que ainda costuram. Cabelo branco coberto com lenço de lã. Senta perto do fogo o dia inteiro.",
         "motivation": "Solução humana para um problema humano. Mandar os gigantes embora. Resolver entre primos.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "commoner"
       }
     },
     {
@@ -389,6 +429,9 @@
         "motivation": "O pacto funciona. Enquanto Kaëlmund pagar, Mundr protege. Se parar, para.",
         "stat_block": "Hill Giant — CR 5 cada, 5 no total",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "hill-giant"
       }
     },
     {
@@ -412,6 +455,9 @@
         "appearance": "Magro, olhos cansados, cabelo castanho com muito grisalho. Mãos de quem segura livros, não espadas. Postura ligeiramente curvada — o peso é metafórico mas parece físico.",
         "motivation": "Não causar dano. O problema é que a inação também causa dano — e ele sabe disso.",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "bandit-captain"
       }
     },
     {
@@ -434,6 +480,9 @@
         "appearance": "Robusta, prática, cabelo castanho preso. Mãos que carregam, constroem, resolvem. Rosto que sorri pouco mas transmite segurança quando sorri.",
         "motivation": "Proteger a família e a vila. Sem filosofia, sem dúvida.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "commoner"
       }
     },
     {
@@ -456,6 +505,9 @@
         "appearance": "Atlética, ombros largos. Cabelo castanho curto — cortou porque atrapalhava o treino. Mãos calejadas de espada. Roupa de treino mais que roupa de vila.",
         "motivation": "Ação. Qualquer ação. A passividade de Drevamor a sufoca.",
         "gender": "female"
+      },
+      "combat": {
+        "srd_analogo": "scout"
       }
     },
     {
@@ -478,6 +530,9 @@
         "appearance": "Corpo de guerreiro de Tharnvik — largo, marcado. Sem a marca de cinza — raspou quando saiu. Armadura mista, metade Tharnvik, metade improvisada. Rosto fechado de quem carrega remorso.",
         "motivation": "Provar que lealdade não é obediência cega. Proteger Drevamor, que o acolheu.",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "veteran"
       }
     },
     {
@@ -502,6 +557,9 @@
         "motivation": "Reunificação forçada. Expor a verdade. Redistribuir os artefatos.",
         "followers": "20-30 seguidores de sangue de todas as três vilas — leais à ideia, não à pessoa",
         "gender": "male"
+      },
+      "combat": {
+        "srd_analogo": "bandit-captain"
       }
     }
   ],

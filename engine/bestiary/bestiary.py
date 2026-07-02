@@ -125,6 +125,16 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
     for iid, dados in working_mem.inimigos_combate.items():
         if dados.get("estado") == "morto":
             continue
+        # 0. Statblock do MÓDULO (NPCs fixos — decisão "híbrido" 02/07): fonte
+        #    prioritária, sem I/O. Bjorn/Runa/etc. ganham a ficha do análogo SRD
+        #    (ou override) definida no campo `combat` do JSON do módulo — antes
+        #    caíam no fallback CR genérico e o líder da vila lutava como capanga.
+        if not dados.get("ficha"):
+            from engine.combat.npc_statblocks import resolver_ficha_npc
+            ficha_modulo = resolver_ficha_npc(iid)
+            if ficha_modulo:
+                dados["ficha"] = ficha_modulo
+                log.info("statblock_modulo_aplicado", id=iid)
         # 1. Ficha SRD em texto (lookup Qdrant, com cap por turno).
         if not dados.get("ficha") and carregadas < _MAX_LOOKUPS_POR_TURNO:
             ficha = await buscar_ficha_monstro(
