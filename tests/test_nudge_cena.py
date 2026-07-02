@@ -83,10 +83,14 @@ def test_sem_deslocamento_nao_injeta_nudge():
     assert "=== DESLOCAMENTO PEDIDO ===" not in system
 
 
-def test_nudge_cena_suprimido_em_combate():
-    # Mudança de cena mid-combate é rara — não injeta no turno mais pesado.
+def test_nudge_cena_injetado_tambem_em_combate():
+    """Fix playtest 01/07 (sess-7893f3bdbd28): 'Eu entro na casa' com
+    em_combate=True (combate-conversa que não encerrava) → o gate antigo
+    suprimia o nudge → [CENA] nunca veio → a engine achou que o jogador nunca
+    saiu do local inicial ('voltou pro local do nada, todos me atacaram').
+    Mudança de cena mid-combate NÃO é rara na prática — o nudge entra sempre."""
     invalidar_cache()
     wm = _wm()
     wm.entrar_combate()
-    system = montar_mensagens(_contexto(wm, "vou para a outra sala"))[0]["content"]
-    assert "=== DESLOCAMENTO PEDIDO ===" not in system
+    system = montar_mensagens(_contexto(wm, "eu entro na casa com toda minha imponência"))[0]["content"]
+    assert "=== DESLOCAMENTO PEDIDO ===" in system
