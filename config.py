@@ -61,8 +61,14 @@ class Settings(BaseSettings):
     # ── Extractor estruturado de combate (Frente A, 12/06) ───────────────
     # Pós-turno de combate, chamada LLM barata (JSON) sincroniza inimigos/
     # estados/dano mesmo quando o LLM narrador não emite markers. Custa
-    # ~0.7s/turno de combate. Desligar: EXTRACTOR_COMBATE_ATIVO=false.
-    EXTRACTOR_COMBATE_ATIVO: bool = True
+    # ~0.7s/turno de combate.
+    # DESLIGADO por padrão (decisão Beltrami, playtest 02/07): rede de
+    # segurança de ANTES do engine-first existir (declaração+resolve,
+    # hostilidade por grafo, statblocks). Virou risco maior que benefício —
+    # inventou o NPC fantasma "cidades" a partir de prosa numa cena social
+    # (sess-6e2ff2a3f5ce), que morreu e pagou XP como combatente de verdade.
+    # Religar: EXTRACTOR_COMBATE_ATIVO=true no .env.
+    EXTRACTOR_COMBATE_ATIVO: bool = False
 
     # ── Extractor de NPC (PLAY5-NPC, 13/06) ──────────────────────────────
     # Pós-turno social (fora de combate), chamada LLM barata (JSON 8B) detecta
