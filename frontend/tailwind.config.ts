@@ -166,6 +166,14 @@ const config: Config = {
           "0%, 100%": { boxShadow: "0 0 0 0 rgba(167,139,250,0)" },
           "50%":       { boxShadow: "0 0 0 4px rgba(167,139,250,0.20), 0 0 24px -4px rgba(139,92,246,0.40)" },
         },
+        // Palco Vivo Ato 1 (03/07): véu do EncontroOverlay — acompanha o
+        // crit-pop do conteúdo (1.8s) sem escalar o fundo full-screen.
+        "veil-fade": {
+          "0%":   { opacity: "0" },
+          "12%":  { opacity: "1" },
+          "80%":  { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
       },
       animation: {
         breathe:           "breathe 3s ease-in-out infinite",
@@ -185,6 +193,7 @@ const config: Config = {
         "morte-flash":     "morte-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "sua-vez":         "sua-vez 1.3s ease-out forwards",
         "accent-glow-pulse": "accent-glow-pulse 2.2s ease-in-out infinite",
+        "veil-fade":         "veil-fade 1.8s ease-out forwards",
       },
     },
   },

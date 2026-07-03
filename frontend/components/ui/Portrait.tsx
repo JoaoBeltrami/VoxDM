@@ -26,7 +26,9 @@ interface PortraitProps {
   name: string;
   /** Enriquecimento do prompt (ex: "Draconato Feiticeiro", "loyal wolf companion"). */
   descriptor?: string;
-  /** URL pronta (ex: retrato de NPC enviado pelo backend) — pula a geração local. */
+  /** URL pronta (ex: retrato de NPC enviado pelo backend) — pula a geração
+      local. `null` EXPLÍCITO = só monograma, NUNCA gera (evita rosto client-side
+      divergente do que o backend vai mandar depois com outro seed). */
   src?: string | null;
   /** sm=40px, md=56px, lg=72px, xl=96px de largura. */
   size?: "sm" | "md" | "lg" | "xl";
@@ -98,7 +100,7 @@ export function Portrait({
   const [carregou, setCarregou] = useState(false);
   const [erro, setErro] = useState(false);
 
-  const url = src ?? urlPollinations(id, name, descriptor);
+  const url = src === null ? null : src ?? urlPollinations(id, name, descriptor);
   const tamanho = aspect === "portrait" ? SIZE_PORTRAIT[size] : SIZE_SQUARE[size];
 
   return (
@@ -125,7 +127,7 @@ export function Portrait({
             </span>
           </div>
         )}
-        {!erro && (
+        {url && !erro && (
           // eslint-disable-next-line @next/next/no-img-element -- URL externa dinâmica (Pollinations)
           <img
             src={url}

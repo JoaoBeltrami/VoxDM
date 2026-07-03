@@ -1116,6 +1116,23 @@ Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,char
 | `frontend/app/page.tsx` | Menu: tagline com identidade ("Fale — e o mundo responde." em Cormorant, substitui "narração de rpg por voz" genérico — nota Beltrami 23/06), painel de botões em moldura ornamentada, botões com emboss. Drawer inline substituído por `<PanelDrawer>` (−110 linhas). Card da FichaViva com moldura. Títulos h2 das telas secundárias + cabeçalhos de seção das Opções em dourado small-caps | ✅ Atualizado |
 | `frontend/app/preview/page.tsx` | Drawer mock substituído pelo `PanelDrawer` REAL com mocks completos (3 companions incl. um caído) — ficha de companion verificável sem sessão | ✅ Atualizado |
 
+### Palco Vivo — Ato 1: As Pessoas (Sessão 03/07 — parte 2)
+
+> O teatro da mente ganha rostos. Frontend-only, decisões Beltrami: Encontro cinemático pleno,
+> heurística de falante com fallback gracioso (erro = ausência, nunca atribuição errada),
+> orb INTEIRO muda de cor com o clima. tsc verde; falante+Encontro+orb verificados no /preview.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `frontend/lib/falante.ts` | `idParaNome()` + `detectarFalante(texto, npcIds)` — heurística conservadora: cursor do karaokê DENTRO de aspas (retas/curvas) + nome de NPC presente a ≤140 chars da abertura → npc-id falando. Sincronia texto+voz+rosto sem backend novo | ✅ Criado |
+| `frontend/components/NpcsPresentes.tsx` | Reescrito: chips de emoji → fileira de retratos BG1 (Portrait sm) com ANEL de trust (vermelho/zinco/esmeralda/ouro) + primeiro nome. `falanteAtivo` acende o retrato (ring dourado + scale) e recua os demais (opacity+dessatura). `src=null` explícito impede rosto client-side divergente do npc_retrato do backend | ✅ Reescrito |
+| `frontend/components/EncontroOverlay.tsx` | Beat cinematográfico de apresentação: véu escuro+blur (`veil-fade`), retrato xl, nome Cinzel dourado, "cruza o seu caminho" Cormorant. Pai controla ciclo (~2s in-game) | ✅ Criado |
+| `frontend/components/VoxOrb.tsx` | + `mood` (neutro/combate/tensao/misterio/calor) — PALETA por clima aplicada a núcleo/ripples/glow com transição de 2s. Exceção semântica: "processando" SEMPRE âmbar (status, não clima) | ✅ Atualizado |
+| `frontend/app/page.tsx` | Fila do Encontro (diff de `npcRetratos` → overlay sequencial 2s); `falanteAtivo` useMemo sobre `textoSincronizado`; `orbMood` (combate > pacing≥7 > tom da cena) no orb do dock | ✅ Atualizado |
+| `frontend/components/ui/Portrait.tsx` | `src: null` explícito = só monograma (nunca gera client-side) | ✅ Atualizado |
+| `frontend/tailwind.config.ts` | Keyframe `veil-fade` (véu acompanha o crit-pop sem escalar o fundo) | ✅ Atualizado |
+| `frontend/app/preview/page.tsx` | Instrumentação: retratos mock na fileira, `falanteAtivo` fixo, botão "✦ demo Encontro" (8s no preview), ciclador de clima do orb | ✅ Atualizado |
+
 ---
 
 ## Documentos de Referência

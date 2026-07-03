@@ -9,7 +9,9 @@ import { DadoAnimado } from "@/components/DadoAnimado";
 import { ErrorBoundary } from "@/components/system/ErrorBoundary";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
-import { VoxOrb, type OrbState } from "@/components/VoxOrb";
+import { VoxOrb, type OrbState, type OrbMood } from "@/components/VoxOrb";
+import { EncontroOverlay } from "@/components/EncontroOverlay";
+import { detectarFalante, idParaNome } from "@/lib/falante";
 import { CharacterForm } from "@/components/CharacterForm";
 import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
@@ -659,6 +661,42 @@ export default function Home() {
   const [actionEconomyFlash, setActionEconomyFlash] = useState(false);
   const actionEconomyFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Palco Vivo Ato 1 (03/07) — O Encontro: npc_retrato novo → overlay
+  // cinematográfico (retrato + nome em Cinzel), depois o rosto doca na
+  // fileira de presença. Fila sequencial: o backend manda até 3 por turno.
+  const [encontroAtual, setEncontroAtual] = useState<{ id: string; nome: string; url: string } | null>(null);
+  const [encontroTick, setEncontroTick] = useState(0);
+  const retratosVistosRef = useRef<Set<string>>(new Set());
+  const filaEncontrosRef = useRef<Array<{ id: string; nome: string; url: string }>>([]);
+
+  useEffect(() => {
+    const vistos = retratosVistosRef.current;
+    const novos = Object.entries(npcRetratos).filter(([id]) => !vistos.has(id));
+    if (novos.length === 0) return;
+    for (const [id, url] of novos) {
+      vistos.add(id);
+      filaEncontrosRef.current.push({ id, nome: idParaNome(id), url });
+    }
+    setEncontroTick((t) => t + 1);
+  }, [npcRetratos]);
+
+  useEffect(() => {
+    if (encontroAtual || filaEncontrosRef.current.length === 0) return;
+    const prox = filaEncontrosRef.current.shift();
+    if (!prox) return;
+    setEncontroAtual(prox);
+    const t = setTimeout(() => setEncontroAtual(null), 2000);
+    return () => clearTimeout(t);
+  }, [encontroAtual, encontroTick]);
+
+  // Palco Vivo Ato 1 — falante ativo: heurística conservadora sincronizada
+  // com o karaokê (dentro de aspas + nome de NPC presente perto da abertura
+  // → o retrato dele acende na fileira de presença). Erro vira ausência.
+  const falanteAtivo = useMemo(
+    () => detectarFalante(textoSincronizado ?? "", Object.keys(npcsTrust)),
+    [textoSincronizado, npcsTrust],
+  );
+
   // Feedback visual + sonoro de crítico/falha crítica — 1.2s de celebração full-screen
   const [critFlash, setCritFlash] = useState<"crit" | "falha" | null>(null);
   // Splash central "RODADA N" — o flash de 700ms nos chips era imperceptível
@@ -1025,6 +1063,18 @@ export default function Home() {
   // Mood visual da cena — overlay sutil + vinheta. Combate sempre sobrescreve.
   const sceneMood = useSceneMood(locationNome, timeOfDay, emCombate);
 
+  // Palco Vivo Ato 1 — clima do orb (orb INTEIRO muda, decisão Beltrami 03/07):
+  // combate > tensão narrativa (pacing ≥ 7) > tom ambiental da cena.
+  const orbMood: OrbMood = emCombate
+    ? "combate"
+    : pacingNivel >= 7
+    ? "tensao"
+    : sceneMood.ambientTone === "cold"
+    ? "misterio"
+    : sceneMood.ambientTone === "warm"
+    ? "calor"
+    : "neutro";
+
   // Turno do inimigo → vinheta vermelha mais intensa (mestre veterano: o jogador sente perigo)
   const ehTurnoInimigo = emCombate && iniciativaOrdem.some(t => t.turno_atual && t.tipo === "inimigo");
 
@@ -1320,7 +1370,7 @@ export default function Home() {
         </header>
 
         <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
-        <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} />
+        <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} falanteAtivo={falanteAtivo} />
       </>
     );
 
@@ -1737,7 +1787,7 @@ export default function Home() {
 
         <div className="flex items-center justify-center gap-4">
           <div className="relative shrink-0">
-            <VoxOrb estado={orbEstado} tamanho={48} />
+            <VoxOrb estado={orbEstado} tamanho={48} mood={orbMood} />
             {respostaAtual && (
               <button
                 onClick={pararAudio}
@@ -1832,6 +1882,11 @@ export default function Home() {
               locationNome={locationNome}
             />
           </ErrorBoundary>
+        )}
+
+        {/* Palco Vivo Ato 1 — O Encontro: apresentação cinematográfica de NPC */}
+        {encontroAtual && (
+          <EncontroOverlay id={encontroAtual.id} nome={encontroAtual.nome} url={encontroAtual.url} />
         )}
 
         {/* Palco-lite: toggles dos painéis laterais (persistidos). Escondidos

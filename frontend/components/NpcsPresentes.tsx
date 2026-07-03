@@ -1,82 +1,87 @@
 "use client";
 
 /**
- * Lista compacta horizontal de NPCs presentes na cena.
+ * Fileira de presença — NPCs da cena como retratos BG1 (Palco Vivo Ato 1).
  *
- * Por que existe: o jogador precisa saber quem está no espaço sem precisar
- *   perguntar ao mestre — peso de presença social, especialmente fora de combate.
- * Dependências: components/ui (Chip).
- * Armadilha: nome é derivado do id (kebab-case → Capitalized) na ausência de
- *   um campo dedicated `nome`. Se quiser nome completo, expor working_mem.npc_nomes.
+ * Por que existe: o jogador precisa saber quem vive a cena com ele. Antes era
+ *   um chip de texto com emoji de trust (💀⚪🤝⭐); agora cada NPC é um retrato
+ *   em moldura com ANEL colorido de confiança — e, quando a heurística de
+ *   falante detecta a fala dele em revelação (karaokê), o retrato ACENDE
+ *   enquanto os outros recuam. Sincronia texto+voz+rosto.
+ * Dependências: ui/Portrait; lib/falante (idParaNome).
+ * Armadilha: `src={retrato ?? null}` — null EXPLÍCITO impede o Portrait de
+ *   gerar rosto client-side com seed divergente do backend (o rosto trocaria
+ *   quando o npc_retrato oficial chegasse).
  *
- * Refatorado 27/05: usa primitiva Chip do design system unificado.
- * Imersão P4 (11/06): avatar Pollinations (retratos) no chip quando disponível.
+ * Exemplo:
+ *   <NpcsPresentes npcsTrust={{"aldric-drevasson": 2}} retratos={...} falanteAtivo="aldric-drevasson" />
  */
 
-import { Chip } from "@/components/ui";
+import { Portrait } from "@/components/ui";
+import { idParaNome } from "@/lib/falante";
 
 interface Props {
   npcsTrust: Record<string, number>;
-  /** Imersão P4: npc_id → URL do retrato (Pollinations, seed por id) */
+  /** Imersão P4: npc_id → URL do retrato (Pollinations, seed por id, backend). */
   retratos?: Record<string, string>;
+  /** npc-id cuja fala o karaokê está revelando — retrato acende, resto recua. */
+  falanteAtivo?: string | null;
 }
 
-// trust_level → (tone do Chip, ícone, label legível)
-const TRUST_VISUAL: Record<
-  number,
-  { tone: "red" | "neutral" | "amber" | "violet"; icone: string; label: string }
-> = {
-  0: { tone: "red",     icone: "💀", label: "Hostil" },
-  1: { tone: "neutral", icone: "⚪", label: "Neutro" },
-  2: { tone: "amber",   icone: "🤝", label: "Aliado" },
-  3: { tone: "violet",  icone: "⭐", label: "Leal"   },
+// trust_level → anel + rótulo. Ouro = leal (material BG1); vermelho = perigo.
+const TRUST_RING: Record<number, { ring: string; label: string }> = {
+  0: { ring: "ring-1 ring-red-500/70",     label: "Hostil" },
+  1: { ring: "ring-1 ring-zinc-500/40",    label: "Neutro" },
+  2: { ring: "ring-1 ring-emerald-400/60", label: "Aliado" },
+  3: { ring: "ring-1 ring-vox-gold",       label: "Leal" },
 };
 
-function idParaNome(id: string): string {
-  return id
-    .split("-")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(" ");
-}
-
-export function NpcsPresentes({ npcsTrust, retratos }: Props) {
+export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Props) {
   const ids = Object.keys(npcsTrust);
   if (ids.length === 0) return null;
 
+  const temFalante = !!falanteAtivo && ids.includes(falanteAtivo);
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-4 py-1.5">
-      <span className="text-[10px] uppercase tracking-widest text-vox-text-muted font-display">
+    <div className="flex flex-wrap items-end gap-2.5 px-4 py-1.5">
+      <span className="mb-3 font-display text-[10px] uppercase tracking-widest text-vox-text-muted">
         Presentes
       </span>
       {ids.map((npcId) => {
         const trust = Math.max(0, Math.min(3, npcsTrust[npcId] ?? 1));
-        const { tone, icone, label } = TRUST_VISUAL[trust];
+        const { ring, label } = TRUST_RING[trust];
         const nome = idParaNome(npcId);
-        const nomeCurto = nome.length > 18 ? nome.slice(0, 17) + "…" : nome;
-        const retrato = retratos?.[npcId];
+        const primeiroNome = nome.split(" ")[0];
+        const falando = temFalante && npcId === falanteAtivo;
+        const recuado = temFalante && !falando;
         return (
-          <Chip
+          <div
             key={npcId}
-            tone={tone}
-            icon={
-              retrato ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={retrato}
-                  alt=""
-                  aria-hidden
-                  loading="lazy"
-                  className="h-4 w-4 rounded-full object-cover ring-1 ring-black/40"
-                />
-              ) : (
-                <span aria-hidden className="text-[10px]">{icone}</span>
-              )
-            }
             title={`${nome} — ${label} (confiança: ${trust}/3)`}
-            className="animate-slide-in-right font-display tracking-wide"
+            className={`flex flex-col items-center gap-1 animate-slide-in-right transition-all duration-300 ${
+              recuado ? "opacity-50 saturate-50" : "opacity-100"
+            } ${falando ? "scale-110" : "scale-100"}`}
           >
-            {nomeCurto}
-          </Chip>
+            <Portrait
+              id={npcId}
+              name={nome}
+              src={retratos?.[npcId] ?? null}
+              size="sm"
+              aspect="square"
+              className={
+                falando
+                  ? "ring-2 ring-vox-gold-bright shadow-[0_0_18px_rgba(230,195,124,0.45)]"
+                  : ring
+              }
+            />
+            <span
+              className={`max-w-[3.5rem] truncate text-[9px] leading-none transition-colors ${
+                falando ? "text-vox-gold-bright" : "text-vox-text-muted"
+              }`}
+            >
+              {primeiroNome}
+            </span>
+          </div>
         );
       })}
     </div>

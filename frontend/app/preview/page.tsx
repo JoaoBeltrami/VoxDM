@@ -33,7 +33,8 @@ import { DadoAnimado } from "@/components/DadoAnimado";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
-import { VoxOrb, type OrbState } from "@/components/VoxOrb";
+import { VoxOrb, type OrbState, type OrbMood } from "@/components/VoxOrb";
+import { EncontroOverlay } from "@/components/EncontroOverlay";
 import { PanelLauncher } from "@/components/PanelLauncher";
 import { PanelDrawer } from "@/components/PanelDrawer";
 import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
@@ -51,7 +52,20 @@ const NPCS_MOCK = {
   "aldric-drevasson": 2,
   "maren-drevadottir": 1,
   "fael-drevasson": 0,
+  "bjorn-valdrekson": 3,
 };
+
+// Retratos mock — mesmo formato do npc_retrato do backend (Pollinations+seed).
+const RETRATOS_MOCK: Record<string, string> = Object.fromEntries(
+  ["aldric-drevasson", "maren-drevadottir", "fael-drevasson", "bjorn-valdrekson"].map((id, i) => [
+    id,
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      `fantasy RPG character portrait of ${id.replace(/-/g, " ")}, medieval, close-up face, dark fantasy oil painting, detailed, no text, no watermark`,
+    )}?width=256&height=256&model=flux&nologo=true&seed=${4210 + i * 137}`,
+  ]),
+);
+
+const ORB_MOODS: OrbMood[] = ["neutro", "combate", "tensao", "misterio", "calor"];
 
 const COMPANIONS_MOCK = [
   { id: "lyssa", nome: "Lyssa",      hp: 28, hp_max: 32, status: "alive" as const },
@@ -75,6 +89,14 @@ export default function PreviewPage() {
   const [orbState, setOrbState] = useState<OrbState>("idle");
   // Verificação do launcher BG1 sem precisar de sessão in-game.
   const [painelPreview, setPainelPreview] = useState<string | null>("cronica");
+  // Palco Vivo Ato 1 — clima do orb + demo do Encontro sem sessão.
+  const [orbMood, setOrbMood] = useState<OrbMood>("neutro");
+  const [encontroDemo, setEncontroDemo] = useState(false);
+  // 8s no preview (in-game são ~2s) — janela folgada pra inspecionar o beat.
+  const dispararEncontro = () => {
+    setEncontroDemo(true);
+    setTimeout(() => setEncontroDemo(false), 8000);
+  };
 
   const dimChrome = chromeOpacityClass(mode);
 
@@ -116,7 +138,11 @@ export default function PreviewPage() {
             </h1>
             <span className="text-xs text-vox-text-muted">☀️ Manhã</span>
           </div>
-          <NpcsPresentes npcsTrust={NPCS_MOCK} />
+          <NpcsPresentes
+            npcsTrust={NPCS_MOCK}
+            retratos={RETRATOS_MOCK}
+            falanteAtivo="aldric-drevasson"
+          />
           {/* Seletor de modo movido pro ViewModeSwitcher flutuante (irmão do
               AppShell) — em TV o topBar fica `hidden` e prenderia os chips aqui. */}
         </div>
@@ -158,7 +184,7 @@ export default function PreviewPage() {
                 title={`Estado: ${ORB_LABEL[orbState]} (click pra ciclar)`}
                 aria-label={`Estado do orb: ${ORB_LABEL[orbState]}`}
               >
-                <VoxOrb estado={orbState} tamanho={84} />
+                <VoxOrb estado={orbState} tamanho={84} mood={orbMood} />
               </button>
               <span className="font-display text-[10px] uppercase tracking-widest text-vox-text-muted">
                 {ORB_LABEL[orbState]}
@@ -166,6 +192,19 @@ export default function PreviewPage() {
               <span className="text-[10px] text-vox-text-muted/70 text-center px-2">
                 click no orb pra ciclar estados
               </span>
+              {/* Palco Vivo Ato 1 — cicla o CLIMA do orb + demo do Encontro */}
+              <button
+                onClick={() => setOrbMood(ORB_MOODS[(ORB_MOODS.indexOf(orbMood) + 1) % ORB_MOODS.length])}
+                className="btn-emboss rounded-md border border-vox-gold-faint px-2 py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-gold-bright"
+              >
+                clima: {orbMood}
+              </button>
+              <button
+                onClick={dispararEncontro}
+                className="btn-emboss rounded-md border border-vox-gold-faint px-2 py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-gold-bright"
+              >
+                ✦ demo Encontro
+              </button>
             </div>
           </Panel>
         </div>
@@ -352,6 +391,15 @@ export default function PreviewPage() {
         gold={137}
         locaisVisitados={["Vila Drevamor", "Porto de Drevamor", "Acampamento dos Sem-Vila"]}
         locationNome="Acampamento dos Sem-Vila"
+      />
+    )}
+
+    {/* Palco Vivo Ato 1 — demo do EncontroOverlay (botão no painel Mestre) */}
+    {encontroDemo && (
+      <EncontroOverlay
+        id="bjorn-valdrekson"
+        nome="Bjorn Valdrekson"
+        url={RETRATOS_MOCK["bjorn-valdrekson"]}
       />
     )}
     </>
