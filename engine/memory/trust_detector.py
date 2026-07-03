@@ -50,7 +50,16 @@ _RE_POSITIVO = re.compile(
     r"luto ao lado|"                    # fight alongside — luto aqui é verbo lutar
     r"coopero|cooperei|"
     r"compartilho (?:comida|recursos|ouro|informação com)\b|"  # compartilhar itens
-    r"alian[cç]a|parceria(?! comercial)"
+    r"alian[cç]a|parceria(?! comercial)|"
+    # ── Diplomacia dirigida (playtest 02/07: sessão inteira de diplomacia,
+    #    trust ficou em 0 pra todos — o vocabulário só cobria ajuda física/
+    #    combate, não os gestos verbais mais comuns de RP social) ──────────
+    # "não concordo"/"não aceito"/"não respeito" NÃO contam — lookbehind
+    # exclui a negação mais óbvia (mesma técnica de 'me apoio'/'a salvo').
+    r"(?<!não )aceito (?:a |sua |seu )?(?:ajuda|proposta|oferta|ali[aã]n[çc]a|acordo|conselho)|"
+    r"(?<!não )concordo com (?:voc[êe]|ele|ela|seu plano|sua ideia|seu conselho|sua proposta)|"
+    r"(?<!não )respeito (?:sua|seu|a) (?:decis[ãa]o|escolha|opini[ãa]o|lideran[çc]a)|"
+    r"(?<!não )reconhe[çc]o (?:seu|sua|o) (?:valor|esfor[çc]o|sacrif[íi]cio|lideran[çc]a)"
     r")\b",
     re.IGNORECASE,
 )

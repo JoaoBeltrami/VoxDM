@@ -186,3 +186,57 @@ def test_positivo_com_nome_e_unico_npc_ainda_funciona():
 def test_unico_npc_sem_acao_nao_muda_trust():
     # Sem verbo de boa-fé, o NPC único não recebe +1 só por estar presente
     assert detectar_mudancas_trust("olho ao redor da taverna", UM) == []
+
+
+# ── Diplomacia dirigida (playtest 02/07 — vocabulário ampliado) ────────────────
+
+def test_aceito_ajuda_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("aceito a ajuda de Fael de bom grado", NPCS)
+    assert ("fael-valdreksson", +1) in resultado
+
+
+def test_aceito_alianca_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("eu aceito a aliança com Osmund", NPCS)
+    assert ("osmund-ferreiro", +1) in resultado
+
+
+def test_nao_aceito_nao_aumenta_trust():
+    # Lookbehind de negação — recusa explícita não pode virar +1.
+    resultado = detectar_mudancas_trust("não aceito a proposta de Fael", NPCS)
+    assert ("fael-valdreksson", +1) not in resultado
+
+
+def test_concordo_com_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("Osmund, eu concordo com seu plano", NPCS)
+    assert ("osmund-ferreiro", +1) in resultado
+
+
+def test_nao_concordo_com_npc_nao_aumenta_trust():
+    resultado = detectar_mudancas_trust("não concordo com Fael dessa vez", NPCS)
+    assert ("fael-valdreksson", +1) not in resultado
+
+
+def test_respeito_lideranca_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("respeito a liderança de Osmund", NPCS)
+    assert ("osmund-ferreiro", +1) in resultado
+
+
+def test_respeito_decisao_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("eu respeito sua decisão, Fael", NPCS)
+    assert ("fael-valdreksson", +1) in resultado
+
+
+def test_reconheco_valor_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("reconheço o valor de Lyra nessa luta", NPCS)
+    assert ("lyra-caçadora", +1) in resultado
+
+
+def test_reconheco_sacrificio_npc_aumenta_trust():
+    resultado = detectar_mudancas_trust("reconheço o sacrifício de Osmund pela vila", NPCS)
+    assert ("osmund-ferreiro", +1) in resultado
+
+
+def test_diplomacia_sem_npc_nomeado_com_unico_npc_presente():
+    # Mesmo fallback do TRUST-IMUTAVEL-1: cena com 1 NPC só, sem nome explícito.
+    resultado = detectar_mudancas_trust("aceito a proposta com gratidão", ["fael-valdreksson"])
+    assert ("fael-valdreksson", +1) in resultado
