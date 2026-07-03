@@ -16,6 +16,7 @@ Exemplo:
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,15 @@ _QUERY_CURTA_LIMITE = 5
 # turno). Como o ContextBuilder é per-sessão, isto basta.
 _TTL_RELS_CACHE = 1800.0
 
+# TTL do cache NEGATIVO (playtest 03/07, sess-6a851e0fa7f1): um id que NÃO existe
+# no grafo (ex: NPC fantasma "guia-do-jogo" registrado por engano pelo extractor)
+# nunca populava `_rels_cache` — só sucesso é cacheado — então pagava os 2s de
+# timeout TODO turno, indefinidamente (18 timeouts numa sessão de 33 turnos).
+# TTL curto (bem menor que o de sucesso): evita martelar o Neo4j num id inválido
+# turno a turno, mas ainda permite um retry eventual — a entidade pode passar a
+# existir de verdade (ex: ingest incremental, ou o id era só temporariamente ruim).
+_TTL_RELS_CACHE_FALHA = 90.0
+
 
 class ContextBuilder:
     """
@@ -83,6 +93,10 @@ class ContextBuilder:
         # (_TTL_RELS_CACHE) + stale-while-revalidate no _buscar_rels: uma vez
         # buscado com sucesso, a entidade não re-consulta nem volta a dar timeout.
         self._rels_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+        # Cache NEGATIVO — id que deu timeout/erro E não tem valor bom anterior
+        # pra servir stale. TTL curto (_TTL_RELS_CACHE_FALHA): não persegue o
+        # Neo4j turno a turno num id fantasma, mas ainda tenta de novo eventualmente.
+        self._rels_cache_falha: dict[str, float] = {}
 
     def _carregar_schema(self) -> dict[str, Any]:
         """Carrega e cacheia o schema do módulo em memória."""
@@ -215,26 +229,37 @@ class ContextBuilder:
         Em timeout/erro, serve o último valor bom (stale-while-revalidate) em vez
         de [] — a AuraDB free é fria/lenta e timeouts são transitórios; sem isto,
         as MESMAS entidades davam timeout TODO turno (teste #4) e sumiam do prompt.
+
+        Cache NEGATIVO (playtest 03/07): um id sem valor bom anterior (nunca teve
+        sucesso — ex: NPC fantasma que não existe no grafo) também é cacheado por
+        _TTL_RELS_CACHE_FALHA, bem mais curto. Sem isto, id inválido pagava 2s de
+        timeout TODO turno pelo resto da sessão inteira.
         """
         agora = time.monotonic()
         em_cache = self._rels_cache.get(entidade_id)
         if em_cache is not None and agora - em_cache[0] < _TTL_RELS_CACHE:
             return em_cache[1]
+        falha_em = self._rels_cache_falha.get(entidade_id)
+        if falha_em is not None and agora - falha_em < _TTL_RELS_CACHE_FALHA:
+            return []
         try:
             rels = await asyncio.wait_for(
                 self._neo4j.buscar_relacionamentos(entidade_id),
                 timeout=2.0,
             )
             self._rels_cache[entidade_id] = (agora, rels)
+            self._rels_cache_falha.pop(entidade_id, None)
             return rels
         except TimeoutError:
             if em_cache is not None:
                 return em_cache[1]  # stale-while-revalidate
+            self._rels_cache_falha[entidade_id] = agora
             log.warning("neo4j_timeout", entidade=entidade_id)
             return []
         except Exception as e:
             if em_cache is not None:
                 return em_cache[1]
+            self._rels_cache_falha[entidade_id] = agora
             log.warning("neo4j_relacoes_falhou", entidade=entidade_id, erro=str(e))
             return []
 
@@ -297,7 +322,12 @@ class ContextBuilder:
         """
         Detecta IDs de entidades do schema citadas na transcrição.
 
-        Compara tokens da transcrição contra nomes do schema (case-insensitive).
+        Compara tokens da transcrição contra nomes do schema (case-insensitive),
+        em WORD-BOUNDARY (não substring) — playtest 03/07: "guia" batia dentro
+        de "conseguia"/"seguia"/"guiar", reintroduzindo um NPC fantasma no
+        contexto todo turno em que o jogador usasse qualquer uma dessas palavras
+        comuns. `\\b` evita falso-positivo por substring sem perder o casamento
+        de nome/primeiro-nome de verdade.
         Retorna lista de IDs kebab-case das entidades encontradas.
 
         Usado para enriquecer a query do Neo4j mesmo quando npcs_presentes está vazio.
@@ -315,8 +345,9 @@ class ContextBuilder:
                 if not nome or not eid:
                     continue
                 primeiro_nome = nome.split()[0] if nome else ""
-                if (nome in transcricao_lower or
-                        (len(primeiro_nome) >= 3 and primeiro_nome in transcricao_lower)):
+                if (re.search(rf"\b{re.escape(nome)}\b", transcricao_lower) or
+                        (len(primeiro_nome) >= 3 and
+                         re.search(rf"\b{re.escape(primeiro_nome)}\b", transcricao_lower))):
                     encontrados.append(eid)
 
         return encontrados

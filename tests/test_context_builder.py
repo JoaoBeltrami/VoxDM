@@ -161,6 +161,29 @@ def test_transcricao_sem_entidades(builder_com_schema):
     assert ids == []
 
 
+def test_nome_como_substring_de_outra_palavra_nao_da_match(builder_com_schema):
+    """Word-boundary (playtest 03/07): "guia" não pode bater dentro de
+    "conseguia"/"seguia"/"guiar" — substring puro reintroduzia um NPC fantasma
+    todo turno em que o jogador usasse qualquer uma dessas palavras comuns."""
+    builder_com_schema._schema_cache["npcs"].append(
+        {"id": "guia-do-jogo", "name": "Guia do Jogo", "role": ""}
+    )
+    ids = builder_com_schema._extrair_entidades_mencionadas(
+        "eu conseguia ver o caminho enquanto seguia em frente"
+    )
+    assert "guia-do-jogo" not in ids
+
+
+def test_nome_como_palavra_inteira_ainda_da_match(builder_com_schema):
+    """A mesma entidade, mencionada como PALAVRA de verdade, continua batendo —
+    o fix é word-boundary, não desligar a detecção."""
+    builder_com_schema._schema_cache["npcs"].append(
+        {"id": "guia-do-jogo", "name": "Guia do Jogo", "role": ""}
+    )
+    ids = builder_com_schema._extrair_entidades_mencionadas("onde está o guia do jogo?")
+    assert "guia-do-jogo" in ids
+
+
 # ── Testes: query inteligente (curta vs. longa) ───────────────────────────────
 
 def test_limite_query_curta_definido():
@@ -275,6 +298,7 @@ def _builder_sem_clientes() -> ContextBuilder:
     """ContextBuilder sem __init__ (não cria QdrantClient/Neo4jClient reais)."""
     b = ContextBuilder.__new__(ContextBuilder)
     b._rels_cache = {}
+    b._rels_cache_falha = {}
     b._neo4j = AsyncMock()
     return b
 
@@ -314,6 +338,69 @@ async def test_buscar_rels_timeout_sem_cache_retorna_vazio():
     r = await b._buscar_rels_cached("dalla")
     assert r == []
     assert "dalla" not in b._rels_cache  # não cacheia o timeout — retry permitido
+
+
+# ── Testes: cache NEGATIVO (playtest 03/07 — NPC fantasma "guia-do-jogo") ──────
+# Sem valor bom anterior, um id que dá timeout/erro TODO turno (ex: entidade que
+# não existe no grafo) martelava o Neo4j com 2s de timeout a cada turno, pelo
+# resto da sessão. O cache negativo (TTL curto) evita isso sem impedir retry.
+
+@pytest.mark.asyncio
+async def test_buscar_rels_timeout_repetido_nao_reconsulta_no_ttl_negativo():
+    """2º timeout seguido do MESMO id, sem cache bom, não bate no Neo4j de novo."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    r1 = await b._buscar_rels_cached("guia-do-jogo")
+    r2 = await b._buscar_rels_cached("guia-do-jogo")
+    assert r1 == r2 == []
+    b._neo4j.buscar_relacionamentos.assert_awaited_once()  # 2ª veio do cache negativo
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_erro_generico_tambem_cacheia_negativo():
+    """Erro não-timeout (ex: driver caiu) também popula o cache negativo."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=RuntimeError("boom"))
+    await b._buscar_rels_cached("entidade-quebrada")
+    assert "entidade-quebrada" in b._rels_cache_falha
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "nunca chamado"}])
+    r = await b._buscar_rels_cached("entidade-quebrada")
+    assert r == []
+    b._neo4j.buscar_relacionamentos.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_negativo_expira_e_tenta_de_novo():
+    """Após o TTL negativo passar, a entidade tenta de novo (não fica banida pra sempre)."""
+    from engine.memory import context_builder as cb_module
+
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    await b._buscar_rels_cached("guia-do-jogo")
+    # expira o TTL negativo forçando timestamp antigo
+    ts_falha = b._rels_cache_falha["guia-do-jogo"]
+    b._rels_cache_falha["guia-do-jogo"] = ts_falha - (cb_module._TTL_RELS_CACHE_FALHA + 1.0)
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "achou dessa vez"}])
+    r = await b._buscar_rels_cached("guia-do-jogo")
+    assert r == [{"rel": "achou dessa vez"}]
+
+
+@pytest.mark.asyncio
+async def test_buscar_rels_sucesso_limpa_cache_negativo_previo():
+    """Se uma entidade falhou antes mas agora tem sucesso, o cache negativo some
+    (não deve continuar sendo tratada como fantasma depois de existir de verdade)."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    await b._buscar_rels_cached("entidade-nova")
+    assert "entidade-nova" in b._rels_cache_falha
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "existe agora"}])
+    # timestamp do cache negativo não expirou — mas o TTL passa por causa do
+    # helper acima; aqui simulamos retry manual chamando de novo após expirar
+    from engine.memory import context_builder as cb_module
+    b._rels_cache_falha["entidade-nova"] -= (cb_module._TTL_RELS_CACHE_FALHA + 1.0)
+    await b._buscar_rels_cached("entidade-nova")
+    assert "entidade-nova" not in b._rels_cache_falha
+    assert "entidade-nova" in b._rels_cache
 
 
 # ── Testes: inferir_npcs_presentes tem timeout (playtest 01/07, freeze) ────────

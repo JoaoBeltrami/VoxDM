@@ -266,6 +266,10 @@ _PALAVRAS_COMUNS = frozenset({
     # objetos/fenômenos que aparecem em id composto
     "sussurro", "assobio", "eco", "grito", "murmurio", "sombra", "vulto",
     "figura", "esquerda", "direita", "fundo", "capuz", "capa",
+    # meta/OOC (playtest 03/07): "guia-do-jogo" registrado como NPC — não é
+    # personagem, é referência ao próprio jogo/regras. Sem entidade real no
+    # grafo, gerava timeout de Neo4j TODO turno pro resto da sessão.
+    "guia", "jogo",
 })
 _MAX_NPCS_PRESENTES = 8
 

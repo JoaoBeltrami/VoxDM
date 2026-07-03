@@ -278,6 +278,9 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     "ela",                   # PRONOME (playtest 29/06: "ela" virou NPC e entrou no combate)
     "ele",
     "voce",
+    # META/OOC (playtest 03/07): "guia-do-jogo" registrado como NPC — gerou
+    # timeout de Neo4j TODO turno pelo resto da sessão (não existe no grafo).
+    "guia-do-jogo",
 ])
 def test_entidade_invalida_rejeita_lixo(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True
