@@ -1133,6 +1133,23 @@ Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,char
 | `frontend/tailwind.config.ts` | Keyframe `veil-fade` (véu acompanha o crit-pop sem escalar o fundo) | ✅ Atualizado |
 | `frontend/app/preview/page.tsx` | Instrumentação: retratos mock na fileira, `falanteAtivo` fixo, botão "✦ demo Encontro" (8s no preview), ciclador de clima do orb | ✅ Atualizado |
 
+### Abolição dos avatares de letra (Sessão 03/07 — parte 3)
+
+> Decisão Beltrami: ZERO letras — retratos/miniaturas em tudo; Mestre no chat = ícone do orb.
+> Peça-chave de engenharia: paridade SHA-1 com o backend — o frontend gera a MESMA URL
+> Pollinations que `_enviar_retratos_npcs` mandaria (seeds verificados TS×Python: idênticos).
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `frontend/lib/retrato.ts` | SHA-1 síncrono (RFC 3174, só pra seed) + `seedRetrato` (espelho de `int(sha1[:8],16)%100k`) + `urlRetratoNpc` (paridade EXATA), `urlRetratoCriatura` (monstros), `urlRetratoPersonagem` (PJ/companions). Armadilha: mudar prompt/seed quebra a paridade — espelhar api/websocket.py | ✅ Criado |
+| `frontend/components/ui/Portrait.tsx` | Monograma ABOLIDO → silhueta encapuzada SVG (assinatura: toda sombra ganha rosto) + tamanho `xs` (28px, chat) + URL via lib/retrato | ✅ Atualizado |
+| `frontend/components/ui/OrbIcon.tsx` | O asterisco do VoxOrb como chip circular estático — identidade do Mestre no chat. `pulsante` só pra bolha ativa (streaming/pensando) | ✅ Criado |
+| `frontend/components/ui/Avatar.tsx` | **DELETADO** — círculo com inicial abolido; nada mais o importava | ❌ Removido |
+| `frontend/components/MasterResponse.tsx` | Mestre = `OrbIcon` (histórico estático, streaming/pensando pulsante); jogador = `Portrait` xs com `playerDescriptor` (URL idêntica à da FichaViva → cache) | ✅ Atualizado |
+| `frontend/components/NpcsPresentes.tsx` | Fallback `src` deixa de ser silhueta permanente: `urlRetratoNpc(npcId)` (paridade) — rosto real imediato pra NPC presente mesmo antes do npc_retrato | ✅ Atualizado |
+| `frontend/components/palco/PresenceCard.tsx` + `CombatTracker.tsx` | Prop `retratoId` → miniatura Pollinations de criatura (seed sha1) no card de inimigo; morto = grayscale. Régua de iniciativa fica como pills (decisão) | ✅ Atualizado |
+| `frontend/app/page.tsx` + `frontend/app/preview/page.tsx` | `playerDescriptor` no MasterResponse; preview troca todos os Avatar por Portrait/OrbIcon | ✅ Atualizado |
+
 ---
 
 ## Documentos de Referência

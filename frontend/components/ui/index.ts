@@ -12,6 +12,6 @@ export { Button } from "./Button";
 export { Chip } from "./Chip";
 export { HpBar } from "./HpBar";
 export { XpBar } from "./XpBar";
-export { Avatar } from "./Avatar";
 export { Portrait } from "./Portrait";
+export { OrbIcon } from "./OrbIcon";
 export { cn } from "./cn";

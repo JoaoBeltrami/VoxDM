@@ -8,10 +8,10 @@
  *   em moldura com ANEL colorido de confiança — e, quando a heurística de
  *   falante detecta a fala dele em revelação (karaokê), o retrato ACENDE
  *   enquanto os outros recuam. Sincronia texto+voz+rosto.
- * Dependências: ui/Portrait; lib/falante (idParaNome).
- * Armadilha: `src={retrato ?? null}` — null EXPLÍCITO impede o Portrait de
- *   gerar rosto client-side com seed divergente do backend (o rosto trocaria
- *   quando o npc_retrato oficial chegasse).
+ * Dependências: ui/Portrait; lib/falante (idParaNome); lib/retrato (paridade).
+ * Armadilha: o fallback usa `urlRetratoNpc()` — PARIDADE sha1 exata com o
+ *   backend (`_enviar_retratos_npcs`): a URL gerada aqui é a MESMA que o
+ *   npc_retrato oficial traria, então o rosto nunca troca.
  *
  * Exemplo:
  *   <NpcsPresentes npcsTrust={{"aldric-drevasson": 2}} retratos={...} falanteAtivo="aldric-drevasson" />
@@ -19,6 +19,7 @@
 
 import { Portrait } from "@/components/ui";
 import { idParaNome } from "@/lib/falante";
+import { urlRetratoNpc } from "@/lib/retrato";
 
 interface Props {
   npcsTrust: Record<string, number>;
@@ -65,7 +66,7 @@ export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Prop
             <Portrait
               id={npcId}
               name={nome}
-              src={retratos?.[npcId] ?? null}
+              src={retratos?.[npcId] ?? urlRetratoNpc(npcId)}
               size="sm"
               aspect="square"
               className={

@@ -21,7 +21,7 @@ import { Portrait } from "@/components/ui";
 interface Props {
   id: string;
   nome: string;
-  /** URL do retrato (npc_retrato do backend). null/ausente → monograma. */
+  /** URL do retrato (npc_retrato do backend). null/ausente → silhueta. */
   url?: string | null;
 }
 

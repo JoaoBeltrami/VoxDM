@@ -4,20 +4,21 @@
  * Portrait — retrato estilo Baldur's Gate 1 com moldura dourada (rebuild 03/07).
  *
  * Por que existe: a party/ficha pedia rosto. Gera retrato via Pollinations.ai
- *   no MESMO estilo dos retratos de NPC do backend (`_enviar_retratos_npcs`
- *   em api/websocket.py: "dark fantasy oil painting", flux, seed determinístico)
- *   — mesma entidade tem sempre o mesmo rosto, na sessão e entre sessões.
- *   Enquanto a imagem carrega (ou se falhar), mostra monograma Cinzel dourado
- *   sobre fundo escuro — a moldura segura a identidade visual sozinha.
- * Dependências: nenhuma além de cn (tokens --vox-* de globals.css).
- * Armadilha: `src` explícito (ex: npc_retrato vindo do WS) PULA a geração
- *   local — passe só quando o backend já mandou a URL pronta.
+ *   no MESMO estilo/seed dos retratos de NPC do backend (paridade sha1 em
+ *   lib/retrato.ts) — mesma entidade tem sempre o mesmo rosto, na sessão e
+ *   entre sessões. Enquanto a imagem carrega (ou se falhar), mostra a SILHUETA
+ *   ENCAPUZADA (assinatura visual: todo retrato nasce de uma sombra que ganha
+ *   rosto). Letras foram ABOLIDAS (decisão Beltrami 03/07).
+ * Dependências: lib/retrato (urlRetratoPersonagem); cn.
+ * Armadilha: `src` explícito (ex: npc_retrato do WS) pula a geração local;
+ *   `src={null}` explícito = só silhueta, nunca gera.
  *
  * Exemplo:
  *   <Portrait id="lyssa" name="Lyssa" descriptor="hired warrior" size="md" />
  */
 
 import { useState } from "react";
+import { urlRetratoPersonagem } from "@/lib/retrato";
 import { cn } from "./cn";
 
 interface PortraitProps {
@@ -27,11 +28,10 @@ interface PortraitProps {
   /** Enriquecimento do prompt (ex: "Draconato Feiticeiro", "loyal wolf companion"). */
   descriptor?: string;
   /** URL pronta (ex: retrato de NPC enviado pelo backend) — pula a geração
-      local. `null` EXPLÍCITO = só monograma, NUNCA gera (evita rosto client-side
-      divergente do que o backend vai mandar depois com outro seed). */
+      local. `null` EXPLÍCITO = só silhueta, NUNCA gera. */
   src?: string | null;
-  /** sm=40px, md=56px, lg=72px, xl=96px de largura. */
-  size?: "sm" | "md" | "lg" | "xl";
+  /** xs=28px (chat), sm=40px, md=56px, lg=72px, xl=96px de largura. */
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   /** portrait = 3:4 vertical (BG1 clássico); square pra chips compactos. */
   aspect?: "portrait" | "square";
   /** Morto — dessatura e apaga. */
@@ -40,6 +40,7 @@ interface PortraitProps {
 }
 
 const SIZE_PORTRAIT = {
+  xs: "w-7 h-9",
   sm: "w-10 h-[52px]",
   md: "w-14 h-[74px]",
   lg: "w-[72px] h-24",
@@ -47,43 +48,32 @@ const SIZE_PORTRAIT = {
 } as const;
 
 const SIZE_SQUARE = {
+  xs: "w-7 h-7",
   sm: "w-10 h-10",
   md: "w-14 h-14",
   lg: "w-[72px] h-[72px]",
   xl: "w-24 h-24",
 } as const;
 
-const FONTE_MONOGRAMA = {
-  sm: "text-sm",
-  md: "text-lg",
-  lg: "text-xl",
-  xl: "text-3xl",
-} as const;
-
-/** Hash determinístico simples — mesmo espírito do sha1 truncado do backend. */
-function seedDeterministico(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h) % 100_000;
-}
-
-function inicial(name: string): string {
-  const partes = name.replace(/[-_]/g, " ").trim().split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return "?";
-  if (partes.length === 1) return partes[0][0]?.toUpperCase() ?? "?";
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
-}
-
-function urlPollinations(id: string, name: string, descriptor?: string): string {
-  const detalhe = descriptor ? `${descriptor}, ` : "";
-  const prompt =
-    `fantasy RPG character portrait of ${name}, ${detalhe}medieval, close-up face, ` +
-    "dark fantasy oil painting, detailed, no text, no watermark";
+/** Silhueta encapuzada — "uma pessoa ainda não revelada". Sem letras. */
+function Silhueta() {
   return (
-    `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
-    `?width=256&height=256&model=flux&nologo=true&seed=${seedDeterministico(id)}`
+    <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-b from-zinc-800 to-zinc-950">
+      <svg viewBox="0 0 48 48" className="h-[88%] w-auto" aria-hidden>
+        {/* Capuz + ombros — contorno com fio de luz dourada entrando de cima */}
+        <path
+          d="M24 6.5 C17.5 6.5 13.5 12 13.2 18.5 C13 23.5 14.6 27.4 17.4 29.8 C10.6 32.8 7 37.8 7 44 L41 44 C41 37.8 37.4 32.8 30.6 29.8 C33.4 27.4 35 23.5 34.8 18.5 C34.5 12 30.5 6.5 24 6.5 Z"
+          fill="#15151b"
+          stroke="rgba(201,164,92,0.3)"
+          strokeWidth="1.1"
+        />
+        {/* Vão do capuz — rosto em sombra */}
+        <path
+          d="M24 11.5 C19.8 11.5 17.2 15 17.2 19.6 C17.2 23.6 18.6 26.8 21 28.4 L27 28.4 C29.4 26.8 30.8 23.6 30.8 19.6 C30.8 15 28.2 11.5 24 11.5 Z"
+          fill="#0a0a0e"
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -100,7 +90,7 @@ export function Portrait({
   const [carregou, setCarregou] = useState(false);
   const [erro, setErro] = useState(false);
 
-  const url = src === null ? null : src ?? urlPollinations(id, name, descriptor);
+  const url = src === null ? null : src ?? urlRetratoPersonagem(id, name, descriptor);
   const tamanho = aspect === "portrait" ? SIZE_PORTRAIT[size] : SIZE_SQUARE[size];
 
   return (
@@ -119,14 +109,8 @@ export function Portrait({
       title={name}
     >
       <div className="relative h-full w-full overflow-hidden rounded-[3px] bg-vox-bg-base ring-1 ring-black/70">
-        {/* Monograma — visível até o retrato chegar (e se nunca chegar) */}
-        {!carregou && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950">
-            <span className={cn("font-display text-vox-gold", FONTE_MONOGRAMA[size])}>
-              {inicial(name)}
-            </span>
-          </div>
-        )}
+        {/* Silhueta — visível até o retrato chegar (e se nunca chegar) */}
+        {!carregou && <Silhueta />}
         {url && !erro && (
           // eslint-disable-next-line @next/next/no-img-element -- URL externa dinâmica (Pollinations)
           <img

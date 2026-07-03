@@ -12,6 +12,8 @@
 "use client";
 
 import { memo } from "react";
+import { Portrait } from "@/components/ui";
+import { urlRetratoCriatura } from "@/lib/retrato";
 
 type Props = {
   nome: string;
@@ -20,6 +22,9 @@ type Props = {
   hpMax?: number;
   distanciaFt?: number;
   suaVez?: boolean;
+  /** Abolição das letras (03/07): id estável do inimigo → miniatura Pollinations
+      (seed sha1, prompt de criatura). Ausente = card sem retrato (compat). */
+  retratoId?: string;
 };
 
 // Estado da engine → cor + fração de barra de fallback (quando não há HP numérico).
@@ -31,7 +36,7 @@ const ESTADO_META: Record<string, { cor: string; fracao: number; rotulo: string 
   morto: { cor: "var(--vox-text-muted)", fracao: 0.0, rotulo: "abatido" },
 };
 
-function PresenceCardBase({ nome, estado, hpAtual, hpMax, distanciaFt, suaVez }: Props) {
+function PresenceCardBase({ nome, estado, hpAtual, hpMax, distanciaFt, suaVez, retratoId }: Props) {
   const meta = ESTADO_META[estado] ?? ESTADO_META.intacto;
   const morto = estado === "morto";
   const temHp = typeof hpAtual === "number" && typeof hpMax === "number" && hpMax > 0;
@@ -43,32 +48,46 @@ function PresenceCardBase({ nome, estado, hpAtual, hpMax, distanciaFt, suaVez }:
         morto ? "opacity-45 grayscale" : ""
       } ${suaVez ? "ring-1 ring-[var(--vox-accent-danger)] shadow-[0_0_14px_-4px_var(--vox-accent-danger)]" : ""}`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span
-          className={`truncate font-display text-[0.92rem] text-[var(--vox-text-primary)] ${
-            morto ? "line-through" : ""
-          }`}
-        >
-          {nome}
-        </span>
-        {typeof distanciaFt === "number" ? (
-          <span className="shrink-0 text-[0.62rem] uppercase tracking-wider text-[var(--vox-text-muted)]">
-            {distanciaFt === 0 ? "corpo a corpo" : `${distanciaFt} ft`}
-          </span>
-        ) : null}
-      </div>
+      <div className="flex items-center gap-2.5">
+        {retratoId && (
+          <Portrait
+            id={retratoId}
+            name={nome}
+            src={urlRetratoCriatura(retratoId, nome)}
+            size="sm"
+            aspect="square"
+            dead={morto}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <span
+              className={`truncate font-display text-[0.92rem] text-[var(--vox-text-primary)] ${
+                morto ? "line-through" : ""
+              }`}
+            >
+              {nome}
+            </span>
+            {typeof distanciaFt === "number" ? (
+              <span className="shrink-0 text-[0.62rem] uppercase tracking-wider text-[var(--vox-text-muted)]">
+                {distanciaFt === 0 ? "corpo a corpo" : `${distanciaFt} ft`}
+              </span>
+            ) : null}
+          </div>
 
-      {/* Estado narrativo primeiro — a língua do Mestre */}
-      <div className="mt-0.5 text-[0.8rem] font-atmospheric" style={{ color: meta.cor }}>
-        {meta.rotulo}
-      </div>
+          {/* Estado narrativo primeiro — a língua do Mestre */}
+          <div className="mt-0.5 text-[0.8rem] font-atmospheric" style={{ color: meta.cor }}>
+            {meta.rotulo}
+          </div>
 
-      {/* Barra fina secundária — leitura de stream, não protagonista */}
-      <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-[var(--vox-border-soft)]">
-        <div
-          className="h-full rounded-full transition-[width] duration-500 ease-out"
-          style={{ width: `${fracao * 100}%`, backgroundColor: meta.cor }}
-        />
+          {/* Barra fina secundária — leitura de stream, não protagonista */}
+          <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-[var(--vox-border-soft)]">
+            <div
+              className="h-full rounded-full transition-[width] duration-500 ease-out"
+              style={{ width: `${fracao * 100}%`, backgroundColor: meta.cor }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

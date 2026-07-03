@@ -1498,6 +1498,7 @@ export default function Home() {
           historico={historico}
           respostaAtual={textoSincronizado}
           playerName={playerName}
+          playerDescriptor={[personagem.player_race, personagem.player_class].filter(Boolean).join(" ")}
           mestrePensando={isProcessing}
           modoRoteiro={modoRoteiro}
         />

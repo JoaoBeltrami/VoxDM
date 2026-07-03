@@ -136,7 +136,7 @@ export function CombatTracker({
                   pulse ? "ring-1 ring-red-500/60 shadow-[0_0_12px_-2px_rgba(239,68,68,0.6)]" : ""
                 }`}
               >
-                <PresenceCard nome={ini.nome} estado={ini.estado} distanciaFt={pos?.distancia_ft} />
+                <PresenceCard nome={ini.nome} estado={ini.estado} distanciaFt={pos?.distancia_ft} retratoId={id} />
 
                 {ini.hp_rel && vivo && (
                   <p className="px-3 pt-1 font-atmospheric text-[10px] italic text-vox-text-muted">

@@ -3,7 +3,7 @@
 /**
  * /preview — demonstração do novo sistema de design cinematográfico.
  *
- * Mostra todas as primitivas (Card, Panel, Button, Chip, HpBar, XpBar, Avatar)
+ * Mostra todas as primitivas (Card, Panel, Button, Chip, HpBar, XpBar, Portrait, OrbIcon)
  * integradas no AppShell com os 3 modos de visualização (mesa/imersão/TV).
  *
  * Sem dependência do backend — usa dados mock. Pra rodar:
@@ -20,12 +20,13 @@
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import {
-  Avatar,
   Button,
   Card,
   Chip,
   HpBar,
+  OrbIcon,
   Panel,
+  Portrait,
   XpBar,
 } from "@/components/ui";
 import { CombatTracker } from "@/components/CombatTracker";
@@ -153,7 +154,7 @@ export default function PreviewPage() {
             <div className="space-y-3">
               {COMPANIONS_MOCK.map((c) => (
                 <div key={c.id} className="flex items-center gap-2">
-                  <Avatar name={c.nome} id={c.id} size="md" status={c.status} />
+                  <Portrait id={c.id} name={c.nome} size="sm" aspect="square" />
                   <div className="flex-1 min-w-0">
                     <HpBar
                       label={c.nome}
@@ -228,9 +229,9 @@ export default function PreviewPage() {
                   </Card>
                 </div>
 
-                {/* Bolha do mestre */}
+                {/* Bolha do mestre — OrbIcon (abolição das letras 03/07) */}
                 <div className="flex items-start gap-3">
-                  <Avatar name="VoxDM" size="md" tone="indigo" status="active" />
+                  <OrbIcon />
                   <Card variant="panel" padding="lg" rounded="xl" elevation={2} className="max-w-[80%]">
                     <p className="text-vox-text-primary leading-relaxed font-atmospheric text-base">
                       {m.mestre}
@@ -255,7 +256,7 @@ export default function PreviewPage() {
         <div className={`space-y-3 ${dimChrome}`}>
           <Panel
             title="Personagem"
-            icon={<Avatar name="Fael" size="xs" tone="violet" />}
+            icon={<Portrait id="fael" name="Fael" size="xs" aspect="square" />}
             action={<Button variant="ghost" size="sm">⚙</Button>}
           >
             <div className="space-y-3">

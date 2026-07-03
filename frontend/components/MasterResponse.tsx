@@ -7,17 +7,21 @@
  * esquerda). Trata 3 tipos especiais: normal, recap (sépia), lampejo
  * (gradiente violeta dramático).
  *
- * Refatorado 27/05: usa Card + Avatar + font-atmospheric. Visual cinema.
+ * Refatorado 27/05: Card + font-atmospheric. Abolição das letras (03/07):
+ * Mestre = OrbIcon (símbolo do orb), jogador = Portrait (mesmo rosto da FichaViva).
  */
 
 import type { TurnoHistorico } from "@/hooks/useGameSession";
 import { TurnoResumo } from "@/components/TurnoResumo";
-import { Avatar, Card } from "@/components/ui";
+import { Card, OrbIcon, Portrait } from "@/components/ui";
 
 interface Props {
   historico: TurnoHistorico[];
   respostaAtual: string;
   playerName?: string | null;
+  /** Raça+classe do personagem — mantém a URL do retrato IDÊNTICA à da
+      FichaViva (mesmo prompt/seed → browser reusa do cache). */
+  playerDescriptor?: string;
   /** True quando o jogador enviou um comando mas o LLM ainda não emitiu o primeiro
    *  token. Mascara o gap silencioso com uma bolha de 3 pontinhos pulsantes. */
   mestrePensando?: boolean;
@@ -53,6 +57,7 @@ export function MasterResponse({
   historico,
   respostaAtual,
   playerName,
+  playerDescriptor,
   mestrePensando = false,
   modoRoteiro = true,
 }: Props) {
@@ -113,7 +118,13 @@ export function MasterResponse({
                 {playerName && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-vox-accent-glow/80">{playerName}</span>
-                    <Avatar name={playerName} size="xs" tone="violet" />
+                    <Portrait
+                      id={playerName}
+                      name={playerName}
+                      descriptor={playerDescriptor}
+                      size="xs"
+                      aspect="square"
+                    />
                   </div>
                 )}
                 <Card
@@ -129,7 +140,7 @@ export function MasterResponse({
             )
           )}
 
-          {/* Resposta do Mestre — roteiro: prosa serif larga; Mesa: balões + Avatar */}
+          {/* Resposta do Mestre — roteiro: prosa serif larga; Mesa: balões + OrbIcon */}
           {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.mestre && (() => {
             const baloes = dividirEmBaloes(turno.mestre);
             if (modoRoteiro) {
@@ -164,7 +175,7 @@ export function MasterResponse({
             }
             return (
               <div className="flex items-start gap-2.5">
-                <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1 shrink-0" />
+                <OrbIcon className="mt-1" />
                 <div className="flex flex-col gap-1.5 max-w-[85%] flex-1">
                   {baloes.map((b, bidx) => {
                     const ultimo = bidx === baloes.length - 1;
@@ -217,7 +228,7 @@ export function MasterResponse({
       {/* Indicador "Mestre pensando" */}
       {mestrePensando && !respostaAtual && (
         <div className="self-start flex items-start gap-2.5">
-          <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1" />
+          <OrbIcon pulsante className="mt-1" />
           <Card variant="panel" elevation={1} rounded="xl" padding="md" aria-label="Mestre pensando">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-vox-accent-glow [animation-delay:0ms]" />
@@ -239,7 +250,7 @@ export function MasterResponse({
           </div>
         ) : (
           <div className="self-start flex items-start gap-2.5 max-w-[85%]">
-            <Avatar name="VoxDM" size="sm" tone="indigo" status="active" className="mt-1 shrink-0" />
+            <OrbIcon pulsante className="mt-1" />
             <Card
               variant="panel"
               elevation={2}
