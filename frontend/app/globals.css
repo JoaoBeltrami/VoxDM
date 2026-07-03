@@ -52,6 +52,14 @@
   --vox-elev-2: 0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.20);
   --vox-elev-3: 0 12px 32px rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.25);
   --vox-elev-glow: 0 0 24px -4px rgba(139, 92, 246, 0.40);
+
+  /* Metais BG1 (rebuild 03/07) — "se Baldur's Gate 1 fosse feito hoje".
+     Dourado envelhecido como acento SECUNDÁRIO: molduras, retratos, títulos
+     de painel, divisores. Nunca substitui o violeta interativo. */
+  --vox-gold:        #c9a45c;
+  --vox-gold-bright: #e6c37c;
+  --vox-gold-dim:    rgba(201, 164, 92, 0.38);
+  --vox-gold-faint:  rgba(201, 164, 92, 0.14);
 }
 
 body {
@@ -96,6 +104,70 @@ body {
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--vox-border-strong);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Camada material BG1 — molduras ornamentadas, grão de pedra, relevo.
+ * Composáveis: um painel BG1 típico = .frame-ornate + .texture-stone +
+ * bg-vox-bg-floating. Os cantos são SVG inline (data-URI) — zero assets.
+ * ───────────────────────────────────────────────────────────────────────── */
+.frame-ornate {
+  border: 1px solid var(--vox-gold-faint);
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><path d='M1 19V6Q1 1 6 1H19' stroke='%23c9a45c' stroke-width='1.4' opacity='0.85'/><path d='M5 14V8Q5 5 8 5H14' stroke='%23c9a45c' opacity='0.3'/><rect x='2' y='2' width='3' height='3' transform='rotate(45 3.5 3.5)' fill='%23c9a45c' opacity='0.9'/></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><g transform='rotate(90 10 10)'><path d='M1 19V6Q1 1 6 1H19' stroke='%23c9a45c' stroke-width='1.4' opacity='0.85'/><path d='M5 14V8Q5 5 8 5H14' stroke='%23c9a45c' opacity='0.3'/><rect x='2' y='2' width='3' height='3' transform='rotate(45 3.5 3.5)' fill='%23c9a45c' opacity='0.9'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><g transform='rotate(270 10 10)'><path d='M1 19V6Q1 1 6 1H19' stroke='%23c9a45c' stroke-width='1.4' opacity='0.85'/><path d='M5 14V8Q5 5 8 5H14' stroke='%23c9a45c' opacity='0.3'/><rect x='2' y='2' width='3' height='3' transform='rotate(45 3.5 3.5)' fill='%23c9a45c' opacity='0.9'/></g></svg>"),
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><g transform='rotate(180 10 10)'><path d='M1 19V6Q1 1 6 1H19' stroke='%23c9a45c' stroke-width='1.4' opacity='0.85'/><path d='M5 14V8Q5 5 8 5H14' stroke='%23c9a45c' opacity='0.3'/><rect x='2' y='2' width='3' height='3' transform='rotate(45 3.5 3.5)' fill='%23c9a45c' opacity='0.9'/></g></svg>");
+  background-position: top 3px left 3px, top 3px right 3px, bottom 3px left 3px, bottom 3px right 3px;
+  background-size: 18px 18px;
+  background-repeat: no-repeat;
+}
+
+/* Grão de pedra sutil — overlay via ::before pra compor com .frame-ornate
+   (que já ocupa o background-image do elemento). Alpha baixíssimo: textura
+   percebida, nunca lida.
+   :where() = especificidade ZERO: o relative é só fallback pro ::before
+   ancorar; utilities de posição (fixed/absolute) SEMPRE vencem — sem isso o
+   drawer fixed do launcher caía pro fluxo do documento (bug 03/07). */
+:where(.texture-stone) {
+  position: relative;
+}
+.texture-stone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 0.95 0 0 0 0 0.85 0 0 0 0.05 0'/></filter><rect width='140' height='140' filter='url(%23g)'/></svg>");
+}
+
+/* Relevo material — botões/chips com peso físico (luz em cima, sombra embaixo) */
+.btn-emboss {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Divisor ornamentado — linha dourada que esmaece pras pontas.
+   Uso: <div class="divider-ornate"><span>◆</span></div> (ou um título dentro). */
+.divider-ornate {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--vox-gold-dim);
+}
+.divider-ornate::before,
+.divider-ornate::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+}
+.divider-ornate::before {
+  background: linear-gradient(to right, transparent, var(--vox-gold-dim));
+}
+.divider-ornate::after {
+  background: linear-gradient(to left, transparent, var(--vox-gold-dim));
 }
 
 /* Focus ring acessível — usar em Button, input, etc. */

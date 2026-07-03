@@ -78,10 +78,10 @@ export function PanelLauncher({ paineis, ativo, onSelect }: Props) {
             onClick={() => onSelect(on ? null : p.id)}
             title={p.label}
             aria-label={p.label}
-            className={`relative flex h-10 w-10 items-center justify-center rounded-lg border transition ${
+            className={`btn-emboss relative flex h-10 w-10 items-center justify-center rounded-lg border transition ${
               on
-                ? "border-vox-accent-primary/50 bg-vox-accent-primary/15 text-vox-accent-glow"
-                : "border-transparent text-vox-text-muted hover:bg-vox-bg-panel hover:text-vox-text-secondary"
+                ? "border-vox-gold-dim bg-vox-gold-faint text-vox-gold-bright"
+                : "border-transparent text-vox-text-muted hover:bg-vox-bg-panel hover:text-vox-gold"
             }`}
           >
             {ICONES[p.id] ?? <span className="text-xs font-medium">{p.label.slice(0, 1)}</span>}

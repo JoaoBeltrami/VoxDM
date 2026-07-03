@@ -13,4 +13,5 @@ export { Chip } from "./Chip";
 export { HpBar } from "./HpBar";
 export { XpBar } from "./XpBar";
 export { Avatar } from "./Avatar";
+export { Portrait } from "./Portrait";
 export { cn } from "./cn";

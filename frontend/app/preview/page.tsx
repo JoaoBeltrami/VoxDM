@@ -35,6 +35,7 @@ import { RolagemBanner } from "@/components/RolagemBanner";
 import { TurnoResumo } from "@/components/TurnoResumo";
 import { VoxOrb, type OrbState } from "@/components/VoxOrb";
 import { PanelLauncher } from "@/components/PanelLauncher";
+import { PanelDrawer } from "@/components/PanelDrawer";
 import { ViewModeSwitcher } from "@/components/ViewModeSwitcher";
 import { useViewMode, chromeOpacityClass } from "@/hooks/useViewMode";
 
@@ -323,23 +324,35 @@ export default function PreviewPage() {
       backgroundUrl="https://image.pollinations.ai/prompt/medieval%20norse%20port%20village%20at%20dawn%20foggy%20fantasy%20art?width=1920&height=1080&model=flux"
     />
 
-    {/* Launcher BG1 — trilho agora vive no gutter (slot railLeft do AppShell);
-        aqui fica só o drawer da Crônica com mock pra verificação visual. */}
-    {painelPreview && (
-      <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="font-display text-base capitalize tracking-wide text-vox-text-primary">{painelPreview}</span>
-          <button onClick={() => setPainelPreview(null)} aria-label="Fechar" className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary">✕</button>
-        </div>
-        <ol className="space-y-2.5 border-l border-vox-border-soft pl-3.5">
-          {["Garruk chega ao acampamento dos Sem-Vila à noite.", "Brennan recusa os espólios — “não há nada para você aqui”.", "Garruk sofre 1 de dano ao se aproximar demais.", "O frio noturno corta o acampamento."].map((e, i) => (
-            <li key={i} className="relative text-xs leading-relaxed text-vox-text-secondary">
-              <span className="absolute -left-[1.18rem] top-1 h-2 w-2 rounded-full bg-vox-accent-glow" />
-              {e}
-            </li>
-          ))}
-        </ol>
-      </div>
+    {/* Launcher BG1 — trilho no gutter (slot railLeft do AppShell); o drawer é
+        o PanelDrawer REAL (rebuild 03/07) alimentado com mock — verificação
+        visual da ficha de companion e dos painéis sem sessão in-game. */}
+    {painelPreview && painelPreview !== "ficha" && (
+      <PanelDrawer
+        painelId={painelPreview}
+        titulo={painelPreview.charAt(0).toUpperCase() + painelPreview.slice(1)}
+        onFechar={() => setPainelPreview(null)}
+        onComando={(t) => console.log("[preview] comando:", t)}
+        cronica={[
+          "Garruk chega ao acampamento dos Sem-Vila à noite.",
+          "Brennan recusa os espólios — “não há nada para você aqui”.",
+          "Garruk sofre 1 de dano ao se aproximar demais.",
+          "O frio noturno corta o acampamento.",
+        ]}
+        activeQuests={["filhos-de-valdrek", "o-pacto-de-vyrmathax"]}
+        questStages={{ "filhos-de-valdrek": "investigando-o-porto" }}
+        fiosSoltos={["Quem paga a taverna de Aldric?", "O anel de Maren brilhou ao falar do pacto."]}
+        companions={{
+          lyssa: { nome: "Lyssa", tipo: "hireling", hp: 28, hp_max: 32, ca: 15, atq: "+5", dano: "1d8+3" },
+          torstein: { nome: "Torstein", tipo: "animal", hp: 12, hp_max: 40, ca: 13, atq: "+4", dano: "2d4+2" },
+          umbra: { nome: "Umbra", tipo: "familiar", hp: 0, hp_max: 8, ca: 12, atq: "+3", dano: "1d4" },
+        }}
+        emCombate={false}
+        inventory={["Espada longa", "Poção de cura", "Corda (15m)", "Mapa rasgado do porto"]}
+        gold={137}
+        locaisVisitados={["Vila Drevamor", "Porto de Drevamor", "Acampamento dos Sem-Vila"]}
+        locationNome="Acampamento dos Sem-Vila"
+      />
     )}
     </>
   );

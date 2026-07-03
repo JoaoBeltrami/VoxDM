@@ -15,6 +15,7 @@ import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { FichaViva } from "@/components/FichaViva";
 import { PanelLauncher, type PainelDef } from "@/components/PanelLauncher";
+import { PanelDrawer } from "@/components/PanelDrawer";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
 import { SceneHeader } from "@/components/SceneHeader";
@@ -1337,7 +1338,7 @@ export default function Home() {
     const rightSlot = (
       <div className="space-y-3">
         {(personagem.player_name || personagem.player_class || personagem.player_race) && (
-          <div className="rounded-xl border border-vox-border-soft bg-vox-bg-panel p-4 backdrop-blur-md">
+          <div className="frame-ornate texture-stone rounded-xl bg-vox-bg-panel p-4 backdrop-blur-md">
             <FichaViva
               personagem={personagem}
               hpAtual={personagem.player_hp}
@@ -1809,138 +1810,28 @@ export default function Home() {
         {/* Drawer do launcher de painéis estilo BG1. O trilho de ícones vive no
             gutter do AppShell (slot railLeft); aqui fica só o painel aberto.
             Ancorado em left-16 pra começar logo após o gutter de 56px (w-14). */}
-        {mostrarLauncher && (
-            <>
-              {/* "ficha" não usa este drawer genérico — reaproveita a view de
-                  Detalhes do CharacterSheet (popover próprio, posicionado à direita). */}
-              {painelAberto && painelAberto !== "ficha" && (
-                <div className="fixed left-16 top-16 bottom-3 z-40 w-72 overflow-y-auto rounded-xl border border-vox-border-soft bg-vox-bg-floating p-4 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="font-display text-base tracking-wide text-vox-text-primary">{labelPainel[painelAberto]}</span>
-                    <button onClick={() => setPainelAberto(null)} title="Fechar" aria-label="Fechar painel"
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-vox-text-muted transition hover:bg-vox-bg-elevated hover:text-vox-text-primary">✕</button>
-                  </div>
-                  {painelAberto === "cronica" ? (
-                    cronica.length === 0 ? (
-                      <p className="text-xs text-vox-text-muted">Nada na crônica ainda.</p>
-                    ) : (
-                      <ol className="space-y-2.5 border-l border-vox-border-soft pl-3.5">
-                        {cronica.map((evento, i) => (
-                          <li key={i} className="relative text-xs leading-relaxed text-vox-text-secondary">
-                            <span className="absolute -left-[1.18rem] top-1 h-2 w-2 rounded-full bg-vox-accent-glow" />
-                            {evento}
-                          </li>
-                        ))}
-                      </ol>
-                    )
-                  ) : painelAberto === "quests" ? (
-                    (activeQuests.length === 0 && fiosSoltos.length === 0) ? (
-                      <p className="text-xs text-vox-text-muted">Sem missões ou fios em aberto.</p>
-                    ) : (
-                      <div className="space-y-4">
-                        {activeQuests.length > 0 && (
-                          <div>
-                            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-vox-text-muted">Missões</div>
-                            <div className="space-y-1.5">
-                              {activeQuests.map((qid) => {
-                                const nome = qid.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-                                const stage = questStages[qid];
-                                return (
-                                  <div key={qid} className="rounded-lg border border-vox-accent-primary/30 bg-vox-accent-primary/10 px-2.5 py-1.5">
-                                    <p className="text-xs font-medium text-vox-accent-glow">{nome}</p>
-                                    {stage && <p className="mt-0.5 text-[10px] text-vox-text-muted">{stage.replace(/-/g, " ")}</p>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        {fiosSoltos.length > 0 && (
-                          <div>
-                            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-vox-text-muted">Fios narrativos</div>
-                            <ul className="space-y-1 border-l border-vox-border-soft pl-3">
-                              {fiosSoltos.map((fio, i) => (
-                                <li key={i} className="text-xs italic leading-relaxed text-vox-text-secondary">{fio}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  ) : painelAberto === "party" ? (
-                    Object.keys(companions).length === 0 ? (
-                      <p className="text-xs text-vox-text-muted">Nenhum aliado na party.</p>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {Object.entries(companions).map(([cid, c]) => {
-                          const pct = c.hp_max > 0 ? Math.max(0, Math.min(100, (c.hp / c.hp_max) * 100)) : 0;
-                          const morto = c.hp <= 0;
-                          return (
-                            <div key={cid} className="rounded-lg border border-vox-border-soft bg-vox-bg-elevated p-2.5">
-                              <div className="mb-1 flex items-center justify-between">
-                                <span className={`text-xs font-medium ${morto ? "text-vox-text-muted line-through" : "text-vox-text-primary"}`}>{c.nome}</span>
-                                <span className="text-[10px] text-vox-text-muted">{c.tipo}</span>
-                              </div>
-                              <div className="mb-1.5 flex items-center justify-between text-[10px] text-vox-text-muted">
-                                <span>{c.hp}/{c.hp_max} PV</span>
-                                <span>CA {c.ca} · {c.atq} {c.dano}</span>
-                              </div>
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-vox-bg-panel">
-                                <div className={`h-full rounded-full ${morto ? "bg-vox-text-muted" : pct < 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              {!morto && (
-                                <button
-                                  onClick={() => enviarComando(`${c.nome}, ${emCombate ? "ataque o inimigo mais próximo" : "fique de guarda"}.`)}
-                                  className="mt-2 w-full rounded border border-vox-border-soft py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-accent-primary/50 hover:text-vox-text-primary"
-                                >
-                                  {emCombate ? "⚔ comandar ataque" : "💬 ordenar"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )
-                  ) : painelAberto === "inventario" ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between rounded-lg border border-vox-border-soft bg-vox-bg-elevated px-3 py-2">
-                        <span className="text-xs text-vox-text-secondary">🪙 Ouro</span>
-                        <span className="text-sm font-medium tabular-nums text-amber-400">{gold.toLocaleString()} PO</span>
-                      </div>
-                      {inventory.length === 0 ? (
-                        <p className="text-xs text-vox-text-muted">Inventário vazio.</p>
-                      ) : (
-                        <ul className="space-y-1">
-                          {inventory.map((item, i) => (
-                            <li key={i} className="flex items-center gap-2 rounded-md border border-vox-border-subtle bg-vox-bg-elevated px-2.5 py-1.5 text-xs text-vox-text-secondary">
-                              <span className="text-vox-text-muted">◆</span>{item}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ) : painelAberto === "mapa" ? (
-                    locaisVisitados.length === 0 ? (
-                      <p className="text-xs text-vox-text-muted">Nenhum local visitado ainda.</p>
-                    ) : (
-                      <ol className="space-y-1.5">
-                        {locaisVisitados.map((local, i) => {
-                          const atual = local === locationNome;
-                          return (
-                            <li key={i} className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs ${atual ? "border-vox-accent-primary/40 bg-vox-accent-primary/10 text-vox-accent-glow" : "border-vox-border-subtle text-vox-text-secondary"}`}>
-                              <span>{atual ? "📍" : "·"}</span>{local}
-                              {atual && <span className="ml-auto text-[10px] text-vox-accent-glow">atual</span>}
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    )
-                  ) : (
-                    <p className="text-xs leading-relaxed text-vox-text-muted">Painel ainda não disponível.</p>
-                  )}
-                </div>
-              )}
-            </>
+        {/* Conteúdo + chrome material BG1 extraídos pra PanelDrawer.tsx
+            (rebuild 03/07). "ficha" não usa este drawer — reaproveita a view
+            de Detalhes do CharacterSheet (popover próprio, à direita). */}
+        {mostrarLauncher && painelAberto && painelAberto !== "ficha" && (
+          <ErrorBoundary nome="painel do launcher">
+            <PanelDrawer
+              painelId={painelAberto}
+              titulo={labelPainel[painelAberto] ?? painelAberto}
+              onFechar={() => setPainelAberto(null)}
+              onComando={enviarComando}
+              cronica={cronica}
+              activeQuests={activeQuests}
+              questStages={questStages}
+              fiosSoltos={fiosSoltos}
+              companions={companions}
+              emCombate={emCombate}
+              inventory={inventory}
+              gold={gold}
+              locaisVisitados={locaisVisitados}
+              locationNome={locationNome}
+            />
+          </ErrorBoundary>
         )}
 
         {/* Palco-lite: toggles dos painéis laterais (persistidos). Escondidos
@@ -2142,13 +2033,17 @@ export default function Home() {
           <VoxOrb estado="idle" tamanho={104} />
           <div className="text-center">
             <h1 className="font-display text-5xl tracking-[0.18em] text-vox-text-primary">VoxDM</h1>
-            <p className="mt-3 text-[11px] uppercase tracking-[0.32em] text-vox-text-muted">
-              narração de rpg por voz
+            <div className="divider-ornate mx-auto mt-4 w-56" aria-hidden>
+              <span className="text-[8px]">◆</span>
+            </div>
+            {/* Identidade em vez de descrição genérica (nota Beltrami 23/06) */}
+            <p className="mt-3 font-atmospheric text-xl italic text-vox-text-secondary">
+              Fale — e o mundo responde.
             </p>
           </div>
         </div>
 
-        <div className="relative flex w-full max-w-xs flex-col gap-2.5">
+        <div className="frame-ornate texture-stone relative flex w-full max-w-xs flex-col gap-2.5 rounded-2xl bg-vox-bg-elevated/60 p-5 backdrop-blur-sm">
           {/* Gamificação: se há save, "Continuar" em destaque retoma o mais
               recente direto (bypass do CharacterForm via handleContinuarPersonagem). */}
           {saveRecente ? (
@@ -2164,13 +2059,13 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setTela("nova-sessao")}
-                className="w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-accent-primary/50 hover:bg-vox-bg-panel active:scale-[0.98]"
+                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98]"
               >
                 Nova aventura
               </button>
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="w-full rounded-xl border border-vox-border-subtle py-3 text-sm font-medium text-vox-text-secondary transition hover:border-vox-border-soft hover:text-vox-text-primary active:scale-[0.98]"
+                className="btn-emboss w-full rounded-xl border border-vox-border-subtle py-3 text-sm font-medium text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-text-primary active:scale-[0.98]"
               >
                 Carregar outra sessão
               </button>
@@ -2189,7 +2084,7 @@ export default function Home() {
                   trocou, etc.). Sem ele, o jogador acha que perdeu tudo. */}
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-accent-primary/50 hover:bg-vox-bg-panel active:scale-[0.98]"
+                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98]"
               >
                 Carregar sessão
               </button>
@@ -2221,7 +2116,7 @@ export default function Home() {
             >
               ← Voltar
             </button>
-            <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Nova Sessão</h2>
+            <h2 className="font-display text-lg uppercase tracking-[0.12em] text-vox-gold-bright">Nova Sessão</h2>
           </div>
 
           {/* Session Zero (P3) — criação conversada, 100% por voz */}
@@ -2235,8 +2130,8 @@ export default function Home() {
               Sessão Zero por voz — sem formulário; o mestre pergunta, você responde
             </span>
           </button>
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-vox-text-muted">
-            <span className="h-px flex-1 bg-vox-bg-elevated" /> ou preencha a ficha <span className="h-px flex-1 bg-vox-bg-elevated" />
+          <div className="divider-ornate text-[10px] uppercase tracking-widest text-vox-text-muted">
+            ou preencha a ficha
           </div>
 
           <CharacterForm onChange={setPersonagem} />
@@ -2282,7 +2177,7 @@ export default function Home() {
             >
               ← Voltar
             </button>
-            <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Carregar Sessão</h2>
+            <h2 className="font-display text-lg uppercase tracking-[0.12em] text-vox-gold-bright">Carregar Sessão</h2>
           </div>
 
           <SessionPicker
@@ -2331,11 +2226,11 @@ export default function Home() {
           >
             ← Voltar
           </button>
-          <h2 className="font-display text-lg tracking-wide text-vox-text-primary">Opções</h2>
+          <h2 className="font-display text-lg uppercase tracking-[0.12em] text-vox-gold-bright">Opções</h2>
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs font-medium text-vox-text-secondary">Voz do Mestre (Edge TTS)</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Voz do Mestre (Edge TTS)</p>
           <div className="space-y-2">
             {VOZES_PTBR.map(v => (
               <button
@@ -2359,7 +2254,7 @@ export default function Home() {
 
         {/* Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Perfil do Mestre</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Perfil do Mestre</p>
           <div className="space-y-2">
             {DM_PROFILES.map(p => (
               <button
@@ -2386,7 +2281,7 @@ export default function Home() {
 
         {/* Task 4 — Provedor de LLM (Groq cloud / Ollama local) */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Provedor de LLM</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Provedor de LLM</p>
           <div className="space-y-2">
             {LLM_BACKENDS.map(b => (
               <button
@@ -2414,7 +2309,7 @@ export default function Home() {
 
         {/* Fase 5.7 — Visibilidade das rolagens do mestre */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Rolagens do Mestre</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Rolagens do Mestre</p>
           <div className="space-y-2">
             {ROLL_VIS_OPTIONS.map(o => (
               <button
@@ -2441,7 +2336,7 @@ export default function Home() {
 
         {/* Pilar Perigo (10/06) — política de morte */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Política de Morte</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Política de Morte</p>
           <div className="grid grid-cols-2 gap-2">
             {([
               { id: "narrativo" as const, label: "🛡 Narrativo", desc: "derrota tem custo, nunca apaga o personagem" },
@@ -2468,7 +2363,7 @@ export default function Home() {
 
         {/* Ritual de mesa (10/06) — modo episódio */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Formato de Sessão</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Formato de Sessão</p>
           <button
             onClick={() => handleToggleModoEpisodio(!modoEpisodio)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
@@ -2492,7 +2387,7 @@ export default function Home() {
 
         {/* Imersão P4 — nudge de silêncio */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Silêncio na Mesa</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Silêncio na Mesa</p>
           <button
             onClick={() => handleToggleIdleNudge(!idleNudgeAtivo)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
@@ -2513,7 +2408,7 @@ export default function Home() {
 
         {/* Toggle de som em natural 20 / natural 1 */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Sons de Combate</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Sons de Combate</p>
           <button
             onClick={() => toggleSomCritico(!somCritico)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
@@ -2537,7 +2432,7 @@ export default function Home() {
 
         {/* Fase 5.6 — Sync texto-voz (karaokê reverso) */}
         <div className="space-y-2 border-t border-vox-border-subtle pt-4">
-          <p className="text-xs font-medium text-vox-text-secondary">Sincronização Texto-Voz</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Sincronização Texto-Voz</p>
           <button
             onClick={() => {
               const novo = !syncAtivo;

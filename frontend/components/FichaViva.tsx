@@ -18,7 +18,7 @@
  */
 
 import type { PersonagemConfig, SpellSlot } from "@/lib/api";
-import { HpBar } from "@/components/ui";
+import { HpBar, Portrait } from "@/components/ui";
 
 interface Props {
   personagem: PersonagemConfig;
@@ -85,12 +85,24 @@ export function FichaViva({ personagem, hpAtual, spellSlots, conditions = [], hp
 
   return (
     <div className="flex flex-col gap-4 font-sans">
-      {/* Identidade */}
-      <div>
-        <h2 className="font-display text-lg leading-tight text-vox-text-primary">
-          {player_name || "Sem nome"}
-        </h2>
-        <p className="mt-0.5 text-xs text-vox-text-secondary">{subtitulo}</p>
+      {/* Identidade — retrato BG1 + nome (rebuild 03/07) */}
+      <div className="flex items-center gap-3">
+        <Portrait
+          id={player_name || "aventureiro"}
+          name={player_name || "?"}
+          descriptor={[player_race, player_class].filter(Boolean).join(" ")}
+          size="lg"
+          dead={hpMax > 0 && hp <= 0}
+        />
+        <div className="min-w-0">
+          <h2 className="font-display text-lg leading-tight text-vox-text-primary">
+            {player_name || "Sem nome"}
+          </h2>
+          <p className="mt-0.5 text-xs text-vox-text-secondary">{subtitulo}</p>
+        </div>
+      </div>
+      <div className="divider-ornate" aria-hidden>
+        <span className="text-[8px]">◆</span>
       </div>
 
       {/* Vida */}

@@ -1098,6 +1098,24 @@ Refactor pontual: `api/websocket.py` agora reexporta os regex e o sync de inimig
 
 Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,character}.py` (relógios+crônica+perfil / locais visitados+ecos / cicatrizes+dano/cura), `api/turn_pipeline.py` (steps 0, 9a-c, 16c-e, ticks), `api/websocket.py` (beat `_beat_turno_inimigo`, `_enviar_retratos_npcs`, intercept `[IDLE]`, `ficha_criada`), `engine/llm/prompt_builder.py` (branch Session Zero + blocos relógios/cicatrizes/0 PV/iniciativa NPC/ecos/perfil/fecho), markers novos: DANO, CURA, CICATRIZ, RELOGIO, RELOGIO_AVANCA, NPC, FICHA.
 
+### Identidade BG1 híbrida + ficha de companion (Sessão 03/07)
+
+> "Se Baldur's Gate 1 fosse feito hoje" — decisão Beltrami: base escura+violeta preservada,
+> dourado envelhecido como acento SECUNDÁRIO (molduras, retratos, títulos de painel).
+> Frontend-only, tsc verde, validado por screenshot em `/` e `/preview`.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `frontend/app/globals.css` | Tokens `--vox-gold[-bright/-dim/-faint]` + camada material BG1: `.frame-ornate` (4 cantos ornamentados via SVG data-URI), `.texture-stone` (grão feTurbulence via `::before`; `:where()` de especificidade zero pra não vencer `fixed` das utilities — bug 03/07), `.btn-emboss` (relevo), `.divider-ornate` (linha dourada com centro) | ✅ Atualizado |
+| `frontend/tailwind.config.ts` + `frontend/lib/design.ts` | Espelhos dos tokens gold (`vox-gold*`) + export `gold` com as classes materiais | ✅ Atualizado |
+| `frontend/components/ui/Portrait.tsx` | Retrato BG1: moldura de metal envelhecido + Pollinations (MESMO estilo/seed-determinístico dos retratos de NPC do backend) + fallback monograma Cinzel dourado + estado morto (grayscale). Aspecto portrait 3:4 ou square | ✅ Criado |
+| `frontend/components/PanelDrawer.tsx` | Drawer dos painéis do launcher BG1 extraído de page.tsx (era inline genérico w-72). Chrome material (moldura+grão+título Cinzel dourado+divisor). **Party = FICHA de companion**: retrato por tipo, rótulo PT (Mercenário/Familiar/…), HP bar, stats CA/ATQ/DANO gravados, ordens contextuais (pools combate/exploração), estado CAÍDO. Overflow em wrapper interno (cantos da moldura não rolam) | ✅ Criado |
+| `frontend/components/FichaViva.tsx` | Identidade ganha retrato do personagem (Portrait lg, descriptor raça+classe, dead quando HP 0) + divisor ornamentado | ✅ Atualizado |
+| `frontend/components/PanelLauncher.tsx` | Rail com ativo DOURADO (era violeta) + emboss + hover gold | ✅ Atualizado |
+| `frontend/components/SceneHeader.tsx` | Diamantes dourados flanqueando local/hora | ✅ Atualizado |
+| `frontend/app/page.tsx` | Menu: tagline com identidade ("Fale — e o mundo responde." em Cormorant, substitui "narração de rpg por voz" genérico — nota Beltrami 23/06), painel de botões em moldura ornamentada, botões com emboss. Drawer inline substituído por `<PanelDrawer>` (−110 linhas). Card da FichaViva com moldura. Títulos h2 das telas secundárias + cabeçalhos de seção das Opções em dourado small-caps | ✅ Atualizado |
+| `frontend/app/preview/page.tsx` | Drawer mock substituído pelo `PanelDrawer` REAL com mocks completos (3 companions incl. um caído) — ficha de companion verificável sem sessão | ✅ Atualizado |
+
 ---
 
 ## Documentos de Referência

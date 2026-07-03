@@ -50,6 +50,13 @@ const config: Config = {
           soft:   "var(--vox-border-soft)",
           strong: "var(--vox-border-strong)",
         },
+        // Metais BG1 — acento secundário (molduras, retratos, títulos de painel)
+        "vox-gold": {
+          DEFAULT: "var(--vox-gold)",
+          bright:  "var(--vox-gold-bright)",
+          dim:     "var(--vox-gold-dim)",
+          faint:   "var(--vox-gold-faint)",
+        },
       },
       fontFamily: {
         sans:         ['Inter', 'system-ui', 'sans-serif'],

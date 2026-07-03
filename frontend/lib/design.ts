@@ -75,6 +75,19 @@ export const glass = {
   strong: "glass-strong",
 } as const;
 
+// ── Metais BG1 (rebuild 03/07) — acento secundário dourado ────────────────
+export const gold = {
+  text:    "text-vox-gold",
+  bright:  "text-vox-gold-bright",
+  border:  "border-vox-gold-dim",
+  bg:      "bg-vox-gold-faint",
+  // Camada material (classes de globals.css)
+  frame:   "frame-ornate",
+  stone:   "texture-stone",
+  emboss:  "btn-emboss",
+  divider: "divider-ornate",
+} as const;
+
 // ── Combinações comuns (pra evitar repetir) ───────────────────────────────
 export const presets = {
   // Card principal — usado em MasterResponse, painéis grandes

@@ -46,6 +46,7 @@ export function SceneHeader({ locationNome, timeOfDay }: Props) {
       key={locationNome}
       className="flex items-center justify-center gap-2.5 border-b border-vox-border-subtle bg-vox-bg-elevated px-4 py-2 animate-fade-in"
     >
+      <span aria-hidden className="text-[7px] text-vox-gold-dim">◆</span>
       <span aria-hidden className="text-base opacity-90">{icone}</span>
       <span className="font-display text-base tracking-[0.06em] text-vox-text-primary">{locationNome}</span>
       {timeFormatado && (
@@ -54,6 +55,7 @@ export function SceneHeader({ locationNome, timeOfDay }: Props) {
           <span className="font-atmospheric text-sm italic text-vox-text-muted">{timeFormatado}</span>
         </>
       )}
+      <span aria-hidden className="text-[7px] text-vox-gold-dim">◆</span>
     </div>
   );
 }
