@@ -37,4 +37,4 @@ def sistemas_registrados() -> list[str]:
     return list(_SISTEMAS)
 
 
-__all__ = ["RuleSystem", "obter_sistema", "sistemas_registrados", "SISTEMA_PADRAO"]
+__all__ = ["RuleSystem", "SISTEMA_PADRAO", "obter_sistema", "sistemas_registrados"]

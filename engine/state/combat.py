@@ -268,7 +268,7 @@ class CombatState:
         proposta_llm = proposta_llm or {}
         em_uso = set(self.iniciativa_cache.values())
         proximo_fallback = 20
-        for inimigo_id in self.inimigos_combate.keys():
+        for inimigo_id in self.inimigos_combate:
             if inimigo_id in self.iniciativa_cache:
                 continue
             valor = proposta_llm.get(inimigo_id)

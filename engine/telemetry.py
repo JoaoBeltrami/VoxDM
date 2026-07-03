@@ -86,7 +86,7 @@ def read_latest(n: int = 10) -> list[dict]:
             try:
                 resultado.append(json.loads(linha))
             except json.JSONDecodeError:
-                pass
+                pass  # linha corrompida (escrita concorrente/crash) — pula, não trava a leitura do resto
     return resultado
 
 
