@@ -11,7 +11,12 @@
  *   rosto). Letras foram ABOLIDAS (decisão Beltrami 03/07).
  * Dependências: lib/retrato (urlRetratoPersonagem); cn.
  * Armadilha: `src` explícito (ex: npc_retrato do WS) pula a geração local;
- *   `src={null}` explícito = só silhueta, nunca gera.
+ *   `src={null}` explícito = só silhueta, nunca gera. NUNCA usar `loading="lazy"`
+ *   na tag <img> interna (playtest 03/07): se o painel onde o retrato vive fica
+ *   fora da viewport (ex: painel espremido por outro bug de layout), o browser
+ *   nunca dispara o fetch e o retrato fica em silhueta pra sempre — reportado
+ *   ao vivo pro retrato do próprio personagem na FichaViva. O app é pequeno o
+ *   bastante (ficha + poucos companions/NPCs por vez) pra não valer o trade-off.
  *
  * Exemplo:
  *   <Portrait id="lyssa" name="Lyssa" descriptor="hired warrior" size="md" />
@@ -116,7 +121,6 @@ export function Portrait({
           <img
             src={url}
             alt={name}
-            loading="lazy"
             onLoad={() => setCarregou(true)}
             onError={() => setErro(true)}
             className={cn(
