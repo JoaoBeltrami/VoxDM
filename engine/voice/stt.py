@@ -79,7 +79,7 @@ def _vocabulario_modulo() -> str:
 # Constantes
 # ---------------------------------------------------------------------------
 
-from config import settings as _settings  # noqa: E402 — import aqui evita circular
+from config import settings as _settings
 
 WHISPER_MODEL: str = _settings.STT_MODEL    # lido de config (default "small")
 COMPUTE_DEVICE: str = _settings.STT_DEVICE  # lido de config (default "cuda")

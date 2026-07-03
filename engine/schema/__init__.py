@@ -19,4 +19,4 @@ from engine.schema.v2 import (
     validar_modulo,
 )
 
-__all__ = ["ModuloV2", "validar_modulo", "SCHEMA_VERSION"]
+__all__ = ["ModuloV2", "SCHEMA_VERSION", "validar_modulo"]

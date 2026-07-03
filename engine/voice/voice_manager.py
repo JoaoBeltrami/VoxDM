@@ -26,6 +26,7 @@ from typing import Any
 
 import structlog
 
+from engine.memory.working_memory import _id_para_nome
 from engine.voice.voice_registry import VERBOS_FALA, PerfilVoz, selecionar_perfil
 
 log = structlog.get_logger(__name__)
@@ -194,9 +195,3 @@ class VoiceManager:
         nomes_ordenados = sorted(self._nome_para_id.keys(), key=len, reverse=True)
         pattern = r"\b(" + "|".join(re.escape(n) for n in nomes_ordenados) + r")\b"
         self._re_nomes = re.compile(pattern, re.IGNORECASE)
-
-
-# _id_para_nome centralizado em engine.memory.working_memory para evitar
-# duplicação (mesma função estava em 3 arquivos). Re-export aqui só por compat
-# com qualquer importação interna remanescente.
-from engine.memory.working_memory import _id_para_nome  # noqa: E402,F401
