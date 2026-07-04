@@ -295,6 +295,27 @@ def _combate_sem_ficha_srd(working_mem: Any) -> bool:
 # um custo físico dramático). Persiste via dm_state; NPCs reagem.
 _RE_CICATRIZ = re.compile(r"\[CICATRIZ:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
+# Telemetria (decisão Beltrami 04/07): iniciativa é AUTORIDADE DA ENGINE —
+# o prompt proíbe o Mestre de pedi-la, mas o LLM insiste (playtests 30/06 e
+# 03/07). O frontend suprime o pedido (nem banner, nem chip — page.tsx
+# pedidoEhIniciativa); aqui só CONTAMOS quantas vezes acontece, pra decidir
+# com dados se um dia vale interceptar/reescrever a resposta. Verbo de
+# rolagem PERTO da palavra "iniciativa", nas duas ordens.
+_RE_MESTRE_PEDE_INICIATIVA = re.compile(
+    r"(?:rol[ae]\w*|jogu\w+|test\w+|fa[çc]a\w*)[^.!?\n]{0,60}\biniciativa\b"
+    r"|\biniciativa\b[^.!?\n]{0,40}(?:rol[ae]\w*|jogu\w+|d20)",
+    re.IGNORECASE,
+)
+
+
+def mestre_pediu_iniciativa(resposta: str) -> bool:
+    """True se a narração do Mestre PEDE uma rolagem de iniciativa.
+
+    Menção casual ("sua iniciativa o coloca na frente") não conta — precisa
+    de verbo de rolagem próximo. Helper puro pra teste; o pipeline só loga.
+    """
+    return bool(_RE_MESTRE_PEDE_INICIATIVA.search(resposta))
+
 # Session Zero (Ritual P3) — o mestre fecha a entrevista de criação com
 # [FICHA: Nome|Raça|Classe|background|traço] (traço opcional). A engine gera
 # atributos/HP/slots/features — o jogador nunca fala de números.
@@ -746,6 +767,16 @@ def aplicar_pos_turno(
         Lista de mudanças de trust aplicadas: [(npc_id, delta), ...].
         Útil para o caller emitir eventos / telemetria.
     """
+    # 0a. Telemetria de iniciativa (04/07) — o Mestre pediu rolagem de
+    # iniciativa? É sempre inválido (autoridade da engine); o frontend suprime
+    # o pedido, aqui só contamos a incidência pra calibrar próximos passos.
+    if mestre_pediu_iniciativa(resposta_completa):
+        log.info(
+            "mestre_pediu_iniciativa",
+            em_combate=working_mem.em_combate,
+            trecho=resposta_completa[:80],
+        )
+
     # 0. Session Zero (Ritual P3) — [FICHA] fecha a entrevista de criação:
     # aplica identidade, gera atributos (standard array por classe), HP/hit
     # dice/slots/features de nível, e desliga o modo entrevista. O caller
