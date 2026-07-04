@@ -10,6 +10,7 @@ import pytest
 from engine.llm.extractor import (
     _canonico,
     _capar_npcs_presentes,
+    _chave_conjunto,
     _e_apelido_do_jogador,
     _e_entidade_invalida,
     _kebab_id,
@@ -136,6 +137,91 @@ def test_aplicar_nao_funde_nomes_distintos():
     wm.npcs_presentes = ["aldric"]
     add = aplicar_npcs_extraidos(wm, [{"id": "aldrina", "nome": "Aldrina"}])
     assert add == ["aldrina"]
+    assert len(wm.npcs_presentes) == 2
+
+
+# ── NPC-DUP-3 (playtest 03/07, sess-6a851e0fa7f1): tokens reordenados ─────────
+
+def test_chave_conjunto_colapsa_reordenacao():
+    """As duas grafias do monge da taverna de Kaelmünd viram a MESMA chave:
+    conjunto ordenado de tokens, sem os estruturais (da/de/o...)."""
+    assert _chave_conjunto("taverna-kaelmund-monge") == "kaelmund-monge-taverna"
+    assert (
+        _chave_conjunto("monge-da-taverna-kaelmund")
+        == _chave_conjunto("taverna-kaelmund-monge")
+    )
+
+
+def test_chave_conjunto_ignora_tokens_estruturais():
+    """'monge-da-taverna' e 'monge-taverna' são o mesmo NPC — artigo/preposição
+    não distingue pessoa."""
+    assert _chave_conjunto("monge-da-taverna") == _chave_conjunto("monge-taverna")
+
+
+def test_chave_conjunto_nao_colapsa_nomes_distintos():
+    """Conjuntos de tokens diferentes = NPCs diferentes — a chave secundária não
+    pode fundir gente distinta."""
+    assert _chave_conjunto("aldric-drevasson") != _chave_conjunto("dalla-drevadottir")
+    assert (
+        _chave_conjunto("guarda-do-portao-norte")
+        != _chave_conjunto("guarda-da-torre-sul")
+    )
+
+
+def test_aplicar_dedup_tokens_reordenados():
+    """NPC-DUP-3: o mesmo NPC descritivo com os tokens reordenados não entra
+    duas vezes na cena ('taverna-kaelmund-monge' ↔ 'monge-da-taverna-kaelmund')."""
+    wm = _wm()
+    wm.npcs_presentes = ["taverna-kaelmund-monge"]
+    add = aplicar_npcs_extraidos(
+        wm, [{"id": "monge-da-taverna-kaelmund", "nome": "Monge da Taverna"}]
+    )
+    assert add == []
+    assert len(wm.npcs_presentes) == 1
+    # caminho inverso: presente com preposição, candidato reordenado sem ela
+    wm2 = _wm()
+    wm2.npcs_presentes = ["monge-da-taverna-kaelmund"]
+    add2 = aplicar_npcs_extraidos(
+        wm2, [{"id": "taverna-kaelmund-monge", "nome": "Monge"}]
+    )
+    assert add2 == []
+    assert len(wm2.npcs_presentes) == 1
+
+
+def test_aplicar_dedup_reordenado_so_com_estrutural():
+    """Reordenação + estrutural: 'taverna-do-monge' e 'monge-da-taverna' têm
+    chaves primárias diferentes ('taverna' vs 'monge') — só a secundária pega."""
+    wm = _wm()
+    wm.npcs_presentes = ["taverna-do-monge"]
+    add = aplicar_npcs_extraidos(wm, [{"id": "monge-da-taverna", "nome": "Monge"}])
+    assert add == []
+    assert len(wm.npcs_presentes) == 1
+
+
+def test_aplicar_nao_funde_papeis_distintos_de_mesmo_tipo():
+    """NPCs que COMPARTILHAM um token de papel ('guarda') mas são pessoas
+    distintas coexistem — a chave-conjunto usa frozenset estrutural pequeno de
+    propósito (não _PALAVRAS_COMUNS inteiro, que descartaria 'guarda' e fundiria
+    os dois). Nota: 'guarda-do-portao-norte' × 'guarda-da-torre-sul' já colapsam
+    ANTES da chave secundária, pela regra do epíteto (mesmo 1º token) — por isso
+    o par aqui tem primeiros tokens distintos."""
+    wm = _wm()
+    wm.npcs_presentes = ["capitao-da-guarda-norte"]
+    add = aplicar_npcs_extraidos(
+        wm, [{"id": "guarda-da-torre-sul", "nome": "Guarda da Torre Sul"}]
+    )
+    assert add == ["guarda-da-torre-sul"]
+    assert len(wm.npcs_presentes) == 2
+
+
+def test_aplicar_nomes_proprios_distintos_coexistem():
+    """Regressão: a chave secundária não pode fundir nomes próprios distintos."""
+    wm = _wm()
+    wm.npcs_presentes = ["aldric-drevasson"]
+    add = aplicar_npcs_extraidos(
+        wm, [{"id": "maren-drevadottir", "nome": "Maren Drevadottir"}]
+    )
+    assert add == ["maren-drevadottir"]
     assert len(wm.npcs_presentes) == 2
 
 
