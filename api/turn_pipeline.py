@@ -1332,7 +1332,24 @@ def aplicar_pos_turno(
         log.info("cura_jogador", cura=int(m.group(1)), hp=f"{antes}->{depois}")
 
     # 16d. Cicatriz permanente — [CICATRIZ: texto] (dedup + cap no substate).
+    # Gate de gatilho (playtest 03/07): o LLM emitia cicatriz em momento
+    # questionável e a engine confiava cegamente. Regra travada: só registra se
+    # o jogador chegou a 0 PV nesta sessão OU está a ≤25% do HP máximo neste
+    # turno. O [DANO] do mesmo turno já foi aplicado no step 16c (logo acima)
+    # — então o golpe quase-fatal do próprio turno conta pro gate.
     for m in _RE_CICATRIZ.finditer(resposta_completa):
+        hp_atual = working_mem.player_hp
+        hp_max = working_mem.player_hp_max
+        gatilho = working_mem.character.chegou_a_zero_hp or (
+            hp_max > 0 and hp_atual <= 0.25 * hp_max
+        )
+        if not gatilho:
+            log.info(
+                "cicatriz_rejeitada_sem_gatilho",
+                cicatriz=m.group(1).strip()[:60],
+                hp=f"{hp_atual}/{hp_max}",
+            )
+            continue
         if working_mem.character.registrar_cicatriz(m.group(1)):
             working_mem.narrative.registrar_cronica(f"🩸 Cicatriz: {m.group(1).strip()[:80]}")
             log.info("cicatriz_registrada", cicatriz=m.group(1).strip()[:60])
