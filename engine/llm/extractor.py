@@ -160,6 +160,36 @@ def _chave_dedup(nid: str) -> str:
     return _canonico(nid)
 
 
+# NPC-DUP-3 (playtest 03/07): tokens ESTRUTURAIS ignorados na chave-conjunto.
+# Frozenset LOCAL e curto DE PROPÓSITO — só artigos/preposições/conjunções.
+# NÃO reutilizar _PALAVRAS_COMUNS: lá vivem papéis genéricos ("guarda",
+# "mercador") que DISTINGUEM NPCs reais — descartá-los colapsaria
+# 'guarda-do-portao-norte' com 'guarda-da-torre-sul', que são pessoas distintas.
+_TOKENS_ESTRUTURAIS = frozenset({
+    "o", "a", "os", "as", "de", "da", "do", "das", "dos",
+    "e", "em", "no", "na", "ao", "um", "uma", "que", "com", "sem",
+})
+
+
+def _chave_conjunto(nid: str) -> str:
+    """Chave SECUNDÁRIA de dedup: conjunto ORDENADO de tokens não-estruturais.
+
+    NPC-DUP-3 (playtest 03/07, sess-6a851e0fa7f1): o MESMO NPC descritivo entrou
+    duas vezes na cena com os tokens reordenados — 'taverna-kaelmund-monge' e
+    'monge-da-taverna-kaelmund'. A chave primária (_chave_dedup) usa só o
+    primeiro nome (regra do epíteto) e vê 'taverna' vs 'monge' → não colapsa.
+    Aqui, descartados os estruturais (da/de/o...), ambos viram
+    'kaelmund-monge-taverna' — mesma pessoa, uma entrada só. Retorna "" quando
+    não sobra token útil (o caller NÃO deve casar chave vazia com chave vazia).
+    """
+    tokens = (
+        re.sub(r"[^a-z0-9]", "", t)
+        for t in re.split(r"[\s-]+", _transliterar(nid).lower())
+    )
+    uteis = {t for t in tokens if t and t not in _TOKENS_ESTRUTURAIS}
+    return "-".join(sorted(uteis))
+
+
 def _npc_fantasma(nid: str) -> bool:
     """True se o id é fragmento de narração ou figurante, não nome de NPC.
 
@@ -391,11 +421,20 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     """Registra NPCs extraídos na cena (presença + apresentado). Idempotente.
 
     Espelha o efeito do marcador `[NPC: id|nome]` (turn_pipeline step 17b). Pula
-    o id do jogador e dedup por CHAVE CANÔNICA (NPC-DUP-1): 'gharen-bra-o-de-ferro'
-    e 'gharen-brao-de-ferro' não entram os dois. Retorna os ids adicionados.
+    o id do jogador e dedup por DUAS chaves: a primária tolerante a epíteto
+    (NPC-DUP-1/2: 'gharen-bra-o-de-ferro' ↔ 'gharen-brao-de-ferro',
+    'brennan-sem-vila' ↔ 'brennan') e a secundária por conjunto de tokens
+    (NPC-DUP-3: 'taverna-kaelmund-monge' ↔ 'monge-da-taverna-kaelmund').
+    Candidato é duplicata se QUALQUER uma bater. Retorna os ids adicionados.
     """
     jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
     presentes_canon = {_chave_dedup(p) for p in wm.npcs_presentes}
+    # NPC-DUP-3: chave SECUNDÁRIA por conjunto de tokens — pega o mesmo NPC
+    # descritivo com tokens reordenados ('taverna-kaelmund-monge' ↔
+    # 'monge-da-taverna-kaelmund'). Chave vazia nunca entra no set.
+    presentes_conjunto = {
+        c for c in (_chave_conjunto(p) for p in wm.npcs_presentes) if c
+    }
     loc_id = str(getattr(wm, "location_id", "") or "")
     loc_nome = str(getattr(wm, "location_nome", "") or "")
     adicionados: list[str] = []
@@ -404,12 +443,18 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
         canon = _chave_dedup(nid)
         if not nid or not canon or canon == jogador_canon or canon in presentes_canon:
             continue
+        conjunto = _chave_conjunto(nid)
+        if conjunto and conjunto in presentes_conjunto:
+            log.info("npc_dup_tokens_reordenados_descartado", id=nid)
+            continue
         if _e_entidade_invalida(nid, loc_id, loc_nome):
             log.info("npc_entidade_invalida_descartada", id=nid)
             continue
         wm.npcs_presentes.append(nid)
         wm.scene.npcs_apresentados.add(nid)
         presentes_canon.add(canon)
+        if conjunto:
+            presentes_conjunto.add(conjunto)
         adicionados.append(nid)
         # F6 (playtest 24/06): crônica vazia em sessão social — registra o
         # ENCONTRO (evento determinístico, não depende de marcador do Mestre).
