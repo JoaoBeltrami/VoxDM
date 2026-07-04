@@ -47,6 +47,9 @@ const TIPOS_WS = [
   "cascade",
   "ficha_criada",
   "npc_retrato",
+  // Autoridade social (02/07) — faltava aqui: sem o tipo no enum, parseMensagemWS
+  // descartava a mensagem na fronteira e NENHUM toast de relação chegava à UI.
+  "relacao",
 ] as const;
 
 /**
