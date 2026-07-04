@@ -1907,3 +1907,49 @@ async def test_thinking_cadencia_pula_turnos_consecutivos(monkeypatch):
     await _rodar_turno()  # turno 3 → dispara
 
     assert len(enviados) == 2, "thinking deve tocar nos turnos 1 e 3, não no 2"
+
+
+# ── Telemetria: mestre pediu Iniciativa (autoridade da engine, 04/07) ─────────
+# Iniciativa é da engine; pedido do LLM é inválido (recorrente nos playtests
+# 30/06 e 03/07). O frontend suprime (pedidoEhIniciativa em page.tsx); o
+# backend só loga — estes testes travam o detector puro.
+
+
+def test_mestre_pediu_iniciativa_verbo_antes():
+    from api.turn_pipeline import mestre_pediu_iniciativa
+
+    assert mestre_pediu_iniciativa("A lâmina cai. Role iniciativa!") is True
+    assert mestre_pediu_iniciativa("Todos rolem iniciativa agora.") is True
+    assert mestre_pediu_iniciativa("Faça um teste de iniciativa, rápido.") is True
+
+
+def test_mestre_pediu_iniciativa_verbo_depois():
+    from api.turn_pipeline import mestre_pediu_iniciativa
+
+    assert mestre_pediu_iniciativa("Iniciativa — role um d20.") is True
+    assert mestre_pediu_iniciativa("Iniciativa, jogue já!") is True
+
+
+def test_mencao_casual_de_iniciativa_nao_dispara():
+    from api.turn_pipeline import mestre_pediu_iniciativa
+
+    # Menção narrativa sem verbo de rolagem por perto — não é pedido.
+    assert mestre_pediu_iniciativa("Sua iniciativa o coloca na frente do orc.") is False
+    assert mestre_pediu_iniciativa("Ele admira a iniciativa do grupo.") is False
+
+
+def test_pedido_de_outra_rolagem_nao_dispara():
+    from api.turn_pipeline import mestre_pediu_iniciativa
+
+    assert mestre_pediu_iniciativa("Role um teste de Persuasão (CD 14).") is False
+    assert mestre_pediu_iniciativa("A guarda observa você. (Furtividade)") is False
+
+
+def test_verbo_e_iniciativa_em_sentencas_diferentes_nao_dispara():
+    from api.turn_pipeline import mestre_pediu_iniciativa
+
+    # Janela limitada não cruza pontuação de fim de sentença.
+    assert (
+        mestre_pediu_iniciativa("Role Percepção. A iniciativa dele é notável na vila.")
+        is False
+    )

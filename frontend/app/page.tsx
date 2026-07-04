@@ -112,8 +112,11 @@ function lerRollVisStorage(): RollVisibility {
   return ROLL_VIS_OPTIONS.find(o => o.id === v)?.id ?? "result_only";
 }
 
-// Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20
-const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|iniciativa|d20|d\d+|perícia|habilidade)\b/i;
+// Detecta quando o mestre pede uma rolagem em PT-BR — ativa o pulso no d20.
+// "iniciativa" foi REMOVIDA de propósito (04/07): iniciativa é autoridade da
+// engine — pedido do LLM é inválido e não deve acender nada (ver
+// pedidoEhIniciativa abaixo pra supressão ativa do caso "rolem iniciativa").
+const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|d20|d\d+|perícia|habilidade)\b/i;
 
 // ── Auto dice — mapeamento PT-BR skill/save → atributo ──────────────────────
 
@@ -144,7 +147,11 @@ const SKILL_MAP: [string, string, keyof import("@/lib/api").PersonagemConfig][] 
   ["furtividade","Furtividade","dex_score"],["prestidigitacao","Prestidigitação","dex_score"],
   ["arcanismo","Arcanismo","int_score"],["historia","História","int_score"],
   ["investigacao","Investigação","int_score"],["natureza","Natureza","int_score"],
-  ["religiao","Religião","int_score"],["iniciativa","Iniciativa","dex_score"],
+  ["religiao","Religião","int_score"],
+  // "iniciativa" REMOVIDA (04/07): a engine é a autoridade de iniciativa
+  // (popular_iniciativa/avancar_turno). O chip "Iniciativa" era exatamente o
+  // caminho do bug dos playtests 30/06 e 03/07 — o Mestre pedia mid-combate,
+  // o jogador rolava pelo chip e a rolagem virava ataque/ruído.
 ];
 const SAVE_MAP: [string, string, keyof import("@/lib/api").PersonagemConfig][] = [
   ["forca","FOR","str_score"],["destreza","DES","dex_score"],
@@ -167,7 +174,7 @@ function parseRolagens(
   p: import("@/lib/api").PersonagemConfig,
 ): RolagemPendente[] {
   const n = _n(texto);
-  if (!/\b(role|jogue|teste|salvaguarda|iniciativa|rolagem)\b/.test(n)) return [];
+  if (!/\b(role|jogue|teste|salvaguarda|rolagem)\b/.test(n)) return [];
 
   const nivel  = p.player_level ?? 3;
   const prof   = _prof(nivel);
@@ -244,6 +251,21 @@ function extrairMotivoRolagem(texto: string): { motivo: string; atributo: string
   // Fallback: última sentença do texto se não achou padrão explícito
   const ultima = sentencas[sentencas.length - 1]?.trim() ?? "";
   return { motivo: ultima.length > 120 ? ultima.slice(0, 117) + "…" : ultima, atributo: "" };
+}
+
+// ── Supressão de pedido de Iniciativa (decisão Beltrami 04/07) ───────────────
+// Iniciativa é AUTORIDADE DA ENGINE (popular_iniciativa etc.) — quando o LLM
+// pede "rolem iniciativa" (recorrente nos playtests 30/06 e 03/07 apesar da
+// proibição no prompt), o pedido é um no-op invisível: nem banner, nem pulso,
+// nem chip. Conservador: só suprime quando há verbo de rolagem PERTO da palavra
+// "iniciativa" E nenhuma outra perícia/atributo foi nomeada na fala (pedido
+// misto legítimo continua acendendo normalmente). O backend loga o evento
+// (mestre_pediu_iniciativa em api/turn_pipeline.py) pra telemetria.
+const _RE_PEDIDO_INICIATIVA =
+  /(?:rol[ae]\w*|jogu\w+|test\w+)[^.!?\n]{0,60}\biniciativa\b|\biniciativa\b[^.!?\n]{0,40}(?:rol[ae]\w*|jogu\w+|d20)/i;
+
+function pedidoEhIniciativa(texto: string): boolean {
+  return _RE_PEDIDO_INICIATIVA.test(texto) && !_RE_ATRIBUTO_CHECK.test(texto);
 }
 
 type Tela = "menu" | "nova-sessao" | "carregar-sessao" | "opcoes";
@@ -390,6 +412,7 @@ export default function Home() {
     const esperando =
       !respostaAtual &&
       historico.length > 0 &&
+      !pedidoEhIniciativa(ultimaFala) &&
       (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
     if (!esperando) {
       return { esperandoRolagem: false, motivoRolagem: "", atributoRolagem: "" };
@@ -1518,6 +1541,7 @@ export default function Home() {
             : "";
           const esperandoRolagem = !respostaAtual &&
             historico.length > 0 &&
+            !pedidoEhIniciativa(ultimaFala) &&
             (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
           const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
           if (!turnoJogador) return null;
