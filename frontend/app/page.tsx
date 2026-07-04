@@ -308,7 +308,10 @@ function CascadeToast({ provider, onDismiss }: { provider: string; onDismiss: ()
 
 /** Autoridade social (02/07): toast discreto de mudança de relação decidida
  *  pela engine — sem números, só o motivo. Vermelho ao cair, esmeralda ao subir.
- *  Auto-dismiss após 5s; clicável para fechar. */
+ *  Ciclo de vida (03/07): quem controla é a FILA em useGameSession — cada toast
+ *  fica ~2.5s e avança (com agregação "X e mais N" quando 3+ na mesma direção);
+ *  clicar pula pro próximo. O timeout interno de 5s é só fallback — o unmount
+ *  entre toasts limpa o timer antes de disparar. */
 function RelacaoToast({
   relacao, onDismiss,
 }: {

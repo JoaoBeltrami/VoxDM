@@ -73,6 +73,23 @@ export interface RolagemLog {
 
 const MAX_ROLAGENS_HISTORICO = 10;
 
+/** Autoridade social: uma mudança de relação decidida pela engine (msg WS
+ *  tipo="relacao"). Espelha `MensagemWS.relacao` em lib/api.ts. */
+export interface RelacaoInfo {
+  npc_id: string;
+  nome: string;
+  direcao: "down" | "up";
+  motivo: string;
+}
+
+/** Cap defensivo da fila de toasts de relação — o backend emite 1 por NPC
+ *  afetado no mesmo instante (atacar NPC com aliados presentes); acima disso
+ *  é bug/spam e os mais antigos são descartados. */
+const MAX_FILA_RELACAO = 8;
+
+/** Duração de exibição de cada toast de relação antes de avançar a fila. */
+const RELACAO_TOAST_MS = 2500;
+
 interface EstadoSessao {
   sessionId: string | null;
   playerName: string | null;
@@ -170,7 +187,14 @@ interface EstadoSessao {
   cascadeAtivo: string | null;
   // Autoridade social (02/07): mudança de relação decidida pela engine
   // (atacar NPC → despenca; virar companion → sobe). Toast discreto, sem números.
-  relacaoToast: { npc_id: string; nome: string; direcao: "down" | "up"; motivo: string } | null;
+  // FILA (03/07): o backend emite VÁRIAS msgs "relacao" no mesmo instante (uma
+  // por NPC afetado) — guardar só 1 fazia os toasts se anularem por overwrite.
+  // O handler faz APPEND aqui; a drenagem (1 por vez + agregação) vive num
+  // effect deste hook e publica o toast da vez em `relacaoToast`.
+  relacaoToasts: RelacaoInfo[];
+  // Toast de relação atualmente exibido — drenado da fila acima. Mantém o nome
+  // antigo pra compat: page.tsx continua consumindo relacaoToast/limparRelacaoToast.
+  relacaoToast: RelacaoInfo | null;
   // Nível de pacing narrativo atual (0–10) — espelha WorkingMemory.pacing_nivel.
   // Passado para useAmbientAudio para ajustar a intensidade da trilha em tempo real.
   pacingNivel: number;
@@ -243,6 +267,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   serverHp: null,
   serverHpMax: null,
   cascadeAtivo: null,
+  relacaoToasts: [],
   relacaoToast: null,
   pacingNivel: 3,
 };
@@ -518,8 +543,14 @@ export function useGameSession() {
       // Autoridade social (02/07): mudança de relação decidida pela engine
       // (atacar NPC → despenca; virar companion → sobe). Toast discreto com
       // motivo, sem números — o ícone de trust do chip atualiza via npcs_trust.
+      // Bug playtest 02/07: várias msgs chegam no mesmo instante (uma por NPC
+      // afetado) e o overwrite deixava só a última visível. Agora APPEND na
+      // fila (cap defensivo) — a drenagem exibe um por vez / agrega.
       if (msg.tipo === "relacao" && msg.relacao) {
-        setEstado(s => ({ ...s, relacaoToast: msg.relacao! }));
+        setEstado(s => ({
+          ...s,
+          relacaoToasts: [...s.relacaoToasts, msg.relacao!].slice(-MAX_FILA_RELACAO),
+        }));
       }
 
       if (msg.tipo === "lampejo" && msg.conteudo) {
@@ -1072,6 +1103,63 @@ export function useGameSession() {
     }
   }, [tocarChunk]);
 
+  // ── Drenagem da fila de toasts de relação (autoridade social) ──────────────
+  // A drenagem vive AQUI (e não em page.tsx, como a fila do Encontro) porque o
+  // append acontece no handler WS deste hook e page.tsx continua consumindo
+  // `relacaoToast`/`limparRelacaoToast` sem nenhuma mudança — coeso e sem
+  // exportar a fila crua. Mesmo espírito da fila do Encontro (um por vez,
+  // ~2.5s, avança sozinho), mas em DOIS effects: no padrão original o timer de
+  // dismiss nasce no mesmo effect que tem o item atual nas deps, então o
+  // cleanup da re-execução mata o timer antes de disparar. Separar "escolher o
+  // próximo" de "agendar o dismiss" evita isso.
+  //
+  // Effect 1 — nada exibido + fila com itens → escolhe o próximo.
+  // Agregação: se 3+ itens têm a MESMA direção do primeiro da fila, viram um
+  // toast único ("Bjorn e mais 4 viraram contra você"), consumindo todos os
+  // itens dessa direção de uma vez; os de direção oposta permanecem na fila.
+  // Com 1-2 itens da direção, exibe individualmente em sequência.
+  useEffect(() => {
+    if (estado.relacaoToast || estado.relacaoToasts.length === 0) return;
+    setEstado(s => {
+      // Re-checa dentro do updater — protege contra double-invoke (StrictMode)
+      // e contra corrida com o handler WS.
+      if (s.relacaoToast || s.relacaoToasts.length === 0) return s;
+      const primeiro = s.relacaoToasts[0];
+      const mesmaDirecao = s.relacaoToasts.filter(t => t.direcao === primeiro.direcao);
+      if (mesmaDirecao.length >= 3) {
+        const outros = mesmaDirecao.length - 1;
+        const agregado: RelacaoInfo = {
+          npc_id: primeiro.npc_id,
+          nome: `${primeiro.nome} e mais ${outros}`,
+          direcao: primeiro.direcao,
+          // O RelacaoToast renderiza só o motivo — o texto agregado vai nele.
+          motivo: primeiro.direcao === "down"
+            ? `${primeiro.nome} e mais ${outros} viraram contra você`
+            : `${primeiro.nome} e mais ${outros} ficaram do seu lado`,
+        };
+        return {
+          ...s,
+          relacaoToast: agregado,
+          relacaoToasts: s.relacaoToasts.filter(t => t.direcao !== primeiro.direcao),
+        };
+      }
+      const [prox, ...resto] = s.relacaoToasts;
+      return { ...s, relacaoToast: prox, relacaoToasts: resto };
+    });
+  }, [estado.relacaoToast, estado.relacaoToasts]);
+
+  // Effect 2 — toast exibido → agenda o avanço da fila após RELACAO_TOAST_MS.
+  // O clique no toast (limparRelacaoToast) antecipa: zera o atual e o Effect 1
+  // puxa o próximo da fila.
+  useEffect(() => {
+    if (!estado.relacaoToast) return;
+    const t = setTimeout(
+      () => setEstado(s => ({ ...s, relacaoToast: null })),
+      RELACAO_TOAST_MS,
+    );
+    return () => clearTimeout(t);
+  }, [estado.relacaoToast]);
+
   return {
     ...estado,
     conectar,
@@ -1102,7 +1190,10 @@ export function useGameSession() {
     // Banner "Party recuperada" — companions da sessão anterior.
     partyRestorada,
     dispensarPartyBanner: () => setPartyRestorada([]),
-    // Autoridade social: limpar o toast de relação após exibição.
+    // Autoridade social: dismiss do toast de relação — PULA o toast atual
+    // (não esvazia a fila): o effect de drenagem puxa o próximo em seguida.
+    // Graças à agregação a fila é curta (1-2 itens), então pular preserva
+    // informação sem prender o jogador numa sequência longa.
     limparRelacaoToast: () => setEstado(s => ({ ...s, relacaoToast: null })),
     // UX-2: cascade toast — limpar após exibição
     limparCascade: () => setEstado(s => ({ ...s, cascadeAtivo: null })),
