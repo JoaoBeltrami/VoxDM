@@ -145,13 +145,53 @@ def test_regex_cicatriz():
 
 
 def test_cicatriz_registrada_com_dedup_e_cap():
-    wm = _wm()
+    # HP a 25% do máximo — satisfaz o gate de gatilho (playtest 03/07).
+    wm = _wm(player_hp=5, player_hp_max=20)
     for _ in range(2):
         aplicar_pos_turno(wm, "", "Sobrou marca. [CICATRIZ: corte no rosto]")
     assert wm.cicatrizes == ["corte no rosto"]
     for i in range(6):
         wm.character.registrar_cicatriz(f"marca {i}")
     assert len(wm.cicatrizes) == 5  # cap
+
+
+# ── Gate de gatilho do [CICATRIZ] (playtest 03/07) ────────────────────────────
+
+
+def test_cicatriz_aceita_apos_chegar_a_zero_hp_mesmo_curado():
+    """Quase-morte na sessão libera o gate permanentemente — cura não apaga."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "", "Tudo escurece. [DANO: -20 martelo de guerra]")
+    assert wm.player_hp == 0
+    aplicar_pos_turno(wm, "", "Você desperta inteiro. [CURA: +20 milagre]")
+    assert wm.player_hp == 20
+    aplicar_pos_turno(wm, "", "A marca fica. [CICATRIZ: fenda no crânio]")
+    assert wm.cicatrizes == ["fenda no crânio"]
+
+
+def test_cicatriz_aceita_com_hp_ate_25_por_cento():
+    """HP atual ≤ 25% do máximo no turno do marcador satisfaz o gate."""
+    wm = _wm(player_hp=5, player_hp_max=20)  # exatamente 25%
+    aplicar_pos_turno(wm, "", "Sobra a marca. [CICATRIZ: queimadura no ombro]")
+    assert wm.cicatrizes == ["queimadura no ombro"]
+
+
+def test_cicatriz_rejeitada_jogador_saudavel():
+    """Sem quase-morte e com HP alto, o marcador é descartado sem efeito."""
+    wm = _wm(player_hp=20, player_hp_max=24)
+    aplicar_pos_turno(wm, "", "Que dramático. [CICATRIZ: arranhão heroico]")
+    assert wm.cicatrizes == []
+    assert not any("arranhão heroico" in e for e in wm.narrative.cronica)
+
+
+def test_cicatriz_aceita_no_mesmo_turno_do_dano_quase_fatal():
+    """[DANO] do step 16c roda ANTES do gate — o golpe que quase matou conta."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(
+        wm, "", "A garra rasga fundo. [DANO: -16 garra] [CICATRIZ: três garras no flanco]"
+    )
+    assert wm.player_hp == 4  # 20% ≤ 25%
+    assert wm.cicatrizes == ["três garras no flanco"]
 
 
 def test_cicatriz_persiste_no_dm_state_roundtrip():
@@ -819,7 +859,8 @@ def test_relogio_estourado_entra_na_cronica():
 
 
 def test_cicatriz_e_chegada_entram_na_cronica_via_pipeline():
-    wm = _wm()
+    # HP baixo (≤25%) pra passar o gate de gatilho do [CICATRIZ].
+    wm = _wm(player_hp=4, player_hp_max=20)
     aplicar_pos_turno(wm, "Sigo em frente.", "Vocês chegam. [CENA: mina|Mina Abandonada]")
     aplicar_pos_turno(wm, "", "Sobra a marca. [CICATRIZ: queimadura na mão]")
     eventos = " | ".join(wm.narrative.cronica)

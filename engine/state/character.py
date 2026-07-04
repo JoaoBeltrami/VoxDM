@@ -86,6 +86,11 @@ class PlayerCharacter:
     # 10/06). NPCs reagem a elas; persistem entre sessões via dm_state. Cap 5.
     cicatrizes: list[str] = field(default_factory=list)
 
+    # Gate de [CICATRIZ] (playtest 03/07): true se o jogador chegou a 0 PV em
+    # algum momento DESTA sessão. Não persiste — flag "nesta sessão" por
+    # definição; cura posterior NÃO limpa (a quase-morte já aconteceu).
+    chegou_a_zero_hp: bool = False
+
     # ── Properties D&D 5e (single source of truth) ───────────────────────────
 
     @property
@@ -140,6 +145,9 @@ class PlayerCharacter:
         """
         quantidade = max(0, min(int(quantidade), self.hp_max))
         self.hp_current = max(0, self.hp_current - quantidade)
+        if self.hp_current == 0:
+            # Marca a quase-morte da sessão — libera o gate de [CICATRIZ].
+            self.chegou_a_zero_hp = True
         return self.hp_current
 
     def aplicar_cura(self, quantidade: int) -> int:
