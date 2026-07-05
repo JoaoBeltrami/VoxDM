@@ -76,7 +76,7 @@ def _vocabulario_modulo() -> str:
     return _VOCAB_MODULO
 
 
-def hotwords_da_sessao(working_mem: Any) -> str:
+def hotwords_da_sessao(working_mem: Any, spells_conhecidas: list[str] | None = None) -> str:
     """Nomes DINÂMICOS da sessão pra enviesar o decoder do Whisper.
 
     STT-NOMES-2 (playtest 05/07, "ele tem grande dificuldade pra entender eu
@@ -85,6 +85,14 @@ def hotwords_da_sessao(working_mem: Any) -> str:
     apresentados na cena, companions, o local atual — ficavam de fora, e são
     exatamente os que o jogador mais fala. Falha silenciosa: qualquer erro →
     string vazia (o STT segue só com o vocabulário estático).
+
+    STT-NOMES-3 (playtest 05/07, "falar magias de cura não funciona... só
+    quando eu falo 'eu vou me curar'"): nomes de magia (Cura de Ferimentos,
+    Impor as Mãos...) erram no decoder do mesmo jeito que nomes de NPC — não
+    são hotwords de módulo/sessão, mas o jogador os fala tanto quanto o nome
+    de um NPC presente. `spells_conhecidas` vem de `sessao.spells_conhecidas`
+    (não vive na WorkingMemory — ver api/state.py), por isso é parâmetro
+    separado, não lido de `working_mem`.
 
     Cap ~300 chars — vai NA FRENTE do vocabulário do módulo no merge (nomes
     da cena atual são os mais prováveis na fala).
@@ -105,6 +113,10 @@ def hotwords_da_sessao(working_mem: Any) -> str:
         local = str(getattr(working_mem, "location_nome", "") or "").strip()
         if local:
             nomes.append(local)
+        for magia in (spells_conhecidas or [])[:12]:
+            magia_str = str(magia).strip()
+            if magia_str:
+                nomes.append(magia_str)
         return ", ".join(dict.fromkeys(n for n in nomes if n))[:300]
     except Exception as e:  # nunca derrubar a transcrição por causa de viés
         log.warning("stt_hotwords_sessao_falhou", erro=str(e)[:100])
