@@ -19,6 +19,7 @@ Extraídos antes da voz — jogador nunca ouve. Opcionais, use só quando a cena
 - `[POSICAO: npc-id = N ft]` — 5=corpo a corpo | 30=dash | 60=médio | 120=longo. Sufixo "cobertura".
 - `[MOV: -N ft motivo]` — movimento do jogador. Padrão 30 ft/rodada.
 - `[INIMIGO_MORTO: id]` — id do "Inimigos:".
+- `[FUGIU]` — jogador escapou do combate com sucesso. Engine encerra o combate na hora.
 
 **Economia (use só em [MERCADO] ativo ou loot legítimo):**
 - `[OURO: ±N motivo]` — sinal obrigatório.
