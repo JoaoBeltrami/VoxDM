@@ -367,6 +367,12 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     # META/OOC (playtest 03/07): "guia-do-jogo" registrado como NPC — gerou
     # timeout de Neo4j TODO turno pelo resto da sessão (não existe no grafo).
     "guia-do-jogo",
+    # PAPÉIS GENÉRICOS DE COMBATE (colateral 04/07): "oponente" vazou pra
+    # npcs_presentes — _npc_fantasma só barra o sufixo numérico ("oponente-1").
+    "oponente",
+    "inimigo",
+    "adversario",
+    "atacante-encapuzado",
 ])
 def test_entidade_invalida_rejeita_lixo(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True
