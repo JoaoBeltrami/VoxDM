@@ -963,7 +963,11 @@ async def _enviar_recap_sessao_anterior(
 
 
 async def _beat_turno_inimigo(
-    websocket: WebSocket, sessao: Any, texto_jogador: str
+    websocket: WebSocket,
+    sessao: Any,
+    texto_jogador: str,
+    *,
+    engine_resolveu_turno: bool = False,
 ) -> None:
     """Turno dos inimigos como beat separado (Pilar Perigo, 10/06).
 
@@ -980,6 +984,19 @@ async def _beat_turno_inimigo(
         return  # kill-switch .env — combate volta ao fluxo prompt-only
     wm = sessao.working_mem
     if not wm.em_combate or wm.player_hp <= 0:
+        return
+    # BEAT-DUPLO-1 (playtest 05/07, sess-6e8a5b525bb2): o resolver engine-
+    # autoritativo (resolver_turno_ataque_jogador) já roda executar_turno_inimigos
+    # e aplica o dano do inimigo no PJ DENTRO do resolve — quando isso aconteceu
+    # neste turno, o beat rodar de novo é um SEGUNDO turno de inimigo pro mesmo
+    # golpe do jogador (dano dobrado, log real: dano_inimigos=8 no resolve E
+    # dano_jogador=8 no beat, 6s depois). E quando o jogador só DECLAROU o ataque
+    # (combate_pendente setado, aguardando o d20), o texto injetado pro LLM
+    # ("O jogador ataca X... PEÇA a rolagem") também bate no regex de combate —
+    # sem este guard os inimigos agiam ANTES da rolagem existir ("narra o turno
+    # inteiro antes de eu rolar"). Em ambos os casos a ordem de turno já foi (ou
+    # está sendo) resolvida pela engine — o beat é só o fallback prompt-only.
+    if engine_resolveu_turno or getattr(sessao, "combate_pendente", None):
         return
     vivos = {
         iid: d for iid, d in wm.inimigos_combate.items() if d.get("estado") != "morto"
@@ -2215,6 +2232,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 # rodada/arco (mesmos guards da abertura).
                 "" if idle_nudge else texto_jogador,
                 resposta_limpa,
+                engine_resolveu_turno=_engine_resolveu_turno,
             )
             # Trava de segurança: combate encerrou neste turno (timeout, LLM,
             # mudança de cena) por QUALQUER via com uma pendência ainda aberta
@@ -2590,7 +2608,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # Pilar Perigo: turno dos inimigos como beat separado. Roda DEPOIS
             # do "fim" (frontend já sincronizou) e ANTES do rolling summary —
             # o áudio do beat chega enquanto o TTS principal ainda toca.
-            await _beat_turno_inimigo(websocket, sessao, texto_jogador)
+            # engine_resolveu_turno=True (resolve já rodou o turno dos inimigos)
+            # OU combate_pendente setado (aguardando o d20 do jogador) → o beat
+            # não roda (BEAT-DUPLO-1, ver docstring da função).
+            await _beat_turno_inimigo(
+                websocket, sessao, texto_jogador,
+                engine_resolveu_turno=_engine_resolveu_turno,
+            )
 
             # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
             # O contador é incrementado dentro de aplicar_pos_turno (só turnos
