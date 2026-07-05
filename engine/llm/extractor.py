@@ -317,6 +317,14 @@ _TOKENS_NAO_NPC = frozenset({
     # combate. Pronome NUNCA é nome próprio de NPC.
     "ela", "ele", "eles", "elas", "voce", "voces", "vc", "eu", "mim", "nos",
     "isso", "isto", "aquilo", "lhe", "lhes", "ti", "si",
+    # PAPÉIS GENÉRICOS DE COMBATE (colateral 04/07): "oponente" vazou pra
+    # npcs_presentes — _npc_fantasma só barra sufixo numérico ("oponente-1"),
+    # e o singular sem número passava. São rótulos da RELAÇÃO de combate, nunca
+    # nome próprio de NPC (o auto-registro genérico da engine usa "oponente-1"
+    # em inimigos_combate, que é outro namespace).
+    "oponente", "oponentes", "inimigo", "inimiga", "inimigos", "inimigas",
+    "adversario", "adversaria", "adversarios", "adversarias",
+    "atacante", "atacantes", "agressor", "agressora", "agressores",
 })
 
 # NPC-LIXO (playtest 27/06): o 8B registrava DESCRITORES como NPC presente —
