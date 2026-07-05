@@ -706,14 +706,26 @@ export default function Home() {
     setEncontroTick((t) => t + 1);
   }, [npcRetratos]);
 
+  // Dois effects (mesmo padrão da fila de toasts de relação em
+  // useGameSession.ts, commit d2403f3): no effect único original, o timer de
+  // dismiss nascia nas mesmas deps que `encontroAtual` — a re-execução ao
+  // exibir o próximo rodava o cleanup (clearTimeout) antes do timer disparar,
+  // travando o overlay montado pra sempre e a fila nunca avançava.
+  //
+  // Effect 1 — nada exibido + fila com itens → escolhe o próximo.
   useEffect(() => {
     if (encontroAtual || filaEncontrosRef.current.length === 0) return;
     const prox = filaEncontrosRef.current.shift();
     if (!prox) return;
     setEncontroAtual(prox);
+  }, [encontroAtual, encontroTick]);
+
+  // Effect 2 — encontro exibido → agenda o dismiss após 2s.
+  useEffect(() => {
+    if (!encontroAtual) return;
     const t = setTimeout(() => setEncontroAtual(null), 2000);
     return () => clearTimeout(t);
-  }, [encontroAtual, encontroTick]);
+  }, [encontroAtual]);
 
   // Palco Vivo Ato 1 — falante ativo: heurística conservadora sincronizada
   // com o karaokê (dentro de aspas + nome de NPC presente perto da abertura
