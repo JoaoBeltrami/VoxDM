@@ -1953,3 +1953,46 @@ def test_verbo_e_iniciativa_em_sentencas_diferentes_nao_dispara():
         mestre_pediu_iniciativa("Role Percepção. A iniciativa dele é notável na vila.")
         is False
     )
+
+
+# ── Telemetria: dano narrado sem [DANO] (playtest 05/07) ──────────────────────
+# O Mestre narrou golpe de inimigo conectando e "declarou o dano" em prosa,
+# mas nunca emitiu [DANO] — HP ficou 24/24 a sessão toda. Detector conservador,
+# telemetria pura.
+
+
+def test_dano_narrado_golpe_no_jogador_dispara():
+    from api.turn_pipeline import dano_narrado_sem_marker
+
+    assert dano_narrado_sem_marker("A clava acerta seu ombro com um estalo.", True) is True
+    assert dano_narrado_sem_marker("O oponente te acerta em cheio no rosto.", True) is True
+    assert dano_narrado_sem_marker("A lâmina rasga sua carne.", True) is True
+
+
+def test_dano_narrado_golpe_do_jogador_nao_dispara():
+    from api.turn_pipeline import dano_narrado_sem_marker
+
+    # Jogador acertando o INIMIGO não é dano no jogador.
+    assert dano_narrado_sem_marker("Você acerta o goblin com força total.", True) is False
+    assert dano_narrado_sem_marker("Seu punho golpeia o queixo do capanga.", True) is False
+
+
+def test_dano_narrado_com_marker_presente_nao_dispara():
+    from api.turn_pipeline import dano_narrado_sem_marker
+
+    assert (
+        dano_narrado_sem_marker("A clava acerta seu ombro. [DANO: -5 clava]", True) is False
+    )
+
+
+def test_dano_narrado_fora_de_combate_nao_dispara():
+    from api.turn_pipeline import dano_narrado_sem_marker
+
+    assert dano_narrado_sem_marker("A lembrança te atinge como um golpe.", False) is False
+
+
+def test_dano_narrado_prosa_neutra_nao_dispara():
+    from api.turn_pipeline import dano_narrado_sem_marker
+
+    assert dano_narrado_sem_marker("Sua lâmina corta o ar, sem encontrar nada.", True) is False
+    assert dano_narrado_sem_marker("O vento corta a duna em silêncio.", True) is False

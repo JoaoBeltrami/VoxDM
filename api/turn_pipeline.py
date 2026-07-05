@@ -316,6 +316,35 @@ def mestre_pediu_iniciativa(resposta: str) -> bool:
     """
     return bool(_RE_MESTRE_PEDE_INICIATIVA.search(resposta))
 
+
+# Telemetria (playtest 05/07, sess-95a7c47468c5): o Mestre narrou golpe de
+# inimigo CONECTANDO no jogador e "declarou o dano" em prosa — mas nunca emitiu
+# [DANO], então o HP ficou 24/24 a sessão inteira. Detector conservador de
+# "golpe acertou o jogador": verbo de impacto + alvo-jogador (te/você/sua parte
+# do corpo), nas duas ordens. Só LOGA — a autoridade continua no marker.
+_RE_GOLPE_NO_JOGADOR = re.compile(
+    r"\b(?:te|lhe)\s+(?:acert\w+|ating\w+|golpe\w+|cort\w+|perfur\w+|rasg\w+|fer\w+|queim\w+)"
+    r"|\b(?:acert\w+|ating\w+|golpe\w+|cort\w+|perfur\w+|rasg\w+|crav\w+|abr\w+)"
+    r"[^.!?\n]{0,28}\b(?:em voc[êe]\b|te\b|seu\s+(?:peito|bra[çc]o|rosto|flanco|ombro|abd[ôo]men|cr[âa]nio)"
+    r"|sua\s+(?:perna|m[ãa]o|coxa|face|carne|cabe[çc]a))",
+    re.IGNORECASE,
+)
+
+
+def dano_narrado_sem_marker(resposta: str, em_combate: bool) -> bool:
+    """True se a narração descreve golpe conectando no jogador SEM [DANO].
+
+    Falso-positivo moderado é aceitável — é telemetria pura pra medir a
+    não-compliance do marker antes de decidir uma intervenção mais dura
+    (engine-first: o dano do inimigo deveria vir do turno de inimigo da
+    engine, que exige combatente registrado).
+    """
+    if not em_combate:
+        return False
+    if "[dano" in resposta.lower():
+        return False
+    return bool(_RE_GOLPE_NO_JOGADOR.search(resposta))
+
 # Session Zero (Ritual P3) — o mestre fecha a entrevista de criação com
 # [FICHA: Nome|Raça|Classe|background|traço] (traço opcional). A engine gera
 # atributos/HP/slots/features — o jogador nunca fala de números.
@@ -774,6 +803,16 @@ def aplicar_pos_turno(
         log.info(
             "mestre_pediu_iniciativa",
             em_combate=working_mem.em_combate,
+            trecho=resposta_completa[:80],
+        )
+
+    # 0b. Telemetria de dano narrado sem marker (playtest 05/07) — golpe
+    # conectou no jogador na prosa mas o [DANO] não veio: o HP visível não
+    # muda e a narração desgruda do estado. Só conta a incidência.
+    if dano_narrado_sem_marker(resposta_completa, working_mem.em_combate):
+        log.info(
+            "dano_narrado_sem_marker",
+            inimigos_registrados=len(working_mem.inimigos_combate),
             trecho=resposta_completa[:80],
         )
 
