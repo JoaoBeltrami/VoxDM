@@ -443,3 +443,64 @@ def test_conhecer_npc_nao_duplica_lixo_filtrado():
     wm = _wm()  # location_id="drevamor"
     aplicar_npcs_extraidos(wm, [{"id": "drevamor", "nome": "Drevamor"}])
     assert not any("Drevamor" in e for e in wm.narrative.cronica)
+
+
+# ── NPC-SÍMILE + vocativo-final (playtest 05/07, sess-95a7c47468c5) ───────────
+# "o amuleto pulsa... quase como um guia silencioso" virou NPC 'guia-silencioso';
+# "Muito bem, marinheiro." (Mestre chamando o JOGADOR) virou NPC 'marinheiro'.
+
+
+def test_simile_descarta_comparacao():
+    from engine.llm.extractor import _e_mencao_simile
+
+    narr = "O amuleto pulsa com um calor suave, quase como um guia silencioso."
+    assert _e_mencao_simile("guia silencioso", narr) is True
+
+
+def test_simile_preserva_mencao_real_mesmo_com_comparacao():
+    from engine.llm.extractor import _e_mencao_simile
+
+    # 1ª menção é símile, 2ª é o personagem de verdade — preserva.
+    narr = (
+        "Ele luta feito um berserker enfurecido. Mais tarde, o berserker "
+        "do norte cruza os braços e cospe no chão."
+    )
+    assert _e_mencao_simile("berserker", narr) is False
+
+
+def test_simile_nome_ausente_da_narracao_nao_e_simile():
+    from engine.llm.extractor import _e_mencao_simile
+
+    assert _e_mencao_simile("guia silencioso", "A noite cai sobre as dunas.") is False
+
+
+def test_vocativo_final_em_fala_descarta_apelido():
+    from engine.llm.extractor import _e_apelido_do_jogador
+
+    assert _e_apelido_do_jogador("marinheiro", 'Ele sorri. "Muito bem, marinheiro."') is True
+    assert _e_apelido_do_jogador("marinheiro", '"E aí, marinheiro?" Ele te encara.') is True
+
+
+def test_vocativo_final_apresentacao_preserva_name_reveal():
+    from engine.llm.extractor import _e_apelido_do_jogador
+
+    # "Sou eu, Kael." é NAME-REVEAL de NPC, não vocativo ao jogador.
+    assert _e_apelido_do_jogador("kael", 'A figura abaixa o capuz. "Sou eu, Kael."') is False
+    assert _e_apelido_do_jogador("kael", '"Este é meu irmão, Kael." Ele aponta.') is False
+
+
+def test_vocativo_final_aposto_fora_de_aspas_preserva():
+    from engine.llm.extractor import _e_apelido_do_jogador
+
+    # Aposto de narração (sem aspas) não é vocativo.
+    assert _e_apelido_do_jogador("meridok", "Ele cumprimenta o capitão, Meridok.") is False
+
+
+def test_vocativo_final_nome_que_age_preserva():
+    from engine.llm.extractor import _e_apelido_do_jogador
+
+    # A guarda de sujeito-3ª-pessoa tem precedência: NPC que AGE nunca é dropado.
+    assert (
+        _e_apelido_do_jogador("aldric", '"Cuidado, Aldric." Aldric saca a espada e recua.')
+        is False
+    )

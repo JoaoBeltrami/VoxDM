@@ -242,6 +242,24 @@ def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
     # "...te convidou, ladrãozinho" / "Você não é bem-vindo, forasteiro"
     if re.search(rf"\b(?:{_RE_2P})\b[^.!?\n]*,\s*{nome_re}\b", narr):
         return True
+    # Vocativo-final em FALA (playtest 05/07: "Muito bem, marinheiro." — o
+    # Mestre chamou o JOGADOR de marinheiro e o extractor criou o NPC): vírgula
+    # + nome imediatamente antes do fecho de aspas. Exigir o contexto de FALA
+    # (aspas) evita dropar aposto de narração ("o capitão, Meridok." fora de
+    # aspas segue vivo); a guarda de sujeito-3ª-pessoa acima segue valendo.
+    # Guarda de APRESENTAÇÃO (adversarial): "Sou eu, Kael." / "este é meu irmão,
+    # Kael." também terminam fala com vírgula+nome — mas são name-reveal de NPC,
+    # nunca vocativo ao jogador. Se a janela antes da vírgula tem marcador de
+    # apresentação, o nome fica.
+    for m in re.finditer(rf"[,!]\s*{nome_re}\s*[.!?…]*\s*[\"”'’]", narr):
+        janela = narr[max(0, m.start() - 40) : m.start()]
+        if re.search(
+            r"\b(?:sou|me chamo|se chama|meu nome|minha filha|meu filho|meu irmao|"
+            r"minha irma|este e|esta e|apresento|conheca)\b",
+            janela,
+        ):
+            continue  # apresentação, não vocativo
+        return True
     # Vocativo invertido: "<nome>, você ..." — exige o pronome-SUJEITO "você/vc"
     # LOGO após a vírgula. Sem essa âncora, "Gareth, o ferreiro, te entrega a
     # espada" (te = objeto, Gareth = sujeito) virava falso-apelido e dropava um
@@ -249,6 +267,36 @@ def _e_apelido_do_jogador(nome: str, narracao: str) -> bool:
     if re.search(rf"(?:^|[.!?\"]\s*){nome_re}\s*,\s*(?:voc[êe]|vc)\b", narr):
         return True
     return False
+
+
+# Marcadores de SÍMILE — "como um guia silencioso" é comparação, não gente.
+# Playtest 05/07 (sess-95a7c47468c5): "o amuleto pulsa... quase como um guia
+# silencioso" virou o NPC 'guia-silencioso', que entrou na cena e ficou.
+_RE_MARCADOR_SIMILE = (
+    r"(?:como|feito|qual|parece(?:ndo)?|lembra(?:ndo)?|igual\s+a)\s+"
+    r"(?:um[a]?|o|a)\s+$"
+)
+
+
+def _e_mencao_simile(nome: str, narracao: str) -> bool:
+    """True se TODA ocorrência do nome na narração é comparação (símile).
+
+    Conservador: basta UMA menção do nome fora de contexto de símile pra ele
+    ser tratado como entidade real. Nome ausente da narração → False (não é
+    símile comprovada; outros filtros decidem).
+    """
+    nome_ascii = _transliterar(nome).strip().lower()
+    if len(nome_ascii) < 3:
+        return False
+    narr = _transliterar(narracao).lower()
+    ocorrencias = list(re.finditer(re.escape(nome_ascii), narr))
+    if not ocorrencias:
+        return False
+    for m in ocorrencias:
+        janela = narr[max(0, m.start() - 24) : m.start()]
+        if not re.search(_RE_MARCADOR_SIMILE, janela):
+            return False  # menção "de verdade" — preserva
+    return True
 
 
 # PLAYTEST 24/06: o extractor inundava npcs_presentes com LUGARES (drevamor,
@@ -408,10 +456,15 @@ async def extrair_npcs_cena(
     npcs = _sanitizar_npcs(bruto)
     # NPC-APELIDO: descarta alcunhas que o Mestre usa pra dirigir-se ao jogador
     # ("Ninguém te convidou, ladrãozinho") — vocativo de 2ª pessoa, não NPC.
+    # NPC-SÍMILE (05/07): descarta comparações ("como um guia silencioso").
     filtrados: list[dict[str, str]] = []
     for n in npcs:
-        if _e_apelido_do_jogador(n.get("nome") or n.get("id", ""), narracao):
+        nome_cand = n.get("nome") or n.get("id", "")
+        if _e_apelido_do_jogador(nome_cand, narracao):
             log.info("npc_apelido_jogador_descartado", id=n.get("id"), nome=n.get("nome"))
+            continue
+        if _e_mencao_simile(nome_cand, narracao):
+            log.info("npc_simile_descartado", id=n.get("id"), nome=n.get("nome"))
             continue
         filtrados.append(n)
     return filtrados
