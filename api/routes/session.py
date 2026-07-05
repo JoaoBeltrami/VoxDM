@@ -571,8 +571,12 @@ async def transcrever_audio(
         # STT-NOMES-2 (playtest 05/07): nomes dinâmicos da cena (personagem,
         # NPCs presentes, companions, local) enviesam o decoder do Whisper —
         # são exatamente os nomes que o jogador mais fala e que mais erravam.
+        # STT-NOMES-3: nomes de magia (spells_conhecidas vive na SessaoAtiva,
+        # não na WorkingMemory) entram no mesmo viés — "falar magias de cura
+        # não funciona" no playtest 05/07.
         texto = await transcrever_bytes(
-            audio_bytes, hotwords_extra=hotwords_da_sessao(sessao.working_mem)
+            audio_bytes,
+            hotwords_extra=hotwords_da_sessao(sessao.working_mem, sessao.spells_conhecidas),
         )
         log.info("transcricao_ok", session_id=session_id, chars=len(texto))
         return TranscricaoResponse(texto=texto, idioma="pt")

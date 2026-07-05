@@ -378,6 +378,35 @@ def test_hotwords_da_sessao_cap_e_falha_silenciosa():
     assert hotwords_da_sessao(object()) == ""
 
 
+# ── STT-NOMES-3: nomes de magia também enviesam o decoder (playtest 05/07) ───
+# "Só quando eu falo 'eu vou me curar' funciona; falar magias de cura não."
+
+
+def test_hotwords_da_sessao_inclui_nomes_de_magia():
+    from engine.voice.stt import hotwords_da_sessao
+
+    hw = hotwords_da_sessao(_wm_stt(), ["Cura de Ferimentos", "Impor as Mãos"])
+    assert "Cura de Ferimentos" in hw
+    assert "Impor as Mãos" in hw
+    # Nomes de cena continuam presentes — spells são aditivas, não substituem.
+    assert hw.startswith("Thor")
+
+
+def test_hotwords_da_sessao_sem_spells_nao_quebra():
+    from engine.voice.stt import hotwords_da_sessao
+
+    assert hotwords_da_sessao(_wm_stt()) == hotwords_da_sessao(_wm_stt(), None)
+    assert hotwords_da_sessao(_wm_stt(), []) == hotwords_da_sessao(_wm_stt())
+
+
+def test_hotwords_da_sessao_cap_com_muitas_magias():
+    from engine.voice.stt import hotwords_da_sessao
+
+    magias = [f"Magia de Nome Bem Comprido Numero {i}" for i in range(30)]
+    hw = hotwords_da_sessao(_wm_stt(), magias)
+    assert len(hw) <= 300
+
+
 def test_montar_hotwords_sessao_vem_antes_do_modulo():
     from engine.voice import stt
 
