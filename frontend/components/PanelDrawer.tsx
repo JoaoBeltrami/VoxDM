@@ -44,6 +44,11 @@ interface Props {
       (dock-slim 04/07): ameaça é informação de missão, não controle de ação. */
   relogios?: Record<string, { nome: string; atual: number; max: number }>;
   companions: Record<string, CompanionInfo>;
+  /** Nomes restaurados do episódico na abertura — religa o banner "Party
+      recuperada" (morto desde o dedup de 25/06, quando o CompanionsPanel
+      saiu do slot esquerdo; auditoria de fios mortos 04/07). */
+  partyRestorada?: string[];
+  onDispensarPartyBanner?: () => void;
   emCombate: boolean;
   inventory: string[];
   gold: number;
@@ -203,6 +208,8 @@ export function PanelDrawer({
   fiosSoltos,
   relogios = {},
   companions,
+  partyRestorada = [],
+  onDispensarPartyBanner,
   emCombate,
   inventory,
   gold,
@@ -284,16 +291,39 @@ export function PanelDrawer({
         </div>
       );
   } else if (painelId === "party") {
-    conteudo =
-      Object.keys(companions).length === 0 ? (
-        <Vazio>Você caminha só. Aliados conquistados aparecem aqui.</Vazio>
-      ) : (
-        <div className="space-y-3">
-          {Object.entries(companions).map(([cid, c]) => (
-            <CompanionFicha key={cid} cid={cid} c={c} emCombate={emCombate} onComando={onComando} />
-          ))}
-        </div>
-      );
+    conteudo = (
+      <>
+        {/* Banner "Party recuperada" — religado (fios mortos 04/07): o hook
+            popula partyRestorada na abertura de sessão continuada desde 19/05,
+            mas o consumidor morreu com o CompanionsPanel no dedup de 25/06. */}
+        {partyRestorada.length > 0 && (
+          <div className="mb-3 flex items-start justify-between gap-2 rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-2.5 py-1.5">
+            <p className="text-[11px] leading-snug text-emerald-300">
+              🛡 Party recuperada: {partyRestorada.join(", ")}
+            </p>
+            {onDispensarPartyBanner && (
+              <button
+                onClick={onDispensarPartyBanner}
+                title="Dispensar"
+                aria-label="Dispensar aviso de party recuperada"
+                className="shrink-0 text-emerald-500/70 transition hover:text-emerald-300"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+        {Object.keys(companions).length === 0 ? (
+          <Vazio>Você caminha só. Aliados conquistados aparecem aqui.</Vazio>
+        ) : (
+          <div className="space-y-3">
+            {Object.entries(companions).map(([cid, c]) => (
+              <CompanionFicha key={cid} cid={cid} c={c} emCombate={emCombate} onComando={onComando} />
+            ))}
+          </div>
+        )}
+      </>
+    );
   } else if (painelId === "inventario") {
     conteudo = (
       <div className="space-y-3">
