@@ -557,7 +557,7 @@ async def transcrever_audio(
     Faster-Whisper tiny na GPU e retorna o texto para envio pelo WebSocket.
     Limite: 10 MB. Sessão deve existir e pertencer ao owner.
     """
-    _get_sessao(session_id, owner)  # garante sessão válida + autorizada antes do áudio
+    sessao = _get_sessao(session_id, owner)  # garante sessão válida + autorizada
 
     audio_bytes = await audio.read(_MAX_AUDIO_BYTES + 1)
     if len(audio_bytes) > _MAX_AUDIO_BYTES:
@@ -566,8 +566,14 @@ async def transcrever_audio(
         raise HTTPException(status_code=400, detail="Arquivo de áudio vazio")
 
     try:
-        from engine.voice.stt import transcrever_bytes
-        texto = await transcrever_bytes(audio_bytes)
+        from engine.voice.stt import hotwords_da_sessao, transcrever_bytes
+
+        # STT-NOMES-2 (playtest 05/07): nomes dinâmicos da cena (personagem,
+        # NPCs presentes, companions, local) enviesam o decoder do Whisper —
+        # são exatamente os nomes que o jogador mais fala e que mais erravam.
+        texto = await transcrever_bytes(
+            audio_bytes, hotwords_extra=hotwords_da_sessao(sessao.working_mem)
+        )
         log.info("transcricao_ok", session_id=session_id, chars=len(texto))
         return TranscricaoResponse(texto=texto, idioma="pt")
     except Exception as e:

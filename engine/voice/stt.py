@@ -75,6 +75,41 @@ def _vocabulario_modulo() -> str:
         log.info("stt_vocab_modulo_carregado", termos=len(nomes), chars=len(_VOCAB_MODULO))
     return _VOCAB_MODULO
 
+
+def hotwords_da_sessao(working_mem: Any) -> str:
+    """Nomes DINÂMICOS da sessão pra enviesar o decoder do Whisper.
+
+    STT-NOMES-2 (playtest 05/07, "ele tem grande dificuldade pra entender eu
+    falando nomes"): o vocabulário do MÓDULO já entra como hotwords, mas os
+    nomes que nascem em jogo — personagem do jogador, NPCs improvisados
+    apresentados na cena, companions, o local atual — ficavam de fora, e são
+    exatamente os que o jogador mais fala. Falha silenciosa: qualquer erro →
+    string vazia (o STT segue só com o vocabulário estático).
+
+    Cap ~300 chars — vai NA FRENTE do vocabulário do módulo no merge (nomes
+    da cena atual são os mais prováveis na fala).
+    """
+    try:
+        from engine.memory.working_memory import _id_para_nome
+
+        nomes: list[str] = []
+        player = str(getattr(working_mem, "player_name", "") or "").strip()
+        if player:
+            nomes.append(player)
+        for npc_id in list(getattr(working_mem, "npcs_presentes", []) or [])[:8]:
+            nomes.append(_id_para_nome(str(npc_id)))
+        for comp in (getattr(working_mem, "companions", {}) or {}).values():
+            nome_comp = str(comp.get("nome", "") or "").strip()
+            if nome_comp:
+                nomes.append(nome_comp)
+        local = str(getattr(working_mem, "location_nome", "") or "").strip()
+        if local:
+            nomes.append(local)
+        return ", ".join(dict.fromkeys(n for n in nomes if n))[:300]
+    except Exception as e:  # nunca derrubar a transcrição por causa de viés
+        log.warning("stt_hotwords_sessao_falhou", erro=str(e)[:100])
+        return ""
+
 # ---------------------------------------------------------------------------
 # Constantes
 # ---------------------------------------------------------------------------
@@ -118,7 +153,25 @@ def _obter_whisper() -> Any:
     return _whisper_singleton
 
 
-async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
+def _montar_hotwords(hotwords_extra: str | None) -> str | None:
+    """Merge dos hotwords: sessão dinâmica PRIMEIRO, módulo estático depois.
+
+    Nomes da cena atual são os mais prováveis na fala do jogador — o viés do
+    decoder favorece o início da string. Dedup por termo, cap total defensivo
+    (hotwords longas demais diluem o ganho). Helper puro pra teste.
+    """
+    partes = [p.strip() for p in (hotwords_extra, _vocabulario_modulo()) if p and p.strip()]
+    if not partes:
+        return None
+    termos = ", ".join(partes).split(", ")
+    return ", ".join(dict.fromkeys(t for t in termos if t))[:800] or None
+
+
+async def transcrever_bytes(
+    audio_bytes: bytes,
+    idioma: str = "pt",
+    hotwords_extra: str | None = None,
+) -> str:
     """
     Transcreve bytes de áudio (webm/opus do MediaRecorder) via Faster-Whisper GPU.
 
@@ -128,11 +181,14 @@ async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
     Args:
         audio_bytes: Bytes de áudio no formato webm/opus do MediaRecorder do browser.
         idioma: Código ISO 639-1 do idioma esperado (padrão "pt").
+        hotwords_extra: Nomes dinâmicos da sessão (hotwords_da_sessao) — entram
+            NA FRENTE do vocabulário estático do módulo no viés do decoder.
 
     Returns:
         Texto transcrito, ou string vazia se áudio inaudível.
     """
     loop = asyncio.get_running_loop()
+    hotwords_final = _montar_hotwords(hotwords_extra)
 
     def _transcrever() -> str:
         modelo = _obter_whisper()
@@ -147,9 +203,9 @@ async def transcrever_bytes(audio_bytes: bytes, idioma: str = "pt") -> str:
                 language=idioma,
                 beam_size=5,        # beam=5 — melhor acurácia PT-BR com latência aceitável na GPU
                 vad_filter=True,    # remove silêncio no início/fim
-                # STT-NOMES-1: nomes próprios do módulo enviesam o decoder —
-                # "Tharnvik" deixa de virar "Tarvnick/Tavik/para a tarde Nick".
-                hotwords=_vocabulario_modulo() or None,
+                # STT-NOMES-1/2: nomes próprios (módulo + sessão) enviesam o
+                # decoder — "Tharnvik" deixa de virar "Tarvnick/Tavik".
+                hotwords=hotwords_final,
             )
             return " ".join(seg.text.strip() for seg in segmentos).strip()
         finally:
