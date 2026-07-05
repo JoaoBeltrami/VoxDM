@@ -339,3 +339,62 @@ def test_snapshot_npcs_trust_so_da_cena_atual():
     wm.trust_levels = {"mira": 2, "velho-de-tres-cenas-atras": 3}
     snap = _snapshot_estado(wm)
     assert set(snap["npcs_trust"].keys()) == {"mira"}
+
+
+# ── STT-NOMES-2: hotwords dinâmicos da sessão (playtest 05/07) ────────────────
+# "Ele tem grande dificuldade pra entender eu falando nomes" — o vocabulário
+# do MÓDULO já era hotword (STT-NOMES-1), mas os nomes que nascem em jogo
+# (personagem, NPCs improvisados, companions, local atual) ficavam de fora.
+
+
+def _wm_stt() -> WorkingMemory:
+    wm = WorkingMemory.nova_sessao("dunas-de-osmund", "Dunas de Osmund", "sess-stt")
+    wm.player_name = "Thor"
+    wm.npcs_presentes = ["osmund", "velho-estudioso", "kael"]
+    wm.companions = {"lyssa": {"nome": "Lyssa", "tipo": "hireling", "hp": 10,
+                               "hp_max": 10, "ca": 12, "atq": "+3", "dano": "1d6"}}
+    return wm
+
+
+def test_hotwords_da_sessao_inclui_nomes_da_cena():
+    from engine.voice.stt import hotwords_da_sessao
+
+    hw = hotwords_da_sessao(_wm_stt())
+    # Personagem primeiro (mais provável na fala), depois NPCs formatados,
+    # companions e o local atual.
+    assert hw.startswith("Thor")
+    for nome in ("Osmund", "Velho Estudioso", "Kael", "Lyssa", "Dunas de Osmund"):
+        assert nome in hw, f"faltou {nome} em: {hw}"
+
+
+def test_hotwords_da_sessao_cap_e_falha_silenciosa():
+    from engine.voice.stt import hotwords_da_sessao
+
+    wm = _wm_stt()
+    wm.npcs_presentes = [f"npc-de-nome-bem-comprido-{i}" for i in range(30)]
+    hw = hotwords_da_sessao(wm)
+    assert len(hw) <= 300
+    # Objeto quebrado → string vazia, nunca exceção
+    assert hotwords_da_sessao(object()) == ""
+
+
+def test_montar_hotwords_sessao_vem_antes_do_modulo():
+    from engine.voice import stt
+
+    # Isola do módulo real: vocabulário estático conhecido
+    original = stt._VOCAB_MODULO
+    stt._VOCAB_MODULO = "Drevamor, Tharnvik"
+    try:
+        combinado = stt._montar_hotwords("Thor, Kael")
+        assert combinado is not None
+        assert combinado.startswith("Thor"), combinado
+        assert combinado.index("Kael") < combinado.index("Drevamor")
+        # Dedup entre sessão e módulo
+        dup = stt._montar_hotwords("Drevamor, Thor")
+        assert dup is not None and dup.count("Drevamor") == 1
+        # Vazio dos dois lados → None
+        stt._VOCAB_MODULO = ""
+        assert stt._montar_hotwords(None) is None
+        assert stt._montar_hotwords("  ") is None
+    finally:
+        stt._VOCAB_MODULO = original
