@@ -39,6 +39,12 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     # Cena e persistência
     "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA", "NPC",
     "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA", "FICHA",
+    # Rótulos de INSTRUÇÃO injetados no prompt (prompt_builder: [PRESSÁGIO],
+    # [REINCORPORAR]; [PACING: CLÍMAX/ALTO/BAIXO]) — o LLM não deve emiti-los,
+    # mas modelos ecoam tag de colchete com frequência; sem cobertura aqui o
+    # eco vazava pro TTS/chat (auditoria de fios mortos, 04/07). Acento E
+    # variante sem acento (o eco nem sempre preserva o acento).
+    "PRESSÁGIO", "PRESSAGIO", "REINCORPORAR", "PACING",
 )
 
 

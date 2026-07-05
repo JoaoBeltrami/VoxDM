@@ -597,3 +597,44 @@ def test_afeto_regex_rejeita_campo_invalido():
 
     assert _RE_AFETO.search("[AFETO: npc|amizade|+1]") is None
     assert _RE_AFETO.search("[AFETO: npc|afeto|+1]") is not None
+
+
+# ── Eco de rótulos de INSTRUÇÃO (auditoria de fios mortos, 04/07) ─────────────
+# [PRESSÁGIO]/[REINCORPORAR]/[PACING] são injetados no prompt como instrução —
+# o LLM não deve emiti-los, mas modelos ecoam tags de colchete. Sem cobertura
+# no strip canônico, o eco vazava pro TTS/chat.
+
+
+def test_strip_remove_eco_pressagio():
+    texto = "A neve cai. [PRESSÁGIO: os corvos voam ao sul] O vento uiva."
+    assert "PRESSÁGIO" not in strip_marcadores(texto)
+    assert "A neve cai." in strip_marcadores(texto)
+
+
+def test_strip_remove_eco_pressagio_sem_acento():
+    texto = "Silêncio. [PRESSAGIO] Nada se move."
+    assert "PRESSAGIO" not in strip_marcadores(texto)
+
+
+def test_strip_remove_eco_reincorporar():
+    texto = "O taverneiro limpa um copo. [REINCORPORAR: o anel de Maren]"
+    resultado = strip_marcadores(texto)
+    assert "REINCORPORAR" not in resultado
+    assert "taverneiro" in resultado
+
+
+def test_strip_remove_eco_pacing():
+    texto = "[PACING: CLÍMAX] A lâmina desce."
+    resultado = strip_marcadores(texto)
+    assert "PACING" not in resultado
+    assert "A lâmina desce." in resultado
+
+
+def test_fugiu_documentado_no_markers_lista():
+    """Guarda de doc (fios mortos 04/07): a dieta de 01/07 cortou a linha do
+    [FUGIU] do markers_lista.md sem intenção — o processador (turn_pipeline
+    step 7) ficou órfão porque o LLM nunca mais soube que o marcador existe."""
+    from pathlib import Path
+
+    frag = Path("engine/llm/prompts/fragments/markers_lista.md").read_text(encoding="utf-8")
+    assert "[FUGIU]" in frag
