@@ -517,7 +517,9 @@ async def extrair_npcs_cena(
     return filtrados
 
 
-def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
+def aplicar_npcs_extraidos(
+    wm: Any, npcs: list[dict[str, str]], narracao: str = ""
+) -> list[str]:
     """Registra NPCs extraídos na cena (presença + apresentado). Idempotente.
 
     Espelha o efeito do marcador `[NPC: id|nome]` (turn_pipeline step 17b). Pula
@@ -526,7 +528,22 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
     'brennan-sem-vila' ↔ 'brennan') e a secundária por conjunto de tokens
     (NPC-DUP-3: 'taverna-kaelmund-monge' ↔ 'monge-da-taverna-kaelmund').
     Candidato é duplicata se QUALQUER uma bater. Retorna os ids adicionados.
+
+    NPC-IDENTIDADE (05/07): antes de registrar candidato NOVO, checa se ele é
+    um NAME-REVEAL de NPC já presente ("O monge abaixa o capuz. 'Sou Kael.'")
+    — nesse caso RENOMEIA o presente via registro canônico (retrato preservado)
+    em vez de criar um NPC duplicado. `narracao` opcional preserva os
+    call-sites antigos (sem narração = sem detecção de reveal).
     """
+    from engine.npc.identity import (
+        alvo_do_reveal,
+        detectar_name_reveal,
+        garantir_registro,
+        registrar_npc,
+        revelar_nome,
+    )
+
+    garantir_registro(wm)
     jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
     presentes_canon = {_chave_dedup(p) for p in wm.npcs_presentes}
     # NPC-DUP-3: chave SECUNDÁRIA por conjunto de tokens — pega o mesmo NPC
@@ -550,15 +567,31 @@ def aplicar_npcs_extraidos(wm: Any, npcs: list[dict[str, str]]) -> list[str]:
         if _e_entidade_invalida(nid, loc_id, loc_nome):
             log.info("npc_entidade_invalida_descartada", id=nid)
             continue
+        nome = (npc.get("nome") or nid.replace("-", " ").title()).strip()[:60]
+        # NAME-REVEAL: candidato novo + frase de apresentação + NPC presente
+        # ancorado na janela antes dela → renomeia em vez de duplicar.
+        if narracao and detectar_name_reveal(narracao, nome):
+            alvo = alvo_do_reveal(wm, narracao, nome)
+            if alvo:
+                novo_id = revelar_nome(wm, alvo, nome)
+                presentes_canon.add(_chave_dedup(novo_id))
+                log.info("npc_name_reveal_renomeado", de=alvo, para=novo_id)
+                try:
+                    wm.narrative.registrar_cronica(f"🎭 {nome} revelou seu nome")
+                except Exception:
+                    pass
+                continue
+            # Padrão presente mas sem âncora única — telemetria pra calibrar.
+            log.info("npc_name_reveal_ambiguo", candidato=nid)
         wm.npcs_presentes.append(nid)
         wm.scene.npcs_apresentados.add(nid)
+        registrar_npc(wm, nid, nome)
         presentes_canon.add(canon)
         if conjunto:
             presentes_conjunto.add(conjunto)
         adicionados.append(nid)
         # F6 (playtest 24/06): crônica vazia em sessão social — registra o
         # ENCONTRO (evento determinístico, não depende de marcador do Mestre).
-        nome = (npc.get("nome") or nid.replace("-", " ").title()).strip()[:60]
         try:
             wm.narrative.registrar_cronica(f"🤝 Conheceu {nome}")
         except Exception:  # narrative ausente em stub de teste — não crítico

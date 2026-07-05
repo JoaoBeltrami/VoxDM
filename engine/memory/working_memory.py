@@ -881,6 +881,16 @@ class WorkingMemory:
             cronica = dm_state.get("cronica", [])
             if cronica and not self.narrative.cronica:
                 self.narrative.cronica = [str(c)[:140] for c in cronica][-40:]
+            # NPC-IDENTIDADE (05/07): registro canônico + aliases (só se vazios)
+            # — name-reveal e retrato_seed não se desfazem num restart.
+            npc_reg = dm_state.get("npc_registro", {})
+            if npc_reg and not self.scene.npc_registro:
+                self.scene.npc_registro = {
+                    str(k): dict(v) for k, v in npc_reg.items() if isinstance(v, dict)
+                }
+            npc_ali = dm_state.get("npc_aliases", {})
+            if npc_ali and not self.scene.npc_aliases:
+                self.scene.npc_aliases = {str(k): str(v) for k, v in npc_ali.items()}
 
     # ── Delegations: PartyState ──────────────────────────────────────────────
 

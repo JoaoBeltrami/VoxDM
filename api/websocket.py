@@ -613,8 +613,14 @@ async def _enviar_retratos_npcs(websocket: WebSocket, sessao: SessaoAtiva) -> No
         if not novos:
             return
         for npc_id in novos[:3]:
-            nome = _id_para_nome(npc_id)
-            seed = int(hashlib.sha1(npc_id.encode()).hexdigest()[:8], 16) % 100_000
+            # NPC-IDENTIDADE (05/07): nome do registro canônico quando houver;
+            # a SEED usa retrato_seed (id ORIGINAL de criação) — NPC renomeado
+            # via name-reveal mantém o MESMO rosto de antes do rename.
+            from engine.npc.identity import retrato_seed
+            entrada = wm.scene.npc_registro.get(npc_id, {})
+            nome = str(entrada.get("nome") or _id_para_nome(npc_id))
+            seed_id = retrato_seed(wm, npc_id)
+            seed = int(hashlib.sha1(seed_id.encode()).hexdigest()[:8], 16) % 100_000
             prompt = (
                 f"fantasy RPG character portrait of {nome}, medieval, close-up face, "
                 "dark fantasy oil painting, detailed, no text, no watermark"
@@ -2319,7 +2325,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         timeout=8.0,
                     )
                     if npcs_novos:
-                        ids = aplicar_npcs_extraidos(sessao.working_mem, npcs_novos)
+                        # narracao habilita o NAME-REVEAL (renomeia NPC presente
+                        # em vez de duplicar — NPC-IDENTIDADE 05/07).
+                        ids = aplicar_npcs_extraidos(
+                            sessao.working_mem, npcs_novos, narracao=resposta_limpa
+                        )
                         if ids:
                             log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
                 except Exception as exc:

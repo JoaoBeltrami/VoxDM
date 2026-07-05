@@ -113,16 +113,22 @@ def bloco_assinaturas(
     npcs_presentes: list[str] | set[str],
     id_para_nome: Callable[[str], str] | None = None,
     cap: int = 3,
+    seed_de: Callable[[str], str] | None = None,
 ) -> str:
     """Bloco de prompt com a assinatura de voz dos NPCs presentes (cap defensivo).
 
     Retorna "" quando não há NPC presente — custo-zero em cena sem NPC. Cap pra
     não inflar o prompt quando a cena tem muita gente (a "regra dura — um por vez"
     do master_system já limita o foco; aqui é só teto de segurança de token).
+
+    `seed_de` (NPC-IDENTIDADE 05/07): resolve o id → seed ESTÁVEL de identidade
+    (id original de criação). NPC renomeado via name-reveal mantém o MESMO
+    registro/tique de fala — sem isso o rename trocaria a personalidade junto
+    com o nome (mesma classe do bug do retrato).
     """
     linhas: list[str] = []
     for nid in list(npcs_presentes)[:cap]:
-        assn = assinatura_voz(nid)
+        assn = assinatura_voz(seed_de(nid) if seed_de else nid)
         if not assn:
             continue
         nome = id_para_nome(nid) if id_para_nome else nid
