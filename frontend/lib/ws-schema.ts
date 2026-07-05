@@ -37,7 +37,8 @@ const TIPOS_WS = [
   "token",
   "fim",
   "erro",
-  "metricas",
+  // "metricas" removido (fios mortos 04/07): tipo fantasma — nunca emitido
+  // pelo backend nem tratado por handler; só existia no enum e no union.
   "audio_chunk",
   "recap",
   "lampejo",

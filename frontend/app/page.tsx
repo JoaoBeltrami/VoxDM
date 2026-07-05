@@ -378,7 +378,7 @@ export default function Home() {
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
-    emMercado, companions,
+    emMercado, companions, partyRestorada, dispensarPartyBanner,
     iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, npcRetratos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
@@ -1869,6 +1869,8 @@ export default function Home() {
               fiosSoltos={fiosSoltos}
               relogios={relogios}
               companions={companions}
+              partyRestorada={partyRestorada}
+              onDispensarPartyBanner={dispensarPartyBanner}
               emCombate={emCombate}
               inventory={inventory}
               gold={gold}

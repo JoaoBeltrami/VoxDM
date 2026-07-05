@@ -391,6 +391,8 @@ export default function PreviewPage() {
           torstein: { nome: "Torstein", tipo: "animal", hp: 12, hp_max: 40, ca: 13, atq: "+4", dano: "2d4+2" },
           umbra: { nome: "Umbra", tipo: "familiar", hp: 0, hp_max: 8, ca: 12, atq: "+3", dano: "1d4" },
         }}
+        partyRestorada={["Lyssa", "Torstein"]}
+        onDispensarPartyBanner={() => console.log("[preview] party banner dispensado")}
         emCombate={false}
         inventory={["Espada longa", "Poção de cura", "Corda (15m)", "Mapa rasgado do porto"]}
         gold={137}
