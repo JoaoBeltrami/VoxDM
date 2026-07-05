@@ -40,6 +40,9 @@ interface Props {
   activeQuests: string[];
   questStages: Record<string, string>;
   fiosSoltos: string[];
+  /** Relógios de Ameaça (Mundo Vivo) — migrados do dock pro painel Quests
+      (dock-slim 04/07): ameaça é informação de missão, não controle de ação. */
+  relogios?: Record<string, { nome: string; atual: number; max: number }>;
   companions: Record<string, CompanionInfo>;
   emCombate: boolean;
   inventory: string[];
@@ -198,6 +201,7 @@ export function PanelDrawer({
   activeQuests,
   questStages,
   fiosSoltos,
+  relogios = {},
   companions,
   emCombate,
   inventory,
@@ -222,8 +226,9 @@ export function PanelDrawer({
         </ol>
       );
   } else if (painelId === "quests") {
+    const temRelogios = Object.keys(relogios).length > 0;
     conteudo =
-      activeQuests.length === 0 && fiosSoltos.length === 0 ? (
+      activeQuests.length === 0 && fiosSoltos.length === 0 && !temRelogios ? (
         <Vazio>Nenhuma missão chama por você — por enquanto.</Vazio>
       ) : (
         <div className="space-y-4">
@@ -255,6 +260,22 @@ export function PanelDrawer({
                 {fiosSoltos.map((fio, i) => (
                   <li key={i} className="font-atmospheric text-xs italic leading-relaxed text-vox-text-secondary">
                     {fio}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {temRelogios && (
+            <div>
+              <Secao>Ameaças</Secao>
+              <ul className="space-y-1.5 border-l border-red-900/40 pl-3">
+                {Object.entries(relogios).map(([id, rel]) => (
+                  <li key={id} className="text-xs leading-snug text-vox-text-secondary">
+                    <span className="font-atmospheric italic">{rel.nome}</span>
+                    <span className="ml-2 font-mono text-[10px] tracking-tighter text-red-400/80">
+                      {"▓".repeat(rel.atual)}
+                      {"░".repeat(Math.max(0, rel.max - rel.atual))}
+                    </span>
                   </li>
                 ))}
               </ul>

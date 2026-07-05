@@ -28,6 +28,9 @@ interface Props {
   spellSlots?: Record<number, SpellSlot>;
   /** Condições ativas — chips discretos. */
   conditions?: string[];
+  /** Cicatrizes permanentes (dock-slim 04/07: cicatriz é IDENTIDADE do
+      personagem — mora aqui, junto do retrato, não no dock de ação). */
+  cicatrizes?: string[];
   /** Flash de HP pra sincronizar com o dano/cura da narração. */
   hpFlash?: "dano" | "cura" | null;
 }
@@ -55,7 +58,7 @@ function mod(score: number): string {
   return m >= 0 ? `+${m}` : `${m}`;
 }
 
-export function FichaViva({ personagem, hpAtual, spellSlots, conditions = [], hpFlash = null }: Props) {
+export function FichaViva({ personagem, hpAtual, spellSlots, conditions = [], cicatrizes = [], hpFlash = null }: Props) {
   const {
     player_name, player_race, player_class, player_level = 3,
     player_hp, player_hp_max,
@@ -187,6 +190,23 @@ export function FichaViva({ personagem, hpAtual, spellSlots, conditions = [], hp
               {c}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Cicatrizes — marcas permanentes vivem com a identidade (migrado do
+          dock, 04/07: "cicatriz aleatória ali nem faz sentido com a UI") */}
+      {cicatrizes.length > 0 && (
+        <div>
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-vox-text-muted">
+            <span className="text-rose-500">🩸</span> cicatrizes
+          </div>
+          <ul className="space-y-0.5 border-l border-rose-900/40 pl-2.5">
+            {cicatrizes.map((cic, i) => (
+              <li key={i} className="font-atmospheric text-[11px] italic leading-snug text-vox-text-secondary">
+                {cic}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

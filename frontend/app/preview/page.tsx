@@ -382,6 +382,10 @@ export default function PreviewPage() {
         activeQuests={["filhos-de-valdrek", "o-pacto-de-vyrmathax"]}
         questStages={{ "filhos-de-valdrek": "investigando-o-porto" }}
         fiosSoltos={["Quem paga a taverna de Aldric?", "O anel de Maren brilhou ao falar do pacto."]}
+        relogios={{
+          "guerra-das-vilas": { nome: "As três vilas marcham para a guerra", atual: 2, max: 6 },
+          "divida-de-vyrmathax": { nome: "Vyrmathax cobra a dívida antiga", atual: 4, max: 6 },
+        }}
         companions={{
           lyssa: { nome: "Lyssa", tipo: "hireling", hp: 28, hp_max: 32, ca: 15, atq: "+5", dano: "1d8+3" },
           torstein: { nome: "Torstein", tipo: "animal", hp: 12, hp_max: 40, ca: 13, atq: "+4", dano: "2d4+2" },

@@ -1420,6 +1420,7 @@ export default function Home() {
               hpAtual={personagem.player_hp}
               spellSlots={spellSlots}
               conditions={playerConditions}
+              cicatrizes={cicatrizes}
             />
           </div>
         )}
@@ -1533,8 +1534,10 @@ export default function Home() {
     );
 
     // Dock inferior — dados, ações de combate, orb do mestre, voz.
+    // Dock-slim (04/07): meta ≤~90px típico. Ameaças/Cicatrizes saíram daqui
+    // (launcher/FichaViva); linhas de dados e de combate foram consolidadas.
     const dockSlot = (
-      <div className="flex flex-col items-center gap-1.5 py-2">
+      <div className="flex flex-col items-center gap-1 py-1.5">
         {(() => {
           const ultimaFala = historico.length > 0
             ? historico[historico.length - 1].mestre
@@ -1635,34 +1638,37 @@ export default function Home() {
                 >
                   ▼d20
                 </button>
+                {/* Dock-slim (04/07): dados de dano na MESMA linha do d20 —
+                    a segunda linha inteira era metade da altura do bloco. */}
+                {!cinemaMode && (emCombate || dadoPedido !== null) && (
+                  <>
+                    <span aria-hidden className="mx-0.5 h-4 w-px bg-vox-border-soft" />
+                    {([4, 6, 8, 10, 12, 100] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => rolarDano(f)}
+                        title={`Rolar d${f}`}
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                          dadoPedido === f
+                            ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_10px_2px_rgba(139,92,246,0.35)]"
+                            : "border-vox-border-subtle bg-vox-bg-base text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
+                        }`}
+                      >
+                        d{f}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
-              {!cinemaMode && (emCombate || dadoPedido !== null) && (
-                <div className="flex items-center gap-1.5">
-                  {([4, 6, 8, 10, 12, 100] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => rolarDano(f)}
-                      title={`Rolar d${f}`}
-                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
-                        dadoPedido === f
-                          ? "animate-pulse border-violet-500 bg-violet-900/30 text-violet-300 shadow-[0_0_10px_2px_rgba(139,92,246,0.35)]"
-                          : "border-vox-border-subtle bg-vox-bg-base text-vox-text-muted hover:border-vox-border-strong hover:text-vox-text-secondary"
-                      }`}
-                    >
-                      d{f}
-                    </button>
-                  ))}
-                </div>
-              )}
               {(atributoCheck || motivoCheck) && (
-                <div className="flex flex-col items-center gap-1">
+                <div className="flex max-w-md flex-wrap items-center justify-center gap-1.5 px-2">
                   {atributoCheck && (
-                    <span className="rounded-full border border-violet-500/50 bg-violet-900/30 px-3 py-0.5 text-xs font-bold tracking-wide text-violet-300">
+                    <span className="rounded-full border border-violet-500/50 bg-violet-900/30 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-violet-300">
                       d20 {atributoCheck.toUpperCase()}
                     </span>
                   )}
                   {motivoCheck && (
-                    <p className="max-w-sm px-2 text-center text-xs italic leading-snug text-vox-text-secondary">
+                    <p className="max-w-[18rem] truncate text-[11px] italic leading-snug text-vox-text-secondary">
                       {motivoCheck}
                     </p>
                   )}
@@ -1674,50 +1680,9 @@ export default function Home() {
 
         {/* Fios narrativos migrados pro painel "Quests" do launcher BG1. */}
 
-        {/* Mundo Vivo (10/06) — Relógios de Ameaça: o jogador VÊ que o mundo anda */}
-        {!cinemaMode && Object.keys(relogios).length > 0 && (
-          <div className="max-w-sm w-full">
-            <details className="group">
-              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-red-400/70 hover:text-red-300 transition-colors list-none">
-                <span className="text-red-500">⏳</span>
-                Ameaças ({Object.keys(relogios).length})
-                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-              </summary>
-              <ul className="mt-1.5 space-y-1.5 pl-3.5 border-l border-red-900/40">
-                {Object.entries(relogios).map(([id, rel]) => (
-                  <li key={id} className="text-[10px] text-vox-text-muted leading-snug">
-                    <span className="italic">{rel.nome}</span>
-                    <span className="ml-2 font-mono tracking-tighter text-red-400/80">
-                      {"▓".repeat(rel.atual)}{"░".repeat(Math.max(0, rel.max - rel.atual))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
-        )}
-
-        {/* Pilar Perigo (10/06) — cicatrizes permanentes */}
-        {!cinemaMode && cicatrizes.length > 0 && (
-          <div className="max-w-sm w-full">
-            <details className="group">
-              <summary className="flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-medium text-rose-400/70 hover:text-rose-300 transition-colors list-none">
-                <span className="text-rose-500">🩸</span>
-                Cicatrizes ({cicatrizes.length})
-                <span className="ml-auto text-[9px] opacity-50 group-open:hidden">▸</span>
-                <span className="ml-auto text-[9px] opacity-50 hidden group-open:inline">▾</span>
-              </summary>
-              <ul className="mt-1.5 space-y-1 pl-3.5 border-l border-rose-900/40">
-                {cicatrizes.map((cic, i) => (
-                  <li key={i} className="text-[10px] italic text-vox-text-muted leading-snug">
-                    {cic}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
-        )}
+        {/* Dock-slim (04/07, meta ≤90px): Ameaças migraram pro painel Quests
+            do launcher; Cicatrizes moram na FichaViva (identidade). O dock é
+            só AÇÃO: dados, ações de combate, orb e voz. */}
 
         {/* Crônica migrada pro launcher de painéis BG1 (PanelLauncher + drawer,
             irmãos do AppShell mais abaixo). Era um chip <details> solto aqui. */}
@@ -1739,27 +1704,27 @@ export default function Home() {
             def: "border-cyan-900/60 bg-cyan-950/30 text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900/40",
             mov: "border-amber-900/60 bg-amber-950/30 text-amber-300 hover:border-amber-500 hover:bg-amber-900/40",
           };
+          // Dock-slim (04/07): ações de combate + economia de ação numa ÚNICA
+          // linha (eram duas empilhadas — o dock em combate passava fácil de
+          // 150px e espremia ficha/chat).
           return (
-            <div className="flex flex-col items-center gap-1.5">
-              {turnoJogadorCombate && (
-                <div className="flex flex-wrap items-center justify-center gap-1.5 px-3">
-                  {acoesCombate.map(a => (
-                    <button
-                      key={a.label}
-                      onClick={() => {
-                        enviarComando(a.comando);
-                        setActionEconomy(prev => ({ ...prev, acao: true }));
-                      }}
-                      disabled={actionEconomy.acao}
-                      title={a.comando}
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${cores[a.cor]}`}
-                    >
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className={`flex items-center gap-4 rounded-xl border px-5 py-1.5 transition-colors duration-300 ${
+            <div className="flex flex-wrap items-center justify-center gap-2 px-3">
+              {turnoJogadorCombate &&
+                acoesCombate.map(a => (
+                  <button
+                    key={a.label}
+                    onClick={() => {
+                      enviarComando(a.comando);
+                      setActionEconomy(prev => ({ ...prev, acao: true }));
+                    }}
+                    disabled={actionEconomy.acao}
+                    title={a.comando}
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${cores[a.cor]}`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              <div className={`flex items-center gap-3 rounded-xl border px-3 py-1 transition-colors duration-300 ${
                 actionEconomyFlash
                   ? "border-emerald-600/60 bg-emerald-950/30 shadow-[0_0_8px_1px_rgba(16,185,129,0.2)]"
                   : "border-vox-border-subtle bg-vox-bg-panel"
@@ -1850,7 +1815,7 @@ export default function Home() {
       { id: "ficha", label: "Ficha" },
       { id: "inventario", label: "Inventário", badge: inventory.length },
       { id: "party", label: "Party", badge: Object.keys(companions).length },
-      { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length },
+      { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length + Object.keys(relogios).length },
       { id: "cronica", label: "Crônica", badge: cronica.length },
       { id: "mapa", label: "Mapa", badge: locaisVisitados.length },
     ];
@@ -1902,6 +1867,7 @@ export default function Home() {
               activeQuests={activeQuests}
               questStages={questStages}
               fiosSoltos={fiosSoltos}
+              relogios={relogios}
               companions={companions}
               emCombate={emCombate}
               inventory={inventory}
