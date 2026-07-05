@@ -45,6 +45,14 @@ class SceneState:
     # NPCs que foram apresentados ao jogador (subset de npcs_presentes)
     npcs_apresentados: set[str] = field(default_factory=set)
 
+    # Identidade única de NPC (05/07) — fonte canônica de UMA chave por pessoa.
+    # npc_registro: canônico → {"nome": str, "retrato_seed": str}. A seed nasce
+    # = id de criação e NUNCA muda (rename preserva o rosto Pollinations).
+    # npc_aliases: id antigo/falado → canônico. API em engine/npc/identity.py;
+    # persistem via dm_state (name-reveal não pode "desfazer" num restart).
+    npc_registro: dict[str, dict] = field(default_factory=dict)
+    npc_aliases: dict[str, str] = field(default_factory=dict)
+
     # Estado emocional atual de cada NPC (cap de 15)
     npc_estados_emocionais: dict[str, str] = field(default_factory=dict)
 

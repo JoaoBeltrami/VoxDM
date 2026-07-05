@@ -845,6 +845,11 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         "locais_visitados":     sorted(wm.scene.locais_visitados),
         # Imersão P4 — crônica da sessão (timeline de eventos-chave)
         "cronica":              list(wm.narrative.cronica),
+        # NPC-IDENTIDADE (05/07) — registro canônico + aliases: um name-reveal
+        # ("monge" → "kael") não pode se desfazer num restart, e a retrato_seed
+        # precisa sobreviver pra manter o mesmo rosto entre sessões.
+        "npc_registro":         {k: dict(v) for k, v in wm.scene.npc_registro.items()},
+        "npc_aliases":          dict(wm.scene.npc_aliases),
     }
 
 

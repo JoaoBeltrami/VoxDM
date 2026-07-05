@@ -43,6 +43,7 @@ from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
+from engine.npc.identity import registrar_npc, resolver_falado
 
 log = structlog.get_logger()
 
@@ -609,6 +610,18 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
         iid = _slugify(nome)
         if not iid:
             continue
+        # NPC-IDENTIDADE (05/07): "ataco o monge" resolvia pra um id CURTO novo
+        # ("monge") enquanto a presença tinha "monge-da-taverna-kaelmund" — o
+        # trust/inimigo nasciam numa 3ª chave que nenhum outro sistema lia.
+        # resolver_falado casa o alvo falado com o NPC presente (subconjunto de
+        # tokens, match único); ambíguo mantém o comportamento antigo.
+        try:
+            _canonico = resolver_falado(working_mem, iid)
+        except Exception:
+            _canonico = None  # stub de teste sem scene.npc_registro
+        if _canonico:
+            iid = _canonico
+            nome = str(iid).replace("-", " ")
         if iid not in working_mem.inimigos_combate:
             working_mem.registrar_inimigo(iid, nome.title(), "intacto")
         return iid
@@ -1540,6 +1553,13 @@ def aplicar_pos_turno(
         log.info("npc_entrou_cena", npc=npc_id, nome=(m.group(2) or "").strip() or None)
         # F6: registra o encontro na crônica (evento determinístico).
         _nome_npc = ((m.group(2) or "").strip() or npc_id.replace("-", " ").title())[:60]
+        # NPC-IDENTIDADE (05/07): entrada canônica — a retrato_seed nasce aqui
+        # e sobrevive a rename futuro (rosto estável). Try/except: stubs de
+        # teste sem scene.npc_registro não podem derrubar o pipeline.
+        try:
+            registrar_npc(working_mem, npc_id, _nome_npc)
+        except Exception as _e_reg:
+            log.warning("npc_registro_falhou", id=npc_id, erro=str(_e_reg)[:80])
         working_mem.narrative.registrar_cronica(f"🤝 Conheceu {_nome_npc}")
 
     # Teto de npcs_presentes (backstop pro que escapa do filtro) — evita os 15
@@ -1567,7 +1587,17 @@ def garantir_vozes_npcs(working_mem: Any) -> int:
     for nid in list(getattr(working_mem, "npcs_presentes", [])):
         if nid in working_mem.npc_vozes or _chave_dedup(nid) == jogador:
             continue
-        assn = assinatura_tts(nid)
+        # NPC-IDENTIDADE (05/07): a assinatura deriva da SEED estável (id
+        # original de criação), não do id atual — NPC renomeado via name-reveal
+        # mantém a MESMA voz (fundir_estado já migrou a entrada existente; este
+        # caminho só roda pra quem ainda não tem voz, e precisa gerar a mesma
+        # que geraria antes do rename). Mesma cura do retrato.
+        try:
+            from engine.npc.identity import retrato_seed
+            semente = retrato_seed(working_mem, nid)
+        except Exception:
+            semente = nid  # stub de teste sem scene.npc_registro
+        assn = assinatura_tts(semente)
         if assn:
             working_mem.npc_vozes[nid] = assn
             atribuidas += 1
