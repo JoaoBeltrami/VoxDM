@@ -94,3 +94,35 @@ def test_nudge_cena_injetado_tambem_em_combate():
     wm.entrar_combate()
     system = montar_mensagens(_contexto(wm, "eu entro na casa com toda minha imponência"))[0]["content"]
     assert "=== DESLOCAMENTO PEDIDO ===" in system
+
+
+# ── nudge de [INIMIGO] — combate sem combatente registrado (05/07) ───────────
+# Playtest sess-95a7c47468c5: sparring abriu em_combate mas nenhum [INIMIGO]
+# foi emitido a luta inteira → sem turno de inimigo da engine, sem [DANO]
+# aplicado, combate-zumbi de 6+ turnos. O nudge cobra o marcador no único
+# estado em que faz falta (combate ativo + zero registrados).
+
+
+def test_injeta_nudge_inimigo_em_combate_vazio():
+    invalidar_cache()
+    wm = _wm()
+    wm.entrar_combate()
+    assert wm.inimigos_combate == {}
+    system = montar_mensagens(_contexto(wm, "dou mais um soco nele"))[0]["content"]
+    assert "=== COMBATE SEM COMBATENTE REGISTRADO ===" in system
+    assert "[INIMIGO:" in system
+
+
+def test_nao_injeta_nudge_inimigo_com_inimigo_registrado():
+    invalidar_cache()
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("tharn-1", "Tharnvik", "intacto")
+    system = montar_mensagens(_contexto(wm, "ataco o Tharnvik"))[0]["content"]
+    assert "=== COMBATE SEM COMBATENTE REGISTRADO ===" not in system
+
+
+def test_nao_injeta_nudge_inimigo_fora_de_combate():
+    invalidar_cache()
+    system = montar_mensagens(_contexto(_wm(), "converso com o taverneiro"))[0]["content"]
+    assert "=== COMBATE SEM COMBATENTE REGISTRADO ===" not in system

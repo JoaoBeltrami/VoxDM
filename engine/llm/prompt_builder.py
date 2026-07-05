@@ -902,6 +902,29 @@ def montar_mensagens(
         )
         log.info("nudge_cena_injetado", transcricao=(contexto.transcricao_atual or "")[:60])
 
+    # COMBATE-SEM-REGISTRO (playtest 05/07, sess-95a7c47468c5): um sparring
+    # abriu em_combate mas NENHUM [INIMIGO] foi emitido a luta inteira — sem
+    # combatente registrado o turno de inimigo da engine nunca roda, o dano
+    # narrado nunca vira [DANO] aplicado (HP ficou 24/24 a sessão toda) e o
+    # combate só morre pelo timeout de fantasma (6+ turnos de zumbi). Mesmo
+    # padrão do nudge de [CENA]: não muda estado, só cobra o marcador. Custo
+    # ~300 chars SÓ neste estado anômalo (combate ativo + zero registrados).
+    _wm_nudge = contexto.working_memory
+    if (
+        _wm_nudge is not None
+        and getattr(_wm_nudge, "em_combate", False)
+        and not getattr(_wm_nudge, "inimigos_combate", None)
+    ):
+        secoes.append(
+            "\n=== COMBATE SEM COMBATENTE REGISTRADO ===\n"
+            "O combate está ativo mas NENHUM oponente foi registrado. EMITA "
+            "[INIMIGO: id|Nome|indice-srd] pra cada oponente desta luta AGORA — "
+            "sem isso a engine não resolve ataques, não aplica dano e não encerra "
+            "o combate direito. Se a luta já se resolveu narrativamente (rendição, "
+            "aperto de mãos, sparring encerrado), deixe a cena esfriar em paz."
+        )
+        log.info("nudge_inimigo_injetado")
+
     # Fase 5.7: instrução de visibilidade de rolagens do mestre.
     # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
     #   qualquer rolagem interna (ataque de NPC, teste secreto, evento aleatório).
