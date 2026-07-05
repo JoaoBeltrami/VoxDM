@@ -21,6 +21,7 @@ Exemplo:
 import json
 import re
 import unicodedata
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -351,15 +352,53 @@ _PALAVRAS_COMUNS = frozenset({
 })
 _MAX_NPCS_PRESENTES = 8
 
+_LOCATIONS_MODULO: set[str] | None = None
+
+
+def _locations_canonicas_modulo() -> set[str]:
+    """Chaves canônicas (id + nome) de TODAS as locations do módulo, cacheado.
+
+    NPC-LOCAL-2 (playtest 05/07, sess-6e8a5b525bb2): o filtro de "local virou
+    NPC" só rejeitava a location_id da CENA ATUAL — uma vila citada de PASSAGEM
+    (menção a outro lugar do módulo, não onde o jogador está) ainda virava NPC
+    ("kaelmund" registrado em npcs_presentes numa cena em Drevamor). Carrega
+    uma vez por processo; falha silenciosa (módulo ausente/corrompido → set
+    vazio, filtro cai pro comportamento de antes: só a cena atual).
+    """
+    global _LOCATIONS_MODULO
+    if _LOCATIONS_MODULO is not None:
+        return _LOCATIONS_MODULO
+    canon: set[str] = set()
+    try:
+        caminho = Path(settings.DEFAULT_MODULE_PATH)
+        if not caminho.is_absolute():
+            caminho = Path(__file__).resolve().parents[2] / str(
+                settings.DEFAULT_MODULE_PATH
+            ).lstrip("./")
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        for elem in dados.get("locations", []):
+            if isinstance(elem, dict):
+                for campo in ("id", "name"):
+                    valor = str(elem.get(campo) or "").strip()
+                    if valor:
+                        canon.add(_canonico(valor))
+    except Exception as e:
+        log.warning("extractor_locations_modulo_falhou", erro=str(e)[:100])
+    _LOCATIONS_MODULO = canon
+    return _LOCATIONS_MODULO
+
 
 def _e_entidade_invalida(nid: str, location_id: str = "", location_nome: str = "") -> bool:
-    """True se o id NÃO deve virar NPC presente: é o LOCAL atual, uma divindade/
-    conceito, ou um figurante anônimo. Conservador — só rejeita sinais claros."""
+    """True se o id NÃO deve virar NPC presente: é o LOCAL atual (ou qualquer
+    OUTRO local do módulo), uma divindade/conceito, ou um figurante anônimo.
+    Conservador — só rejeita sinais claros."""
     canon = _canonico(nid)
     if not canon:
         return True
     if canon == _canonico(location_id) or (location_nome and canon == _canonico(location_nome)):
         return True  # o próprio local virou "NPC"
+    if canon in _locations_canonicas_modulo():
+        return True  # QUALQUER local do módulo (citado de passagem) — NPC-LOCAL-2
     tokens = {t for t in re.split(r"[\s-]+", _transliterar(nid).lower()) if t}
     if tokens & _TOKENS_NAO_NPC:
         return True

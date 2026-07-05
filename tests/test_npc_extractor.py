@@ -389,6 +389,57 @@ def test_entidade_invalida_preserva_npc_real(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is False
 
 
+# ── NPC-LOCAL-2 (playtest 05/07): OUTRO local do módulo também não é NPC ─────
+
+
+def test_entidade_invalida_rejeita_outro_local_do_modulo():
+    """Cena atual é 'drevamor'; 'kaelmund' é OUTRO local do módulo (citado de
+    passagem) — não é a location_id/nome da cena, mas segue sendo um local."""
+    from engine.llm import extractor as extractor_mod
+
+    original = extractor_mod._LOCATIONS_MODULO
+    extractor_mod._LOCATIONS_MODULO = None  # força rebuild do cache
+    try:
+        assert _e_entidade_invalida("kaelmund", "drevamor", "Drevamor") is True
+    finally:
+        extractor_mod._LOCATIONS_MODULO = original
+
+
+def test_aplicar_descarta_outro_local_do_modulo():
+    from engine.llm import extractor as extractor_mod
+
+    original = extractor_mod._LOCATIONS_MODULO
+    extractor_mod._LOCATIONS_MODULO = None
+    try:
+        wm = _wm()  # location_id="drevamor"
+        extraidos = [
+            {"id": "kaelmund", "nome": "Kaelmund"},         # outro local do módulo
+            {"id": "aldric-drevasson", "nome": "Aldric"},   # real
+        ]
+        add = aplicar_npcs_extraidos(wm, extraidos)
+        assert add == ["aldric-drevasson"]
+        assert "kaelmund" not in wm.npcs_presentes
+    finally:
+        extractor_mod._LOCATIONS_MODULO = original
+
+
+def test_locations_canonicas_modulo_falha_silenciosa_com_path_invalido(monkeypatch):
+    """Módulo ausente/corrompido → set vazio, filtro cai pro comportamento
+    de antes (só a cena atual) sem lançar."""
+    from config import settings as cfg_settings
+    from engine.llm import extractor as extractor_mod
+
+    original_cache = extractor_mod._LOCATIONS_MODULO
+    original_path = cfg_settings.DEFAULT_MODULE_PATH
+    extractor_mod._LOCATIONS_MODULO = None
+    cfg_settings.DEFAULT_MODULE_PATH = "modulo/inexistente.json"
+    try:
+        assert extractor_mod._locations_canonicas_modulo() == set()
+    finally:
+        extractor_mod._LOCATIONS_MODULO = original_cache
+        cfg_settings.DEFAULT_MODULE_PATH = original_path
+
+
 def test_aplicar_descarta_local_e_divindade():
     wm = _wm()  # location_id="drevamor"
     extraidos = [
