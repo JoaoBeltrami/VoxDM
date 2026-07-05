@@ -84,6 +84,37 @@ def test_dano_e_cura_no_mesmo_turno_em_ordem():
     assert wm.player_hp == 15
 
 
+# ── ENGINE-DANO-DUP-1: [DANO]/[CURA] narrado quando a engine já resolveu ──────
+
+
+def test_dano_descartado_quando_engine_ja_resolveu_turno():
+    """A engine já aplicou o dano via resolver_turno_ataque_jogador — o [DANO]
+    que o Mestre narra pra descrever o MESMO golpe é eco, não reaplica."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(
+        wm, "", "O golpe acerta em cheio. [DANO: -7 maça]",
+        engine_resolveu_turno=True,
+    )
+    assert wm.player_hp == 20  # intocado
+
+
+def test_cura_descartada_quando_engine_ja_resolveu_turno():
+    wm = _wm(player_hp=10, player_hp_max=20)
+    aplicar_pos_turno(
+        wm, "", "Você sente o calor da poção. [CURA: +5 poção]",
+        engine_resolveu_turno=True,
+    )
+    assert wm.player_hp == 10  # intocado
+
+
+def test_dano_aplicado_normalmente_quando_engine_nao_resolveu():
+    """Default (engine_resolveu_turno=False) preserva 100% o comportamento
+    existente — combate livre/prompt-only continua aplicando [DANO] normal."""
+    wm = _wm(player_hp=20, player_hp_max=20)
+    aplicar_pos_turno(wm, "Avanço!", "O golpe acerta em cheio. [DANO: -7 maça]")
+    assert wm.player_hp == 13
+
+
 # ── DANO-IMPROVISADO-1: teto de dano de inimigo sem ficha SRD ─────────────────
 
 
@@ -491,6 +522,60 @@ async def test_beat_roda_apos_rolagem_resolvida():
     groq = _GroqSoMarkers()
     await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, groq), "[Rolagem: d20+5 = 18]")
     assert groq.chamadas == 1
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_quando_engine_resolveu_turno():
+    """BEAT-DUPLO-1: resolve engine-autoritativo já rodou o turno dos inimigos
+    — o beat rodar de novo dobraria o dano no jogador (playtest 05/07)."""
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    await _beat_turno_inimigo(
+        _WsNuncaUsado(), _sessao_fake(wm, _GroqNuncaChamado()),
+        "(Narre este turno de combate dando corpo às decisões da ENGINE...)",
+        engine_resolveu_turno=True,
+    )
+    assert wm.player_hp == 20  # nada aconteceu — o resolve já aplicou o dano
+
+
+@pytest.mark.asyncio
+async def test_beat_nao_roda_com_combate_pendente():
+    """Declaração de ataque aguardando o d20 do jogador — os inimigos não
+    podem agir antes da rolagem existir (playtest 05/07: "narra o turno
+    inteiro antes de eu rolar")."""
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    sessao = _sessao_fake(wm, _GroqNuncaChamado())
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "guarda"}
+    await _beat_turno_inimigo(
+        _WsNuncaUsado(), sessao,
+        "Ataco o guarda! (PEÇA a rolagem de ataque)",
+    )
+    assert wm.player_hp == 20
+
+
+@pytest.mark.asyncio
+async def test_beat_roda_normalmente_sem_pendencia_via_getattr():
+    """_sessao_fake não seta combate_pendente — getattr default None não
+    bloqueia o fluxo antigo (fallback prompt-only intacto)."""
+    from api.websocket import _beat_turno_inimigo
+
+    wm = _wm(player_hp=20, player_hp_max=20)
+    wm.entrar_combate()
+    wm.registrar_inimigo("guarda", "Guarda", "intacto")
+    groq = _GroqSoMarkers()
+    await _beat_turno_inimigo(
+        _WsNuncaUsado(), _sessao_fake(wm, groq), "Ataco o guarda!",
+        engine_resolveu_turno=False,
+    )
+    assert groq.chamadas == 1
+    assert wm.player_hp == 15
 
 
 # ══ Ritual de mesa — modo episódio ════════════════════════════════════════════

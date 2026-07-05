@@ -786,11 +786,19 @@ def aplicar_pos_turno(
     working_mem: WorkingMemory,
     texto_jogador: str,
     resposta_completa: str,
+    *,
+    engine_resolveu_turno: bool = False,
 ) -> list[tuple[str, int]]:
     """Aplica todos os efeitos colaterais de um turno completo na WorkingMemory.
 
     Idempotente em relação a `dialogo_recente` desde que `registrar_fala("mestre", ...)`
     NÃO tenha sido chamado antes — esta função chama internamente.
+
+    engine_resolveu_turno=True quando o resolver engine-autoritativo (task 7)
+    já aplicou o dano deste turno diretamente (resolver_turno_ataque_jogador →
+    executar_turno_inimigos). Nesse caso [DANO]/[CURA] narrados pelo Mestre são
+    ECO do que já aconteceu, não um evento novo — ver ENGINE-DANO-DUP-1 no step
+    16c abaixo.
 
     Returns:
         Lista de mudanças de trust aplicadas: [(npc_id, delta), ...].
@@ -1378,33 +1386,53 @@ def aplicar_pos_turno(
     # prompt_builder injeta o protocolo da death_policy no próximo turno.
     # DANO-IMPROVISADO-1: em combate 100% improvisado (sem ficha SRD) limita o
     # dano por golpe a um teto CR≈0 — evita o 8B inventar one-shot (dano=17).
-    teto_improvisado = (
-        _DANO_MAX_INIMIGO_IMPROVISADO if _combate_sem_ficha_srd(working_mem) else None
-    )
-    for m in _RE_DANO.finditer(resposta_completa):
-        dano = int(m.group(1))
-        if teto_improvisado is not None and dano > teto_improvisado:
+    #
+    # ENGINE-DANO-DUP-1 (playtest 05/07, sess-6e8a5b525bb2): quando a ENGINE já
+    # resolveu o turno (resolver_turno_ataque_jogador rodou executar_turno_inimigos
+    # e aplicou o dano do inimigo DIRETO no PJ antes do LLM narrar), o Mestre segue
+    # o hábito normal de narração e emite [DANO: -N] pra descrever o MESMO golpe —
+    # e este loop reaplicava, dobrando o dano (HP caindo 2× o esperado). O gate
+    # deve_zerar_dano_extractor já existia pra isso, mas só protegia o extractor de
+    # prosa (extrair_estado_combate) — o marker explícito aqui não tinha guard
+    # nenhum. Quando a engine resolveu, [DANO]/[CURA] narrados são ECO do que já
+    # aconteceu: descarta sem aplicar, só loga pra telemetria.
+    if engine_resolveu_turno:
+        for m in _RE_DANO.finditer(resposta_completa):
             log.info(
-                "dano_improvisado_clampado",
-                bruto=dano,
-                teto=teto_improvisado,
+                "dano_narrado_descartado_engine_resolveu",
+                dano=m.group(1),
                 motivo=m.group(2).strip()[:60] or None,
             )
-            dano = teto_improvisado
-        antes = working_mem.player_hp
-        depois = working_mem.character.aplicar_dano(dano)
-        log.info(
-            "dano_jogador",
-            dano=dano,
-            hp=f"{antes}->{depois}",
-            motivo=m.group(2).strip()[:60] or None,
+        for m in _RE_CURA.finditer(resposta_completa):
+            log.info("cura_narrada_descartada_engine_resolveu", cura=m.group(1))
+    else:
+        teto_improvisado = (
+            _DANO_MAX_INIMIGO_IMPROVISADO if _combate_sem_ficha_srd(working_mem) else None
         )
-        if depois == 0:
-            log.warning("jogador_a_zero_hp", policy=working_mem.death_policy)
-    for m in _RE_CURA.finditer(resposta_completa):
-        antes = working_mem.player_hp
-        depois = working_mem.character.aplicar_cura(int(m.group(1)))
-        log.info("cura_jogador", cura=int(m.group(1)), hp=f"{antes}->{depois}")
+        for m in _RE_DANO.finditer(resposta_completa):
+            dano = int(m.group(1))
+            if teto_improvisado is not None and dano > teto_improvisado:
+                log.info(
+                    "dano_improvisado_clampado",
+                    bruto=dano,
+                    teto=teto_improvisado,
+                    motivo=m.group(2).strip()[:60] or None,
+                )
+                dano = teto_improvisado
+            antes = working_mem.player_hp
+            depois = working_mem.character.aplicar_dano(dano)
+            log.info(
+                "dano_jogador",
+                dano=dano,
+                hp=f"{antes}->{depois}",
+                motivo=m.group(2).strip()[:60] or None,
+            )
+            if depois == 0:
+                log.warning("jogador_a_zero_hp", policy=working_mem.death_policy)
+        for m in _RE_CURA.finditer(resposta_completa):
+            antes = working_mem.player_hp
+            depois = working_mem.character.aplicar_cura(int(m.group(1)))
+            log.info("cura_jogador", cura=int(m.group(1)), hp=f"{antes}->{depois}")
 
     # 16d. Cicatriz permanente — [CICATRIZ: texto] (dedup + cap no substate).
     # Gate de gatilho (playtest 03/07): o LLM emitia cicatriz em momento
