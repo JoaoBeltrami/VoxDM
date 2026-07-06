@@ -17,6 +17,14 @@ Dependências: pytest, pytest-asyncio.
 
 import pytest
 
+from engine.memory.working_memory import WorkingMemory
+from engine.npc.identity import garantir_registro, registrar_npc
+
+
+def _wm(**kw) -> WorkingMemory:
+    return WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test", **kw)
+
+
 # ══ STT-ECO-HOTWORDS-1 ════════════════════════════════════════════════════════
 
 
@@ -111,3 +119,140 @@ async def test_transcrever_bytes_preserva_fala_real_e2e(monkeypatch):
         hotwords_extra="Tharnvik, Faccao de Kaelmund, Drevamor",
     )
     assert texto == "Eu ataco o goblin com meu machado!"
+
+
+# ══ NPC-DEDUP-CANONICO-1 ══════════════════════════════════════════════════════
+
+
+def test_distancia_edicao_helper():
+    from engine.llm.extractor import _distancia_edicao
+
+    assert _distancia_edicao("grimbold", "grimbold") == 0
+    assert _distancia_edicao("grimbol", "grimbold") == 1  # falta 1 letra
+    assert _distancia_edicao("taverneiro", "taberneiro") == 1  # v↔b
+    assert _distancia_edicao("tabernero", "taverneiro") == 2
+    assert _distancia_edicao("aldric", "bjorn") == 5
+
+
+def test_variante_proxima_pega_erro_de_grafia_curto():
+    """'grimbol' (1 letra faltando) casa com 'grimbold' já registrado."""
+    from engine.llm.extractor import _canonico, _variante_proxima
+
+    mapa = {_canonico("grimbold"): "grimbold", _canonico("aldric"): "aldric"}
+    assert _variante_proxima("grimbol", mapa) == "grimbold"
+
+
+def test_variante_proxima_pega_troca_de_letra():
+    """'taberneiro' (v→b) casa com 'taverneiro' já registrado."""
+    from engine.llm.extractor import _canonico, _variante_proxima
+
+    mapa = {_canonico("taverneiro"): "taverneiro"}
+    assert _variante_proxima("taberneiro", mapa) == "taverneiro"
+    assert _variante_proxima("tabernero", mapa) == "taverneiro"  # distância 2
+
+
+def test_variante_proxima_nao_funde_nomes_curtos_distintos():
+    """Nomes curtos (<8 chars) toleram só distância 1 — 'kael' vs 'kaia'
+    (distância 2) não pode colapsar."""
+    from engine.llm.extractor import _canonico, _variante_proxima
+
+    mapa = {_canonico("kael"): "kael"}
+    assert _variante_proxima("kaia", mapa) is None
+
+
+def test_variante_proxima_nao_funde_nomes_genuinamente_diferentes():
+    from engine.llm.extractor import _canonico, _variante_proxima
+
+    mapa = {_canonico("aldric"): "aldric", _canonico("bjorn"): "bjorn"}
+    assert _variante_proxima("kael", mapa) is None
+
+
+def test_variante_proxima_ids_curtos_demais_nao_comparam():
+    """Abaixo de 4 chars, distância 1-2 é ruído — nunca compara."""
+    from engine.llm.extractor import _canonico, _variante_proxima
+
+    mapa = {_canonico("kai"): "kai"}
+    assert _variante_proxima("kal", mapa) is None
+
+
+def test_dedup_contra_registro_mesmo_fora_de_npcs_presentes():
+    """'grimbold' saiu de npcs_presentes (re-inferência de cena trocou a
+    lista) mas segue no registro canônico da sessão — repetição EXATA não
+    pode re-registrar do zero (log real: 22:22:58, 'grimbold' voltou junto
+    com 'tabernero' porque tinha saído de presentes)."""
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    wm = _wm()
+    wm.npcs_presentes = ["aldric"]  # grimbold NÃO está mais presente
+    garantir_registro(wm)
+    registrar_npc(wm, "grimbold", "Grimbold")  # mas segue no registro (já visto)
+
+    add = aplicar_npcs_extraidos(wm, [{"id": "grimbold", "nome": "Grimbold"}])
+    assert add == []  # repetição exata contra o registro — não duplica
+
+
+def test_dedup_variante_de_grafia_fora_de_npcs_presentes():
+    """Combina os dois mecanismos: universo session-wide + distância de
+    edição — 'grimbol' (typo) casa com 'grimbold' mesmo fora de presentes."""
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    wm = _wm()
+    wm.npcs_presentes = ["aldric"]
+    garantir_registro(wm)
+    registrar_npc(wm, "grimbold", "Grimbold")
+
+    add = aplicar_npcs_extraidos(wm, [{"id": "grimbol", "nome": "Grimbol"}])
+    assert add == []
+    assert "grimbol" not in wm.npcs_presentes
+
+
+@pytest.mark.parametrize("candidato", ["taberneiro", "tabernero"])
+def test_dedup_variantes_de_grafia_do_taverneiro(candidato):
+    """As variantes de GRAFIA reais do log (distância de edição ≤2) colapsam
+    contra 'taverneiro' já registrado. 'homem-da-taberna' e
+    'grimbold-o-taberneiro' são descrições DIFERENTES (distância >10), não
+    erro de grafia — não colapsam por esta via (limitação conhecida; mitigada
+    pela lista de 'conhecidos' mais ampla passada ao extractor LLM)."""
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    wm = _wm()
+    wm.npcs_presentes = []
+    garantir_registro(wm)
+    registrar_npc(wm, "taverneiro", "Taverneiro")
+
+    add = aplicar_npcs_extraidos(wm, [{"id": candidato, "nome": candidato.title()}])
+    assert add == [], f"'{candidato}' deveria colapsar contra 'taverneiro'"
+
+
+def test_dedup_nomes_distintos_nao_colapsam_por_edicao():
+    """Distância de edição não pode fundir NPCs genuinamente diferentes."""
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    wm = _wm()
+    wm.npcs_presentes = []
+    garantir_registro(wm)
+    registrar_npc(wm, "aldric", "Aldric")
+
+    add = aplicar_npcs_extraidos(wm, [{"id": "bjorn", "nome": "Bjorn"}])
+    assert add == ["bjorn"]
+
+
+def test_dedup_step17b_marker_usa_registro_canonico_e_edicao():
+    """O mesmo fix no caminho do marcador [NPC: id|nome] (turn_pipeline step 17b)."""
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm()
+    wm.npcs_presentes = ["aldric"]  # grimbold não está mais presente
+    garantir_registro(wm)
+    registrar_npc(wm, "grimbold", "Grimbold")
+
+    aplicar_pos_turno(wm, "", "O taverneiro acena. [NPC: grimbol|Grimbol]")
+    assert "grimbol" not in wm.npcs_presentes
+
+
+def test_sotao_taberna_porao_nao_viram_npc():
+    """'sotão' (falado pelo JOGADOR, não é NPC) virou NPC no playtest 06/07."""
+    from engine.llm.extractor import _e_entidade_invalida
+
+    for termo in ("sotao", "taberna", "porao"):
+        assert _e_entidade_invalida(termo, "drevamor", "Drevamor") is True, termo

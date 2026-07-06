@@ -33,10 +33,12 @@ from config import settings
 from engine.authority.intent import classificar_intent_economia
 from engine.authority.resolve import resolver_custo_ouro
 from engine.llm.extractor import (
+    _canonico,
     _capar_npcs_presentes,
     _chave_conjunto,
     _chave_dedup,
     _e_entidade_invalida,
+    _variante_proxima,
 )
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
@@ -1523,10 +1525,19 @@ def aplicar_pos_turno(
     # NPC-DUP-3: chave secundária por conjunto de tokens — pega o mesmo NPC
     # descritivo com tokens reordenados ('taverna-kaelmund-monge' ↔
     # 'monge-da-taverna-kaelmund'). Chave vazia nunca entra no set.
-    _presentes_chaves = {_chave_dedup(p) for p in working_mem.npcs_presentes}
-    _presentes_conjuntos = {
-        c for c in (_chave_conjunto(p) for p in working_mem.npcs_presentes) if c
-    }
+    # NPC-DEDUP-CANONICO-1 (playtest 06/07): universo de dedup inclui o registro
+    # canônico da SESSÃO INTEIRA (não só npcs_presentes atual) — sem isso, um
+    # NPC que saiu de presentes (re-inferência de cena) era re-registrado do
+    # zero. Mais a chave TERCIÁRIA por distância de edição, que pega erro de
+    # grafia do STT/LLM ('grimbol'/'grimbold') que nenhuma chave exata colapsa.
+    _universo_ids = (
+        set(working_mem.npcs_presentes)
+        | set(getattr(working_mem.scene, "npc_registro", {}).keys())
+        | set(getattr(working_mem.scene, "npc_aliases", {}).keys())
+    )
+    _presentes_chaves = {_chave_dedup(p) for p in _universo_ids}
+    _presentes_conjuntos = {c for c in (_chave_conjunto(p) for p in _universo_ids) if c}
+    _mapa_canon_para_id = {_canonico(p): p for p in _universo_ids}
     _loc_id = str(getattr(working_mem, "location_id", "") or "")
     _loc_nome = str(getattr(working_mem, "location_nome", "") or "")
     for m in _RE_NPC_ENTRA.finditer(resposta_completa):
@@ -1540,6 +1551,10 @@ def aplicar_pos_turno(
         if conjunto and conjunto in _presentes_conjuntos:
             log.info("npc_marcador_dup_tokens_reordenados", id=npc_id)
             continue  # mesmo NPC descritivo com tokens reordenados
+        _variante = _variante_proxima(npc_id, _mapa_canon_para_id)
+        if _variante:
+            log.info("npc_marcador_dedup_variante_edicao", id=npc_id, existente=_variante)
+            continue
         # PLAYTEST 24/06: barra LUGAR/DEIDADE/anônimo virando NPC (mesmo via marcador).
         if _e_entidade_invalida(npc_id, _loc_id, _loc_nome):
             log.info("npc_marcador_entidade_invalida", id=npc_id)
@@ -1548,6 +1563,7 @@ def aplicar_pos_turno(
         _presentes_chaves.add(chave)
         if conjunto:
             _presentes_conjuntos.add(conjunto)
+        _mapa_canon_para_id[_canonico(npc_id)] = npc_id
         working_mem.scene.npcs_apresentados.add(npc_id)
         working_mem.scene.npcs_introduzidos_turno.append(npc_id)
         log.info("npc_entrou_cena", npc=npc_id, nome=(m.group(2) or "").strip() or None)
