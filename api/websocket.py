@@ -2315,11 +2315,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         aplicar_npcs_extraidos,
                         extrair_npcs_cena,
                     )
+                    # NPC-DEDUP-CANONICO-1 (playtest 06/07): "já conhecidos" inclui
+                    # o registro canônico da SESSÃO INTEIRA, não só quem está
+                    # presente agora — sem isso o LLM re-sugeria "homem-da-taberna"
+                    # pro MESMO taverneiro que tinha saído de npcs_presentes.
+                    _npcs_conhecidos = list(dict.fromkeys(
+                        list(sessao.working_mem.npcs_presentes)
+                        + list(sessao.working_mem.scene.npc_registro.keys())
+                    ))
                     npcs_novos = await asyncio.wait_for(
                         extrair_npcs_cena(
                             sessao.groq,
                             resposta_limpa,
-                            list(sessao.working_mem.npcs_presentes),
+                            _npcs_conhecidos,
                             nome_jogador=sessao.working_mem.player_name,
                         ),
                         timeout=8.0,

@@ -191,6 +191,59 @@ def _chave_conjunto(nid: str) -> str:
     return "-".join(sorted(uteis))
 
 
+def _distancia_edicao(a: str, b: str) -> int:
+    """Levenshtein simples (DP O(m·n), sem libs) — só pra strings curtas de id."""
+    if a == b:
+        return 0
+    m, n = len(a), len(b)
+    if m == 0:
+        return n
+    if n == 0:
+        return m
+    anterior = list(range(n + 1))
+    for i in range(1, m + 1):
+        atual = [i] + [0] * n
+        for j in range(1, n + 1):
+            custo = 0 if a[i - 1] == b[j - 1] else 1
+            atual[j] = min(anterior[j] + 1, atual[j - 1] + 1, anterior[j - 1] + custo)
+        anterior = atual
+    return anterior[n]
+
+
+# NPC-DEDUP-CANONICO-1 (playtest 06/07): 'grimbol'/'grimbold' e 'taberneiro'/
+# 'taverneiro' são a MESMA pessoa com erro de grafia do STT/LLM (1 char de
+# diferença) — nenhuma chave de dedup exata (canônica/epíteto/conjunto)
+# colapsa erro de grafia. Limiar escalado pelo tamanho: ids curtos toleram
+# MENOS erro (evita 'kael' colapsar com 'kaia'); piso mínimo de 4 chars —
+# abaixo disso, distância 1-2 é ruído estatístico, não sinal de typo.
+_DIST_EDICAO_LIMIAR_CURTO = 1
+_DIST_EDICAO_LIMIAR_LONGO = 2
+_DIST_EDICAO_MIN_LEN = 4
+
+
+def _variante_proxima(candidato: str, mapa_canon_para_id: dict[str, str]) -> str | None:
+    """Candidato é uma variante de GRAFIA (Levenshtein) de um id já conhecido?
+
+    Compara a forma canônica do candidato contra a forma canônica de cada id
+    já registrado; retorna o id ORIGINAL batido (não a forma canônica — o
+    caller precisa da chave de verdade) ou None se nenhum estiver dentro do
+    limiar. Só compara ids de comprimento comparável (corte defensivo barato
+    antes do Levenshtein completo).
+    """
+    cand = _canonico(candidato)
+    if len(cand) < _DIST_EDICAO_MIN_LEN:
+        return None
+    limiar = _DIST_EDICAO_LIMIAR_CURTO if len(cand) < 8 else _DIST_EDICAO_LIMIAR_LONGO
+    for existente_canon, existente_id in mapa_canon_para_id.items():
+        if len(existente_canon) < _DIST_EDICAO_MIN_LEN:
+            continue
+        if abs(len(cand) - len(existente_canon)) > limiar:
+            continue
+        if _distancia_edicao(cand, existente_canon) <= limiar:
+            return existente_id
+    return None
+
+
 def _npc_fantasma(nid: str) -> bool:
     """True se o id é fragmento de narração ou figurante, não nome de NPC.
 
@@ -325,6 +378,10 @@ _TOKENS_NAO_NPC = frozenset({
     "oponente", "oponentes", "inimigo", "inimiga", "inimigos", "inimigas",
     "adversario", "adversaria", "adversarios", "adversarias",
     "atacante", "atacantes", "agressor", "agressora", "agressores",
+    # CÔMODOS/SUBLOCAIS (playtest 06/07): "sotão" (falado pelo JOGADOR sobre
+    # o CÔMODO, não um NPC) virou NPC presente. Mesma família de "taberna"/
+    # "porão" — parte do cenário, nunca personagem, mesmo em id de 1 token.
+    "sotao", "sotaos", "taberna", "tabernas", "porao", "poroes",
 })
 
 # NPC-LIXO (playtest 27/06): o 8B registrava DESCRITORES como NPC presente —
@@ -545,13 +602,27 @@ def aplicar_npcs_extraidos(
 
     garantir_registro(wm)
     jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
-    presentes_canon = {_chave_dedup(p) for p in wm.npcs_presentes}
+    # NPC-DEDUP-CANONICO-1 (playtest 06/07): o universo de dedup NÃO pode ser
+    # só npcs_presentes ATUAL — quando a re-inferência de cena (Neo4j) substitui
+    # a lista, um NPC já conhecido (ex: o taverneiro) some de presentes mas
+    # continua no registro canônico da SESSÃO INTEIRA (scene.npc_registro) e nos
+    # aliases de rename (scene.npc_aliases). Log real: 'grimbold' foi re-registrado
+    # do zero em 22:22 porque tinha saído de npcs_presentes — o registro já
+    # existia, só não era consultado aqui.
+    _universo_ids = (
+        set(wm.npcs_presentes)
+        | set(getattr(wm.scene, "npc_registro", {}).keys())
+        | set(getattr(wm.scene, "npc_aliases", {}).keys())
+    )
+    presentes_canon = {_chave_dedup(p) for p in _universo_ids}
     # NPC-DUP-3: chave SECUNDÁRIA por conjunto de tokens — pega o mesmo NPC
     # descritivo com tokens reordenados ('taverna-kaelmund-monge' ↔
     # 'monge-da-taverna-kaelmund'). Chave vazia nunca entra no set.
-    presentes_conjunto = {
-        c for c in (_chave_conjunto(p) for p in wm.npcs_presentes) if c
-    }
+    presentes_conjunto = {c for c in (_chave_conjunto(p) for p in _universo_ids) if c}
+    # NPC-DEDUP-CANONICO-1: chave TERCIÁRIA por distância de edição — pega erro
+    # de grafia do STT/LLM ('grimbol'/'grimbold', 'taberneiro'/'taverneiro') que
+    # nenhuma chave exata acima colapsa.
+    mapa_canon_para_id = {_canonico(p): p for p in _universo_ids}
     loc_id = str(getattr(wm, "location_id", "") or "")
     loc_nome = str(getattr(wm, "location_nome", "") or "")
     adicionados: list[str] = []
@@ -564,6 +635,10 @@ def aplicar_npcs_extraidos(
         if conjunto and conjunto in presentes_conjunto:
             log.info("npc_dup_tokens_reordenados_descartado", id=nid)
             continue
+        variante = _variante_proxima(nid, mapa_canon_para_id)
+        if variante:
+            log.info("npc_dedup_variante_edicao_descartada", candidato=nid, existente=variante)
+            continue
         if _e_entidade_invalida(nid, loc_id, loc_nome):
             log.info("npc_entidade_invalida_descartada", id=nid)
             continue
@@ -575,6 +650,7 @@ def aplicar_npcs_extraidos(
             if alvo:
                 novo_id = revelar_nome(wm, alvo, nome)
                 presentes_canon.add(_chave_dedup(novo_id))
+                mapa_canon_para_id[_canonico(novo_id)] = novo_id
                 log.info("npc_name_reveal_renomeado", de=alvo, para=novo_id)
                 try:
                     wm.narrative.registrar_cronica(f"🎭 {nome} revelou seu nome")
@@ -589,6 +665,7 @@ def aplicar_npcs_extraidos(
         presentes_canon.add(canon)
         if conjunto:
             presentes_conjunto.add(conjunto)
+        mapa_canon_para_id[_canonico(nid)] = nid
         adicionados.append(nid)
         # F6 (playtest 24/06): crônica vazia em sessão social — registra o
         # ENCONTRO (evento determinístico, não depende de marcador do Mestre).
