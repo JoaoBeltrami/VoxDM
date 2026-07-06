@@ -23,8 +23,10 @@ Instalação:
 
 import asyncio
 import json
+import re
 import tempfile
 import threading
+import unicodedata
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -179,6 +181,51 @@ def _montar_hotwords(hotwords_extra: str | None) -> str | None:
     return ", ".join(dict.fromkeys(t for t in termos if t))[:800] or None
 
 
+def _normalizar_termo(termo: str) -> str:
+    """ASCII sem acento, minúsculo, só alfanumérico+espaço — pra comparar termos."""
+    nfkd = unicodedata.normalize("NFKD", termo)
+    sem_acento = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9 ]+", "", sem_acento.lower()).strip()
+
+
+# Fração mínima de segmentos-vírgula da transcrição que precisa bater
+# (quase-exato) com termos do hotwords injetado pra classificar como eco.
+_LIMIAR_ECO_HOTWORDS = 0.6
+
+
+def _e_eco_de_hotwords(texto: str, hotwords: str | None) -> bool:
+    """True quando a transcrição é ECO do vocabulário de hotwords injetado.
+
+    STT-ECO-HOTWORDS-1 (playtest 06/07): falha conhecida de hotword bias no
+    Faster-Whisper — em áudio de silêncio/ruído, o decoder pode "alucinar" o
+    próprio vocabulário injetado como se fosse fala real. Log real da sessão:
+    `transcricao_ok` registrou 'Tharnvik — Facção de Kaélmund, Os Kaél —
+    Facção de Kaélmund,' como "fala do jogador" — é literalmente um trecho do
+    hotwords concatenado (STT-NOMES-2/3), não voz humana. Isso contaminou o
+    resto da sessão: NPCs fantasma, prompt inflando pra 21-23k chars, cascata
+    forçada pro modelo fraco em todo turno.
+
+    Sinal: a transcrição, cortada por vírgula, tem MÚLTIPLOS segmentos e a
+    MAIORIA bate quase-exatamente com termos do hotwords injetado. Conservador
+    de propósito — uma ÚNICA menção real a um NPC presente ("ataco o Bjorn
+    Tharnsson") tem overlap com hotwords mas não tem a ESTRUTURA de lista
+    (1 segmento só, sem vírgula) — não é descartada.
+    """
+    if not hotwords or not texto.strip():
+        return False
+    segmentos = [s for s in (p.strip() for p in texto.split(",")) if s]
+    if len(segmentos) < 2:
+        return False  # sem estrutura de lista — fala natural comum
+    termos_hotwords = {
+        _normalizar_termo(t) for t in hotwords.split(", ") if t.strip()
+    }
+    termos_hotwords.discard("")
+    if not termos_hotwords:
+        return False
+    batidas = sum(1 for s in segmentos if _normalizar_termo(s) in termos_hotwords)
+    return (batidas / len(segmentos)) >= _LIMIAR_ECO_HOTWORDS
+
+
 async def transcrever_bytes(
     audio_bytes: bytes,
     idioma: str = "pt",
@@ -224,6 +271,12 @@ async def transcrever_bytes(
             tmp_path.unlink(missing_ok=True)
 
     texto = await loop.run_in_executor(None, _transcrever)
+    if _e_eco_de_hotwords(texto, hotwords_final):
+        log.warning(
+            "stt_eco_hotwords_descartado",
+            chars=len(texto), trecho=texto[:120],
+        )
+        return ""
     log.info("transcrever_bytes_ok", chars=len(texto), idioma=idioma)
     return texto
 
