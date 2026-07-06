@@ -516,6 +516,19 @@ _PRONOMES: frozenset[str] = frozenset({
     "isso", "isto", "aquilo",
 })
 
+# ALVO-PRONOME-1 (playtest 06/07): "vou atacar ele do nada!" — _RE_ALVO_ATAQUE
+# exige um ARTIGO entre o verbo e o alvo ("ataco O goblin"), então um objeto-
+# pronome ("atacar ele", sem artigo) nunca bate no regex nenhuma vez — o loop
+# de match nem roda, e sem NOME no texto o passo 2 (busca por substring) também
+# falha. Verbo de ataque + pronome de objeto DIRETO (sem artigo) → só entra em
+# jogo quando há exatamente 1 candidato (NPC presente OU inimigo já vivo);
+# ambíguo (0 ou 2+) mantém o comportamento de sempre (sem alvo, nunca adivinha).
+_RE_PRONOME_ATAQUE = re.compile(
+    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto)\s+"
+    r"(?:nele|nela|ele|ela|aquele|aquela|esse|essa|isso|aquilo)\b",
+    re.IGNORECASE,
+)
+
 
 # ALVO-FANTASMA-1 (playtest 29/06): "corto a cabeça de aldric" tem alvo "aldric",
 # NÃO "cabeça". Partes do corpo nunca são o alvo-NPC — se o regex pegar uma delas,
@@ -643,7 +656,22 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
         iid for iid, d in working_mem.inimigos_combate.items()
         if d.get("estado") != "morto"
     ]
-    return vivos[0] if len(vivos) == 1 else None
+    if len(vivos) == 1:
+        return vivos[0]
+
+    # 2.5 (ALVO-PRONOME-1): "vou atacar ele do nada" — sem artigo, o passo 1
+    # nem roda (_RE_ALVO_ATAQUE exige artigo entre verbo e alvo); sem nome no
+    # texto, o passo 2 também falha. Único candidato (NPC presente OU inimigo
+    # já registrado) → resolve; ambíguo (0 ou 2+) segue None, nunca adivinha.
+    if _RE_PRONOME_ATAQUE.search(texto_jogador):
+        candidatos = list(dict.fromkeys(vivos + list(working_mem.npcs_presentes)))
+        if len(candidatos) == 1:
+            iid = candidatos[0]
+            if iid not in working_mem.inimigos_combate:
+                working_mem.registrar_inimigo(iid, str(iid).replace("-", " ").title(), "intacto")
+            return iid
+
+    return None
 
 
 # Rolagem de d20 que o JOGADOR envia da UI — tolerante a DOIS formatos legítimos
