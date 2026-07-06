@@ -256,3 +256,87 @@ def test_sotao_taberna_porao_nao_viram_npc():
 
     for termo in ("sotao", "taberna", "porao"):
         assert _e_entidade_invalida(termo, "drevamor", "Drevamor") is True, termo
+
+
+# ══ ALVO-PRONOME-1 ════════════════════════════════════════════════════════════
+
+
+def test_ataque_por_pronome_resolve_unico_npc_presente():
+    """'vou atacar ele do nada' — sem artigo, o regex de nome nem roda; com
+    SÓ 1 NPC na cena, resolve pro único candidato em vez de descartar."""
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = ["grimbold"]
+    garantir_registro(wm)
+    wm.entrar_combate()
+    alvo = extrair_alvo_ataque("Vou atacar ele do nada!", wm)
+    assert alvo == "grimbold"
+    assert "grimbold" in wm.inimigos_combate
+
+
+def test_ataque_por_pronome_resolve_unico_inimigo_ja_registrado():
+    """Sem NPC presente nomeado mas com 1 inimigo VIVO já em combate."""
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = []
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-1", "Goblin", "ferido")
+    alvo = extrair_alvo_ataque("Ataco ele de novo!", wm)
+    assert alvo == "goblin-1"
+
+
+def test_ataque_por_pronome_nele_tambem_resolve():
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = ["grimbold"]
+    garantir_registro(wm)
+    wm.entrar_combate()
+    assert extrair_alvo_ataque("Eu ataco nele com tudo!", wm) == "grimbold"
+
+
+def test_ataque_por_pronome_ambiguo_mantem_comportamento_antigo():
+    """2+ NPCs presentes — pronome continua ambíguo, sem alvo (nunca adivinha)."""
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = ["grimbold", "aldric"]
+    garantir_registro(wm)
+    wm.entrar_combate()
+    assert extrair_alvo_ataque("Vou atacar ele do nada!", wm) is None
+
+
+def test_ataque_por_pronome_sem_ninguem_mantem_comportamento_antigo():
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = []
+    wm.entrar_combate()
+    assert extrair_alvo_ataque("Vou atacar ele do nada!", wm) is None
+
+
+def test_ataque_com_nome_explicito_tem_precedencia_sobre_pronome():
+    """Regressão: nome explícito (passo 1) continua tendo precedência — o
+    fallback de pronome só entra quando NENHUM nome bate."""
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = ["grimbold", "aldric"]
+    garantir_registro(wm)
+    wm.entrar_combate()
+    assert extrair_alvo_ataque("Eu ataco o aldric!", wm) == "aldric"
+
+
+def test_ataque_sem_pronome_de_ataque_nao_aciona_fallback():
+    """Texto sem verbo+pronome de ataque (ex: fala social) não deve resolver
+    um alvo só porque há 1 NPC presente — o fallback é condicionado ao
+    padrão verbal, não dispara pra qualquer turno."""
+    from api.turn_pipeline import extrair_alvo_ataque
+
+    wm = _wm()
+    wm.npcs_presentes = ["grimbold"]
+    garantir_registro(wm)
+    wm.entrar_combate()
+    assert extrair_alvo_ataque("Eu confio nele.", wm) is None
