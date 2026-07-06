@@ -340,3 +340,79 @@ def test_ataque_sem_pronome_de_ataque_nao_aciona_fallback():
     garantir_registro(wm)
     wm.entrar_combate()
     assert extrair_alvo_ataque("Eu confio nele.", wm) is None
+
+
+# ══ NPC-REVEAL-TELEMETRIA-1 ═══════════════════════════════════════════════════
+
+
+class _LogFake:
+    """Substitui o logger do módulo — evita depender de structlog.configure()
+    global, que (cache_logger_on_first_use=True em engine/logging_setup.py)
+    ignora reconfigurações após o primeiro uso do logger na suite inteira."""
+
+    def __init__(self) -> None:
+        self.eventos: list[dict] = []
+
+    def info(self, event: str, **kw) -> None:
+        self.eventos.append({"event": event, **kw})
+
+    def warning(self, event: str, **kw) -> None:
+        self.eventos.append({"event": event, **kw})
+
+
+def test_reveal_ambiguo_sem_ancora_loga_trecho_e_zero_candidatos(monkeypatch):
+    """Recém-chegado sem âncora válida ('candidatos_ancorados=0') — o trecho
+    da narração ao redor do reveal entra no log pra calibrar a heurística."""
+    import engine.npc.identity as identity_mod
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    log_fake = _LogFake()
+    monkeypatch.setattr(identity_mod, "log", log_fake)
+
+    wm = _wm()
+    wm.npcs_presentes = ["brennan"]
+    garantir_registro(wm)
+    narr = 'Um estranho surge da névoa. "Sou Kael", anuncia com firmeza total.'
+
+    aplicar_npcs_extraidos(wm, [{"id": "kael", "nome": "Kael"}], narracao=narr)
+    achados = [e for e in log_fake.eventos if e["event"] == "npc_name_reveal_ambiguo"]
+    assert achados, "esperava log npc_name_reveal_ambiguo"
+    achado = achados[0]
+    assert achado["candidatos_ancorados"] == 0
+    assert "Kael" in achado["trecho"]
+
+
+def test_reveal_ambiguo_dois_ancorados_loga_contagem_correta(monkeypatch):
+    """Dois NPCs ancorados na janela ('candidatos_ancorados=2')."""
+    import engine.npc.identity as identity_mod
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    log_fake = _LogFake()
+    monkeypatch.setattr(identity_mod, "log", log_fake)
+
+    wm = _wm()
+    wm.npcs_presentes = ["monge-da-taverna", "velho-monge-cego"]
+    garantir_registro(wm)
+    narr = 'O monge olha pro outro monge. "Sou Kael."'
+
+    aplicar_npcs_extraidos(wm, [{"id": "kael", "nome": "Kael"}], narracao=narr)
+    achados = [e for e in log_fake.eventos if e["event"] == "npc_name_reveal_ambiguo"]
+    assert achados
+    assert achados[0]["candidatos_ancorados"] == 2
+
+
+def test_reveal_com_ancora_unica_nao_loga_ambiguo(monkeypatch):
+    """Caso feliz (1 ancorado, renomeia) não deve emitir o log de ambíguo."""
+    import engine.npc.identity as identity_mod
+    from engine.llm.extractor import aplicar_npcs_extraidos
+
+    log_fake = _LogFake()
+    monkeypatch.setattr(identity_mod, "log", log_fake)
+
+    wm = _wm()
+    wm.npcs_presentes = ["monge-da-taverna"]
+    garantir_registro(wm)
+    narr = 'O monge abaixa o capuz. "Sou Kael, e preciso da sua ajuda."'
+
+    aplicar_npcs_extraidos(wm, [{"id": "kael", "nome": "Kael"}], narracao=narr)
+    assert not [e for e in log_fake.eventos if e["event"] == "npc_name_reveal_ambiguo"]

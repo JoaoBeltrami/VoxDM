@@ -273,7 +273,12 @@ def alvo_do_reveal(wm: Any, narracao: str, nome: str) -> str | None:
     "cena com 1 NPC": um recém-chegado dizendo "Sou Kael" numa cena onde só
     Brennan estava NÃO pode renomear Brennan. Ambíguo (0 ou 2+ presentes
     ancorados) → None; o caller registra o candidato como NPC novo (fluxo
-    de sempre) e loga a telemetria.
+    de sempre).
+
+    NPC-REVEAL-TELEMETRIA-1 (playtest 06/07): o caso ambíguo logava só o id do
+    candidato, sem contexto suficiente pra calibrar a heurística de âncora
+    quando o problema reaparecer. Loga aqui (não no caller) porque é aqui que
+    vivem a posição do reveal e a contagem de ancorados.
     """
     pos = _pos_reveal(narracao, nome)
     if pos is None:
@@ -284,4 +289,11 @@ def alvo_do_reveal(wm: Any, narracao: str, nome: str) -> str | None:
         tokens = {t for t in _tokens_uteis(p) if len(t) >= 3}
         if any(re.search(rf"\b{re.escape(t)}\b", janela) for t in tokens):
             ancorados.append(p)
-    return ancorados[0] if len(ancorados) == 1 else None
+    if len(ancorados) == 1:
+        return ancorados[0]
+    trecho = narracao[max(0, pos - 60) : pos + 90].strip()[:150]
+    log.info(
+        "npc_name_reveal_ambiguo",
+        candidato=nome, trecho=trecho, candidatos_ancorados=len(ancorados),
+    )
+    return None

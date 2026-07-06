@@ -657,8 +657,10 @@ def aplicar_npcs_extraidos(
                 except Exception:
                     pass
                 continue
-            # Padrão presente mas sem âncora única — telemetria pra calibrar.
-            log.info("npc_name_reveal_ambiguo", candidato=nid)
+            # Padrão presente mas sem âncora única — alvo_do_reveal já loga
+            # npc_name_reveal_ambiguo com trecho+contagem de ancorados
+            # (NPC-REVEAL-TELEMETRIA-1); nada a fazer aqui além do fallback
+            # pra registrar como NPC novo (fluxo de sempre, abaixo).
         wm.npcs_presentes.append(nid)
         wm.scene.npcs_apresentados.add(nid)
         registrar_npc(wm, nid, nome)
