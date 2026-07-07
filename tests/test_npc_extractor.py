@@ -373,6 +373,12 @@ async def test_extrair_npcs_cena_mantem_npc_real_com_vocativo():
     "inimigo",
     "adversario",
     "atacante-encapuzado",
+    # FUNC-3 (playtest 07/07): descritor de RAÇA sem nome — mesma família de
+    # "velho-mercador", mas pro QUE alguém é em vez de QUEM.
+    "meio-elfo",
+    "meio-orc",
+    "jovem-elfo",     # raça + descritor de idade, ambos genéricos
+    "velho-anao",
 ])
 def test_entidade_invalida_rejeita_lixo(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is True
@@ -390,6 +396,10 @@ def test_entidade_invalida_rejeita_lixo(nid):
     "deusdedit-o-velho",
     "aldric-o-divino",
     "divina-cantora",
+    # FUNC-3 (playtest 07/07): epíteto racial ANEXADO a um nome próprio real
+    # tem que sobreviver — só o descritor PURO (sem nome) é lixo.
+    "aldric-o-elfo-cinzento",
+    "thoradin-o-anao",
 ])
 def test_entidade_invalida_preserva_npc_real(nid):
     assert _e_entidade_invalida(nid, "drevamor", "Drevamor") is False
