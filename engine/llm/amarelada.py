@@ -17,6 +17,8 @@ Exemplo:
 
 from __future__ import annotations
 
+import re
+
 # Frases de fade-to-black / sanitização voluntária.
 # O LLM descreve que NÃO vai descrever — o pior cenário pra imersão.
 _FRASES_FADE = (
@@ -83,13 +85,32 @@ KEYWORDS_ATROCIDADE: tuple[str, ...] = (
 )
 
 
+# FUNC-2 (playtest 07/07, sess-c48c397df10a): "aniquilar toda a cidade" e "detonar
+# a bomba" (jogador destruindo uma cidade inteira) não batiam em nenhuma keyword —
+# cena sombria nunca ligou no clímax da sessão, resposta do Mestre à detonação
+# ficou em ~29 chars (fade silencioso) e ninguém percebeu, porque o gate nem
+# tentou detectar. Regex em vez de frase fixa: a ordem varia demais na fala real
+# ("aniquilar TODA A cidade", "destruir a cidade INTEIRA") pra cobrir com
+# substring simples. Verbo de destruição + alvo coletivo a até 25 chars de
+# distância — mesma filosofia conservadora do resto do módulo (combinação, não
+# palavra solta) aplicada com uma folga de posição.
+_RE_DESTRUICAO_MASSA = re.compile(
+    r"\b(?:aniquilar|detonar|destruir|explodir|arrasar|dizimar)\b"
+    r"[^.!?\n]{0,25}\b(?:cidade|vila|bomba|povoado|popula[cç][aã]o)\b",
+    re.IGNORECASE,
+)
+
+
 def e_cena_sombria(texto: str) -> bool:
-    """True quando o texto do jogador contém keywords de atrocidade.
+    """True quando o texto do jogador contém keywords de atrocidade OU descreve
+    destruição em massa (verbo de aniquilação perto de um alvo coletivo).
 
     Usado para injetar o fragmento grimdark.md mesmo sem dm_profile="sombrio".
     """
     t = texto.lower()
-    return any(kw in t for kw in KEYWORDS_ATROCIDADE)
+    if any(kw in t for kw in KEYWORDS_ATROCIDADE):
+        return True
+    return bool(_RE_DESTRUICAO_MASSA.search(texto))
 
 
 # ── Camada 5 — reframe literário antes de escalar ─────────────────────────────
