@@ -70,6 +70,14 @@ class SceneState:
     # re-inferência de NPCs via Neo4j. NÃO é serializado — é sinal de turno.
     cena_mudou_local: bool = False
 
+    # GRIM-REATIVA-1 (07/07) — gatilho (c) do roadmap anti-amarelada: quando o
+    # LLM amarelou (fade/moralização) numa cena sombria, o RESTO DA CENA roteia
+    # pra cascata NARRATIVE_GRIM (garantia uncensored) mesmo que o turno
+    # seguinte não tenha keyword de atrocidade. Limpa quando o local muda
+    # (turn_pipeline, junto com o fim de combate por mudança de cena). Escopo
+    # de cena — de propósito NÃO serializa em dm_state (restart recomeça limpo).
+    cena_sombria_reativa: bool = False
+
     # Transiente (escopo de turno): ids adicionados via [NPC: id|Nome] neste
     # turno. A re-inferência de cena (que SUBSTITUI npcs_presentes) faz união
     # com estes para não apagar NPC improvisado pelo mestre. Limpo no início

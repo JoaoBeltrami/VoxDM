@@ -466,14 +466,18 @@ def montar_mensagens(
             log.info("dm_profile_aplicado", profile=dm_profile_attr)
 
     # Contrato de ficção sombria — injetado quando kill-switch ativo E
-    # (dm_profile="sombrio" OU keywords de atrocidade na transcrição atual).
+    # (dm_profile="sombrio" OU keywords de atrocidade na transcrição atual OU
+    # escalação reativa grudada na cena — GRIM-REATIVA-1: o LLM já amarelou
+    # nesta cena, então o fragmento acompanha a rota grim até a cena mudar).
     # Posicionado APÓS o overlay de perfil pra ter prioridade de instrução.
     # "sombrio" não tem overlay de dm_profiles/ — ele só usa este fragmento.
     if settings.GRIMDARK_ATIVO:
         _transcricao = getattr(contexto, "transcricao_atual", "") or ""
+        _scene = getattr(contexto.working_memory, "scene", None)
         _usa_grimdark = (
             dm_profile_attr == "sombrio"
             or e_cena_sombria(_transcricao)
+            or bool(getattr(_scene, "cena_sombria_reativa", False))
         )
         if _usa_grimdark:
             grimdark_frag = _ler_prompt(_FRAG_GRIMDARK)

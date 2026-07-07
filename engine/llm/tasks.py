@@ -141,6 +141,7 @@ def escolher_task_type_narrativo(
     light_consecutivos: int = 0,
     dm_profile: str = "",
     grimdark_ativo: bool = False,
+    cena_sombria: bool = False,
 ) -> TaskType:
     """Decide qual TaskType usar para o turno narrativo atual.
 
@@ -168,9 +169,17 @@ def escolher_task_type_narrativo(
 
     `dm_profile` e `grimdark_ativo` controlam a rota grim (Camada 3 do roadmap
     anti-amarelada). Passar `grimdark_ativo=settings.GRIMDARK_ATIVO` no call site.
+
+    `cena_sombria` (GRIM-ROTA-1, 07/07): o gatilho (a)+(c) do roadmap — keywords
+    de atrocidade no turno OU escalação reativa (amarelada detectada na cena).
+    Antes, keywords ligavam só o FRAGMENTO e a DETECÇÃO, mas a cascata seguia a
+    NARRATIVE comum (70b→8b→gemini→ollama-local) — o ollama-grim nunca era a
+    garantia fora do dm_profile="sombrio". Agora cena sombria roteia a cascata
+    grim de verdade.
     """
-    # Grim tem prioridade: dm_profile sombrio com kill-switch ativo
-    if grimdark_ativo and dm_profile == "sombrio":
+    # Grim tem prioridade: kill-switch ativo E (perfil sombrio OU cena sombria
+    # por keywords/escalação reativa).
+    if grimdark_ativo and (dm_profile == "sombrio" or cena_sombria):
         return TaskType.NARRATIVE_GRIM
 
     if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
