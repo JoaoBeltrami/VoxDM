@@ -414,6 +414,16 @@ _PALAVRAS_COMUNS = frozenset({
     # personagem, é referência ao próprio jogo/regras. Sem entidade real no
     # grafo, gerava timeout de Neo4j TODO turno pro resto da sessão.
     "guia", "jogo",
+    # FUNC-3 (playtest 07/07): "meio-elfo" (descritor de RAÇA, sem nome) virou
+    # NPC presente numa cena social. Mesma família de "velho"/"mercador" —
+    # descrever O QUE alguém é não é o mesmo que ter um NOME. Fica em
+    # _PALAVRAS_COMUNS (só rejeita quando TODOS os tokens são genéricos), não em
+    # _TOKENS_NAO_NPC (rejeitaria QUALQUER token) — um NPC nomeado com epíteto
+    # racial ("Aldric o Elfo Cinzento") tem que sobreviver, só "meio-elfo" puro
+    # (sem nome nenhum) é o lixo. "anã" fica de fora de propósito — colide com o
+    # nome próprio "Ana" (transliterado sem acento) e um "Ana" real seria
+    # descartado se combinado com outro token comum.
+    "elfo", "elfa", "anao", "orc", "orcs", "humano", "humana", "meio",
 })
 _MAX_NPCS_PRESENTES = 8
 
