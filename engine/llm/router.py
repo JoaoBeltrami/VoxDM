@@ -26,7 +26,7 @@ from collections.abc import AsyncIterator
 import structlog
 
 from config import settings
-from engine.llm.amarelada import e_amarelada
+from engine.llm.amarelada import aplicar_reframe, e_amarelada
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 from engine.llm.providers.gemini import GeminiProvider
 from engine.llm.providers.groq import GroqProvider
@@ -187,10 +187,33 @@ class LLMRouter:
 
         self.ultima_chamada_amarelou = False
         ultimo_erro: LLMRetriable | None = None
-        for p in providers:
+        # GRIM-REFRAME-1 (Camada 5): fila de tentativas (provider, mensagens) em
+        # vez de iterar providers direto — quando um provider CLOUD amarela em
+        # cena sombria, re-enfileiramos o MESMO provider com o reframe literário
+        # na frente (1 reframe por chamada). Se ainda amarelar, a cascata segue.
+        fila: list[tuple[BaseLLMProvider, list[dict[str, str]]]] = [
+            (p, mensagens) for p in providers
+        ]
+        reframe_usado = False
+
+        def _tentar_reframe(p: BaseLLMProvider) -> bool:
+            nonlocal reframe_usado
+            if (
+                self._cena_sombria
+                and not reframe_usado
+                and not p.nome.startswith("ollama")  # local não tem filtro corporativo
+            ):
+                reframe_usado = True
+                fila.insert(0, (p, aplicar_reframe(mensagens)))
+                log.info("llm_reframe_literario_tentando", provider=p.nome)
+                return True
+            return False
+
+        while fila:
+            p, msgs = fila.pop(0)
             try:
                 log.info("llm_provider_tentando", provider=p.nome, task=task.value)
-                texto = await p.completar(mensagens, temperatura, max_tokens)
+                texto = await p.completar(msgs, temperatura, max_tokens)
                 # Detecção de amarelada em cena sombria: se o provider filtrou
                 # suavemente (fade-to-black, moralização), cascateia pro próximo.
                 if self._cena_sombria and e_amarelada(texto):
@@ -204,6 +227,7 @@ class LLMRouter:
                         f"{p.nome} amarelou (fade-to-black/moralização)",
                         categoria="amarelada",
                     )
+                    _tentar_reframe(p)  # GRIM-REFRAME-1
                     continue
                 log.info("llm_provider_ok", provider=p.nome, task=task.value, chars=len(texto))
                 cascata_disparou = p.nome != provider_primario
@@ -228,6 +252,7 @@ class LLMRouter:
                 # prompt malformado viraria escalação grim indevida.
                 if self._cena_sombria and e.categoria in _CATEGORIAS_AMARELADA:
                     self.ultima_chamada_amarelou = True
+                    _tentar_reframe(p)  # GRIM-REFRAME-1
                 ultimo_erro = e
 
         # Todos cascateados falharam
@@ -267,13 +292,21 @@ class LLMRouter:
         self.ultimo_provider_stream = None
         self.ultima_chamada_amarelou = False
         ultimo_erro: LLMRetriable | None = None
-        for p in providers:
+        # GRIM-REFRAME-1 (Camada 5): mesma fila de tentativas do completar() —
+        # recusa/amarelada PRÉ-emissão de um provider cloud em cena sombria
+        # re-enfileira o mesmo provider com o reframe literário (1 por chamada).
+        fila: list[tuple[BaseLLMProvider, list[dict[str, str]]]] = [
+            (p, mensagens) for p in providers
+        ]
+        reframe_usado = False
+        while fila:
+            p, msgs = fila.pop(0)
             try:
                 log.info("llm_provider_tentando_stream", provider=p.nome, task=task.value)
                 emitiu = False
                 chars_saida = 0
                 latencia_primeiro_ms = 0
-                async for token in p.completar_stream(mensagens, temperatura, max_tokens):
+                async for token in p.completar_stream(msgs, temperatura, max_tokens):
                     if not emitiu:
                         log.info("llm_provider_stream_ok", provider=p.nome, task=task.value)
                         self.ultimo_provider_stream = p.nome
@@ -323,6 +356,12 @@ class LLMRouter:
                 # em cena sombria gruda a escalação reativa da cena.
                 if self._cena_sombria and e.categoria in _CATEGORIAS_AMARELADA:
                     self.ultima_chamada_amarelou = True
+                    # GRIM-REFRAME-1: retry do mesmo provider cloud com reframe
+                    # literário, uma vez por chamada.
+                    if not reframe_usado and not p.nome.startswith("ollama"):
+                        reframe_usado = True
+                        fila.insert(0, (p, aplicar_reframe(mensagens)))
+                        log.info("llm_reframe_literario_tentando_stream", provider=p.nome)
                 ultimo_erro = e
                 continue
 

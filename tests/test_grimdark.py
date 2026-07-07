@@ -463,3 +463,187 @@ def test_set_cena_sombria_propaga_para_providers():
     # Não deve lançar exceção
     client.router.set_cena_sombria(True)
     client.router.set_cena_sombria(False)
+
+
+# ── GRIM-REFRAME-1 (Camada 5): reframe literário antes de escalar ─────────────
+
+
+def _router_com(providers: dict, cena_sombria: bool = True):
+    """Router mínimo com providers mockados (sem __init__ real — sem chaves)."""
+    from engine.llm.router import LLMRouter
+
+    router = LLMRouter.__new__(LLMRouter)
+    router._providers = providers
+    router._cena_sombria = cena_sombria
+    router._override_primario = None
+    router.ultimo_provider_stream = None
+    router.ultima_chamada_amarelou = False
+    return router
+
+
+def test_aplicar_reframe_anexa_system_sem_mutar():
+    from engine.llm.amarelada import REFRAME_LITERARIO, aplicar_reframe
+
+    original = [{"role": "system", "content": "mestre"}, {"role": "user", "content": "x"}]
+    novo = aplicar_reframe(original)
+    assert len(original) == 2  # intocada
+    assert len(novo) == 3
+    assert novo[-1] == {"role": "system", "content": REFRAME_LITERARIO}
+
+
+@pytest.mark.asyncio
+async def test_reframe_destrava_o_mesmo_provider():
+    """Provider cloud amarela na 1ª tentativa; com o reframe anexado, narra
+    íntegro — o MESMO provider vence, sem descer a cascata."""
+    from engine.llm.providers.base import BaseLLMProvider
+    from engine.llm.tasks import TaskType
+
+    class _AmarelaSemReframe(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        def __init__(self):
+            self.chamadas: list[list[dict]] = []
+        async def completar(self, mensagens, temperatura, max_tokens):
+            self.chamadas.append(mensagens)
+            if any("REENQUADRAMENTO" in m.get("content", "") for m in mensagens):
+                return "A crônica registra: o salão foi tomado pelo aço."
+            return "Prefiro não detalhar o que aconteceu."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    class _NuncaChamado(BaseLLMProvider):
+        nome = "gemini-flash"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            raise AssertionError("cascata não devia ter descido — reframe destravou")
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    p = _AmarelaSemReframe()
+    router = _router_com({"groq-70b": p, "gemini-flash": _NuncaChamado()})
+    texto = await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
+    assert "crônica" in texto
+    assert len(p.chamadas) == 2  # original + reframed
+    # A tentativa reframed recebeu a instrução extra; a original não.
+    assert not any("REENQUADRAMENTO" in m.get("content", "") for m in p.chamadas[0])
+    assert any("REENQUADRAMENTO" in m.get("content", "") for m in p.chamadas[1])
+
+
+@pytest.mark.asyncio
+async def test_reframe_so_uma_vez_por_chamada():
+    """Provider amarela SEMPRE (com e sem reframe) → 2 tentativas no primário,
+    depois a cascata desce normalmente (sem loop de reframes)."""
+    from engine.llm.providers.base import BaseLLMProvider
+    from engine.llm.tasks import TaskType
+
+    class _AmarelaSempre(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        def __init__(self):
+            self.n = 0
+        async def completar(self, mensagens, temperatura, max_tokens):
+            self.n += 1
+            return "Prefiro não detalhar."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    class _Grim(BaseLLMProvider):
+        nome = "ollama-grim"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            return "O aço canta e o sangue corre."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    p = _AmarelaSempre()
+    router = _router_com({"groq-70b": p, "ollama-grim": _Grim()})
+    # NARRATIVE_GRIM: a única cascata que inclui o ollama-grim como garantia.
+    texto = await router.completar(
+        [{"role": "user", "content": "x"}], task=TaskType.NARRATIVE_GRIM
+    )
+    assert "aço" in texto
+    assert p.n == 2  # original + 1 reframe, nunca 3
+    assert router.ultima_chamada_amarelou is True
+
+
+@pytest.mark.asyncio
+async def test_reframe_nao_dispara_fora_de_cena_sombria():
+    """Fora de cena sombria não há detecção de amarelada — a resposta com
+    frase de fade passa direto (pode ser fala legítima de NPC)."""
+    from engine.llm.providers.base import BaseLLMProvider
+    from engine.llm.tasks import TaskType
+
+    class _P(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        def __init__(self):
+            self.n = 0
+        async def completar(self, mensagens, temperatura, max_tokens):
+            self.n += 1
+            return "Prefiro não detalhar, diz o velho, desviando o olhar."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    p = _P()
+    router = _router_com({"groq-70b": p}, cena_sombria=False)
+    texto = await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
+    assert "velho" in texto
+    assert p.n == 1  # sem retry
+
+
+@pytest.mark.asyncio
+async def test_reframe_nao_reaplica_em_provider_ollama():
+    """ollama-grim amarelar é sinal de modelo errado, não de filtro corporativo
+    — reframe não se aplica a providers locais."""
+    from engine.llm.providers.base import BaseLLMProvider
+    from engine.llm.tasks import TaskType
+
+    class _GrimAmarela(BaseLLMProvider):
+        nome = "ollama-grim"
+        disponivel = True
+        def __init__(self):
+            self.n = 0
+        async def completar(self, mensagens, temperatura, max_tokens):
+            self.n += 1
+            return "Prefiro não detalhar."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield ""
+
+    p = _GrimAmarela()
+    router = _router_com({"ollama-grim": p})
+    with pytest.raises(RuntimeError):
+        await router.completar(
+            [{"role": "user", "content": "x"}], task=TaskType.NARRATIVE_GRIM
+        )
+    assert p.n == 1  # sem retry de reframe no local
+
+
+@pytest.mark.asyncio
+async def test_reframe_no_stream_pre_emissao():
+    """Recusa pré-emissão no stream → retry reframed do mesmo provider emite."""
+    from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
+    from engine.llm.tasks import TaskType
+
+    class _RecusaSemReframe(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        def __init__(self):
+            self.chamadas: list[list[dict]] = []
+        async def completar(self, mensagens, temperatura, max_tokens):
+            return ""
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            self.chamadas.append(mensagens)
+            if not any("REENQUADRAMENTO" in m.get("content", "") for m in mensagens):
+                raise LLMRetriable("recusou", categoria="refusal")
+            yield "A crônica registra o massacre em detalhe."
+
+    p = _RecusaSemReframe()
+    router = _router_com({"groq-70b": p})
+    tokens = [
+        t async for t in router.completar_stream(
+            [{"role": "user", "content": "x"}], task=TaskType.NARRATIVE
+        )
+    ]
+    assert "crônica" in "".join(tokens)
+    assert len(p.chamadas) == 2
+    assert router.ultima_chamada_amarelou is True  # a recusa original grudou
