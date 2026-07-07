@@ -452,7 +452,11 @@ _RE_ALVO_ATAQUE = re.compile(
     # eram registrados como inimigos: "lanço a flecha no orc" → "Flecha" virava
     # inimigo no CombatTracker. "lanço" é detectado separadamente pelo spell_detector
     # (spell_detector.py:_RE_CASTING) que extrai o nome da magia corretamente.
-    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto)\s+"
+    # FUNC-1 (playtest 07/07): quebro/esfaqueio/degolo — golpes com arma
+    # improvisada ou mutilação explícita, mesma classe dos verbos já aceitos.
+    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto|"
+    r"quebr[oa]|quebrei|quebrar|esfaquei[oa]|esfaqueei|esfaquear|"
+    r"degol[oa]|degolei|degolar)\s+"
     r"(?:o|a|ao?s?|na?s?)\s+"
     r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]{1,30}?)(?=\s+(?:com|de|usando|n[ao])\b|[.!,?]|$)",
     re.IGNORECASE,
@@ -523,9 +527,26 @@ _PRONOMES: frozenset[str] = frozenset({
 # falha. Verbo de ataque + pronome de objeto DIRETO (sem artigo) → só entra em
 # jogo quando há exatamente 1 candidato (NPC presente OU inimigo já vivo);
 # ambíguo (0 ou 2+) mantém o comportamento de sempre (sem alvo, nunca adivinha).
+# FUNC-1 (playtest 07/07, sess-c48c397df10a): 5 turnos de combate real, ZERO
+# markers [INIMIGO], ZERO dano aplicado — o resolver nunca engatou porque as
+# falas do jogador não bateram em NENHUM regex de alvo. Duas construções que
+# escapavam:
+#   (a) verbo + pronome de objeto direto, mas com verbo fora da lista antiga
+#       ("quebrar ELE na cabeça com o copo" — arma improvisada);
+#   (b) alvo como POSSESSIVO do corpo atingido, não objeto direto do verbo
+#       ("o chute na cara DELE", "abrir as tripas DELE" — o pronome está preso
+#       a um substantivo de golpe/parte-do-corpo, não ao verbo).
+# (b) é um padrão novo — precisa de uma segunda alternativa no regex, não só
+# mais verbos na lista de (a).
 _RE_PRONOME_ATAQUE = re.compile(
-    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto)\s+"
-    r"(?:nele|nela|ele|ela|aquele|aquela|esse|essa|isso|aquilo)\b",
+    r"\b(?:ataco?|atacar|golpei?o|firo|apunhalo|atinge?|atinjo|acerto|"
+    r"quebr[oa]|quebrei|quebrar|esfaquei[oa]|esfaqueei|esfaquear|"
+    r"degol[oa]|degolei|degolar)\s+"
+    r"(?:nele|nela|ele|ela|aquele|aquela|esse|essa|isso|aquilo)\b"
+    r"|"
+    r"\b(?:tapa|soco|murro|chute|empurr[ãa]o|joelhada|cabe[çc]ada|cotovelada|"
+    r"bofetada|estocada|facada|punhalada|tripas|garganta|pesco[çc]o)\b"
+    r"[^.!?\n]{0,25}\b(?:dele|dela)\b",
     re.IGNORECASE,
 )
 

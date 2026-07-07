@@ -112,7 +112,27 @@ RE_COMBATE = re.compile(
     r"agarrei (?:(?:o|a) \w+|(?:ele|ela|você))|"
     # ── Nível 2: derrubar (shove) — exige alvo singular ou pronome ───────────
     r"derrub[ao] (?:(?:o|a) \w+|(?:ele|ela|você))|"
-    r"derrubei (?:(?:o|a) \w+|(?:ele|ela|você))"
+    r"derrubei (?:(?:o|a) \w+|(?:ele|ela|você))|"
+    # ── Nível 2: quebrar — mesmo padrão de cortar/empurrar/agarrar/derrubar ──
+    # FUNC-1 (playtest 07/07): "quebrar ele na cabeça com o copo" — arma
+    # improvisada. Sem alvo/pronome explícito fica de fora ("quebro a corda").
+    r"quebr[ao] (?:com (?:minha|meu) \w+|(?:o|a) \w+|(?:ele|ela|você))|"
+    r"quebrei (?:com|(?:o|a) \w+|(?:ele|ela|você))|"
+    r"quebrar (?:com|(?:o|a) \w+|(?:ele|ela|você))|"
+    # ── Nível 1: mutilação explícita — inequívoca mesmo sem alvo qualificado ──
+    r"abr[oi] as tripas|abrir as tripas|"
+    r"degol[oa]|degolei|degolar|"
+    r"esfaquei[oa]|esfaqueei|esfaquear|"
+    r"arranc[oa] (?:o|a) (?:cora[çc][ãa]o|olho|bra[çc]o|l[íi]ngua)|"
+    # ── Nível 1: golpe físico ANEXADO a "dele/dela" (não objeto direto do verbo) ─
+    # "o chute na cara dele" — o alvo aparece como possessivo do CORPO atingido,
+    # padrão que o golpe-descritivo clássico (linha acima, exige um/uma + verbo
+    # dou/dei) não cobre. Também aceita continuação com artigo DEFINIDO
+    # ("o mesmo chute", comum na fala real ao retomar uma ação já narrada).
+    r"(?:o|a|aquele|aquela|esse|essa)\s+(?:mesmo\s+)?"
+    r"(?:tapa|soco|murro|chute|empurr[ãa]o|joelhada|cabe[çc]ada|cotovelada|"
+    r"bofetada|estocada|facada|punhalada)\b[^.!?\n]{0,25}\b(?:dele|dela)\b|"
+    r"(?:tripas|garganta|pesco[çc]o)\b[^.!?\n]{0,25}\b(?:dele|dela)\b"
     r")\b",
     re.IGNORECASE,
 )
