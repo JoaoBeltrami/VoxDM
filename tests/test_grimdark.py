@@ -66,6 +66,53 @@ def test_e_cena_sombria_massacre_com_alvo():
     assert e_cena_sombria("Vamos cometer um massacre de aldeões.") is True
 
 
+# ── FUNC-2 (playtest 07/07): destruição em massa ("aniquilar a cidade") ────────
+
+
+def test_e_cena_sombria_aniquilar_toda_a_cidade():
+    """A frase real do playtest — 'toda a' entre o verbo e o alvo."""
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("Eu vou usar minha bomba pra aniquilar toda a cidade.") is True
+
+
+def test_e_cena_sombria_detonar_a_bomba():
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("Vou detonar a bomba agora mesmo.") is True
+
+
+def test_e_cena_sombria_destruir_a_cidade_inteira():
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("Vamos destruir a cidade inteira com fogo.") is True
+
+
+def test_e_cena_sombria_arrasar_o_povoado():
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("O exército vai arrasar o povoado ao amanhecer.") is True
+
+
+def test_e_cena_sombria_explodir_e_dizimar():
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("Ele quer explodir a vila inteira.") is True
+    assert e_cena_sombria("O plano é dizimar a população local.") is True
+
+
+def test_e_cena_sombria_destruicao_massa_combate_normal_preserva():
+    """Verbo de destruição sem alvo coletivo (combate normal) não dispara."""
+    from engine.llm.amarelada import e_cena_sombria
+    assert e_cena_sombria("Vou destruir esse goblin com meu machado.") is False
+    assert e_cena_sombria("Ataco pra aniquilar o inimigo à minha frente.") is False
+
+
+def test_e_cena_sombria_destruicao_massa_alvo_distante_nao_dispara():
+    """Alvo coletivo bem fora da janela de 25 chars do verbo não conecta os dois."""
+    from engine.llm.amarelada import e_cena_sombria
+    texto = (
+        "Vou detonar essa pequena armadilha decorativa aqui do lado, "
+        "totalmente sem relação nenhuma com qualquer vila ou cidade."
+    )
+    assert e_cena_sombria(texto) is False
+
+
 # ── OllamaGrimProvider ─────────────────────────────────────────────────────────
 
 def test_ollama_grim_indisponivel_sem_flag(monkeypatch):
