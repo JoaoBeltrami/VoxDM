@@ -2044,6 +2044,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             from engine.llm.tasks import TaskType, escolher_task_type_narrativo
             _dm_prof = sessao.working_mem.dm_profile
             _grim = settings.GRIMDARK_ATIVO
+            # GRIM-ROTA-1 + GRIM-REATIVA-1: cena sombria = keywords de atrocidade
+            # no turno OU escalação reativa grudada (amarelada detectada em turno
+            # anterior desta cena). Alimenta TANTO a detecção nos providers
+            # quanto a rota da cascata (NARRATIVE_GRIM) — antes, keywords ligavam
+            # só o fragmento/detecção e a cascata seguia a comum, sem a garantia
+            # do ollama-grim.
+            _cena_sombria = _grim and (
+                _dm_prof == "sombrio"
+                or e_cena_sombria(texto_jogador)
+                or sessao.working_mem.scene.cena_sombria_reativa
+            )
             _task_turno = escolher_task_type_narrativo(
                 em_combate=sessao.working_mem.em_combate,
                 pacing_nivel=sessao.working_mem.pacing_nivel,
@@ -2053,13 +2064,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
                 dm_profile=_dm_prof,
                 grimdark_ativo=_grim,
+                cena_sombria=_cena_sombria,
             )
             # Informa os providers se a cena atual exige detecção de amarelada.
             # Setado antes do stream para que o buffer check do GroqProvider
             # cascateie no próprio turno, não no próximo.
-            _cena_sombria = _grim and (
-                _dm_prof == "sombrio" or e_cena_sombria(texto_jogador)
-            )
             sessao.groq.router.set_cena_sombria(_cena_sombria)
             # Atualiza o cap anti-robô: conta turnos LIGHT (8B) seguidos para
             # que a próxima decisão force um 70B periódico e quebre o loop.
@@ -2222,6 +2231,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 log.info("quests_avancaram_ws", session_id=session_id,
                          avancos=[(q, s) for q, s in avanco_quests],
                          recompensas=len(recompensas_por_quest))
+
+            # GRIM-REATIVA-1 (gatilho c do roadmap anti-amarelada): se QUALQUER
+            # provider amarelou/recusou neste turno em cena sombria, o resto da
+            # CENA roteia NARRATIVE_GRIM — mesmo que o próximo turno não tenha
+            # keyword. Lido ANTES do pipeline: se este mesmo turno trocar de
+            # local ([CENA]), a limpeza da mudança de cena vence (a cena onde
+            # amarelou ficou pra trás).
+            if getattr(sessao.groq.router, "ultima_chamada_amarelou", False) and (
+                not sessao.working_mem.scene.cena_sombria_reativa
+            ):
+                sessao.working_mem.scene.cena_sombria_reativa = True
+                log.warning("cena_sombria_reativa_grudada", session_id=session_id)
 
             # Pipeline pós-turno compartilhado entre WebSocket e REST `/turn`.
             # Centraliza: registrar fala, apresentar NPCs, sync inimigos,

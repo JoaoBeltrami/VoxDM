@@ -45,6 +45,13 @@ from engine.telemetry import emit_llm_decisao
 
 log = structlog.get_logger(__name__)
 
+# GRIM-REATIVA-1: categorias de LLMRetriable que significam "o modelo filtrou
+# conteúdo" (não erro de infra) — em cena sombria, qualquer uma gruda a
+# escalação reativa. "refusal" = Gemini/Groq hard refusal; "recusa" = variante
+# PT usada em código legado; "amarelada" = sanitização suave (fade/moralização)
+# detectada no buffer do provider ou pós-resposta no router.
+_CATEGORIAS_AMARELADA: frozenset[str] = frozenset({"amarelada", "refusal", "recusa"})
+
 
 class LLMRouter:
     """Roteador de chamadas LLM com fallback em cascata.
@@ -73,6 +80,13 @@ class LLMRouter:
         # Comparado pelo consumidor com o provider primário da cascata para detectar
         # cascata silenciosa (Groq TPM → Gemini sem feedback visual ao usuário).
         self.ultimo_provider_stream: str | None = None
+        # GRIM-REATIVA-1 (07/07): True quando a ÚLTIMA chamada (completar ou
+        # stream) detectou amarelada/recusa em cena sombria — em qualquer
+        # provider da cascata, mesmo que outro tenha completado depois. O
+        # websocket lê após o turno pra "grudar" a cena como sombria (gatilho
+        # (c) do roadmap: resto da cena roteia NARRATIVE_GRIM). Resetado no
+        # início de cada chamada.
+        self.ultima_chamada_amarelou: bool = False
 
     def set_primario(self, nome: str | None) -> None:
         """Coloca um provider como primeiro da cascata desta instância.
@@ -171,6 +185,7 @@ class LLMRouter:
         provider_primario = providers[0].nome
         t0 = time.monotonic()
 
+        self.ultima_chamada_amarelou = False
         ultimo_erro: LLMRetriable | None = None
         for p in providers:
             try:
@@ -184,6 +199,7 @@ class LLMRouter:
                         provider=p.nome,
                         trecho=texto[:80],
                     )
+                    self.ultima_chamada_amarelou = True  # GRIM-REATIVA-1
                     ultimo_erro = LLMRetriable(
                         f"{p.nome} amarelou (fade-to-black/moralização)",
                         categoria="amarelada",
@@ -206,6 +222,12 @@ class LLMRouter:
                     categoria=e.categoria,
                     erro=str(e)[:160],
                 )
+                # GRIM-REATIVA-1: recusa/amarelada detectada DENTRO do provider
+                # (buffer de stream do Groq, refusal do Gemini) também gruda a
+                # cena — só conta em cena sombria, senão recusa legítima de
+                # prompt malformado viraria escalação grim indevida.
+                if self._cena_sombria and e.categoria in _CATEGORIAS_AMARELADA:
+                    self.ultima_chamada_amarelou = True
                 ultimo_erro = e
 
         # Todos cascateados falharam
@@ -243,6 +265,7 @@ class LLMRouter:
         t0 = time.monotonic()
 
         self.ultimo_provider_stream = None
+        self.ultima_chamada_amarelou = False
         ultimo_erro: LLMRetriable | None = None
         for p in providers:
             try:
@@ -296,6 +319,10 @@ class LLMRouter:
                     categoria=e.categoria,
                     erro=str(e)[:160],
                 )
+                # GRIM-REATIVA-1: idem completar() — recusa/amarelada pré-emissão
+                # em cena sombria gruda a escalação reativa da cena.
+                if self._cena_sombria and e.categoria in _CATEGORIAS_AMARELADA:
+                    self.ultima_chamada_amarelou = True
                 ultimo_erro = e
                 continue
 

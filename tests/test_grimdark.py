@@ -169,6 +169,199 @@ def test_escolher_grim_tem_prioridade_sobre_climax():
     assert task == TaskType.NARRATIVE_GRIM
 
 
+# ── GRIM-ROTA-1: cena sombria (keywords/reativa) roteia a cascata grim ─────────
+
+
+def test_escolher_grim_por_cena_sombria_sem_perfil():
+    """Gatilho (a)+(c) do roadmap: keywords de atrocidade OU escalação reativa
+    roteiam NARRATIVE_GRIM mesmo com dm_profile normal — antes, só o perfil
+    'sombrio' chegava na cascata com a garantia do ollama-grim."""
+    from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+    task = escolher_task_type_narrativo(
+        em_combate=False,
+        pacing_nivel=3.0,
+        dm_profile="equilibrado",
+        grimdark_ativo=True,
+        cena_sombria=True,
+    )
+    assert task == TaskType.NARRATIVE_GRIM
+
+
+def test_escolher_cena_sombria_sem_killswitch_nao_roteia_grim():
+    from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+    task = escolher_task_type_narrativo(
+        em_combate=False,
+        pacing_nivel=3.0,
+        dm_profile="equilibrado",
+        grimdark_ativo=False,
+        cena_sombria=True,
+    )
+    assert task != TaskType.NARRATIVE_GRIM
+
+
+def test_escolher_sem_cena_sombria_preserva_comportamento():
+    """Default cena_sombria=False não muda nenhuma rota existente."""
+    from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+    task = escolher_task_type_narrativo(
+        em_combate=False,
+        pacing_nivel=3.0,
+        npc_na_cena=True,
+        dm_profile="equilibrado",
+        grimdark_ativo=True,
+    )
+    assert task == TaskType.NARRATIVE
+
+
+# ── GRIM-REATIVA-1: escalação reativa gruda a cena ─────────────────────────────
+
+
+def test_scene_state_tem_flag_reativa_default_false():
+    from engine.state.scene import SceneState
+    assert SceneState().cena_sombria_reativa is False
+
+
+def test_mudanca_de_cena_limpa_flag_reativa():
+    """Trocar de local ([CENA]) encerra a cena sombria — o massacre ficou
+    pra trás; a nova cena começa limpa."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-grim")
+    wm.scene.cena_sombria_reativa = True
+    aplicar_pos_turno(wm, "Sigo para o porto.", "Vocês chegam. [CENA: porto|Porto|Noite]")
+    assert wm.scene.cena_sombria_reativa is False
+
+
+def test_mesmo_local_preserva_flag_reativa():
+    """Turno sem troca de local mantém a escalação grudada."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-grim")
+    wm.scene.cena_sombria_reativa = True
+    aplicar_pos_turno(wm, "Continuo andando.", "A rua segue vazia e fria.")
+    assert wm.scene.cena_sombria_reativa is True
+
+
+@pytest.mark.asyncio
+async def test_router_seta_ultima_chamada_amarelou_em_cena_sombria():
+    """Provider amarela em cena sombria → flag do router liga (o websocket lê
+    e gruda a cena). Outro provider completa e a flag PERSISTE (o sinal é
+    'houve amarelada', não 'a chamada falhou')."""
+    from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
+    from engine.llm.router import LLMRouter
+    from engine.llm.tasks import TaskType
+
+    class _Amarela(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            raise LLMRetriable("filtrou", categoria="amarelada")
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            raise LLMRetriable("filtrou", categoria="amarelada")
+            yield  # pragma: no cover
+
+    class _Integro(BaseLLMProvider):
+        nome = "gemini-flash"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            return "O sangue seca nas pedras do salão."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield "O sangue seca nas pedras."
+
+    router = LLMRouter.__new__(LLMRouter)
+    router._providers = {"groq-70b": _Amarela(), "gemini-flash": _Integro()}
+    router._cena_sombria = True
+    router._override_primario = None
+    router.ultimo_provider_stream = None
+    router.ultima_chamada_amarelou = False
+
+    texto = await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
+    assert "sangue" in texto
+    assert router.ultima_chamada_amarelou is True
+
+
+@pytest.mark.asyncio
+async def test_router_flag_reseta_em_chamada_limpa():
+    from engine.llm.providers.base import BaseLLMProvider
+    from engine.llm.router import LLMRouter
+    from engine.llm.tasks import TaskType
+
+    class _Integro(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            return "A taverna está quieta."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield "A taverna está quieta."
+
+    router = LLMRouter.__new__(LLMRouter)
+    router._providers = {"groq-70b": _Integro()}
+    router._cena_sombria = True
+    router._override_primario = None
+    router.ultimo_provider_stream = None
+    router.ultima_chamada_amarelou = True  # sobra da chamada anterior
+
+    await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
+    assert router.ultima_chamada_amarelou is False
+
+
+@pytest.mark.asyncio
+async def test_router_fora_de_cena_sombria_nao_gruda():
+    """Recusa fora de cena sombria (prompt malformado, etc.) NÃO liga a flag —
+    escalação grim indevida degradaria qualidade de conversa normal."""
+    from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
+    from engine.llm.router import LLMRouter
+    from engine.llm.tasks import TaskType
+
+    class _Recusa(BaseLLMProvider):
+        nome = "groq-70b"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            raise LLMRetriable("recusou", categoria="refusal")
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            raise LLMRetriable("recusou", categoria="refusal")
+            yield  # pragma: no cover
+
+    class _Integro(BaseLLMProvider):
+        nome = "gemini-flash"
+        disponivel = True
+        async def completar(self, mensagens, temperatura, max_tokens):
+            return "Tudo bem."
+        async def completar_stream(self, mensagens, temperatura, max_tokens):
+            yield "Tudo bem."
+
+    router = LLMRouter.__new__(LLMRouter)
+    router._providers = {"groq-70b": _Recusa(), "gemini-flash": _Integro()}
+    router._cena_sombria = False
+    router._override_primario = None
+    router.ultimo_provider_stream = None
+    router.ultima_chamada_amarelou = False
+
+    await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
+    assert router.ultima_chamada_amarelou is False
+
+
+def test_fragmento_injetado_com_flag_reativa(monkeypatch):
+    """O fragmento grimdark acompanha a escalação reativa — cena grudada
+    injeta o contrato mesmo sem keyword no turno atual."""
+    monkeypatch.setattr("config.settings.GRIMDARK_ATIVO", True)
+    from engine.llm.prompt_builder import montar_mensagens
+    from engine.llm.types import ContextoMontado
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-grim")
+    wm.scene.cena_sombria_reativa = True
+    ctx = ContextoMontado(
+        working_memory=wm,
+        chunks_semanticos=[], chunks_episodicos=[], chunks_regras=[],
+        relacoes_grafo=[], secrets_visiveis=[],
+        transcricao_atual="continuo olhando ao redor",  # sem keyword
+    )
+    system = montar_mensagens(ctx)[0]["content"]
+    assert "ficção sombria" in system.lower() or "grimdark" in system.lower() or "eventos de jogo" in system.lower()
+
+
 # ── Fragmento grimdark.md ──────────────────────────────────────────────────────
 
 def test_grimdark_md_existe():

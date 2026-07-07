@@ -1535,6 +1535,11 @@ def aplicar_pos_turno(
             if working_mem.em_combate:
                 working_mem.sair_combate()
                 log.info("combate_encerrado_mudanca_cena")
+            # GRIM-REATIVA-1: a escalação reativa tem escopo de CENA — trocar
+            # de local encerra a cena sombria (o massacre ficou pra trás).
+            if working_mem.scene.cena_sombria_reativa:
+                working_mem.scene.cena_sombria_reativa = False
+                log.info("cena_sombria_reativa_limpa_mudanca_cena")
             # Mundo Vivo: viagem custa tempo — relógios avançam, mas com cadência
             # (a cada 2ª troca de cena) pra não encher rápido num hub social.
             estourados = working_mem.narrative.tick_relogios_viagem()
