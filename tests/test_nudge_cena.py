@@ -9,6 +9,7 @@ nudge de compliance — não muda estado, sem risco de "teleporte" falso.
 import pytest
 
 from engine.llm.prompt_builder import (
+    _RE_RECRUTAMENTO,
     _RE_VIAGEM,
     ContextoMontado,
     invalidar_cache,
@@ -126,3 +127,51 @@ def test_nao_injeta_nudge_inimigo_fora_de_combate():
     invalidar_cache()
     system = montar_mensagens(_contexto(_wm(), "converso com o taverneiro"))[0]["content"]
     assert "=== COMBATE SEM COMBATENTE REGISTRADO ===" not in system
+
+
+# ── nudge de [COMPANION_ADD] — recrutamento fechado (playtest 10/07) ──────────
+# Playtest sess-cc69c30f7c4f: contratação inequívoca de mercenário (aperto de
+# mão, "selando o acordo", LLM até emitiu [XP: +100]) e [COMPANION_ADD] nunca
+# veio — a instrução já estava no prompt (social.md + markers_lista.md) e o
+# modelo ignorou. Reforço pontual quando o jogador fecha o acordo na fala.
+
+@pytest.mark.parametrize("texto", [
+    "bem-vindo ao bando, Moreno",
+    "bem-vinda ao grupo",
+    "a partir de agora você anda comigo",
+    "vem comigo, Moreno",
+    "venha comigo, viajante",
+    "você está contratado",
+    "está contratada, parceira",
+    "eu te contrato",
+    "junte-se a mim nessa jornada",
+    "fechado, sessenta moedas de ouro",
+    "combinado, cinquenta moedas pra te contratar",
+])
+def test_recrutamento_detecta_fechamento_de_acordo(texto):
+    assert _RE_RECRUTAMENTO.search(texto), f"deveria casar recrutamento: {texto}"
+
+
+@pytest.mark.parametrize("texto", [
+    "quanto você cobra pra me acompanhar?",
+    "você aluga a espada?",
+    "preciso de um parceiro de estrada",
+    "qual é o seu nome e o seu preço?",
+    "ataco o goblin com minha espada",
+])
+def test_recrutamento_ignora_negociacao_em_curso(texto):
+    assert not _RE_RECRUTAMENTO.search(texto), f"não deveria casar ainda: {texto}"
+
+
+def test_injeta_nudge_companion_ao_fechar_recrutamento():
+    invalidar_cache()
+    texto = "Aperto a mão dele: fechado, sessenta moedas. Bem-vindo ao bando, Moreno."
+    system = montar_mensagens(_contexto(_wm(), texto))[0]["content"]
+    assert "=== RECRUTAMENTO SENDO FECHADO ===" in system
+    assert "[COMPANION_ADD:" in system
+
+
+def test_sem_recrutamento_nao_injeta_nudge_companion():
+    invalidar_cache()
+    system = montar_mensagens(_contexto(_wm(), "pergunto ao ferreiro sobre a espada"))[0]["content"]
+    assert "=== RECRUTAMENTO SENDO FECHADO ===" not in system
