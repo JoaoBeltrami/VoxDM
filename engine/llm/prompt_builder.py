@@ -98,6 +98,24 @@ _RE_VIAGEM = re.compile(
     re.IGNORECASE,
 )
 
+# COMPANION-NUDGE-1 (playtest 10/07, sess-cc69c30f7c4f): contratação de
+# mercenário inequívoca (aperto de mão, "selando o acordo", LLM até emitiu
+# [XP: +100] pelo marco) e [COMPANION_ADD] nunca veio — a instrução JÁ estava
+# no prompt duas vezes (social.md + markers_lista.md), o modelo simplesmente
+# não obedeceu. Mesmo padrão do nudge de [CENA]/[INIMIGO]: detecta a fala do
+# JOGADOR fechando o recrutamento e reforça o marcador pontualmente nesse
+# turno. Conservador — linguagem de FECHAMENTO de acordo, não negociação
+# ainda em curso ("quanto você cobra?" não casa).
+_RE_RECRUTAMENTO = re.compile(
+    r"bem[- ]vind[oa]\s+a[oa]?\s*(?:bando|grupo|time|equipe|jornada)|"
+    r"\b(?:anda|vem|venha|vamos)\s+comigo\b|"
+    r"\b(?:(?:você|voce)\s+)?(?:est[áa]|fica)\s+contratad[oa]\b|"
+    r"\beu\s+(?:te\s+|o\s+|a\s+)?contrato\b|"
+    r"\bjunt[ae]-?se\s+a\s+mim\b|"
+    r"\b(?:fechado|combinado|trato\s+feito)\b.{0,30}\b(?:moedas?|ouro|contrat)",
+    re.IGNORECASE,
+)
+
 # Cache com hot reload por mtime — quando o arquivo .md muda, próxima leitura
 # pega o novo conteúdo sem precisar reiniciar o servidor. Estrutura:
 #   path -> (mtime_visto, conteudo_ou_string_vazia)
@@ -939,6 +957,19 @@ def montar_mensagens(
             "aperto de mãos, sparring encerrado), deixe a cena esfriar em paz."
         )
         log.info("nudge_inimigo_injetado")
+
+    # COMPANION-NUDGE-1 (playtest 10/07): reforço pontual quando o jogador
+    # fecha um recrutamento nesta fala — mesmo padrão do nudge de [INIMIGO].
+    if _RE_RECRUTAMENTO.search(contexto.transcricao_atual or ""):
+        secoes.append(
+            "\n=== RECRUTAMENTO SENDO FECHADO ===\n"
+            "O jogador está fechando a contratação/aliança de um NPC nesta fala. "
+            "Se o acordo for selado NESTA resposta, EMITA "
+            "[COMPANION_ADD: id|nome|tipo|hp|ca|atq|dano] (tipo: hireling|"
+            "familiar|animal|summon) — sem isso o aliado não aparece na ficha "
+            "nem luta ao seu lado."
+        )
+        log.info("nudge_companion_injetado")
 
     # Fase 5.7: instrução de visibilidade de rolagens do mestre.
     # "open" / "result_only" → LLM insere [Rolagem visível: dX=Y] ANTES de narrar
