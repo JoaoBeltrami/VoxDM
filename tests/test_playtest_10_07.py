@@ -91,3 +91,82 @@ def test_alvo_instrumento_possuidor_pronome_nao_casa():
     wm.npcs_presentes = []
     wm.entrar_combate()
     assert extrair_alvo_ataque("Bato na cabeça dele com a garrafa", wm) is None
+
+
+# ══ NAME-REVEAL-DUP-1: reticências + âncora na pergunta do jogador ════════════
+# Playtest 10/07: "qual é o nome dele, o grandão de barba espessa?" → "Aquele
+# é... Gorvoth" criou 'gorvoth' NOVO em vez de renomear 'barba-espessa'. Duas
+# causas: (a) "aquele é" faltava no vocabulário de apresentação; (b) mesmo
+# com o verbo certo, a reticência ("é... Gorvoth") quebrava a janela de match;
+# (c) o descritor do alvo só está na PERGUNTA do jogador, nunca repetido pela
+# narração do Mestre — a âncora só olhava a narração.
+
+
+def test_detectar_reveal_aquele_e_com_reticencia():
+    from engine.npc.identity import detectar_name_reveal
+
+    narr = '"Aquele é... Gorvoth. Um homem... perigoso."'
+    assert detectar_name_reveal(narr, "Gorvoth")
+
+
+def test_detectar_reveal_aquela_e_tambem_cobre():
+    from engine.npc.identity import detectar_name_reveal
+
+    assert detectar_name_reveal('"Aquela é... Runa", ele murmura.', "Runa")
+
+
+def test_alvo_do_reveal_usa_contexto_extra_quando_narracao_nao_ancora():
+    """A frase real do playtest: 'barba-espessa' só aparece na PERGUNTA do
+    jogador, não na resposta do barman — sem contexto_extra, 0 ancorados."""
+    from engine.npc.identity import alvo_do_reveal, garantir_registro
+
+    wm = _wm()
+    wm.npcs_presentes = ["barba-espessa"]
+    garantir_registro(wm)
+    narr = (
+        'O barman olha em volta nervosamente e responde em voz baixa, '
+        '"Aquele é... Gorvoth. Um homem... perigoso."'
+    )
+    pergunta = "aquele grandão de barba espessa que sumiu — qual é o nome dele?"
+    assert alvo_do_reveal(wm, narr, "Gorvoth") is None  # sem contexto: ambíguo
+    assert alvo_do_reveal(wm, narr, "Gorvoth", contexto_extra=pergunta) == "barba-espessa"
+
+
+def test_alvo_do_reveal_narracao_ancorada_ignora_contexto_extra():
+    """Se a narração JÁ ancora, contexto_extra nunca é consultado — não pode
+    desempatar uma ambiguidade real que a narração sozinha já resolveu."""
+    from engine.npc.identity import alvo_do_reveal, garantir_registro
+
+    wm = _wm()
+    wm.npcs_presentes = ["monge-da-taverna"]
+    garantir_registro(wm)
+    narr = 'O monge abaixa o capuz. "Sou Kael."'
+    # contexto_extra menciona um NPC diferente que nem está na cena — deve
+    # ser ignorado porque a narração sozinha já ancorou 1 candidato.
+    assert alvo_do_reveal(
+        wm, narr, "Kael", contexto_extra="pergunto ao aldric sobre o clima"
+    ) == "monge-da-taverna"
+
+
+def test_aplicar_npcs_extraidos_renomeia_com_texto_jogador():
+    """Fim-a-fim: aplicar_npcs_extraidos com texto_jogador renomeia em vez de
+    duplicar — a regressão exata do playtest 10/07."""
+    from engine.llm.extractor import aplicar_npcs_extraidos
+    from engine.npc.identity import garantir_registro
+
+    wm = _wm()
+    wm.npcs_presentes = ["barba-espessa"]
+    garantir_registro(wm)
+    narr = (
+        'O barman olha em volta nervosamente e responde em voz baixa, '
+        '"Aquele é... Gorvoth. Um homem... perigoso. Você não quer '
+        'problemas com ele, entende?"'
+    )
+    pergunta = "aquele grandão de barba espessa que sumiu — qual é o nome dele?"
+    add = aplicar_npcs_extraidos(
+        wm, [{"id": "gorvoth", "nome": "Gorvoth"}],
+        narracao=narr, texto_jogador=pergunta,
+    )
+    assert add == []  # renomeou, não adicionou candidato novo
+    assert "gorvoth" in wm.npcs_presentes
+    assert "barba-espessa" not in wm.npcs_presentes

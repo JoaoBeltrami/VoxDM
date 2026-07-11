@@ -585,7 +585,7 @@ async def extrair_npcs_cena(
 
 
 def aplicar_npcs_extraidos(
-    wm: Any, npcs: list[dict[str, str]], narracao: str = ""
+    wm: Any, npcs: list[dict[str, str]], narracao: str = "", texto_jogador: str = ""
 ) -> list[str]:
     """Registra NPCs extraídos na cena (presença + apresentado). Idempotente.
 
@@ -601,6 +601,11 @@ def aplicar_npcs_extraidos(
     — nesse caso RENOMEIA o presente via registro canônico (retrato preservado)
     em vez de criar um NPC duplicado. `narracao` opcional preserva os
     call-sites antigos (sem narração = sem detecção de reveal).
+
+    NAME-REVEAL-DUP-1 (playtest 10/07): `texto_jogador` opcional é a segunda
+    fonte de âncora do reveal (ver `alvo_do_reveal`) — cobre "qual é o nome
+    dele, o grandão de barba espessa?" → "Aquele é... Gorvoth", onde o
+    descritor do alvo só aparece na PERGUNTA, não na narração do Mestre.
     """
     from engine.npc.identity import (
         alvo_do_reveal,
@@ -656,7 +661,7 @@ def aplicar_npcs_extraidos(
         # NAME-REVEAL: candidato novo + frase de apresentação + NPC presente
         # ancorado na janela antes dela → renomeia em vez de duplicar.
         if narracao and detectar_name_reveal(narracao, nome):
-            alvo = alvo_do_reveal(wm, narracao, nome)
+            alvo = alvo_do_reveal(wm, narracao, nome, contexto_extra=texto_jogador)
             if alvo:
                 novo_id = revelar_nome(wm, alvo, nome)
                 presentes_canon.add(_chave_dedup(novo_id))

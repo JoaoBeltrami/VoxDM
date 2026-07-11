@@ -2356,9 +2356,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     )
                     if npcs_novos:
                         # narracao habilita o NAME-REVEAL (renomeia NPC presente
-                        # em vez de duplicar — NPC-IDENTIDADE 05/07).
+                        # em vez de duplicar — NPC-IDENTIDADE 05/07). texto_jogador
+                        # é a 2ª fonte de âncora do reveal (NAME-REVEAL-DUP-1,
+                        # 10/07) — cobre quando o descritor do alvo só está na
+                        # pergunta do jogador, não na narração do Mestre.
                         ids = aplicar_npcs_extraidos(
-                            sessao.working_mem, npcs_novos, narracao=resposta_limpa
+                            sessao.working_mem, npcs_novos,
+                            narracao=resposta_limpa, texto_jogador=texto_jogador,
                         )
                         if ids:
                             log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
