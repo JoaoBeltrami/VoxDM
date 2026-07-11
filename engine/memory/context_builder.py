@@ -70,6 +70,19 @@ _TTL_RELS_CACHE = 1800.0
 # existir de verdade (ex: ingest incremental, ou o id era só temporariamente ruim).
 _TTL_RELS_CACHE_FALHA = 90.0
 
+# NEO4J-DOWN-1 (playtest 10/07, sess-cc69c30f7c4f): o cache negativo acima é
+# POR ENTIDADE — protege a MESMA entidade de martelar o Neo4j, mas quando a
+# instância inteira está fora (AuraDB pausada/DNS não resolve), cada entidade
+# NOVA na cena ainda paga os 2s inteiros de wait_for() na primeira vez que
+# aparece, turno após turno, pela sessão inteira. Log real: ~2,3s de
+# `context_ms` pago em TODO turno porque o Neo4j nunca respondia. Circuit
+# breaker de SESSÃO: N falhas CONSECUTIVAS (qualquer entidade, qualquer método)
+# abrem o circuito por um cooldown — durante ele, nem tenta I/O (retorna cache
+# stale se houver, senão vazio). Half-open após o cooldown: a próxima chamada
+# tenta de novo; sucesso fecha o circuito, falha reabre com cooldown fresco.
+_CIRCUITO_LIMIAR_FALHAS = 3
+_CIRCUITO_COOLDOWN = 60.0
+
 
 class ContextBuilder:
     """
@@ -97,6 +110,29 @@ class ContextBuilder:
         # pra servir stale. TTL curto (_TTL_RELS_CACHE_FALHA): não persegue o
         # Neo4j turno a turno num id fantasma, mas ainda tenta de novo eventualmente.
         self._rels_cache_falha: dict[str, float] = {}
+        # NEO4J-DOWN-1: circuit breaker de sessão (ver constantes acima).
+        self._neo4j_falhas_consecutivas: int = 0
+        self._neo4j_circuito_aberto_ate: float = 0.0
+
+    def _circuito_neo4j_aberto(self) -> bool:
+        """True se o circuito está aberto (Neo4j fora, pulando I/O por ora)."""
+        return time.monotonic() < self._neo4j_circuito_aberto_ate
+
+    def _registrar_falha_neo4j(self) -> None:
+        """Conta falha consecutiva; abre o circuito ao bater o limiar."""
+        self._neo4j_falhas_consecutivas += 1
+        if self._neo4j_falhas_consecutivas >= _CIRCUITO_LIMIAR_FALHAS:
+            self._neo4j_circuito_aberto_ate = time.monotonic() + _CIRCUITO_COOLDOWN
+            log.warning(
+                "neo4j_circuito_aberto",
+                falhas=self._neo4j_falhas_consecutivas,
+                cooldown_s=_CIRCUITO_COOLDOWN,
+            )
+
+    def _registrar_sucesso_neo4j(self) -> None:
+        """Sucesso fecha o circuito e zera o contador de falhas."""
+        self._neo4j_falhas_consecutivas = 0
+        self._neo4j_circuito_aberto_ate = 0.0
 
     def _carregar_schema(self) -> dict[str, Any]:
         """Carrega e cacheia o schema do módulo em memória."""
@@ -239,6 +275,12 @@ class ContextBuilder:
         em_cache = self._rels_cache.get(entidade_id)
         if em_cache is not None and agora - em_cache[0] < _TTL_RELS_CACHE:
             return em_cache[1]
+        # NEO4J-DOWN-1: circuito aberto (Neo4j fora da sessão inteira) — nem
+        # tenta I/O; serve stale se houver, senão vazio. Sem isto, cada
+        # entidade NOVA continuaria pagando 2s de wait_for mesmo já sabendo
+        # que o Neo4j está inalcançável.
+        if self._circuito_neo4j_aberto():
+            return em_cache[1] if em_cache is not None else []
         falha_em = self._rels_cache_falha.get(entidade_id)
         if falha_em is not None and agora - falha_em < _TTL_RELS_CACHE_FALHA:
             return []
@@ -249,14 +291,17 @@ class ContextBuilder:
             )
             self._rels_cache[entidade_id] = (agora, rels)
             self._rels_cache_falha.pop(entidade_id, None)
+            self._registrar_sucesso_neo4j()
             return rels
         except TimeoutError:
+            self._registrar_falha_neo4j()
             if em_cache is not None:
                 return em_cache[1]  # stale-while-revalidate
             self._rels_cache_falha[entidade_id] = agora
             log.warning("neo4j_timeout", entidade=entidade_id)
             return []
         except Exception as e:
+            self._registrar_falha_neo4j()
             if em_cache is not None:
                 return em_cache[1]
             self._rels_cache_falha[entidade_id] = agora
@@ -363,17 +408,23 @@ class ContextBuilder:
         travando o WebSocket e derrubando a resposta do jogador em silêncio
         (playtest 01/07, sess-7893f3bdbd28).
         """
+        if self._circuito_neo4j_aberto():
+            log.warning("neo4j_circuito_aberto_pulando", entidade=location_id)
+            return []
         try:
             npcs = await asyncio.wait_for(
                 self._neo4j.buscar_npcs_no_local(location_id), timeout=2.0
             )
             ids = [n["id"] for n in npcs if n.get("id")]
             log.info("npcs_inferidos", location=location_id, total=len(ids))
+            self._registrar_sucesso_neo4j()
             return ids
         except TimeoutError:
+            self._registrar_falha_neo4j()
             log.warning("neo4j_timeout", entidade=location_id)
             return []
         except Exception as e:
+            self._registrar_falha_neo4j()
             log.warning("npcs_inferir_falhou", location=location_id, erro=str(e))
             return []
 
