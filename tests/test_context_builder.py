@@ -10,6 +10,7 @@ Todos os testes são offline — sem Qdrant, Neo4j nem Groq.
 """
 
 import json
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -300,6 +301,8 @@ def _builder_sem_clientes() -> ContextBuilder:
     b._rels_cache = {}
     b._rels_cache_falha = {}
     b._neo4j = AsyncMock()
+    b._neo4j_falhas_consecutivas = 0
+    b._neo4j_circuito_aberto_ate = 0.0
     return b
 
 
@@ -439,6 +442,98 @@ async def test_inferir_npcs_presentes_erro_generico_nao_propaga():
     b._neo4j.buscar_npcs_no_local = AsyncMock(side_effect=RuntimeError("boom"))
     ids = await b.inferir_npcs_presentes("tharnvik")
     assert ids == []
+
+
+# ── Testes: circuit breaker de sessão (NEO4J-DOWN-1, playtest 10/07) ───────────
+# Cache negativo é POR ENTIDADE; quando a instância inteira está fora, cada
+# entidade NOVA na cena ainda pagava os 2s cheios de wait_for na 1ª vez que
+# aparecia. Circuit breaker de sessão: N falhas CONSECUTIVAS abrem o circuito
+# e pulam I/O até o cooldown passar.
+
+@pytest.mark.asyncio
+async def test_circuito_abre_apos_limiar_de_falhas_consecutivas():
+    from engine.memory import context_builder as cb_module
+
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    for i in range(cb_module._CIRCUITO_LIMIAR_FALHAS):
+        await b._buscar_rels_cached(f"entidade-{i}")
+    assert b._circuito_neo4j_aberto() is True
+
+
+@pytest.mark.asyncio
+async def test_circuito_aberto_pula_io_em_entidade_nova():
+    """Depois do circuito abrir, uma entidade NUNCA vista antes nem tenta I/O —
+    é exatamente o caso do playtest: NPC novo aparece turno após turno enquanto
+    o Neo4j está fora, cada um pagando 2s sem o breaker."""
+    from engine.memory import context_builder as cb_module
+
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    for i in range(cb_module._CIRCUITO_LIMIAR_FALHAS):
+        await b._buscar_rels_cached(f"entidade-{i}")
+    b._neo4j.buscar_relacionamentos.reset_mock()
+    r = await b._buscar_rels_cached("entidade-jamais-vista")
+    assert r == []
+    b._neo4j.buscar_relacionamentos.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_circuito_aberto_ainda_serve_stale_de_entidade_ja_cacheada():
+    """Circuito aberto não deve apagar o que já tinha sucesso — só evita I/O novo."""
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "bom"}])
+    await b._buscar_rels_cached("npc-com-cache")  # sucesso, popula cache
+    b._neo4j_circuito_aberto_ate = time.monotonic() + 60.0
+    r = await b._buscar_rels_cached("npc-com-cache")
+    assert r == [{"rel": "bom"}]
+
+
+@pytest.mark.asyncio
+async def test_circuito_fecha_apos_cooldown_e_sucesso_reseta_contador():
+    """Depois do cooldown, a próxima chamada tenta de novo (half-open); sucesso
+    fecha o circuito e zera o contador de falhas."""
+    from engine.memory import context_builder as cb_module
+
+    b = _builder_sem_clientes()
+    b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+    for i in range(cb_module._CIRCUITO_LIMIAR_FALHAS):
+        await b._buscar_rels_cached(f"entidade-{i}")
+    assert b._circuito_neo4j_aberto() is True
+    # expira o cooldown manualmente
+    b._neo4j_circuito_aberto_ate = time.monotonic() - 1.0
+    b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "voltou"}])
+    r = await b._buscar_rels_cached("entidade-pos-cooldown")
+    assert r == [{"rel": "voltou"}]
+    assert b._neo4j_falhas_consecutivas == 0
+    assert b._circuito_neo4j_aberto() is False
+
+
+@pytest.mark.asyncio
+async def test_circuito_inferir_npcs_presentes_pula_quando_aberto():
+    b = _builder_sem_clientes()
+    b._neo4j_circuito_aberto_ate = time.monotonic() + 60.0
+    b._neo4j.buscar_npcs_no_local = AsyncMock(
+        return_value=[{"id": "nao-deveria-ser-chamado"}]
+    )
+    ids = await b.inferir_npcs_presentes("drevamor")
+    assert ids == []
+    b._neo4j.buscar_npcs_no_local.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_circuito_sucesso_isolado_nao_abre():
+    """Falhas ESPAÇADAS por sucessos nunca somam pro limiar — só consecutivas."""
+    from engine.memory import context_builder as cb_module
+
+    b = _builder_sem_clientes()
+    for i in range(cb_module._CIRCUITO_LIMIAR_FALHAS + 2):
+        if i % 2 == 0:
+            b._neo4j.buscar_relacionamentos = AsyncMock(side_effect=TimeoutError())
+        else:
+            b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[{"rel": "ok"}])
+        await b._buscar_rels_cached(f"entidade-alternada-{i}")
+    assert b._circuito_neo4j_aberto() is False
 
 
 # ── Testes: canon do módulo (Schema v2, bridge B2) ──────────────────────────────
