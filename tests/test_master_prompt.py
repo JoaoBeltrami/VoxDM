@@ -599,6 +599,11 @@ def test_social_md_dentro_do_budget():
     # Garantia funcional preservada na compressão (test_prompt_wiring depende disso).
     assert "assinatura de voz" in conteudo
     assert "COMPANION_ADD" in conteudo
+    # NPC-BATISMO-PREGUIÇOSO (playtest 10/07): o id kebab-case exposto em "NPCs
+    # presentes" ("barman-robusto") não é o nome do personagem — sem esta
+    # instrução o LLM canoniza o descritor como nome próprio ("Meu nome é
+    # Robusto"). Guarda: a instrução não pode sumir numa próxima compressão.
+    assert "DESCRITOR interno" in conteudo
 
 
 def test_master_system_dentro_do_budget():

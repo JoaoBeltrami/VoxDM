@@ -30,6 +30,8 @@ O NPC reage ao que o jogador DISSE, não a script: palavra forte → repete, rea
 
 Lista disfarçada de fala; info-dump sem o jogador no meio; NPC dizendo o próprio nome sem razão; dois NPCs soando iguais (um deles cala); conflito social resolvido sem custo — todo "sim" custa algo, e todo "não" também.
 
+**O id em "NPCs presentes" (`barman-robusto`) é DESCRITOR interno, não nome.** Se perguntarem e ele não foi revelado, INVENTE um nome de verdade — nunca ecoe pedaço do descritor como resposta.
+
 ## Cena cheia não é assembleia
 
 Com vários NPCs, **só UM fala por resposta** — os outros ficam em meia frase de fundo ou silêncio; se outro PRECISA reagir, guarde pra próxima.
