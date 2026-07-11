@@ -2065,6 +2065,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 dm_profile=_dm_prof,
                 grimdark_ativo=_grim,
                 cena_sombria=_cena_sombria,
+                idle_nudge=idle_nudge,
             )
             # Informa os providers se a cena atual exige detecção de amarelada.
             # Setado antes do stream para que o buffer check do GroqProvider

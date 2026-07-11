@@ -142,6 +142,7 @@ def escolher_task_type_narrativo(
     dm_profile: str = "",
     grimdark_ativo: bool = False,
     cena_sombria: bool = False,
+    idle_nudge: bool = False,
 ) -> TaskType:
     """Decide qual TaskType usar para o turno narrativo atual.
 
@@ -149,6 +150,12 @@ def escolher_task_type_narrativo(
       0. Grim: dm_profile="sombrio" + GRIMDARK_ATIVO → NARRATIVE_GRIM
          (groq-70b → gemini → ollama-grim, pula 8B). Tem prioridade pra
          garantir o fallback uncensored independente do estado de combate.
+      0.5. Idle nudge → LIGHT sempre (playtest 10/07): "[IDLE]" é um empurrão
+         atmosférico de 1-2 frases que EXPLICITAMENTE não avança a história
+         ("pacing/estilo/arco intocados" — api/websocket.py). A regra 2 (NPC
+         na cena força 70B) tratava esse filler como cena social de verdade só
+         por haver um NPC presente — foi ele quem tomou o 429 do 70B no log
+         real de um playtest, sem ganho de qualidade (idle não é diálogo).
       1. Combate + pacing≥7 OU cliffhanger → CLIMAX (qualidade máxima)
       2. Fora de combate COM NPC na cena → NARRATIVE (70B), nunca 8B: cena
          social/RP é narrativamente exigente (diálogo, subtexto, voz de
@@ -181,6 +188,9 @@ def escolher_task_type_narrativo(
     # por keywords/escalação reativa).
     if grimdark_ativo and (dm_profile == "sombrio" or cena_sombria):
         return TaskType.NARRATIVE_GRIM
+
+    if idle_nudge:
+        return TaskType.NARRATIVE_LIGHT
 
     if cliffhanger_pendente or (em_combate and pacing_nivel >= 7.0):
         return TaskType.NARRATIVE_CLIMAX

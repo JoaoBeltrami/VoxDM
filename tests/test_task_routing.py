@@ -126,6 +126,44 @@ class TestHibridoQualidadeMestre:
         ) == TaskType.NARRATIVE_CLIMAX
 
 
+class TestIdleNudgeForcaLight:
+    """Playtest 10/07: idle vencia pela regra 'NPC na cena força 70B' e tomou
+    um 429 real no log — filler atmosférico que não avança história não
+    justifica 70B, com ou sem NPC presente."""
+
+    def test_idle_vence_npc_na_cena(self):
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=5.0, npc_na_cena=True, idle_nudge=True,
+        ) == TaskType.NARRATIVE_LIGHT
+
+    def test_idle_vence_cliffhanger_e_climax_de_combate(self):
+        assert escolher_task_type_narrativo(
+            em_combate=True, pacing_nivel=9.0,
+            cliffhanger_pendente=True, idle_nudge=True,
+        ) == TaskType.NARRATIVE_LIGHT
+
+    def test_idle_nao_conta_para_cap_anti_robo_de_forma_incorreta(self):
+        # Mesmo com o teto de LIGHT consecutivos batido, idle ainda é LIGHT —
+        # não é um turno narrativo "de verdade" sujeito ao cap anti-robô.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=2.0,
+            light_consecutivos=5, idle_nudge=True,
+        ) == TaskType.NARRATIVE_LIGHT
+
+    def test_grim_ainda_vence_idle(self):
+        # Cena sombria mantém a garantia do fallback uncensored mesmo em idle.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=5.0,
+            idle_nudge=True, grimdark_ativo=True, dm_profile="sombrio",
+        ) == TaskType.NARRATIVE_GRIM
+
+    def test_sem_idle_comportamento_antigo_preservado(self):
+        # idle_nudge default False não muda nenhum caso pré-existente.
+        assert escolher_task_type_narrativo(
+            em_combate=False, pacing_nivel=5.0, npc_na_cena=True,
+        ) == TaskType.NARRATIVE
+
+
 class TestCascataPara:
     def test_narrative_light_prefere_8b(self):
         cascata = cascata_para(TaskType.NARRATIVE_LIGHT)
