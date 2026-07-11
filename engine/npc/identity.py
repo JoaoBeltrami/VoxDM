@@ -38,12 +38,18 @@ _ESTRUTURAIS = frozenset({
     "no", "na", "nos", "nas", "um", "uma", "ao", "aos",
 })
 
-# Janela de APRESENTAÇÃO — o NPC declara o próprio nome. Mesmo vocabulário da
-# guarda de name-reveal do extractor (_e_apelido_do_jogador), aqui na direção
-# oposta: detectar o reveal pra RENOMEAR em vez de criar NPC novo.
+# Janela de APRESENTAÇÃO — o NPC declara o próprio nome OU um terceiro revela
+# o nome dele ("Aquele é... Gorvoth", resposta a "qual é o nome dele?").
+# Mesmo vocabulário da guarda de name-reveal do extractor
+# (_e_apelido_do_jogador), aqui na direção oposta: detectar o reveal pra
+# RENOMEAR em vez de criar NPC novo.
+# NAME-REVEAL-DUP-1 (playtest 10/07): "aquele é"/"aquela é" (revelação em 3ª
+# pessoa distal — alguém aponta e nomeia outro NPC) faltava; só "este é"/
+# "esta é" (proximal, tipo apresentar quem chegou) estava coberto.
 _RE_APRESENTACAO = (
     r"\b(?:sou(?:\s+eu)?|me\s+chamo|meu\s+nome\s+e|se\s+chama|chamam[\s-]?me|"
-    r"pode(?:m)?\s+me\s+chamar\s+de|este\s+e|esta\s+e|apresento)\b"
+    r"pode(?:m)?\s+me\s+chamar\s+de|este\s+e|esta\s+e|aquele\s+e|aquela\s+e|"
+    r"apresento)\b"
 )
 
 
@@ -51,6 +57,18 @@ def _translit(texto: str) -> str:
     """Acentos → ASCII (espelho local do helper do extractor — sem ciclo)."""
     nfkd = unicodedata.normalize("NFKD", texto)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _normalizar_reveal(texto: str) -> str:
+    """_translit + lower + colapsa reticências.
+
+    NAME-REVEAL-DUP-1 (playtest 10/07): "Aquele é... Gorvoth" nunca casava —
+    "..." é PAUSA dramática dentro da MESMA fala em PT-BR, não fim de frase,
+    mas a janela `[^.!?\\n]` do reveal trata qualquer "." como fronteira e
+    nunca atravessava a reticência. Compartilhado por `_pos_reveal` e
+    `alvo_do_reveal` pra manter as posições consistentes entre as duas.
+    """
+    return re.sub(r"\.{2,}", " ", _translit(texto).lower())
 
 
 def _kebab(texto: str) -> str:
@@ -255,16 +273,28 @@ def detectar_name_reveal(narracao: str, nome: str) -> bool:
 
 
 def _pos_reveal(narracao: str, nome: str) -> int | None:
-    """Posição (no texto transliterado) do início da frase de apresentação."""
+    """Posição (no texto normalizado) do início da frase de apresentação."""
     if not nome.strip():
         return None
-    narr = _translit(narracao).lower()
+    narr = _normalizar_reveal(narracao)
     nome_re = re.escape(_translit(nome).lower().strip())
     m = re.search(rf"{_RE_APRESENTACAO}[^.!?\n]{{0,40}}\b{nome_re}\b", narr)
     return m.start() if m else None
 
 
-def alvo_do_reveal(wm: Any, narracao: str, nome: str) -> str | None:
+def _npcs_ancorados_em(wm: Any, janela: str) -> list[str]:
+    """Presentes cujo token útil (≥3 chars) aparece na janela de texto dada."""
+    ancorados: list[str] = []
+    for p in {resolver_npc(wm, str(x)) for x in wm.npcs_presentes}:
+        tokens = {t for t in _tokens_uteis(p) if len(t) >= 3}
+        if any(re.search(rf"\b{re.escape(t)}\b", janela) for t in tokens):
+            ancorados.append(p)
+    return ancorados
+
+
+def alvo_do_reveal(
+    wm: Any, narracao: str, nome: str, *, contexto_extra: str = ""
+) -> str | None:
     """Quem está revelando o nome? O NPC presente ANCORADO na narração.
 
     "O monge abaixa o capuz. 'Sou Kael.'" → o alvo do rename é o presente cujo
@@ -279,16 +309,21 @@ def alvo_do_reveal(wm: Any, narracao: str, nome: str) -> str | None:
     candidato, sem contexto suficiente pra calibrar a heurística de âncora
     quando o problema reaparecer. Loga aqui (não no caller) porque é aqui que
     vivem a posição do reveal e a contagem de ancorados.
+
+    NAME-REVEAL-DUP-1 (playtest 10/07): "qual é o nome dele, o grandão de
+    barba espessa?" → "Aquele é... Gorvoth" — o descritor do alvo só aparece
+    na PERGUNTA do jogador, nunca repetido pela narração do Mestre. Sem
+    âncora na narração, `contexto_extra` (o texto do jogador NESTE turno) é
+    tentado como segunda fonte — só quando a narração sozinha não ancorou
+    ninguém, nunca para desempatar uma ambiguidade já existente nela.
     """
     pos = _pos_reveal(narracao, nome)
     if pos is None:
         return None
-    janela = _translit(narracao).lower()[max(0, pos - 120) : pos]
-    ancorados: list[str] = []
-    for p in {resolver_npc(wm, str(x)) for x in wm.npcs_presentes}:
-        tokens = {t for t in _tokens_uteis(p) if len(t) >= 3}
-        if any(re.search(rf"\b{re.escape(t)}\b", janela) for t in tokens):
-            ancorados.append(p)
+    janela = _normalizar_reveal(narracao)[max(0, pos - 120) : pos]
+    ancorados = _npcs_ancorados_em(wm, janela)
+    if not ancorados and contexto_extra:
+        ancorados = _npcs_ancorados_em(wm, _normalizar_reveal(contexto_extra))
     if len(ancorados) == 1:
         return ancorados[0]
     trecho = narracao[max(0, pos - 60) : pos + 90].strip()[:150]
