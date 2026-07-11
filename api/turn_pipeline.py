@@ -550,6 +550,24 @@ _RE_PRONOME_ATAQUE = re.compile(
     re.IGNORECASE,
 )
 
+# ALVO-INSTRUMENTO-1 (playtest 10/07, sess-cc69c30f7c4f): "Quebro a caneca na
+# cabeça do grandão" — _RE_ALVO_ATAQUE captura "caneca" (objeto direto do
+# verbo) porque ela aparece ANTES do possessivo do corpo atingido, e devolve
+# na hora (loop com `return` no primeiro match). A engine registrou "Caneca"
+# como inimigo (CA/HP default) e ele "revidou" na narrativa — o instrumento do
+# golpe nunca é o alvo. Espelho do padrão golpe-substantivo do FUNC-1 ("o
+# chute na cara DELE"), só que aqui o possuidor é um NOME, não um pronome —
+# não cai em _RE_PRONOME_ATAQUE (que só cobre dele/dela). Roda sobre o texto
+# SEM ACENTO (mesmo padrão de `_ALVO_NAO_NPC`) pra não depender de acentuação.
+_RE_ALVO_POSSESSIVO_CORPO = re.compile(
+    r"\bn[ao]s?\s+(?:cabeca|cara|rosto|peito|costas|pescoco|garganta|"
+    r"barriga|ventre|nuca|corpo|tronco|olhos?|bracos?|pernas?|maos?|"
+    r"ombros?|joelhos?|pes?)\s+"
+    r"d[oa]s?\s+"
+    r"([a-z][a-z\s]{1,30}?)(?=[.,!?]|$)",
+    re.IGNORECASE,
+)
+
 
 # ALVO-FANTASMA-1 (playtest 29/06): "corto a cabeça de aldric" tem alvo "aldric",
 # NÃO "cabeça". Partes do corpo nunca são o alvo-NPC — se o regex pegar uma delas,
@@ -626,6 +644,9 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
 
     Usado pela costura de combate engine-autoritativo (task 7) ANTES do LLM, pra
     saber contra quem resolver a rolagem. Estratégia (em ordem):
+      0. ALVO-INSTRUMENTO-1 (playtest 10/07): possessivo NOMEADO de parte do
+         corpo ("na cabeça DO GRANDÃO") vence o objeto direto do verbo — o
+         instrumento do golpe (a caneca, a espada) nunca é o alvo;
       1. `_RE_ALVO_ATAQUE` clássico ("ataco o goblin") — registra e devolve;
          ignora pronome e PARTE DO CORPO ("a cabeça");
       2. ALVO-FANTASMA (playtest 29/06): NPC PRESENTE nomeado no texto — "corto a
@@ -634,6 +655,24 @@ def extrair_alvo_ataque(texto_jogador: str, working_mem: WorkingMemory) -> str |
       3. sem nome → único inimigo VIVO ("ataco ele");
       4. senão None (ambíguo — caller pede alvo ou cai no fluxo antigo).
     """
+    _m_corpo = _RE_ALVO_POSSESSIVO_CORPO.search(_sem_acento(texto_jogador))
+    if _m_corpo:
+        nome = _m_corpo.group(1).strip().rstrip(".,!?")
+        primeira = nome.split()[0] if nome.split() else ""
+        if nome and nome not in _PRONOMES and primeira not in _PRONOMES:
+            iid = _slugify(nome)
+            if iid:
+                try:
+                    _canonico = resolver_falado(working_mem, iid)
+                except Exception:
+                    _canonico = None
+                if _canonico:
+                    iid = _canonico
+                    nome = str(iid).replace("-", " ")
+                if iid not in working_mem.inimigos_combate:
+                    working_mem.registrar_inimigo(iid, nome.title(), "intacto")
+                return iid
+
     for m in _RE_ALVO_ATAQUE.finditer(texto_jogador):
         nome = m.group(1).strip().rstrip(".,!?")
         if not nome:
