@@ -606,6 +606,24 @@ def test_social_md_dentro_do_budget():
     assert "DESCRITOR interno" in conteudo
 
 
+def test_markers_lista_dentro_do_budget():
+    """markers_lista.md comprimido: máx 2 300 chars (~657 tokens).
+
+    É injetado TODO turno (fragmento incondicional do prompt_builder) — no
+    playtest 10/07 era o 3º maior bloco fixo (2 530 chars) atrás de master e
+    social.md. Dieta de 11/07: 2 530 → 2 156 preservando os 29 markers e todas
+    as regras comportamentais (o contrato test_contrato_markers_ws garante que
+    nenhum `[MARKER` saiu da doc). Teto 2 300 = margem pequena de edição;
+    crescer além exige cortar em outro lugar.
+    """
+    markers_path = _COMBAT_PATH.parent / "fragments" / "markers_lista.md"
+    conteudo = markers_path.read_text(encoding="utf-8")
+    assert len(conteudo) <= 2_300, (
+        f"markers_lista.md com {len(conteudo)} chars excede teto de 2 300 — "
+        "é custo fixo de TODO turno; comprimir sem derrubar nenhum [MARKER"
+    )
+
+
 def test_master_system_dentro_do_budget():
     """master_system.md: máx 7 500 chars (~2 140 tokens).
 
