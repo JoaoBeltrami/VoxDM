@@ -373,7 +373,7 @@ export default function Home() {
   const {
     sessionId, playerName, conectado, carregando, respostaAtual,
     historico, erro, reconectando, questStages, activeQuests, inventory, playerConditions,
-    locationNome, timeOfDay, npcsTrust,
+    locationNome, timeOfDay, npcsTrust, npcsMortos,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
@@ -1408,7 +1408,7 @@ export default function Home() {
         </header>
 
         <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
-        <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} falanteAtivo={falanteAtivo} />
+        <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} falanteAtivo={falanteAtivo} mortos={npcsMortos} />
       </>
     );
 

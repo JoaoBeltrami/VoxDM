@@ -108,6 +108,8 @@ interface EstadoSessao {
   locationNome: string;
   timeOfDay: string;
   npcsTrust: Record<string, number>;
+  // CANON-MORTOS (12/07): presentes mortos — retrato em grayscale (corpo na cena)
+  npcsMortos: string[];
   // Mecânicas RPG
   spellSlots: Record<number, SpellSlot>;
   hitDiceCurrent: number;
@@ -229,6 +231,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   locationNome: "",
   timeOfDay: "",
   npcsTrust: {},
+  npcsMortos: [],
   spellSlots: {},
   hitDiceCurrent: 0,
   gold: 0,
@@ -793,6 +796,9 @@ export function useGameSession() {
             locationNome: novoTurnoBase.locationNome ?? s.locationNome,
             timeOfDay: novoTurnoBase.timeOfDay ?? s.timeOfDay,
             npcsTrust: novoTurnoBase.npcsTrust ?? s.npcsTrust,
+            // Lista sempre presente no snapshot do backend — substitui direto
+            // (vazia = ninguém morto NA CENA atual; morte é por-cena, não turno).
+            npcsMortos: msg.npcs_mortos ?? s.npcsMortos,
             spellSlots: rpgUpdate.spellSlots ?? s.spellSlots,
             hitDiceCurrent: rpgUpdate.hitDiceCurrent ?? s.hitDiceCurrent,
             serverHp: rpgUpdate.serverHp,

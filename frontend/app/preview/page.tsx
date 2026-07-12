@@ -143,6 +143,7 @@ export default function PreviewPage() {
             npcsTrust={NPCS_MOCK}
             retratos={RETRATOS_MOCK}
             falanteAtivo="aldric-drevasson"
+            mortos={["fael-drevasson"]}
           />
           {/* Seletor de modo movido pro ViewModeSwitcher flutuante (irmão do
               AppShell) — em TV o topBar fica `hidden` e prenderia os chips aqui. */}

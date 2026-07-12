@@ -55,6 +55,8 @@ export interface MensagemWS {
   location_nome?: string;
   time_of_day?: string;
   npcs_trust?: Record<string, number>;
+  // CANON-MORTOS (12/07): presentes marcados como mortos — retrato em grayscale
+  npcs_mortos?: string[];
   // Mecânicas RPG
   spell_slots?: Record<string, SpellSlot>;
   hit_dice_current?: number;

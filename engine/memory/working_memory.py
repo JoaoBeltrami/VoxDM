@@ -679,6 +679,8 @@ class WorkingMemory:
 
     def atualizar_estado_inimigo(self, inimigo_id: str, estado: str, hp_rel: str = "") -> None:
         self.combat.atualizar_estado_inimigo(inimigo_id, estado, hp_rel)
+        if estado == "morto":
+            self._marcar_npc_morto(inimigo_id)
 
     def remover_inimigo(self, inimigo_id: str) -> None:
         self.combat.remover_inimigo(inimigo_id)
@@ -687,7 +689,24 @@ class WorkingMemory:
         self.combat.aplicar_stats_inimigo(inimigo_id, ca, hp_max)
 
     def aplicar_dano_inimigo(self, inimigo_id: str, dano: int) -> str:
-        return self.combat.aplicar_dano_inimigo(inimigo_id, dano)
+        estado = self.combat.aplicar_dano_inimigo(inimigo_id, dano)
+        if estado == "morto":
+            self._marcar_npc_morto(inimigo_id)
+        return estado
+
+    def _marcar_npc_morto(self, inimigo_id: str) -> None:
+        """CANON-MORTOS (decisão 12/07): morte de combatente que É um NPC da
+        cena marca a flag no registro canônico — o corpo fica na cena (prompt
+        anota "morto, não fala"; frontend mostra grayscale). A facade é o
+        choke point dos DOIS caminhos de morte (dano determinístico do
+        orchestrator e marker/regex via atualizar_estado_inimigo). Falha
+        silenciosa: stub de teste sem scene.npc_registro não pode quebrar
+        combate."""
+        try:
+            from engine.npc.identity import marcar_morto
+            marcar_morto(self, inimigo_id)
+        except Exception:
+            pass
 
     def sair_combate(self) -> None:
         """Encerra combate — registra consequência antes de zerar inimigos."""
