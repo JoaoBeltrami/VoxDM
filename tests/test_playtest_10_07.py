@@ -172,6 +172,65 @@ def test_aplicar_npcs_extraidos_renomeia_com_texto_jogador():
     assert "barba-espessa" not in wm.npcs_presentes
 
 
+# ══ ALVO-INSTRUMENTO-2: sync de combate com os mesmos guards do extrair ═══════
+# O sincronizar_inimigos_combate roda o MESMO _RE_ALVO_ATAQUE do extrair mas não
+# tinha os guards — o mesmo texto registrava inimigos DIFERENTES nos 2 caminhos:
+# "quebro a caneca na cabeça do grandão" → extrair (com fix) mira grandão, sync
+# registrava "caneca"; "golpeio a cabeça de aldric" → sync registrava "cabeça".
+
+
+def test_sync_nao_registra_instrumento_como_inimigo():
+    from api.turn_pipeline import sincronizar_inimigos_combate
+
+    wm = _wm()
+    wm.entrar_combate()
+    sincronizar_inimigos_combate(
+        wm, "Quebro a caneca na cabeça do grandão.", "O grandão cambaleia."
+    )
+    assert "caneca" not in wm.inimigos_combate
+    assert "grandao" in wm.inimigos_combate
+
+
+def test_sync_nao_registra_parte_do_corpo_como_inimigo():
+    from api.turn_pipeline import sincronizar_inimigos_combate
+
+    wm = _wm()
+    wm.entrar_combate()
+    sincronizar_inimigos_combate(
+        wm, "Golpeio a cabeça de aldric com força", "Aldric recua."
+    )
+    assert "cabeca" not in wm.inimigos_combate
+
+
+def test_sync_ataque_direto_normal_segue_registrando():
+    from api.turn_pipeline import sincronizar_inimigos_combate
+
+    wm = _wm()
+    wm.entrar_combate()
+    sincronizar_inimigos_combate(wm, "Ataco o goblin!", "O goblin urra.")
+    assert "goblin" in wm.inimigos_combate
+
+
+def test_sync_fala_multi_clausula_registra_o_alvo_real_e_nao_lixo():
+    """Limitação PRÉ-EXISTENTE documentada: o capture lazy de _RE_ALVO_ATAQUE
+    engole a conjunção ("orc E QUEBRO A GARRAFA" vira um nome só), então o 1º
+    alvo de uma fala multi-cláusula se perde — isso é anterior a este fix (o
+    código antigo registrava o inimigo-LIXO 'orc-e-quebro-a-garrafa'). Com o
+    guard do possessivo, ao menos o alvo REAL da cláusula ("goblin") é
+    registrado e nem lixo nem instrumento entram. A cura definitiva é o
+    classificador do pipeline de autoridade, não mais tuning deste regex."""
+    from api.turn_pipeline import sincronizar_inimigos_combate
+
+    wm = _wm()
+    wm.entrar_combate()
+    sincronizar_inimigos_combate(
+        wm, "Ataco o orc e quebro a garrafa na cabeça do goblin.", "Caos na taverna."
+    )
+    assert "goblin" in wm.inimigos_combate
+    assert "garrafa" not in wm.inimigos_combate
+    assert "orc-e-quebro-a-garrafa" not in wm.inimigos_combate
+
+
 # ══ RODADA-SALTO: rodada avançava 2× por troca resolvida via engine ═══════════
 # Playtest 10/07: UI mostrou "Rodada 2" na ENTRADA do combate (declaração sem
 # d20) e "Rodada 4" após uma única troca. Dupla contagem: o orchestrator avança

@@ -838,6 +838,25 @@ def sincronizar_inimigos_combate(
         primeira_palavra = nome.split()[0].lower() if nome.split() else ""
         if nome.lower() in _PRONOMES or primeira_palavra in _PRONOMES:
             continue
+        # ALVO-INSTRUMENTO-2 (11/07): espelho dos guards que extrair_alvo_ataque
+        # já tinha e este loop não — sem eles, o MESMO texto registrava inimigos
+        # diferentes nos dois caminhos:
+        #   (a) parte do corpo nunca é alvo (ALVO-FANTASMA-1): "golpeio a cabeça
+        #       de aldric" registrava "cabeça" como inimigo aqui;
+        #   (b) possessivo nomeado de corpo vence o objeto direto
+        #       (ALVO-INSTRUMENTO-1): "quebro a caneca na cabeça do grandão"
+        #       registrava "caneca" — o instrumento. O trecho logo após o match
+        #       ("na cabeça do grandão") identifica o alvo real; troca o nome
+        #       ANTES de registrar, por match (multi-alvo na mesma fala intacto).
+        if _sem_acento(primeira_palavra) in _ALVO_NAO_NPC:
+            continue
+        _resto = _sem_acento(texto_jogador[m.end():].lstrip())
+        _m_corpo = _RE_ALVO_POSSESSIVO_CORPO.match(_resto)
+        if _m_corpo:
+            _possuidor = _m_corpo.group(1).strip().rstrip(".,!?")
+            _primeira_pos = _possuidor.split()[0] if _possuidor.split() else ""
+            if _possuidor and _possuidor not in _PRONOMES and _primeira_pos not in _PRONOMES:
+                nome = _possuidor
         inimigo_id = _slugify(nome)
         if not inimigo_id:
             continue
