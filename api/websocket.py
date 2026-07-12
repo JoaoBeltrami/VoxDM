@@ -2261,6 +2261,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "" if idle_nudge else texto_jogador,
                 resposta_limpa,
                 engine_resolveu_turno=_engine_resolveu_turno,
+                # RODADA-SALTO (10/07): pendência viva = declaração sem d20 —
+                # nenhuma troca resolvida, rodada não anda no step 6.
+                aguardando_rolagem=bool(sessao.combate_pendente),
             )
             # Trava de segurança: combate encerrou neste turno (timeout, LLM,
             # mudança de cena) por QUALQUER via com uma pendência ainda aberta
