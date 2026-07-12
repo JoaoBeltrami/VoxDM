@@ -155,6 +155,11 @@ async def working_memory_completo(
         },
         # Social
         "npcs_presentes": wm.npcs_presentes,
+        # DEBUG-REGISTRO-NPC (playtest 10/07): sem estes dois campos, o
+        # monitor do /playtest precisava INFERIR renames de name-reveal por
+        # diffs de npcs_presentes — o registro canônico é a fonte da verdade.
+        "npc_registro": {k: dict(v) for k, v in wm.scene.npc_registro.items()},
+        "npc_aliases": dict(wm.scene.npc_aliases),
         "npc_estados_emocionais": wm.npc_estados_emocionais,
         "trust_levels": wm.trust_levels,
         "faction_standings": wm.faction_standings,
