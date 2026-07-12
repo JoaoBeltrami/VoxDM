@@ -32,7 +32,7 @@ Você fala no microfone, o Mestre fala de volta — narração rica em pt-BR, re
 🎧  Web Audio API → fala do Mestre no browser
 ```
 
-Latência alvo: **<2s ponta a ponta**. Atual: ~3-6s no Groq, ~7-9s no Gemini.
+Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em playtest; picos quando a cascata desce ao Gemini).
 
 ---
 
@@ -53,11 +53,21 @@ Latência alvo: **<2s ponta a ponta**. Atual: ~3-6s no Groq, ~7-9s no Gemini.
 - **Lista de 246 magias SRD**: seleção na criação com tabs por nível, limite por classe/nível
 - **Bestiário SRD**: 334 monstros indexados em `voxdm_bestiary`; o LLM declara combatentes com `[INIMIGO: id\|nome\|srd]` e a engine puxa a ficha real (CA/PV/ataques + mecânica dos traços) direto pro combate
 
-### Combate
+### Combate (engine-first)
+- **Resolver autoritativo**: a ENGINE resolve ataque vs CA, dano, turno dos inimigos, rodada e XP de abate (`engine/combat/orchestrator.py`) — o LLM recebe linhas `ENGINE: ...` e só narra, sem inventar números. Prosa em camadas: turno comum é seco, momento-chave (crítico/abate/fim) é épico
+- **Contrato de dado**: a engine fixa o alvo do ataque e o frontend acende o d20 certo; a rolagem do jogador resolve o turno inteiro
 - **Iniciativa visual horizontal**: tokens circulares com anel violeta no turno ativo, 💀 mortos em grayscale, seta ▼
 - **Combate tático**: posicionamento em pés (`[POSICAO: id = N ft cobertura]`), movimento por rodada (`[MOV: -N ft]`), barra de movimento no CombatTracker, chips de distância por inimigo
-- **Sync de inimigos**: LLM atualiza estado (intacto/ferido/grave/morto) via regex, barra de vitalidade pulsante
 - **Dados cinematográficos**: overlay full-screen "20"/"1" em crít/falha, splash "COMBATE" na transição, vinheta vermelha, som sintético de crítico/falha via Web Audio API
+
+### NPCs vivos
+- **Identidade canônica** (`engine/npc/identity.py`): uma chave por pessoa — name-reveal renomeia em vez de duplicar, retrato estável pós-rename, aliases resolvem ids falados
+- **Voz e tique por NPC** (`engine/npc/persona.py`): pitch/rate de TTS e tique de fala determinísticos por id
+- **Retratos**: Pollinations com seed determinística e paridade backend↔frontend — o mesmo rosto a sessão inteira
+- **Relações que reagem** (`engine/authority/social.py`): atacar um NPC derruba trust dele e dos aliados presentes (grafo Neo4j); afeto/medo/rancor persistem entre sessões
+
+### Narrativa sombria (grimdark)
+- **Rota `NARRATIVE_GRIM`**: cena sombria (keywords de atrocidade ou perfil "sombrio") roteia uma cascata que termina num modelo local uncensored via Ollama; detecção de "amarelada" + retry com reframe literário antes de descer. Kill-switch `GRIMDARK_ATIVO`
 
 ### Companions/Party
 - **Tipos**: hireling (🛡), familiar (🦉), animal (🐺), summon (✨)
@@ -142,13 +152,17 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | 5.5 | Áudio de pensamento (mascarar latência) | ✅ |
 | 6 | Mecânicas D&D 5e (spell slots, class features, subclass, spells, XP) | ✅ |
 | 6+ | 4 features de game design (XP/LvUp, combate tático, economia, companions) | ✅ |
-| Bug audit | 10 bugs críticos corrigidos (5 FUNC + 5 UX) | ✅ |
+| 5.6 | Sincronização texto-voz (karaokê reverso) | ✅ |
+| 5.7 | Dados visuais + roll visibility (aberto/resultado/narrado) | ✅ |
+| 5.8 | Imagem de cena + retratos de NPC (Pollinations.ai) | ✅ |
+| 6.5 | Refactor WorkingMemory → 5 substates puros (`engine/state/`) | ✅ |
+| 7 | Combate engine-first (resolver autoritativo + prosa em camadas) | ✅ |
+| 7+ | Autoridade generalizada (economia, social/trust) + identidade de NPC | ✅ |
+| 8 | Grimdark anti-amarelada (rota grim + modelo local uncensored) | ✅ |
+| — | Frontend "BG1 híbrido" (launcher de painéis, FichaViva, retratos, dock slim) | ✅ |
 | 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
-| 5.6 | Sincronização texto-voz (karaokê reverso) | 🟡 planejado |
-| 5.7 | Dados visuais com roll behind the screen | 🟡 planejado |
-| 5.8 | Imagem de cena gerada por IA (Pollinations.ai) | 🟡 planejado |
 
-**Cobertura de testes:** 919/919 passam.
+**Cobertura de testes:** 2005/2005 passam.
 
 ---
 
@@ -239,6 +253,13 @@ voxdm/
 │   └── routes/             session, debug, llm-backend
 ├── engine/
 │   ├── auth/               jwt_validator.py, identity.py
+│   ├── authority/          camada de autoridade: intent, economia, social,
+│   │                       resolve (dispatcher), brief (NarrationBrief)
+│   ├── combat/             resolver engine-first: orchestrator, narration,
+│   │                       intent, npc_statblocks
+│   ├── npc/                identity (registro canônico), persona (voz/tique)
+│   ├── state/              5 substates puros (scene, combat, character,
+│   │                       party, narrative)
 │   ├── llm/
 │   │   ├── router.py       LLMRouter — cascata + override por sessão
 │   │   ├── providers/      groq.py, gemini.py (multi-key+model), ollama.py
@@ -263,7 +284,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  919 testes (pytest)
+└── tests/                  2005 testes (pytest)
 ```
 
 ---
@@ -271,7 +292,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 919 testes
+uv run pytest tests/ -q   # 2005 testes
 make ingest
 make run-api
 make debug
