@@ -891,6 +891,7 @@ def aplicar_pos_turno(
     resposta_completa: str,
     *,
     engine_resolveu_turno: bool = False,
+    aguardando_rolagem: bool = False,
 ) -> list[tuple[str, int]]:
     """Aplica todos os efeitos colaterais de um turno completo na WorkingMemory.
 
@@ -901,7 +902,14 @@ def aplicar_pos_turno(
     já aplicou o dano deste turno diretamente (resolver_turno_ataque_jogador →
     executar_turno_inimigos). Nesse caso [DANO]/[CURA] narrados pelo Mestre são
     ECO do que já aconteceu, não um evento novo — ver ENGINE-DANO-DUP-1 no step
-    16c abaixo.
+    16c abaixo. Também pula o avanço de rodada do step 6 (o orchestrator JÁ
+    avançou ao renovar action economy) — RODADA-SALTO, playtest 10/07.
+
+    aguardando_rolagem=True quando há uma pendência de ataque viva no fim do
+    turno (`sessao.combate_pendente` no websocket) — turno de DECLARAÇÃO ("quebro
+    a caneca...") ou de conversa com a rolagem ainda em aberto. Nenhuma troca de
+    combate se resolveu, então a rodada não anda (RODADA-SALTO: a UI mostrava
+    "Rodada 2" na entrada do combate antes de qualquer d20).
 
     Returns:
         Lista de mudanças de trust aplicadas: [(npc_id, delta), ...].
@@ -1131,7 +1139,20 @@ def aplicar_pos_turno(
     # (_enviar_abertura). Se a sessão era continuada em combate, `em_combate=True`
     # e `avancar_rodada()` incrementava `rodada_combate` sem rodada real acontecer —
     # player retomava em "Rodada 2" ao invés de "Rodada 1".
-    if working_mem.em_combate and texto_jogador.strip():
+    # RODADA-SALTO (playtest 10/07): dois guards novos —
+    #   engine_resolveu_turno: o orchestrator JÁ avançou a rodada ao renovar a
+    #     action economy; avançar de novo aqui dobrava a contagem (+2/troca:
+    #     "Rodada 4" após uma única troca resolvida);
+    #   aguardando_rolagem: declaração de ataque com d20 ainda pendente — nenhuma
+    #     troca se resolveu, a rodada fica parada ("Rodada 2" na entrada do
+    #     combate antes de qualquer dado). O caminho legado (LLM narra a troca
+    #     inteira sem engine) segue avançando por turno como sempre.
+    if (
+        working_mem.em_combate
+        and texto_jogador.strip()
+        and not engine_resolveu_turno
+        and not aguardando_rolagem
+    ):
         working_mem.avancar_rodada()
 
     # 7. [FUGIU] — jogador escapou do combate. Encerra combate imediatamente.

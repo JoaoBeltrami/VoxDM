@@ -170,3 +170,89 @@ def test_aplicar_npcs_extraidos_renomeia_com_texto_jogador():
     assert add == []  # renomeou, não adicionou candidato novo
     assert "gorvoth" in wm.npcs_presentes
     assert "barba-espessa" not in wm.npcs_presentes
+
+
+# ══ RODADA-SALTO: rodada avançava 2× por troca resolvida via engine ═══════════
+# Playtest 10/07: UI mostrou "Rodada 2" na ENTRADA do combate (declaração sem
+# d20) e "Rodada 4" após uma única troca. Dupla contagem: o orchestrator avança
+# a rodada ao renovar action economy E o step 6 de aplicar_pos_turno avançava
+# de novo no mesmo turno; e o turno de declaração (pendência de d20 viva)
+# avançava sem nenhuma troca ter se resolvido.
+
+
+def _wm_rodada() -> WorkingMemory:
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("grandao", "Grandão", "intacto")
+    return wm
+
+
+def test_rodada_nao_avanca_quando_engine_ja_resolveu():
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm_rodada()
+    rodada = wm.rodada_combate
+    aplicar_pos_turno(
+        wm, "[Rolagem: d20 = 19]", "Seu golpe acerta em cheio.",
+        engine_resolveu_turno=True,
+    )
+    assert wm.rodada_combate == rodada  # orchestrator é a autoridade neste turno
+
+
+def test_rodada_nao_avanca_com_pendencia_de_rolagem_viva():
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm_rodada()
+    rodada = wm.rodada_combate
+    aplicar_pos_turno(
+        wm, "Quebro a caneca na cabeça do grandão.",
+        "Qual é o resultado desse golpe? (d20)",
+        aguardando_rolagem=True,
+    )
+    assert wm.rodada_combate == rodada  # troca ainda não resolvida
+
+
+def test_rodada_avanca_no_caminho_legado_sem_engine():
+    """Regressão: combate narrado livre (sem engine, sem pendência) segue
+    avançando por turno — a aproximação legada não muda."""
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm_rodada()
+    rodada = wm.rodada_combate
+    aplicar_pos_turno(wm, "Ataco.", "O grandão reage com um rugido.")
+    assert wm.rodada_combate == rodada + 1
+
+
+def test_rodada_sequencia_completa_do_playtest_e_exatamente_2():
+    """A sequência real da sessão: entrar em combate (rodada 1) → declaração
+    com pendência (fica 1) → resolução via orchestrator (vira 2, e o pipeline
+    NÃO dobra). Antes do fix a UI mostrava 4 neste ponto."""
+    import random
+
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.combat.orchestrator import resolver_turno_ataque_jogador
+
+    wm = _wm()
+    wm.entrar_combate()
+    wm.registrar_inimigo("grandao", "Grandão", "intacto")
+    wm.aplicar_stats_inimigo("grandao", ca=12, hp_max=9)
+    assert wm.rodada_combate == 1  # entrar_combate
+
+    # Turno 1 — declaração ("quebro a caneca..."), pendência criada, sem d20.
+    aplicar_pos_turno(
+        wm, "Quebro a caneca na cabeça do grandão.",
+        "Qual é o resultado desse golpe? (d20)",
+        aguardando_rolagem=True,
+    )
+    assert wm.rodada_combate == 1
+
+    # Turno 2 — d20 chega, orchestrator resolve (avança a rodada UMA vez)...
+    res = resolver_turno_ataque_jogador(wm, "grandao", d20=19, rng=random.Random(7))
+    assert res["valido"] is True
+    assert wm.rodada_combate == 2
+    # ...e o pipeline pós-turno NÃO avança de novo.
+    aplicar_pos_turno(
+        wm, "[Rolagem: d20 = 19]", "Seu golpe brutal colide com a cabeça dele.",
+        engine_resolveu_turno=True,
+    )
+    assert wm.rodada_combate == 2
