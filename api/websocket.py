@@ -1116,6 +1116,15 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
             for npc in wm.npcs_apresentados
             if npc in set(wm.npcs_presentes)
         },
+        # CANON-MORTOS (12/07): quem está na cena MORTO — o frontend mostra o
+        # retrato em grayscale (corpo presente) em vez de fingir que está vivo.
+        "npcs_mortos": [
+            npc for npc in wm.npcs_apresentados
+            if npc in set(wm.npcs_presentes)
+            and wm.scene.npc_registro.get(
+                wm.scene.npc_aliases.get(npc, npc), {}
+            ).get("morto")
+        ],
         "spell_slots": wm.spell_slots,
         "hit_dice_current": wm.hit_dice_current,
         "player_hp": wm.player_hp,

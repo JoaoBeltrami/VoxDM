@@ -215,6 +215,9 @@ class MensagemWS(BaseModel):
     location_nome: str = ""
     time_of_day: str = ""
     npcs_trust: dict[str, int] = Field(default_factory=dict)  # npc_id → trust (0-3)
+    # CANON-MORTOS (12/07): presentes marcados como mortos no registro canônico —
+    # o frontend mostra o retrato em grayscale (corpo na cena, não some).
+    npcs_mortos: list[str] = Field(default_factory=list)
     # Mecânicas RPG — enviadas no "fim" para manter frontend sincronizado
     spell_slots: dict[int, dict[str, int]] = Field(default_factory=dict)
     hit_dice_current: int = 0

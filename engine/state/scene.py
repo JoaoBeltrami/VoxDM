@@ -228,7 +228,16 @@ class SceneState:
             fundo = [n for n in self.npcs_presentes if n not in self.npcs_apresentados]
             partes: list[str] = []
             if conhecidos:
-                partes.append(", ".join(conhecidos))
+                # CANON-MORTOS (decisão 12/07): morto FICA na cena como corpo,
+                # mas o LLM precisa saber que ele não fala nem age — sem isto,
+                # o inimigo abatido na taverna seguia listado como presente
+                # vivo e podia até ganhar diálogo.
+                def _rotulo(n: str) -> str:
+                    canon = self.npc_aliases.get(n, n)
+                    if self.npc_registro.get(canon, {}).get("morto"):
+                        return f"{n} (MORTO — corpo na cena; não fala, não age)"
+                    return n
+                partes.append(", ".join(_rotulo(n) for n in conhecidos))
             # Teste #3 (12/06): esconder os NOMES do fundo deixou o LLM sem ter
             # como USAR os NPCs reais do local — ele improvisava NPCs fora do
             # grafo e o HUD ficava vazio pra sempre. Os ids voltam ao prompt em

@@ -128,6 +128,36 @@ def garantir_registro(wm: Any) -> None:
         registrar_npc(wm, str(nid))
 
 
+def marcar_morto(wm: Any, npc_id: str) -> str | None:
+    """Marca um NPC como MORTO no registro canônico (CANON-MORTOS, 12/07).
+
+    Decisão Beltrami: o morto FICA na cena como corpo — o prompt anota "morto,
+    não fala" e o frontend mostra o retrato em grayscale; nunca some em
+    silêncio. A flag vive na entrada do registro (persiste via dm_state e
+    sobrevive a rename — quem morre com um nome revelado continua morto).
+
+    Conservador: só marca quando o id resolve pra alguém que a CENA conhece
+    (registro ou presença) — inimigo puro de combate ("goblin-2") que nunca
+    foi NPC não polui o registro. Retorna a chave canônica marcada, ou None.
+    """
+    canonico = resolver_npc(wm, str(npc_id))
+    conhecido = canonico in _registro(wm) or canonico in set(
+        resolver_npc(wm, str(p)) for p in wm.npcs_presentes
+    )
+    if not conhecido:
+        return None
+    registrar_npc(wm, canonico)
+    _registro(wm)[canonico]["morto"] = True
+    log.info("npc_marcado_morto", npc_id=canonico)
+    return canonico
+
+
+def esta_morto(wm: Any, npc_id: str) -> bool:
+    """True se o NPC (por qualquer alias) está marcado como morto no registro."""
+    canonico = resolver_npc(wm, str(npc_id))
+    return bool(_registro(wm).get(canonico, {}).get("morto"))
+
+
 def retrato_seed(wm: Any, npc_id: str) -> str:
     """Seed do retrato Pollinations — id ORIGINAL de criação, estável pós-rename."""
     canonico = resolver_npc(wm, npc_id)
@@ -184,6 +214,10 @@ def revelar_nome(wm: Any, id_atual: str, nome_novo: str) -> str:
             # A seed do retrato NUNCA re-seeda — herda da entrada original.
             "retrato_seed": entrada_de.get("retrato_seed", de),
         }
+        # CANON-MORTOS: morto continua morto mesmo se o nome for revelado
+        # depois (ex: alguém nomeia o corpo) — a flag viaja no rename.
+        if entrada_de.get("morto"):
+            _registro(wm)[para]["morto"] = True
     _aliases(wm)[de] = para
     # Aliases antigos que apontavam pro id que acabou de migrar seguem a corrente.
     for alias, destino in list(_aliases(wm).items()):

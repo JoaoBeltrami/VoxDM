@@ -231,6 +231,95 @@ def test_sync_fala_multi_clausula_registra_o_alvo_real_e_nao_lixo():
     assert "orc-e-quebro-a-garrafa" not in wm.inimigos_combate
 
 
+# ══ CANON-MORTOS: NPC morto marcado no registro (decisão Beltrami 12/07) ══════
+# "Marca morto + retrato grayscale": o morto FICA na cena como corpo — o prompt
+# anota "não fala, não age", o frontend mostra grayscale. Antes, o inimigo
+# abatido seguia em npcs_presentes como vivo e o LLM podia até fazê-lo falar.
+
+
+def test_marcar_morto_e_esta_morto_com_alias():
+    from engine.npc.identity import esta_morto, marcar_morto, registrar_npc, revelar_nome
+
+    wm = _wm()
+    wm.npcs_presentes = ["barba-espessa"]
+    registrar_npc(wm, "barba-espessa")
+    revelar_nome(wm, "barba-espessa", "Gorvoth")
+    # marca pelo alias antigo — resolve pro canônico
+    assert marcar_morto(wm, "barba-espessa") == "gorvoth"
+    assert esta_morto(wm, "gorvoth")
+    assert esta_morto(wm, "barba-espessa")  # alias também responde morto
+
+
+def test_morte_por_dano_deterministico_marca_registro():
+    """Caminho 1: orchestrator mata por HP<=0 → registro canônico ganha a flag."""
+    from engine.npc.identity import esta_morto, registrar_npc
+
+    wm = _wm()
+    wm.npcs_presentes = ["gorvoth"]
+    registrar_npc(wm, "gorvoth")
+    wm.entrar_combate()
+    wm.registrar_inimigo("gorvoth", "Gorvoth", "intacto")
+    wm.aplicar_stats_inimigo("gorvoth", ca=12, hp_max=5)
+    estado = wm.aplicar_dano_inimigo("gorvoth", 10)
+    assert estado == "morto"
+    assert esta_morto(wm, "gorvoth")
+
+
+def test_morte_por_marker_marca_registro():
+    """Caminho 2: [INIMIGO_MORTO]/regex via atualizar_estado_inimigo."""
+    from engine.npc.identity import esta_morto, registrar_npc
+
+    wm = _wm()
+    wm.npcs_presentes = ["gorvoth"]
+    registrar_npc(wm, "gorvoth")
+    wm.entrar_combate()
+    wm.registrar_inimigo("gorvoth", "Gorvoth", "intacto")
+    wm.atualizar_estado_inimigo("gorvoth", "morto", "sem vida")
+    assert esta_morto(wm, "gorvoth")
+
+
+def test_monstro_puro_de_combate_nao_polui_registro():
+    """Inimigo que nunca foi NPC da cena (goblin-2) não entra no registro."""
+    from engine.npc.identity import esta_morto
+
+    wm = _wm()
+    wm.npcs_presentes = []
+    wm.entrar_combate()
+    wm.registrar_inimigo("goblin-2", "Goblin", "intacto")
+    wm.aplicar_stats_inimigo("goblin-2", ca=12, hp_max=3)
+    wm.aplicar_dano_inimigo("goblin-2", 10)
+    assert not esta_morto(wm, "goblin-2")
+    assert "goblin-2" not in wm.scene.npc_registro
+
+
+def test_scene_to_prompt_anota_morto_nao_fala():
+    from engine.npc.identity import marcar_morto, registrar_npc
+
+    wm = _wm()
+    wm.npcs_presentes = ["gorvoth", "moreno"]
+    wm.scene.npcs_apresentados = {"gorvoth", "moreno"}
+    registrar_npc(wm, "gorvoth")
+    registrar_npc(wm, "moreno")
+    marcar_morto(wm, "gorvoth")
+    prompt = wm.scene.to_prompt()
+    assert "gorvoth (MORTO — corpo na cena; não fala, não age)" in prompt
+    assert "moreno" in prompt
+    assert "moreno (MORTO" not in prompt  # vivo não ganha o rótulo
+
+
+def test_rename_preserva_flag_de_morto():
+    """Nomear o corpo depois de morto não o 'ressuscita' — a flag viaja."""
+    from engine.npc.identity import esta_morto, marcar_morto, registrar_npc, revelar_nome
+
+    wm = _wm()
+    wm.npcs_presentes = ["homem-de-preto"]
+    registrar_npc(wm, "homem-de-preto")
+    marcar_morto(wm, "homem-de-preto")
+    novo = revelar_nome(wm, "homem-de-preto", "Vex")
+    assert novo == "vex"
+    assert esta_morto(wm, "vex")
+
+
 # ══ RODADA-SALTO: rodada avançava 2× por troca resolvida via engine ═══════════
 # Playtest 10/07: UI mostrou "Rodada 2" na ENTRADA do combate (declaração sem
 # d20) e "Rodada 4" após uma única troca. Dupla contagem: o orchestrator avança

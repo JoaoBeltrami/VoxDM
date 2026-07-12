@@ -27,6 +27,9 @@ interface Props {
   retratos?: Record<string, string>;
   /** npc-id cuja fala o karaokê está revelando — retrato acende, resto recua. */
   falanteAtivo?: string | null;
+  /** CANON-MORTOS (12/07): presentes mortos — o corpo fica na cena, retrato
+   *  em grayscale (decisão: nunca sumir em silêncio). */
+  mortos?: string[];
 }
 
 // trust_level → anel + rótulo. Ouro = leal (material BG1); vermelho = perigo.
@@ -37,10 +40,11 @@ const TRUST_RING: Record<number, { ring: string; label: string }> = {
   3: { ring: "ring-1 ring-vox-gold",       label: "Leal" },
 };
 
-export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Props) {
+export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null, mortos }: Props) {
   const ids = Object.keys(npcsTrust);
   if (ids.length === 0) return null;
 
+  const setMortos = new Set(mortos ?? []);
   const temFalante = !!falanteAtivo && ids.includes(falanteAtivo);
 
   return (
@@ -49,18 +53,19 @@ export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Prop
         Presentes
       </span>
       {ids.map((npcId) => {
+        const morto = setMortos.has(npcId);
         const trust = Math.max(0, Math.min(3, npcsTrust[npcId] ?? 1));
         const { ring, label } = TRUST_RING[trust];
         const nome = idParaNome(npcId);
         const primeiroNome = nome.split(" ")[0];
-        const falando = temFalante && npcId === falanteAtivo;
+        const falando = !morto && temFalante && npcId === falanteAtivo;
         const recuado = temFalante && !falando;
         return (
           <div
             key={npcId}
-            title={`${nome} — ${label} (confiança: ${trust}/3)`}
+            title={morto ? `${nome} — morto` : `${nome} — ${label} (confiança: ${trust}/3)`}
             className={`flex flex-col items-center gap-1 animate-slide-in-right transition-all duration-300 ${
-              recuado ? "opacity-50 saturate-50" : "opacity-100"
+              recuado || morto ? "opacity-50 saturate-50" : "opacity-100"
             } ${falando ? "scale-110" : "scale-100"}`}
           >
             <Portrait
@@ -69,10 +74,13 @@ export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Prop
               src={retratos?.[npcId] ?? urlRetratoNpc(npcId)}
               size="sm"
               aspect="square"
+              dead={morto}
               className={
                 falando
                   ? "ring-2 ring-vox-gold-bright shadow-[0_0_18px_rgba(230,195,124,0.45)]"
-                  : ring
+                  : morto
+                    ? "ring-1 ring-zinc-600/50"
+                    : ring
               }
             />
             <span
@@ -80,7 +88,7 @@ export function NpcsPresentes({ npcsTrust, retratos, falanteAtivo = null }: Prop
                 falando ? "text-vox-gold-bright" : "text-vox-text-muted"
               }`}
             >
-              {primeiroNome}
+              {morto ? `☠ ${primeiroNome}` : primeiroNome}
             </span>
           </div>
         );
