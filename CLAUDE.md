@@ -1156,7 +1156,7 @@ Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,char
 
 | Documento | Quando consultar |
 |---|---|
-| `docs/ARCHITECTURE.md` | Desenho do sistema ATUAL: caminho do turno, camada de autoridade, RAG, router LLM, contrato de markers, substates, mapa de diretórios (12/07/26) |
+| `ARCHITECTURE.md` (raiz) | Desenho do sistema ATUAL: tese autoridade-primeiro, caminho do turno, subsistemas, contrato de markers, identidade de NPC (enriquecido 12/07/26) |
 | `docs/VOXDM_PROJETO.md` | Arquitetura, schema v1.2 completo, stack técnica |
 | `docs/DIRETRIZES_IMPLEMENTACAO.md` | Diretrizes técnicas por arquivo — ler antes de implementar |
 | `docs/VOXDM_CHECKLIST.md` | Tarefas abertas por fase, o que fazer hoje |

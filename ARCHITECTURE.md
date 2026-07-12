@@ -18,7 +18,21 @@ Para rodar, veja o [README](./README.md). Para contribuir, veja [CONTRIBUTING](.
 Tudo trafega por um **WebSocket** (`api/websocket.py`) — o turno é uma coroutine
 async que faz streaming de tokens do LLM e, em paralelo, sintetiza voz por sentença.
 
-## Os 5 subsistemas
+## A tese: autoridade-primeiro, LLM-fino
+
+A engine é o jogo — resolve deterministicamente tudo que tem regra (rolagem vs
+CA, dano, HP, morte, ouro, trust) — e o LLM é um **narrador contratado** que
+recebe os fatos já resolvidos (linhas `ENGINE: ...`) e só dá corpo em prosa.
+O combate é a 1ª instância completa (`engine/combat/orchestrator.py`: ataque →
+dano → turno dos inimigos → rodada → XP de abate, tudo antes do LLM falar);
+economia (`engine/authority/economia.py` — transação sem fundos é REJEITADA
+inteira) e social (`engine/authority/social.py` — atacar derruba trust do alvo
+e dos aliados presentes via grafo) seguem o mesmo desenho, unificados pelo
+dispatcher `engine/authority/resolve.py`. O `engine/authority/brief.py`
+(NarrationBrief) é a futura fonte compacta do prompt — construído e testado,
+aguardando wiring.
+
+## Os 6 subsistemas
 
 ### 1. Voz (`engine/voice/`)
 - **STT:** Faster-Whisper `small` em GPU (`stt.py`), exposto via `POST /transcribe`.
@@ -46,7 +60,11 @@ em `engine/state/` (`SceneState`, `CombatState`, `PlayerCharacter`, `PartyState`
   Cada provider lança `LLMRetriable` em 429/5xx/timeout/refusal → o router cascateia.
   Streaming só cascateia até o 1º token emitido (trocar mid-frase quebraria a narrativa).
 - **Cascatas:** `NARRATIVE` (70B→8B→Gemini→Ollama), `SUMMARIZATION` (Gemini-first),
-  `CLASSIFICATION` (8B-first), e variantes contextuais `NARRATIVE_LIGHT/CLIMAX`.
+  `CLASSIFICATION` (8B-first), e variantes contextuais `NARRATIVE_LIGHT/CLIMAX/GRIM`.
+- **Rota grimdark** (`amarelada.py` + `NARRATIVE_GRIM`): cena sombria (keywords de
+  atrocidade ou perfil "sombrio") roteia uma cascata que garante um modelo local
+  uncensored (`ollama-grim`) no fim; detecção de "amarelada" (recusa/moralização)
+  + retry com reframe literário antes de descer. Kill-switch `GRIMDARK_ATIVO`.
 - **Prompt** (`prompt_builder.py` + `prompts/*.md`): o system prompt é montado como um
   **prefixo estático** (persona + combat.md/saves.md/markers) seguido de **sufixo dinâmico**
   (estado + RAG + histórico) — ordenado assim para ser *cache-friendly* (cache de prefixo
@@ -61,7 +79,25 @@ resposta e que são *extraídos antes do TTS* (o jogador nunca ouve):
 `aplicar_pos_turno()` parseia tudo e atualiza a `WorkingMemory`. Regex de vocabulário
 PT-BR ficam como *fallback* de defesa quando o LLM não emite o marcador.
 
-### 5. Persistência (`engine/persistence/`)
+O contrato tem **guarda automática ponta-a-ponta** (`tests/test_contrato_markers_ws.py`):
+todo marker documentado ⊆ tabela de strip (`engine/markers.py`) ⊆ processador na engine
+⊆ instrução ao LLM, e todo tipo WS emitido ⊆ enum zod do frontend — cortar qualquer
+ponta quebra um teste com a instrução de religar. Extractors LLM baratos
+(`engine/llm/extractor.py`) complementam: NPCs improvisados, quests, estado de combate
+narrado — sempre com a engine como autoridade final.
+
+### 5. Identidade de NPC (`engine/npc/`)
+- **Registro canônico** (`identity.py`): uma chave por pessoa, para sempre — name-reveal
+  RENOMEIA em vez de duplicar (com âncora textual na narração OU na pergunta do
+  jogador), o `retrato_seed` é imutável (o rosto Pollinations nunca muda no rename),
+  aliases resolvem ids falados ("ataco o monge" → chave canônica), estado mais forte
+  vence no merge.
+- **Persona** (`persona.py`): voz TTS (pitch/rate) e tique de fala determinísticos
+  por id — o mesmo NPC soa igual a sessão inteira.
+- **Paridade de seed com o frontend**: `frontend/lib/retrato.ts` espelha o SHA-1 do
+  backend — mudar o prompt/seed de um lado quebra o rosto estável do outro.
+
+### 6. Persistência (`engine/persistence/`)
 - **SQLite** (`character_store.py`, via aiosqlite): HP, spell slots, ouro, XP, death saves,
   class features, companions, spells conhecidas, `dm_state` — fonte da verdade do PJ entre sessões.
 - **Qdrant/Neo4j**: memória de longo prazo (episódica + grafo + lore/regras/bestiário).
@@ -69,7 +105,9 @@ PT-BR ficam como *fallback* de defesa quando o LLM não emite o marcador.
 ## Padrões de design recorrentes
 - **Facade compat:** `WorkingMemory` e `GroqClient` são fachadas finas — a migração
   interna é invisível para os consumidores.
-- **Cascade fallback:** toda chamada externa (LLM, Qdrant, Neo4j, TTS) degrada graciosamente.
+- **Cascade fallback:** toda chamada externa (LLM, Qdrant, Neo4j, TTS) degrada graciosamente
+  — timeouts curtos, cache stale-while-revalidate, cache negativo por entidade e circuit
+  breaker de sessão quando o Neo4j inteiro está fora (nada disso trava um turno).
 - **Engine authority via marcadores:** decisões frágeis (morte de inimigo, descanso) saem
   de regex frágil para marcadores explícitos do LLM.
 - **Fire-and-forget:** efeitos não-críticos (imagem de cena, afeto NPC, auto-checkpoint)
