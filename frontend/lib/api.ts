@@ -238,6 +238,22 @@ export async function checkpointSessao(
   }
 }
 
+// A6 boot UX (12/07): estado de warmup da API pro menu não deixar o jogador
+// clicar num app que ainda não responde. null = API inalcançável.
+export interface HealthStatus {
+  warmup_pronto: boolean;
+}
+
+export async function obterHealth(): Promise<HealthStatus | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/health`, { cache: "no-store" });
+    if (!resp.ok) return null;
+    return resp.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function listarSessoes(): Promise<SessaoListaItem[]> {
   const resp = await fetch(`${API_BASE}/session/list`);
   if (!resp.ok) return [];
