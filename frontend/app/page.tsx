@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
+import { useWarmupStatus } from "@/hooks/useWarmupStatus";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useEventSounds } from "@/hooks/useEventSounds";
 import { useSceneMood } from "@/hooks/useSceneMood";
@@ -436,6 +437,11 @@ export default function Home() {
   });
 
   const [tela, setTela] = useState<Tela>("menu");
+
+  // A6 boot UX (12/07): o menu sabe se a API acordou — banner "o mestre está
+  // acordando…" + CTAs desabilitados até warmup_pronto (clicar antes só
+  // gerava erro). O polling para sozinho quando pronto.
+  const { pronto: warmupPronto, apiOnline } = useWarmupStatus();
 
   // ── Feature 1: Tela de encerramento de sessão ──────────────────────────────
   // Stats capturados antes de desconectar() limpar o estado. Exibidos por 8s
@@ -2107,13 +2113,26 @@ export default function Home() {
         </div>
 
         <div className="frame-ornate texture-stone relative flex w-full max-w-xs flex-col gap-2.5 rounded-2xl bg-vox-bg-elevated/60 p-5 backdrop-blur-sm">
+          {/* A6 boot UX: enquanto a API não termina o warmup, o menu avisa e
+              os CTAs ficam desabilitados — clicar antes só gerava erro. */}
+          {!warmupPronto && (
+            <div className="mb-1 flex items-center justify-center gap-2 rounded-lg border border-vox-border-subtle bg-vox-bg-panel/70 px-3 py-2 text-xs text-vox-text-secondary animate-fade-in">
+              <span className="animate-breathe">🕯</span>
+              <span className="font-atmospheric italic">
+                {apiOnline
+                  ? "O mestre está acordando…"
+                  : "Procurando o mestre… (a API ainda não respondeu)"}
+              </span>
+            </div>
+          )}
           {/* Gamificação: se há save, "Continuar" em destaque retoma o mais
               recente direto (bypass do CharacterForm via handleContinuarPersonagem). */}
           {saveRecente ? (
             <>
               <button
                 onClick={() => handleContinuarPersonagem(saveRecente.session_id)}
-                className="group w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98]"
+                disabled={!warmupPronto}
+                className="group w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98] disabled:cursor-wait disabled:opacity-40"
               >
                 <span className="flex items-center justify-center gap-2">▶ Continuar</span>
                 <span className="mt-0.5 block text-xs font-normal text-white/70">
@@ -2122,13 +2141,15 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setTela("nova-sessao")}
-                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98]"
+                disabled={!warmupPronto}
+                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98] disabled:cursor-wait disabled:opacity-40"
               >
                 Nova aventura
               </button>
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="btn-emboss w-full rounded-xl border border-vox-border-subtle py-3 text-sm font-medium text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-text-primary active:scale-[0.98]"
+                disabled={!warmupPronto}
+                className="btn-emboss w-full rounded-xl border border-vox-border-subtle py-3 text-sm font-medium text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-text-primary active:scale-[0.98] disabled:cursor-wait disabled:opacity-40"
               >
                 Carregar outra sessão
               </button>
@@ -2137,7 +2158,8 @@ export default function Home() {
             <>
               <button
                 onClick={() => setTela("nova-sessao")}
-                className="w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98]"
+                disabled={!warmupPronto}
+                className="w-full rounded-xl bg-vox-accent-primary py-4 text-base font-medium text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.6)] transition hover:bg-vox-accent-glow active:scale-[0.98] disabled:cursor-wait disabled:opacity-40"
               >
                 Nova aventura
               </button>
@@ -2147,7 +2169,8 @@ export default function Home() {
                   trocou, etc.). Sem ele, o jogador acha que perdeu tudo. */}
               <button
                 onClick={() => setTela("carregar-sessao")}
-                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98]"
+                disabled={!warmupPronto}
+                className="btn-emboss w-full rounded-xl border border-vox-border-soft bg-vox-bg-elevated py-3.5 text-sm font-medium text-vox-text-primary transition hover:border-vox-gold-dim hover:bg-vox-bg-panel active:scale-[0.98] disabled:cursor-wait disabled:opacity-40"
               >
                 Carregar sessão
               </button>
