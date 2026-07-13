@@ -385,6 +385,76 @@ def _formatar_secrets(secrets: list[SecretVisivel]) -> str:
     return "\n".join(partes)
 
 
+def _montar_mensagens_brief(
+    contexto: ContextoMontado,
+    master_system_override: str | None = None,
+) -> list[dict[str, str]]:
+    """Modo NarrationBrief (BRIEF_ATIVO=True) — o system enxuto da tese LLM-fino.
+
+    Composição: persona (master_system) + contrato de markers (sempre — o LLM
+    continua operando [DANO]/[CENA]/etc.) + overlay de perfil + grimdark (mesmas
+    condições do modo normal — segurança de rota não é negociável) + regras SRD
+    do turno (mecânica que a engine JÁ buscou pro casting) + o BRIEFING
+    (engine/authority/brief.py, com rolling summary sempre incluso). O que o
+    modo normal injeta e este NÃO: para_texto() completo, chunks de lore
+    episódicos/semânticos, relações do grafo, social/combat/saves/dice.md,
+    fios/agenda/cartas/pacing — a aposta é que o rolling + o brief carregam o
+    contexto que importa. Validação = playtest com a flag ligada.
+    """
+    wm = contexto.working_memory
+    master_system = master_system_override or _carregar_master_system()
+    secoes: list[str] = [master_system, ""]
+
+    markers = _carregar_markers_lista()
+    if markers:
+        secoes.append(markers)
+
+    dm_profile_attr = getattr(wm, "dm_profile", "equilibrado")
+    if dm_profile_attr not in ("equilibrado", "sombrio"):
+        overlay = _carregar_dm_profile(dm_profile_attr)
+        if overlay:
+            secoes.append(overlay)
+
+    if settings.GRIMDARK_ATIVO:
+        _transcricao = getattr(contexto, "transcricao_atual", "") or ""
+        _scene = getattr(wm, "scene", None)
+        if (
+            dm_profile_attr == "sombrio"
+            or e_cena_sombria(_transcricao)
+            or bool(getattr(_scene, "cena_sombria_reativa", False))
+        ):
+            grimdark_frag = _ler_prompt(_FRAG_GRIMDARK)
+            if grimdark_frag and len(grimdark_frag) >= _PROMPT_MIN_CHARS:
+                secoes.append(grimdark_frag)
+                log.info("grimdark_fragmento_injetado", dm_profile=dm_profile_attr)
+
+    # Regras SRD do turno (spell detector) — mecânica engine-fornecida, faz
+    # parte dos "fatos que a engine entrega", não do dump cortado.
+    if contexto.chunks_regras:
+        regras = "\n".join(str(c.get("text", c)) for c in contexto.chunks_regras[:3])
+        if regras.strip():
+            secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
+
+    from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
+    brief = montar_brief(wm, contexto.transcricao_atual or "")
+    secoes.append("\n" + brief.to_prompt())
+
+    system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
+    turnos = wm.dialogo_recente
+    historico = turnos[:-1] if turnos else []
+    mensagens: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+    for turno in historico:
+        role = "user" if turno.falante == "player" else "assistant"
+        mensagens.append({"role": role, "content": turno.texto})
+    mensagens.append({"role": "user", "content": contexto.transcricao_atual})
+    log.info(
+        "prompt_brief",
+        chars_system=len(system_content),
+        turnos_historico=len(historico),
+    )
+    return mensagens
+
+
 def montar_mensagens(
     contexto: ContextoMontado,
     master_system_override: str | None = None,
@@ -418,6 +488,17 @@ def montar_mensagens(
             log.info("prompt_session_zero", chars_system=len(sz), turnos=len(turnos_sz))
             return mensagens_sz
         # session_zero.md ausente/corrompido → degrada pro fluxo normal
+
+    # ── NarrationBrief (kill-switch BRIEF_ATIVO, decisão 12/07) ──────────────
+    # A aposta engine-first completa: em vez do dump do para_texto() + RAG +
+    # fragmentos de cena, o system vira persona + contrato de markers + o
+    # BRIEFING curto (fatos de cena + estado vital + evento de mundo + rolling
+    # summary — orçamento travado em 01/07). Wirado atrás de flag DESLIGADA
+    # (padrão grimdark): zero mudança até o Beltrami ligar no .env e validar a
+    # qualidade narrativa ao vivo. Regras SRD (mecânica de magia que a engine
+    # buscou) e grimdark (segurança de rota) acompanham o brief.
+    if settings.BRIEF_ATIVO and contexto.working_memory is not None:
+        return _montar_mensagens_brief(contexto, master_system_override)
 
     master_system = master_system_override or _carregar_master_system()
 
