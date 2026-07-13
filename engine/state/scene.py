@@ -234,8 +234,15 @@ class SceneState:
                 # vivo e podia até ganhar diálogo.
                 def _rotulo(n: str) -> str:
                     canon = self.npc_aliases.get(n, n)
-                    if self.npc_registro.get(canon, {}).get("morto"):
+                    entrada = self.npc_registro.get(canon, {})
+                    if entrada.get("morto"):
                         return f"{n} (MORTO — corpo na cena; não fala, não age)"
+                    # Dossiê de personalidade (decisão 12/07): traços DISTINTOS
+                    # inline — é o que impede todo NPC de convergir pro tom do
+                    # Mestre. Gerados no 1º encontro (engine/npc/dossie.py).
+                    tracos = entrada.get("tracos") or []
+                    if tracos:
+                        return f"{n} [{'; '.join(tracos[:3])}]"
                     return n
                 partes.append(", ".join(_rotulo(n) for n in conhecidos))
             # Teste #3 (12/06): esconder os NOMES do fundo deixou o LLM sem ter

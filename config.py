@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Candidatos testados no RTX 2060 6GB: dolphin-mistral (7B Q4, ~4.2GB)
     OLLAMA_MODEL_GRIM: str = "dolphin-mistral"
 
+    # ── Dossiê de personalidade de NPC (decisão 12/07) ─────────────────────
+    # LLM gera 2-3 traços distintos no 1º encontro (chamada barata 8B,
+    # fire-and-forget pós-turno); engine persiste no registro canônico e
+    # injeta no prompt da cena. False = NPCs seguem sem dossiê (rollback).
+    DOSSIE_NPC_ATIVO: bool = True
+
     # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
     # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
     GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"
