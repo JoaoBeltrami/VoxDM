@@ -151,6 +151,34 @@ def _extractors_pos_turno_liberados(
     )
 
 
+async def _gerar_dossies_pendentes(
+    sessao: Any, npc_ids: list[str], narracao: str, session_id: str
+) -> None:
+    """Gera e aplica o dossiê dos NPCs pendentes — corpo do fire-and-forget.
+
+    Dossiê de personalidade (decisão 12/07): roda FORA do caminho crítico do
+    turno (create_task) — o jogador nunca espera por isto. Timeout curto por
+    NPC; qualquer falha é silenciosa (outro turno tenta de novo, porque
+    aplicar_dossie só grava quando gerar_dossie teve sucesso).
+    """
+    from engine.npc.dossie import aplicar_dossie, gerar_dossie
+    for nid in npc_ids:
+        try:
+            nome = sessao.working_mem.scene.npc_registro.get(nid, {}).get(
+                "nome", nid.replace("-", " ").title()
+            )
+            tracos = await asyncio.wait_for(
+                gerar_dossie(sessao.groq, narracao, nid, nome), timeout=8.0
+            )
+            if tracos:
+                aplicar_dossie(sessao.working_mem, nid, tracos)
+        except Exception as exc:
+            log.warning(
+                "dossie_geracao_falhou", npc_id=nid,
+                session_id=session_id, erro=str(exc)[:120],
+            )
+
+
 def _sanitizar_texto_beat(texto: str) -> str:
     """Higieniza a narração do beat contra marcadores meio-formatados do 8B.
 
@@ -2380,6 +2408,28 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
                 except Exception as exc:
                     log.warning("npc_extractor_pulado", erro=str(exc)[:120])
+
+            # Dossiê de personalidade (decisão 12/07): NPCs em cena sem dossiê
+            # ganham 2-3 traços via chamada barata (8B), fire-and-forget — o
+            # turno NÃO espera; o prompt do turno seguinte já os injeta. Mesmos
+            # gates dos extractors (fora de combate/idle/SZ). Cap 2 por turno.
+            if settings.DOSSIE_NPC_ATIVO and _extractors_pos_turno_liberados(
+                sessao.working_mem.em_combate,
+                idle_nudge,
+                sessao.working_mem.session_zero_ativa,
+                era_session_zero,
+            ):
+                try:
+                    from engine.npc.dossie import npcs_sem_dossie_na_cena
+                    _pendentes_dossie = npcs_sem_dossie_na_cena(sessao.working_mem)
+                    if _pendentes_dossie:
+                        asyncio.create_task(
+                            _gerar_dossies_pendentes(
+                                sessao, _pendentes_dossie, resposta_limpa, session_id
+                            )
+                        )
+                except Exception as exc:
+                    log.warning("dossie_agendamento_falhou", erro=str(exc)[:120])
 
             # PLAY5-QUEST (16/06): extractor de quest improvisada pós-turno
             # SOCIAL. O sistema [Q:id:stage] valida contra o catálogo do módulo,
