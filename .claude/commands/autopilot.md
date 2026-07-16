@@ -1,6 +1,17 @@
 # /autopilot
 
-Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina que o Claude já usou em sessão: pegar o estado atual, escolher o trabalho de MAIOR valor que **não precisa de validação manual nem visual**, implementar testado, e commitar — deixando o app melhor enquanto o Beltrami não está no PC.
+Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina que o Claude já usou em sessão: pegar o estado atual, escolher o trabalho de MAIOR valor que **não precisa do Beltrami no meio**, implementar testado, e commitar — deixando o app melhor enquanto o Beltrami não está no PC.
+
+## ⚡ Autopilot 2.0 (16/07/2026 — autorização explícita do Beltrami)
+
+O autopilot pode, **à vontade e sem pedir de novo**:
+- **Usar o browser** (MCP Claude-in-Chrome ou Preview do harness) — não só pra validar UI, mas pra **JOGAR sessões autônomas completas** contra o LLM real (padrão provado 2×: playtest 10/07 e smoke 14/07).
+- **Spawnar subagentes** — exploração, implementação paralela e, principalmente, **juízes cegos** de qualidade narrativa (comparação de transcripts par a par por critérios objetivos).
+- Rodar em `/loop` como antes.
+
+Isso muda a regra de ouro: itens que eram pendência automática por "precisa jogar pra validar" agora são elegíveis QUANDO a validação puder ser feita por **evidência de jogo** — sessão autônoma roteirizada + telemetria (`/debug/*`) + juízes por subagente. O que continua fora: validação **de ouvido** (TTS/karaokê/STT com mic real), gosto estético, decisões de design/produto e contas externas.
+
+**Alvo prioritário atual:** validação A/B do `BRIEF_ATIVO` (tese LLM-fino) — plano aprovado e detalhado na memória `plano_autopilot2_brief_ab.md`. Rodadas seguintes na mesma infra: grimdark (`GRIMDARK_ATIVO`), FEEL do dossiê, bônus STT via `POST /transcribe` com áudio sintetizado. Protocolo de sessão autônoma: `.claude/commands/playtest-autonomo.md`.
 
 ## Quando usar
 
@@ -10,7 +21,7 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
 
 ## Princípio central (a regra de ouro)
 
-> Só faça o que pode ser **provado verde por teste automatizado** (pytest + `tsc --noEmit` + ruff). Tudo que exige olho humano, jogar, GPU/re-ingestão, conta externa ou decisão de produto: **NÃO faça — registre como pendência pro Beltrami** e siga pro próximo item headless.
+> Só faça o que pode ser **provado por evidência automatizável**, em três portões possíveis: (1) **teste verde** (pytest + `tsc --noEmit` + ruff) — o clássico; (2) **evidência visual** no browser (screenshot do estado certo, zero erro de console) — pra UI; (3) **evidência de jogo** (sessão autônoma roteirizada via browser + telemetria + juízes cegos por subagente) — pra qualidade narrativa e flags de engine (2.0). Tudo que exige OUVIDO humano, gosto estético, GPU/re-ingestão, conta externa ou decisão de produto: **NÃO faça — registre como pendência pro Beltrami** e siga pro próximo item.
 
 ## Procedimento
 
@@ -31,8 +42,12 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
      valendo a regra de ouro: gate de código com `tsc`+`eslint` E evidência visual no browser
      (print do estado certo, sem erro de console). O que NÃO posso decidir sozinho é **gosto
      estético subjetivo** ("essa paleta é a cara do projeto?") — isso fica pro Beltrami.
+   - **Validação ao vivo de flags/qualidade narrativa AGORA é elegível (2.0):** playtest
+     autônomo A/B (protocolo em `.claude/commands/playtest-autonomo.md`) + juízes cegos
+     por subagente. Vale pra `BRIEF_ATIVO`, `GRIMDARK_ATIVO`, FEEL do dossiê, anti-repetição.
+     Entregável = relatório GO/NO-GO com evidência; o sign-off final de GOSTO fica pro Beltrami.
    - **EXCLUIR sempre** (vira pendência, não trabalho de autopilot):
-     - Qualquer coisa que precise **jogar pra validar** (qualidade narrativa, "soa bem?", balance de combate).
+     - Qualquer coisa que precise de **ouvido humano** (TTS/karaokê/STT com microfone real, "soa bem?").
      - **Decisão estética/de produto** subjetiva (qual visual, o que cortar do prompt, tom da voz).
      - **Re-ingestão / troca de embedder** (GPU + recria Qdrant) — só com OK explícito.
      - Contas externas (GitHub push, Cloudflare), segredos.
@@ -50,7 +65,7 @@ Rotina de **auto-aprimoramento do VoxDM** sem supervisão. Codifica a disciplina
    - `uvx ruff@0.15.16 check engine/ api/ tests/ ingestor/` → "All checks passed!".
    - Se QUALQUER portão falhar e não der pra consertar com confiança → reverter a branch e registrar como pendência. Não force-ship.
 
-5. **Commit granular + merge**: mensagem clara em PT-BR explicando causa-raiz e fix, terminando com `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. `git checkout main && git merge --no-ff <branch>`. Um item por branch (rollback fácil).
+5. **Commit granular + merge**: mensagem clara em PT-BR explicando causa-raiz e fix, terminando com o `Co-Authored-By` do modelo em uso (hoje: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`). `git checkout main && git merge --no-ff <branch>`. Um item por branch (rollback fácil).
 
 6. **Fechar**: rodar `/estado` (atualiza `.internal/ESTADO.md` + cópia no Downloads). Relatório curto: o que shippou (hash + nº de testes), o que **adiou e por quê**, e o **próximo passo manual/visual recomendado** pra quando o Beltrami voltar.
 
