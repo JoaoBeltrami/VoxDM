@@ -105,6 +105,33 @@ Ou: **Nenhum bug crítico conhecido.**
 ## 8. Pendências imediatas
 
 [Checklist do que precisa acontecer antes da próxima sessão de dev. Cada item com responsável (Beltrami ou Claude) e bloqueio se aplicável.]
+
+## 9. Insumos de planejamento (polimento · features · futuro)
+
+[Seção PERMANENTE desde 16/07/2026 (pedido Beltrami): tudo que uma sessão de
+planejamento (claude.ai/Cowork) precisa pra decidir polimento + novas features
+sem reler o repo. Quatro subseções fixas:
+
+### 9.1 Restrições de engenharia que TODO plano deve respeitar
+Prompt budget (tetos/metas atuais), TPM/quotas dos providers, alvo de latência,
+hardware/infra (GPU, tiers free), invariantes de produto (100% voz, singleplayer,
+orb+karaokê intocáveis), regras de processo (taste=Beltrami, headless=prova verde).
+Atualizar os NÚMEROS a cada /estado — são eles que mudam.
+
+### 9.2 Features planejadas — estado real de cada uma
+Tabela: Feature | Estado (shipped/atrás de flag/peça isolada/design pendente/gated) |
+O que falta / gate. Cobre features de gameplay, frontend (Fase 2 etc.) e infra.
+Fonte: roadmap_mestre_consolidado + roadmap_frontend_fase2_top10 + roadmap_ux_gaps
++ bugs_conhecidos — mas o ESTADO deve bastar sozinho.
+
+### 9.3 Necessidades prováveis futuras
+Antecipação: o que vira bloqueio se não for planejado (upgrades de tier, migração
+de TTS, GPU contention, refactors que a pressão vai pedir). Cada item com GATILHO
+("quando X acontecer, isso vira prioridade").
+
+### 9.4 Fila de decisões do Beltrami
+Lista numerada do que o planejamento precisa DELE (decisões de design/conteúdo/
+infra que bloqueiam frentes). Remover quando decidido, apontando onde foi parar.]
 ```
 
 ### 3. Copiar pra Downloads
@@ -130,7 +157,7 @@ Se for a primeira vez (não há versão anterior), diga "primeira versão do est
 ## Regras importantes
 
 - **Não criar arquivo com data no nome.** Nunca `voxdm_estado_DDMMAAAA.md`. A virtude do protocolo é ter UM ARQUIVO SÓ.
-- **Não pular seções.** Se a seção está vazia, escreva "Nenhuma." ou "Nenhum bug crítico conhecido." H2 sempre presente — Cowork consegue update cirúrgico.
+- **Não pular seções.** Se a seção está vazia, escreva "Nenhuma." ou "Nenhum bug crítico conhecido." H2 sempre presente — Cowork consegue update cirúrgico. Isso inclui a seção 9 e suas 4 subseções.
 - **Não fazer commit do .internal/ESTADO.md.** Ele é gitignored. Cópia em Downloads também não vai pro repo.
 - **Manter conciso.** O doc inteiro cabe numa LLM nova lendo em ≤5min. Se passar de ~600 linhas, comprimir seção 4 (mudanças recentes) primeiro.
 - **Em caso de dúvida sobre o que entra em cada seção:** olhar a versão anterior em `.internal/ESTADO.md` e seguir o padrão existente.
