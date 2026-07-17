@@ -86,6 +86,13 @@ class WorkingMemory:
     em_mercado: bool = False
     turnos_sem_mercado: int = 0
 
+    # CANON-MORTOS-2 (A/B 17/07): abates cuja flag `morto` não pôde ser gravada
+    # na hora — o inimigo ainda não era conhecido da cena quando a engine matou
+    # (kill pré-LLM roda ANTES da extração/[NPC] do turno). Transiente: drenada
+    # pelo aplicar_pos_turno após a extração registrar o combatente; nunca
+    # persiste nem entra em prompt.
+    mortos_pendentes: list[str] = field(default_factory=list)
+
     # ── Properties: SceneState ───────────────────────────────────────────────
 
     @property
@@ -704,7 +711,13 @@ class WorkingMemory:
         combate."""
         try:
             from engine.npc.identity import marcar_morto
-            marcar_morto(self, inimigo_id)
+            # CANON-MORTOS-2: marcar_morto é conservador — devolve None quando a
+            # cena ainda não conhece o id (kill da engine roda pré-LLM, antes da
+            # extração registrar o combatente). Guarda o abate pra reconciliação
+            # no fim do aplicar_pos_turno, quando o NPC já terá sido registrado.
+            if marcar_morto(self, inimigo_id) is None:
+                if inimigo_id not in self.mortos_pendentes:
+                    self.mortos_pendentes.append(inimigo_id)
         except Exception:
             pass
 

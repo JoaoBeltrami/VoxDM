@@ -1718,6 +1718,22 @@ def aplicar_pos_turno(
     # N2/F3: garante voz TTS determinística pra cada NPC presente (gênero-safe).
     garantir_vozes_npcs(working_mem)
 
+    # 17c. CANON-MORTOS-2 (A/B 17/07): reconcilia abates pendentes. O kill da
+    # engine roda pré-LLM — se o combatente só virou conhecido-da-cena AGORA
+    # (extração/[NPC] acima), a flag `morto` não foi gravada na hora. Segunda
+    # tentativa pós-registro; quem continua desconhecido é descartado com log
+    # (inimigo puro de combate não polui o registro — decisão original mantida).
+    pendentes = list(getattr(working_mem, "mortos_pendentes", []) or [])
+    if pendentes:
+        try:
+            from engine.npc.identity import marcar_morto
+            for _morto_id in pendentes:
+                if marcar_morto(working_mem, _morto_id) is None:
+                    log.info("canon_morto_descartado_desconhecido", id=_morto_id)
+        except Exception as _e_morto:
+            log.warning("canon_morto_reconciliacao_falhou", erro=str(_e_morto)[:80])
+        working_mem.mortos_pendentes.clear()
+
     return mudancas_trust
 
 
