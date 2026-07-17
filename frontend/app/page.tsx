@@ -43,12 +43,17 @@ const VOZ_PADRAO = "pt-BR-FranciscaNeural";
 const LS_VOZ_KEY = "voxdm_tts_voice";
 
 // Perfis de personalidade do Mestre — overlay aplicado sobre master_system.md
-type DmProfile = "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool";
+type DmProfile = "rigoroso" | "equilibrado" | "tranquilo" | "rule_of_cool" | "sombrio";
 const DM_PROFILES: { id: DmProfile; label: string; descricao: string }[] = [
   { id: "rigoroso",     label: "Rigoroso",     descricao: "Mundo punitivo. Inimigos jogam pra vencer, consequências sem aviso." },
   { id: "equilibrado",  label: "Equilibrado",  descricao: "Padrão VoxDM — desafio justo, peso narrativo na morte." },
   { id: "tranquilo",    label: "Tranquilo",    descricao: "Didático. Lembra consequências, falhas viram aprendizado." },
   { id: "rule_of_cool", label: "Rule of Cool", descricao: "Cinema. Descrição boa funciona mesmo fora das regras estritas." },
+  // Grimdark (roadmap 17/06, engine atrás de GRIMDARK_ATIVO): o perfil existia
+  // na engine (prompt_builder valida "sombrio" e injeta o contrato de ficção
+  // sombria) mas era INALCANÇÁVEL pela UI — o picker não o listava e o storage
+  // rejeitava o valor. Ficção adulta contínua; requer a flag ligada no .env.
+  { id: "sombrio",      label: "Sombrio",      descricao: "Grimdark. Ficção pesada contínua — violência e crueldade narradas sem suavizar." },
 ];
 const DM_PROFILE_PADRAO: DmProfile = "equilibrado";
 const LS_DM_PROFILE_KEY = "voxdm_dm_profile";
