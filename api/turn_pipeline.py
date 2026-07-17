@@ -400,6 +400,9 @@ _RE_CONSEQUENCIA = re.compile(r"\[CONSEQUÊNCIA:\s*([^\]]+?)\s*\]", re.IGNORECAS
 # Ex: "[XP: +50 derrotou goblin patrulheiro]", "[XP: +200 quest concluída]"
 # Backend acumula em wm.xp e detecta level up via tabela SRD.
 _RE_XP = re.compile(r"\[XP:\s*\+?(\d+)\s*([^\]]*?)\s*\]", re.IGNORECASE)
+# Teto por marker (XP-CLAMP-1): [XP:] é bônus narrativo 25–100; acima é inflação
+# do LLM (abate/quest a engine paga por conta própria, fora deste marker).
+_XP_MARKER_MAX = 100
 
 # Lampejo — visão dramática emitida pelo LLM. Conteúdo entre `:` e `]` vira
 # uma mensagem WS `tipo="lampejo"` separada, com voz alterada (rate/pitch).
@@ -1851,6 +1854,13 @@ def aplicar_xp_e_detectar_level_up(
             qtd = int(m.group(1))
         except ValueError:
             continue
+        # XP-CLAMP-1 (A/B 17/07): [XP:] é SÓ bônus narrativo — guideline 25–100
+        # no master_system.md. O LLM emitiu +400 por examinar um corpo e a engine
+        # aceitou; abate/quest a engine já paga por fora, então marker acima de
+        # 100 é sempre inflação. Clamp duro, com log pra telemetria.
+        if qtd > _XP_MARKER_MAX:
+            log.info("xp_marker_clampado", pedido=qtd, aplicado=_XP_MARKER_MAX)
+            qtd = _XP_MARKER_MAX
         motivo = m.group(2).strip() or "ganho de experiência"
         chave = (qtd, motivo.lower())
         if chave in _xp_vistos:
