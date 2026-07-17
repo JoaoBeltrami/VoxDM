@@ -536,7 +536,20 @@ export default function Home() {
   const [saveRecente, setSaveRecente] = useState<PersonagemSalvoItem | null>(null);
   const recarregarSaveRecente = useCallback(() => {
     listarPersonagensSalvos()
-      .then(lista => setSaveRecente(lista.length > 0 ? lista[0] : null))
+      .then(lista => setSaveRecente(prev => {
+        // Hardening (A/B 17/07): cada fetch cria um objeto NOVO — setar sempre
+        // re-renderiza mesmo sem mudança real e, se algo desestabilizar as deps
+        // de quem refaz o fetch, vira loop de fetch+render (classe do
+        // FRONT-LOOP-1). Preserva a referência quando o save é o mesmo.
+        const novo = lista.length > 0 ? lista[0] : null;
+        if (prev && novo && prev.session_id === novo.session_id
+            && prev.ultima_sessao === novo.ultima_sessao
+            && prev.hp_atual === novo.hp_atual
+            && prev.player_level === novo.player_level) {
+          return prev;
+        }
+        return novo;
+      }))
       .catch(() => {});
   }, []);
   useEffect(() => {
@@ -546,9 +559,14 @@ export default function Home() {
   // saveRecente do BOOT — o save recém-gravado no encerramento não aparecia e
   // o jogador achou que perdeu 1h de jogo (os dados estavam no SQLite/Qdrant).
   // Refetch sempre que o menu reaparece desconectado.
+  //
+  // FRONT-SAVE-RETRY (A/B 17/07): `warmupPronto` nas deps — na ordem comum do
+  // start.bat o front monta ANTES da API terminar o warmup, o fetch do save
+  // falha silencioso e o card "▶ Continuar" nunca aparecia até um reload
+  // manual. Quando o warmup termina (false→true), refaz o fetch.
   useEffect(() => {
     if (tela === "menu" && !conectado) recarregarSaveRecente();
-  }, [tela, conectado, recarregarSaveRecente]);
+  }, [tela, conectado, recarregarSaveRecente, warmupPronto]);
 
   // Palco-lite (F1, validado pelo veredito "nada da HUD é utilizável tirando
   // falar e rolar"): painéis laterais ocultáveis individualmente, persistido.
