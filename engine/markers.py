@@ -65,8 +65,13 @@ def _construir_regex_strip() -> re.Pattern[str]:
         número fabricado confunda a autoridade de dados.
     """
     alternativa = "|".join(re.escape(n) for n in NOMES_MARCADORES)
+    # TAG-MALFORM-1 (A/B 17/07): o LLM emitiu `[TAG: NPC: id|nome]` — envelope
+    # "TAG:" espúrio em volta de um marker legítimo. O strip exigia o nome
+    # conhecido logo após `[`, então o bloco inteiro vazava pro chat/TTS.
+    # Prefixo opcional `TAG:` tolera o envelope sem afrouxar o resto (palavras
+    # de prosa começando com "TAG" não casam — o nome canônico segue exigido).
     return re.compile(
-        rf"\[(?:{alternativa})(?::|=)?[^\]]*\]"
+        rf"\[(?:TAG:\s*)?(?:{alternativa})(?::|=)?[^\]]*\]"
         r"|"
         r"\[Rolagem\b[^\]]*\]",
         re.IGNORECASE,

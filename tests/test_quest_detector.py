@@ -630,6 +630,35 @@ def test_strip_remove_eco_pacing():
     assert "A lâmina desce." in resultado
 
 
+# ── TAG-MALFORM-1 (A/B 17/07): envelope "TAG:" espúrio em volta de marker ────
+# Corrida A exibiu "[TAG: NPC: figura-encapuzada|voz-arrastada]" na bolha e no
+# TTS — o strip exigia nome canônico logo após `[` e o envelope vazava inteiro.
+
+
+def test_strip_remove_marker_com_envelope_tag():
+    texto = 'Uma voz sussurra: "Observando." [TAG: NPC: figura-encapuzada|voz-arrastada]'
+    resultado = strip_marcadores(texto)
+    assert "TAG" not in resultado
+    assert "figura-encapuzada" not in resultado
+    assert "Observando." in resultado
+
+
+def test_strip_envelope_tag_com_outros_markers():
+    texto = "O ouro troca de mãos. [TAG: OURO: -10 suborno] [TAG: FIO: guarda subornável]"
+    resultado = strip_marcadores(texto)
+    assert "OURO" not in resultado
+    assert "FIO" not in resultado
+    assert "O ouro troca de mãos." in resultado
+
+
+def test_strip_nao_pega_prosa_comecando_com_tag():
+    # Palavra de prosa que começa com "TAG" (sem envelope de marker) fica intacta.
+    texto = "A tagarela do mercado aponta o caminho [tagarelando sem parar]."
+    resultado = strip_marcadores(texto)
+    assert "tagarela do mercado" in resultado
+    assert "[tagarelando sem parar]" in resultado
+
+
 def test_fugiu_documentado_no_markers_lista():
     """Guarda de doc (fios mortos 04/07): a dieta de 01/07 cortou a linha do
     [FUGIU] do markers_lista.md sem intenção — o processador (turn_pipeline
