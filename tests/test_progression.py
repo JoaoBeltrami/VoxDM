@@ -181,6 +181,8 @@ def test_pipeline_xp_acumula_sem_subir():
 
 
 def test_pipeline_xp_detecta_level_up():
+    # XP-CLAMP-1: [XP: +200] é clampado a 100 (marker é bônus narrativo 25–100;
+    # quest concluída a engine paga por fora). 2600+100 = 2700 = limiar do nv 4.
     from api.turn_pipeline import aplicar_xp_e_detectar_level_up
 
     wm = _wm(nivel=3)
@@ -188,9 +190,29 @@ def test_pipeline_xp_detecta_level_up():
     resumo = aplicar_xp_e_detectar_level_up(
         wm, "Quest concluída! [XP: +200 missão da mina]"
     )
-    assert wm.xp == 2800
+    assert wm.xp == 2700
     assert resumo is not None
     assert resumo["nivel_novo"] == 4
+
+
+def test_pipeline_xp_clampa_marker_inflado():
+    """XP-CLAMP-1 (A/B 17/07): LLM emitiu [XP: +400] por examinar um corpo —
+    o marker narrativo tem teto 100; o excedente é inflação e não entra."""
+    from api.turn_pipeline import aplicar_xp_e_detectar_level_up
+
+    wm = _wm(nivel=3)
+    wm.xp = 0
+    aplicar_xp_e_detectar_level_up(wm, "[XP: +400 examinou o corpo]")
+    assert wm.xp == 100
+
+
+def test_pipeline_xp_ate_100_passa_integral():
+    from api.turn_pipeline import aplicar_xp_e_detectar_level_up
+
+    wm = _wm(nivel=3)
+    wm.xp = 0
+    aplicar_xp_e_detectar_level_up(wm, "[XP: +100 diplomacia com o conselho]")
+    assert wm.xp == 100
 
 
 def test_pipeline_xp_multiplos_marcadores():
