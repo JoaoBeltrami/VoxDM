@@ -177,6 +177,14 @@ function parseRolagens(
   const n = _n(texto);
   if (!/\b(role|jogue|teste|salvaguarda|rolagem)\b/.test(n)) return [];
 
+  // CHIP-ROLL-POISON-1 (A/B 17/07): "rolagem de ataque: (Furtividade)" — pedido
+  // explícito de ATAQUE com perícia espúria colada. O chip de perícia enviava
+  // "[Rolagem: Furtividade ...]" e a engine preservava a pendência de ataque
+  // (eh_teste_pericia confirmava teste) → o golpe nunca resolvia. Ataque usa o
+  // d20 puro; nenhum chip de perícia quando o pedido é de ataque. Espelha
+  // _RE_ROLAGEM_DE_ATAQUE em engine/combat/intent.py.
+  if (/\b(?:rolagem|role|rola|rolar|jogue|jogar|jogada|teste)\s+(?:de\s+|do\s+|para\s+(?:o\s+)?)?ataque\b/.test(n)) return [];
+
   const nivel  = p.player_level ?? 3;
   const prof   = _prof(nivel);
   const sprofs = new Set((p.skill_profs ?? []).map(_n));
