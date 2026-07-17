@@ -89,6 +89,28 @@ def test_string_vazia():
     assert eh_teste_pericia("") is None
 
 
+# ── CHIP-ROLL-POISON-1 (A/B 17/07): "rolagem de ataque" anula perícia colada ──
+
+
+def test_rolagem_de_ataque_com_pericia_espuria_nao_e_teste():
+    # Caso REAL da corrida A: pedido explícito de ataque com skill espúria —
+    # confirmar "Furtividade" preservava a pendência e o golpe nunca resolvia.
+    texto = "Você desfere um golpe poderoso. Peço uma rolagem de ataque: (Furtividade)."
+    assert eh_teste_pericia(texto) is None
+
+
+def test_rolagem_de_ataque_com_atributo_espurio_nao_e_teste():
+    texto = "A lâmina corta o ar. Role o teste de ataque (Força)!"
+    assert eh_teste_pericia(texto) is None
+
+
+def test_pericia_apos_narracao_de_ataque_segue_sendo_teste():
+    # Regressão da precedência LEGÍTIMA: ataque só na NARRAÇÃO (sem colocação
+    # rolagem+ataque) e a perícia é o pedido real.
+    texto = "O goblin desvia do seu ataque e some nas sombras. Role Percepção."
+    assert eh_teste_pericia(texto) == "Percepção"
+
+
 def test_string_so_pontuacao():
     assert eh_teste_pericia("...") is None
 

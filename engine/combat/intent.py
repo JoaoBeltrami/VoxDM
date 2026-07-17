@@ -61,6 +61,18 @@ _NOME_EXIBICAO: dict[str, str] = {
 
 _RE_SALVAGUARDA = re.compile(r"\bsalvaguarda\b", re.IGNORECASE)
 
+# CHIP-ROLL-POISON-1 (A/B 17/07): o Mestre pediu "rolagem de ataque: (Furtividade)"
+# — pedido EXPLÍCITO de rolagem de ataque com uma perícia espúria colada. A
+# precedência de perícia (correta pra "o goblin desvia do seu ataque... role
+# Percepção") envenenava o chip e preservava a pendência: o 1º ataque da corrida
+# A nunca foi resolvido pela engine. A colocação pedido-de-rolagem+ataque
+# ADJACENTES é sinal mais forte que qualquer perícia nomeada na mesma fala.
+_RE_ROLAGEM_DE_ATAQUE = re.compile(
+    r"\b(?:rolagem|role|rola|rolar|jogue|jogar|jogada|teste)\s+"
+    r"(?:de\s+|do\s+|para\s+(?:o\s+)?)?ataque\b",
+    re.IGNORECASE,
+)
+
 
 def _sem_acento(s: str) -> str:
     nfd = unicodedata.normalize("NFD", s.lower())
@@ -74,10 +86,15 @@ def eh_teste_pericia(ultima_fala_mestre: str) -> str | None:
     disjunto de vocabulário de combate). Devolve None tanto pra "claramente não é
     teste" quanto pra "ambíguo" — o caller nunca deve inferir ataque a partir de
     None; isso exige um sinal positivo separado (ex: combate_pendente já setado).
+
+    Exceção (CHIP-ROLL-POISON-1): "rolagem de ataque" explícito na fala anula
+    qualquer perícia nomeada — o pedido é de ataque, a perícia é ruído do LLM.
     """
     if not ultima_fala_mestre:
         return None
     norm = _sem_acento(ultima_fala_mestre)
+    if _RE_ROLAGEM_DE_ATAQUE.search(norm):
+        return None
     if _RE_SALVAGUARDA.search(norm):
         for nome in _ATRIBUTOS_SALVAGUARDA_PT:
             if re.search(rf"\b{nome}\b", norm):
