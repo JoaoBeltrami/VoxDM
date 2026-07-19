@@ -35,3 +35,8 @@ srd_data/
 # SQLite local
 voxdm.db
 engine/voice/_thinking_cache_data/
+
+# Skills de agente instaladas via skills CLI (setup local por maquina, nao versionado)
+.agents/
+.claude/skills/
+skills-lock.json
