@@ -203,6 +203,30 @@ def revelar_nome(wm: Any, id_atual: str, nome_novo: str) -> str:
         if de in _registro(wm) and nome_novo.strip():
             _registro(wm)[de]["nome"] = nome_novo.strip()[:60]
         return de
+    # NPC-IDENTITY-CONFLATION-1 (rodada grimdark 18/07): identidade AUTORAL é
+    # inviolável. Na sessão real, o extractor batizou o guarda do portão de
+    # "bjorn-tharnsson" (a fala dele só MENCIONAVA Bjorn) e o reveal "Roric"
+    # migrou a entrada — o Bjorn verdadeiro sumiu do registro/presença e Roric
+    # herdou o rosto dele. Quando o id-origem é um NPC FIXO do módulo, o reveal
+    # vira um FORK: o nome revelado nasce como NPC NOVO (seed própria, sem
+    # alias, sem fusão de estado) e a entrada autoral fica intacta. Efeito
+    # colateral aceito: apelido legítimo do próprio NPC fixo ("me chamem de
+    # Urso") também forka — raro e benigno perto de apagar o Bjorn.
+    try:
+        from engine.combat.npc_statblocks import e_npc_fixo
+        _fixo = e_npc_fixo(de)
+    except Exception:
+        _fixo = False
+    if _fixo:
+        registrar_npc(wm, para, nome_novo)
+        try:
+            presentes_canon = {resolver_npc(wm, str(p)) for p in wm.npcs_presentes}
+            if para not in presentes_canon:
+                wm.npcs_presentes.append(para)
+        except Exception:
+            pass
+        log.info("npc_reveal_fork_npc_fixo", de=de, para=para)
+        return para
     registrar_npc(wm, de)
     entrada_de = _registro(wm).pop(de)
     if para in _registro(wm):

@@ -103,6 +103,17 @@ def limpar_cache() -> None:
     _combat_map_cache = None
 
 
+def e_npc_fixo(npc_id: str) -> bool:
+    """True se o id é um NPC FIXO do módulo (tem campo `combat` autoral).
+
+    NPC-IDENTITY-CONFLATION-1 (rodada grimdark 18/07): identidade autoral é
+    inviolável — usado pelo name-reveal pra recusar que um figurante "roube"
+    a entrada canônica de um NPC do módulo, e pelo extractor pra não batizar
+    um falante com o nome de um NPC fixo apenas MENCIONADO em fala.
+    """
+    return str(npc_id or "") in _carregar_combat_map()
+
+
 def resolver_ficha_npc(npc_id: str) -> str | None:
     """Ficha em texto do NPC fixo, ou None se o módulo não define `combat` pra ele.
 

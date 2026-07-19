@@ -584,6 +584,53 @@ async def extrair_npcs_cena(
     return filtrados
 
 
+def _spans_de_fala(texto: str) -> list[tuple[int, int]]:
+    """Intervalos [ini, fim) de trechos entre aspas (retas ou curvas) no texto."""
+    spans: list[tuple[int, int]] = []
+    ini: int | None = None
+    for i, c in enumerate(texto):
+        if c in "\"“”":
+            if ini is None:
+                ini = i
+            else:
+                spans.append((ini, i + 1))
+                ini = None
+    return spans
+
+
+def _npc_fixo_apenas_citado_em_fala(nid: str, nome: str, narracao: str) -> bool:
+    """True se `nid` é NPC FIXO do módulo e TODA ocorrência do nome dele na
+    narração está dentro de aspas (alguém falou dele; ele não apareceu).
+
+    Conservador: nome ausente da narração (extração veio de outra fonte) ou
+    qualquer ocorrência FORA de aspas ("Bjorn ergue os olhos do mapa") → False,
+    o registro segue normal. Falha de import/módulo → False (nunca bloqueia).
+    """
+    try:
+        from engine.combat.npc_statblocks import e_npc_fixo
+        if not e_npc_fixo(nid):
+            return False
+    except Exception:
+        return False
+    baixo = narracao.lower()
+    alvos = {nome.lower().strip()}
+    primeiro_token = nome.lower().split()[0] if nome.strip() else ""
+    if len(primeiro_token) > 3:
+        alvos.add(primeiro_token)
+    spans = _spans_de_fala(narracao)
+    achou_alguma = False
+    for alvo in alvos:
+        if not alvo:
+            continue
+        pos = baixo.find(alvo)
+        while pos != -1:
+            achou_alguma = True
+            if not any(a <= pos < b for a, b in spans):
+                return False  # apareceu FORA de fala — presença legítima
+            pos = baixo.find(alvo, pos + 1)
+    return achou_alguma
+
+
 def aplicar_npcs_extraidos(
     wm: Any, npcs: list[dict[str, str]], narracao: str = "", texto_jogador: str = ""
 ) -> list[str]:
@@ -658,6 +705,15 @@ def aplicar_npcs_extraidos(
             log.info("npc_entidade_invalida_descartada", id=nid)
             continue
         nome = (npc.get("nome") or nid.replace("-", " ").title()).strip()[:60]
+        # NPC-IDENTITY-CONFLATION-1 (rodada grimdark 18/07): NPC FIXO do módulo
+        # cujo nome só aparece DENTRO de falas (aspas) na narração foi
+        # MENCIONADO, não visto — não entra em presença. Caso real: o guarda
+        # perguntou "Com Bjorn Tharnsson?" e o extractor batizou o GUARDA de
+        # bjorn-tharnsson; o name-reveal seguinte apagou o Bjorn verdadeiro.
+        # Escopo estreito de propósito: NPC comum ("Sou Gryff") não passa aqui.
+        if narracao and _npc_fixo_apenas_citado_em_fala(nid, nome, narracao):
+            log.info("npc_fixo_citado_em_fala_descartado", id=nid)
+            continue
         # NAME-REVEAL: candidato novo + frase de apresentação + NPC presente
         # ancorado na janela antes dela → renomeia em vez de duplicar.
         if narracao and detectar_name_reveal(narracao, nome):
