@@ -11,6 +11,7 @@ import {
   type TokenIniciativa,
 } from "@/lib/api";
 import { parseMensagemWS } from "@/lib/ws-schema";
+import { stripMarcadoresExibicao } from "@/lib/markers";
 import { useAudio } from "@/hooks/useAudio";
 
 /** Converte erros técnicos vindos do server em frases narrativas pro jogador.
@@ -589,7 +590,14 @@ export function useGameSession() {
           checkpointSessao(sessionIdRef.current).catch(() => {/* silencioso */});
         }
         const turno = turnoAtualRef.current;
-        const textoFinal = textoAtualRef.current;
+        // MARKER-DISPLAY-LEAK-1 (rodada grimdark 18/07): o backend stripa os
+        // markers antes do TTS, mas o CHAT renderizava o stream cru — turnos
+        // do gemini exibiram "[CENA:...] [INIMIGO_MORTO: roric] [XP: +50]"
+        // na bolha. Limpa aqui, no choke point do fim do turno: cobre o
+        // histórico, o respostaAtual pós-stream E a detecção de condições.
+        // (Durante o streaming um marker parcial ainda pode piscar — o flush
+        // troca pelo texto limpo.)
+        const textoFinal = stripMarcadoresExibicao(textoAtualRef.current);
         textoAtualRef.current = "";
         turnoAtualRef.current = null;
 
