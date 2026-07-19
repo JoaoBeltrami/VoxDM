@@ -40,12 +40,14 @@ class Settings(BaseSettings):
     # injeta no prompt da cena. False = NPCs seguem sem dossiê (rollback).
     DOSSIE_NPC_ATIVO: bool = True
 
-    # ── NarrationBrief como fonte do prompt (decisão 12/07) ────────────────
-    # Kill-switch DESLIGADO por padrão (padrão grimdark): True troca o dump do
-    # para_texto()+RAG+fragmentos pelo BRIEFING enxuto (persona + markers +
-    # brief + regras SRD do turno). Ligar SÓ pra validar qualidade narrativa
-    # ao vivo — é a aposta central da tese "autoridade-primeiro, LLM-fino".
-    BRIEF_ATIVO: bool = False
+    # ── NarrationBrief como fonte do prompt (decisão 12/07; DEFAULT ON 19/07) ──
+    # True troca o dump do para_texto()+RAG+fragmentos pelo BRIEFING enxuto
+    # (persona + markers + brief + regras SRD do turno) — a tese
+    # "autoridade-primeiro, LLM-fino" em produção. Promovido a default após o
+    # A/B de 16-17/07 (ADR-001): tokens −47% média/−52% pico, prompt estável,
+    # 8B vira fallback real, qualidade NÃO-INFERIOR (4 juízes cegos, 6×6).
+    # Rollback: BRIEF_ATIVO=false no .env (kill-switch preservado).
+    BRIEF_ATIVO: bool = True
 
     # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
     # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
