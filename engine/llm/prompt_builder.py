@@ -1008,11 +1008,18 @@ def montar_mensagens(
     # pressuposto "mudança de cena mid-combate é rara" foi refutado ao vivo;
     # ~230 chars é barato perto de perder a troca de cena.
     if _RE_VIAGEM.search(contexto.transcricao_atual or ""):
+        # CENA-TRANSITO-1 (validações 16-18/07, 3/3 corridas): o nudge disparava
+        # mas o Mestre NÃO emitia [CENA] quando o destino era local de PASSAGEM
+        # (estrada, trilha) — não é location do módulo, e a instrução sugeria
+        # local "de verdade"; o elenco da taverna seguia "presente" na estrada.
+        # Texto afiado: trânsito CONTA como cena nova, improvise o id.
         secoes.append(
             "\n=== DESLOCAMENTO PEDIDO ===\n"
-            "O jogador indicou ir a outro lugar. Se a cena chegar a um local NOVO, "
-            "EMITA [CENA: local-id|Nome|hora] no fim da resposta — sem isso a engine "
-            "não atualiza local, NPCs, trilha nem imagem."
+            "O jogador indicou ir a outro lugar. Se a narração SAIR do local atual, "
+            "EMITA [CENA: local-id|Nome|hora] no fim da resposta — local de passagem "
+            "(estrada, trilha, portão, floresta) TAMBÉM é cena nova: improvise um id "
+            "kebab-case (ex.: [CENA: estrada-norte|Estrada ao Norte|noite]). Sem o "
+            "marcador a engine não atualiza local, NPCs presentes, trilha nem imagem."
         )
         log.info("nudge_cena_injetado", transcricao=(contexto.transcricao_atual or "")[:60])
 
