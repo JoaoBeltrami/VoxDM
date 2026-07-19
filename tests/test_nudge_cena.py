@@ -78,6 +78,23 @@ def test_injeta_nudge_cena_com_deslocamento():
     assert "[CENA:" in system
 
 
+def test_nudge_cena_cobre_local_de_transito():
+    """CENA-TRANSITO-1 (validações 16-18/07, 3/3 corridas): o nudge disparava
+    mas o Mestre não emitia [CENA] quando o destino era local de PASSAGEM
+    ("saio da taverna e sigo pela estrada ao norte") — a estrada não é location
+    do módulo e o texto antigo sugeria local 'de verdade'. Guarda de doc: a
+    instrução precisa dizer que trânsito CONTA e mostrar um id improvisado."""
+    invalidar_cache()
+    # Frase EXATA das corridas de validação — o regex tem que casar…
+    frase = "Termino minha bebida, saio da taverna e sigo pela estrada ao norte."
+    assert _RE_VIAGEM.search(frase)
+    # …e a instrução tem que cobrir passagem/improviso de id.
+    system = montar_mensagens(_contexto(_wm(), frase))[0]["content"]
+    assert "=== DESLOCAMENTO PEDIDO ===" in system
+    assert "passagem" in system
+    assert "estrada-norte" in system  # exemplo concreto de id improvisado
+
+
 def test_sem_deslocamento_nao_injeta_nudge():
     invalidar_cache()
     system = montar_mensagens(_contexto(_wm(), "pergunto ao ferreiro sobre a espada"))[0]["content"]
