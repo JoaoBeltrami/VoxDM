@@ -38,9 +38,13 @@ def _contexto(wm: WorkingMemory, transcricao: str = "Peço uma cerveja.", **kw) 
     )
 
 
-def test_flag_off_default_mantem_caminho_normal():
-    """O default do kill-switch é OFF — e OFF significa o para_texto de sempre."""
-    assert settings.BRIEF_ATIVO is False
+def test_flag_default_e_on_e_off_mantem_caminho_normal(monkeypatch):
+    """Default promovido a ON (ADR-001, 19/07 — A/B: tokens −47%, qualidade
+    não-inferior). O conftest fixa a SUITE no caminho legado via env, então o
+    default de produção é guardado pelo default do CAMPO (model_fields). O
+    kill-switch continua existindo: OFF restaura o para_texto de sempre."""
+    assert type(settings).model_fields["BRIEF_ATIVO"].default is True
+    monkeypatch.setattr(settings, "BRIEF_ATIVO", False)
     invalidar_cache()
     system = montar_mensagens(_contexto(_wm()), master_system_override=_PERSONA_FAKE)[0]["content"]
     assert "=== CENA ATUAL ===" in system

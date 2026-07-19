@@ -30,6 +30,13 @@ os.environ.setdefault("DEBUG",          "true")
 os.environ.setdefault("DEV_USER_EMAIL", "test@voxdm.test")
 os.environ.setdefault("ADMIN_EMAILS",   "test@voxdm.test")
 
+# BRIEF_ATIVO virou default ON em produção (ADR-001, 19/07), mas a suite
+# roda com o caminho LEGADO (para_texto+RAG+fragmentos) por padrão — centenas
+# de asserts de prompt foram escritos sobre ele e ele continua suportado
+# (kill-switch). Os testes do caminho brief (test_brief_wiring) LIGAM a flag
+# via monkeypatch; o default de produção é guardado por teste de model_fields.
+os.environ.setdefault("BRIEF_ATIVO", "false")
+
 # Pula warmups no lifespan da API durante testes: TestClient(app) com context
 # manager dispara o lifespan, e os warmups baixam Whisper (~500MB), carregam
 # embedder e fazem 20 sínteses Edge TTS pra thinking_cache — transformam
