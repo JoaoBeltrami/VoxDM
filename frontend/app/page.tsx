@@ -122,7 +122,10 @@ function lerRollVisStorage(): RollVisibility {
 // "iniciativa" foi REMOVIDA de propósito (04/07): iniciativa é autoridade da
 // engine — pedido do LLM é inválido e não deve acender nada (ver
 // pedidoEhIniciativa abaixo pra supressão ativa do caso "rolem iniciativa").
-const _RE_PEDE_ROLAGEM = /\b(rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|d20|d\d+|perícia|habilidade)\b/i;
+// FECHO-FALSO-POSITIVO (18/07): "rolagem" adicionado — `\brol[ae]\b` não casa a
+// palavra inteira ("rolagem" segue com 'g'); o gap era mascarado pela muleta do
+// "?" que ligava o banner pra qualquer pergunta (removida no mesmo fix).
+const _RE_PEDE_ROLAGEM = /\b(rolagem|rol[ae]|jogue?|teste?|jog[au]e?\s+\w*d\d|salvaguarda|d20|d\d+|perícia|habilidade)\b/i;
 
 // ── Auto dice — mapeamento PT-BR skill/save → atributo ──────────────────────
 
@@ -423,11 +426,16 @@ export default function Home() {
   // Usado tanto pelo banner persistente quanto pela toolbar (motivoCheck).
   const { esperandoRolagem, motivoRolagem, atributoRolagem } = useMemo(() => {
     const ultimaFala = historico.length > 0 ? historico[historico.length - 1].mestre : "";
+    // FECHO-FALSO-POSITIVO (A/B+grimdark 17-18/07): a heurística antiga ligava
+    // o banner "MESTRE PEDIU: TESTE" pra QUALQUER fala terminando em "?" —
+    // "O que você fará agora?" e "O que ele vai dizer?" viravam pedido de
+    // rolagem. Pergunta conversacional não é check: exige vocabulário de
+    // rolagem OU perícia/atributo nomeado na fala.
     const esperando =
       !respostaAtual &&
       historico.length > 0 &&
       !pedidoEhIniciativa(ultimaFala) &&
-      (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
+      (_RE_PEDE_ROLAGEM.test(ultimaFala) || _RE_ATRIBUTO_CHECK.test(ultimaFala));
     if (!esperando) {
       return { esperandoRolagem: false, motivoRolagem: "", atributoRolagem: "" };
     }
@@ -1591,10 +1599,12 @@ export default function Home() {
           const ultimaFala = historico.length > 0
             ? historico[historico.length - 1].mestre
             : "";
+          // FECHO-FALSO-POSITIVO: mesma regra do banner (topo do componente) —
+          // "?" sozinho não é pedido de rolagem.
           const esperandoRolagem = !respostaAtual &&
             historico.length > 0 &&
             !pedidoEhIniciativa(ultimaFala) &&
-            (ultimaFala.trimEnd().endsWith("?") || _RE_PEDE_ROLAGEM.test(ultimaFala));
+            (_RE_PEDE_ROLAGEM.test(ultimaFala) || _RE_ATRIBUTO_CHECK.test(ultimaFala));
           const turnoJogador = !respostaAtual && historico.length > 0 && !ouvindo;
           if (!turnoJogador) return null;
           const toolbarUtil = emCombate || esperandoRolagem || rolamentosPendentes.length > 0;
