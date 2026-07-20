@@ -155,6 +155,60 @@ class LootTable(BaseModel):
     entries: list[LootEntry] = Field(default_factory=list)
 
 
+# ── Arco de campanha: espinha + finais (schema v1.3, Diretor de Arco) ────────────
+# A engine é episódica e nenhuma história ENCERRA (ADR-002). O `arc` declara a
+# ESPINHA (o relógio-mestre que dá destino) e `endings` os DESFECHOS, cada um com
+# uma condição `when` (mesma DSL dos secrets) que o Diretor de Arco avalia de
+# forma determinística. Finais = DADO; o Diretor (engine/authority/arco.py) é o
+# avaliador genérico e agnóstico de história.
+
+class ArcEscalation(BaseModel):
+    model_config = _Config
+    cadence: str = Field(default="per_session", description="quando a espinha avança")
+    arm_at: int = Field(default=0, ge=0, description="filled ≥ arm_at → Diretor dirige pro clímax")
+
+
+class ArcSpec(BaseModel):
+    model_config = _Config
+    spine: str = Field(description="id do front (ou quest) que é o relógio-mestre da campanha")
+    target_sessions: int = Field(default=3, ge=1)
+    escalation: ArcEscalation = Field(default_factory=ArcEscalation)
+    free_master: bool = Field(default=False, description="toggle Mestre Livre: 100% sandbox, ignora o arco")
+
+
+class ClimaxBranch(BaseModel):
+    """Ramo de clímax escolhido pelo jogador (ex: F4 expor/desmascarar/reivindicar)."""
+
+    model_config = _Config
+    choice_id: str
+    label: str | None = None
+    directive: str | None = None
+    beats: list[str] = Field(default_factory=list)
+    epilogue: str | None = None
+
+
+class ClimaxSpec(BaseModel):
+    model_config = _Config
+    directive: str | None = Field(default=None, description="instrução estruturada do clímax único")
+    beats: list[str] = Field(default_factory=list)
+    branches: list[ClimaxBranch] = Field(
+        default_factory=list, description="clímax ramificado por escolha do jogador (opcional)"
+    )
+
+
+class EndingSpec(BaseModel):
+    model_config = _Config
+    id: str
+    name: str
+    priority: int = Field(default=0, description="desempate: se >1 dispara, vence o maior")
+    when: TriggerCondition | None = Field(
+        default=None, description="condição de disparo (mesma DSL dos secrets)"
+    )
+    climax: ClimaxSpec = Field(default_factory=ClimaxSpec)
+    epilogue: str | None = Field(default=None, description="narração de fecho pós-clímax (clímax único)")
+    tone: str | None = None
+
+
 # ── Canon protegido (mortos continuam mortos; verdades imutáveis) ────────────────
 
 class CanonFact(BaseModel):
@@ -184,6 +238,10 @@ class ModuloV2(BaseModel):
     fronts: list[Front] = Field(default_factory=list)
     loot_tables: list[LootTable] = Field(default_factory=list)
     canon: list[CanonFact] = Field(default_factory=list)
+
+    # v1.3 — arco de campanha (Diretor de Arco):
+    arc: ArcSpec | None = None
+    endings: list[EndingSpec] = Field(default_factory=list)
 
     def schema_version(self) -> str:
         """Versão declarada em _meta.schema_version, ou o default v2."""
