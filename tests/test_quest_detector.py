@@ -428,10 +428,56 @@ def test_multiplos_efeitos_mesmo_avanço():
 
 
 def test_efeitos_mundo_nao_geram_recompensa_visivel():
-    """faction/npc/location changes não devem aparecer na lista de recompensas."""
-    wm = _wm_simples()
+    """faction/npc/location changes não devem aparecer na lista de recompensas
+    (faction_standing aplica ESTADO no passo 3a, mas sem string player-facing)."""
+    wm = WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test")
     r = aplicar_recompensas_avancos([("q2", "s5")], _EFEITOS, wm)
     assert ("q2", "s5") not in r
+    assert wm.faction_standings.get("os-tharn") == 10  # aplicou o estado, calado
+
+
+# ── Diretor de Arco (passo 3a): efeitos que fazem a guerra TICAR ──────────────
+# faction_standing_change agora É aplicado (move faction_standings → decide F1/F3)
+# e front_advance avança a espinha (latente, persistente).
+
+from engine.memory.working_memory import WorkingMemory  # noqa: E402
+
+
+def _wm_real() -> WorkingMemory:
+    return WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test")
+
+
+def test_faction_standing_change_agora_e_aplicado_e_clampado():
+    wm = _wm_real()
+    wm.faction_standings = {"os-tharn": 45}
+    efeitos = {"q": {"s": [{"effect": "faction_standing_change", "target": "os-tharn", "value": 10}]}}
+    aplicar_recompensas_avancos([("q", "s")], efeitos, wm)
+    assert wm.faction_standings["os-tharn"] == 55  # 45 + 10, moveu de verdade
+    # clamp: um delta gigante não estoura o teto
+    efeitos_big = {"q": {"s": [{"effect": "faction_standing_change", "target": "os-tharn", "value": 999}]}}
+    aplicar_recompensas_avancos([("q", "s")], efeitos_big, wm)
+    assert wm.faction_standings["os-tharn"] == 100
+
+
+def test_front_advance_avanca_espinha_latente_e_capa():
+    wm = _wm_real()
+    wm.narrative.fronts_latentes = {
+        "guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 4}
+    }
+    efeitos = {"q": {"s": [{"effect": "front_advance", "target": "guerra-das-vilas", "value": 1}]}}
+    aplicar_recompensas_avancos([("q", "s")], efeitos, wm)
+    assert wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 5
+    # avança além do teto → capa em segmentos (não estoura, não deleta)
+    efeitos5 = {"q": {"s": [{"effect": "front_advance", "target": "guerra-das-vilas", "value": 5}]}}
+    aplicar_recompensas_avancos([("q", "s")], efeitos5, wm)
+    assert wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 6
+
+
+def test_front_advance_alvo_desconhecido_nao_quebra():
+    wm = _wm_real()
+    efeitos = {"q": {"s": [{"effect": "front_advance", "target": "inexistente", "value": 1}]}}
+    # não deve levantar — só loga warning
+    aplicar_recompensas_avancos([("q", "s")], efeitos, wm)
 
 
 def test_sem_avancos_retorna_dict_vazio():

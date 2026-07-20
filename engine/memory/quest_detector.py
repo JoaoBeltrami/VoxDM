@@ -236,6 +236,9 @@ def strip_marcadores(texto: str) -> str:
 _MAX_XP_REWARD: int = 10_000        # XP máximo por stage (acima disso o módulo está errado)
 _MAX_GOLD_REWARD: int = 10_000      # PO máximo por stage
 _MAX_INVENT_REWARD: int = 40        # inventário máximo (deixa margem para itens manuais)
+# Diretor de Arco: reputação de facção do jogador — clamp defensivo (allied=50).
+_MIN_FACTION_STANDING: int = -100
+_MAX_FACTION_STANDING: int = 100
 
 
 def carregar_efeitos_modulo(modulo_path: str) -> dict[str, dict[str, list[dict]]]:
@@ -342,9 +345,43 @@ def aplicar_recompensas_avancos(
                 log.info("recompensa_informacao", quest_id=qid, stage_id=sid,
                          preview=info[:60])
 
-            elif tipo in ("faction_standing_change", "npc_disposition_change",
-                          "location_state_change"):
+            elif tipo == "faction_standing_change" and isinstance(valor, int):
+                # Diretor de Arco (passo 3a): APLICA de verdade — é o que faz a
+                # reputação de facção do jogador se mover e, com ela, decide qual
+                # final da guerra dispara (F1/F3). Antes era só logado → a guerra
+                # nunca pendia. Clamp defensivo pra evitar runaway.
+                alvo = str(efeito.get("target", "")).strip()
+                if alvo:
+                    novo = working_mem.faction_standings.get(alvo, 0) + valor
+                    working_mem.faction_standings[alvo] = max(
+                        _MIN_FACTION_STANDING, min(_MAX_FACTION_STANDING, novo)
+                    )
+                    log.info("faction_standing_aplicado", target=alvo, delta=valor,
+                             novo=working_mem.faction_standings[alvo], quest_id=qid)
+
+            elif tipo == "front_advance":
+                # Diretor de Arco (passo 3a): avança a ESPINHA da campanha. A
+                # espinha vive latente (persistente, sem deleção one-shot) — é
+                # onde a guerra tica silenciosa até o clímax. Fallback: se o front
+                # virou relógio ativo, usa a API do relógio.
+                alvo = str(efeito.get("target", "")).strip().lower()
+                passos = valor if isinstance(valor, int) and valor > 0 else 1
+                narr = working_mem.narrative
+                if alvo in getattr(narr, "relogios", {}):
+                    narr.avancar_relogio(alvo, passos)
+                    log.info("front_advance_relogio", target=alvo, passos=passos, quest_id=qid)
+                elif alvo in getattr(narr, "fronts_latentes", {}):
+                    fr = narr.fronts_latentes[alvo]
+                    seg = int(fr.get("segmentos", 0))
+                    fr["filled"] = max(0, min(seg, int(fr.get("filled", 0)) + passos))
+                    log.info("front_advance_latente", target=alvo, passos=passos,
+                             filled=fr["filled"], segmentos=seg, quest_id=qid)
+                else:
+                    log.warning("front_advance_alvo_desconhecido", target=alvo, quest_id=qid)
+
+            elif tipo in ("npc_disposition_change", "location_state_change"):
                 # Efeitos de mundo — logados, não modificam WorkingMemory
+                # (o LLM os narra naturalmente via prompt).
                 log.info("efeito_mundo", tipo=tipo, target=efeito.get("target"),
                          value=valor, quest_id=qid, stage_id=sid)
 
