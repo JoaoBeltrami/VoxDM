@@ -126,6 +126,16 @@ class WorkingMemory:
     def npcs_apresentados(self, v: set[str]) -> None: self.scene.npcs_apresentados = v
 
     @property
+    def secrets_revelados(self) -> set[str]: return self.scene.secrets_revelados
+    @secrets_revelados.setter
+    def secrets_revelados(self, v: set[str]) -> None: self.scene.secrets_revelados = v
+
+    @property
+    def quests_completas(self) -> set[str]: return self.scene.quests_completas
+    @quests_completas.setter
+    def quests_completas(self, v: set[str]) -> None: self.scene.quests_completas = v
+
+    @property
     def npc_estados_emocionais(self) -> dict[str, str]: return self.scene.npc_estados_emocionais
     @npc_estados_emocionais.setter
     def npc_estados_emocionais(self, v: dict[str, str]) -> None: self.scene.npc_estados_emocionais = v

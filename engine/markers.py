@@ -39,6 +39,8 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     # Cena e persistência
     "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA", "NPC",
     "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA", "FICHA",
+    # Diretor de Arco — o jogador declarou um segredo e o Mestre confirma.
+    "SEGREDO_REVELADO",
     # Rótulos de INSTRUÇÃO injetados no prompt (prompt_builder: [PRESSÁGIO],
     # [REINCORPORAR]; [PACING: CLÍMAX/ALTO/BAIXO]) — o LLM não deve emiti-los,
     # mas modelos ecoam tag de colchete com frequência; sem cobertura aqui o

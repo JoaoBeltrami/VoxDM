@@ -45,6 +45,13 @@ class SceneState:
     # NPCs que foram apresentados ao jogador (subset de npcs_presentes)
     npcs_apresentados: set[str] = field(default_factory=set)
 
+    # Diretor de Arco (passo 3b): estado que os finais avaliam ao longo da
+    # CAMPANHA (não do turno). secrets_revelados = segredos que já vieram à tona
+    # (NPC contou por confiança/suborno, OU o jogador declarou). quests_completas
+    # = quests que chegaram à última stage. Alimentam F4 (segredo) e F2 (trégua).
+    secrets_revelados: set[str] = field(default_factory=set)
+    quests_completas: set[str] = field(default_factory=set)
+
     # Identidade única de NPC (05/07) — fonte canônica de UMA chave por pessoa.
     # npc_registro: canônico → {"nome": str, "retrato_seed": str}. A seed nasce
     # = id de criação e NUNCA muda (rename preserva o rosto Pollinations).

@@ -67,6 +67,10 @@ _RE_AGENDA = re.compile(r"\[AGENDA:\s*([a-z0-9-]+)\s*[→>-]+\s*([^\]]+?)\s*\]",
 # Ex: "[ANCORA: O segredo de Valdrek foi revelado ao jogador]"
 # Backend acumula max 5; prompt_builder injeta como "Não repetir narrativa já dita".
 _RE_ANCORA = re.compile(r"\[ANCORA:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+# Diretor de Arco: o jogador declarou um segredo e o Mestre confirma.
+_RE_SEGREDO_REVELADO = re.compile(
+    r"\[SEGREDO_REVELADO:\s*([a-z0-9][a-z0-9-]{0,60})\s*\]", re.IGNORECASE
+)
 
 # REPETICAO-FRIO (playtest 21/06): o Mestre re-descreve a MESMA imagem sensorial
 # (clima/frio/cheiro) a cada turno. Detectamos frases curtas de ambiente pra
@@ -1493,6 +1497,15 @@ def aplicar_pos_turno(
         if ancora:
             working_mem.registrar_ancora(ancora)
             log.info("ancora_registrada", texto=ancora[:80])
+
+    # 15c. Diretor de Arco (passo 3b, caminho B): o jogador DECLAROU um segredo e
+    # o Mestre confirma via [SEGREDO_REVELADO: id] → entra em secrets_revelados
+    # (alimenta F4). O caminho A ("NPC honesto conta") vive no context_builder.
+    for m in _RE_SEGREDO_REVELADO.finditer(resposta_completa):
+        sid = m.group(1).strip().lower()
+        if sid:
+            working_mem.secrets_revelados.add(sid)
+            log.info("segredo_revelado_marker", secret_id=sid)
 
     # 15b. Repetition Guard SENSORIAL (REPETICAO-FRIO) — registra as imagens de
     # ambiente/clima desta narração pra o prompt do próximo turno pedir variação.

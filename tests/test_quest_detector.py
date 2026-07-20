@@ -480,6 +480,28 @@ def test_front_advance_alvo_desconhecido_nao_quebra():
     aplicar_recompensas_avancos([("q", "s")], efeitos, wm)
 
 
+# ── passo 3b: quest concluída na última stage + strip do SEGREDO_REVELADO ─────
+
+def test_quest_concluida_na_ultima_stage():
+    from engine.memory.quest_detector import detectar_e_aplicar_quests
+    wm = _wm_real()
+    catalog = {"missao-guerra": ["inicio", "meio", "fim"]}
+    # stage intermediária NÃO conclui
+    detectar_e_aplicar_quests("Avança. [Q:missao-guerra:meio]", wm, catalog)
+    assert "missao-guerra" not in wm.quests_completas
+    # última stage conclui
+    detectar_e_aplicar_quests("Fim. [Q:missao-guerra:fim]", wm, catalog)
+    assert "missao-guerra" in wm.quests_completas
+
+
+def test_strip_remove_segredo_revelado():
+    from engine.memory.quest_detector import strip_marcadores
+    limpo = strip_marcadores("A verdade veio à tona. [SEGREDO_REVELADO: verdade-do-cisma]")
+    assert "SEGREDO_REVELADO" not in limpo
+    assert "verdade-do-cisma" not in limpo
+    assert "A verdade veio à tona." in limpo
+
+
 def test_sem_avancos_retorna_dict_vazio():
     wm = _wm_simples()
     r = aplicar_recompensas_avancos([], _EFEITOS, wm)
