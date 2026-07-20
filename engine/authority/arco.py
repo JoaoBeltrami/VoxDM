@@ -119,6 +119,41 @@ def escolher_ending(endings: list[dict[str, Any]], est: EstadoArco) -> dict[str,
     return vencedor
 
 
+def snapshot_de_wm(wm: Any, modulo: dict[str, Any] | None = None) -> EstadoArco:
+    """Traduz o estado VIVO (WorkingMemory + módulo) → EstadoArco (o seam entre a
+    engine e o avaliador puro). Duck-typed de propósito: lê `quests_completas` e
+    `secrets_revelados` da WM SE existirem (passo 3 os adiciona) — enquanto não,
+    ficam vazios e os finais que dependem deles (F2/F4) só não disparam ainda.
+
+    Fronts: união de `narrative.fronts_latentes` (filled) e `narrative.relogios`
+    (atual); o relógio ATIVO sobrescreve o latente (mesmo id).
+    """
+    narr = getattr(wm, "narrative", None)
+
+    fronts: dict[str, int] = {}
+    for fid, d in (getattr(narr, "fronts_latentes", {}) or {}).items():
+        fronts[str(fid)] = int((d or {}).get("filled", 0))
+    for fid, d in (getattr(narr, "relogios", {}) or {}).items():
+        fronts[str(fid)] = int((d or {}).get("atual", 0))  # ativo vence latente
+
+    thresholds: dict[str, dict[str, int]] = {}
+    for f in (modulo or {}).get("factions", []):
+        fid = f.get("id")
+        rt = f.get("reputation_thresholds")
+        if fid and isinstance(rt, dict):
+            thresholds[str(fid)] = {str(k): int(v) for k, v in rt.items()}
+
+    scene = getattr(wm, "scene", None)
+    return EstadoArco(
+        fronts=fronts,
+        faction_rep=dict(getattr(wm, "faction_standings", {}) or {}),
+        quests_completas=set(getattr(wm, "quests_completas", set()) or set()),
+        secrets_revelados=set(getattr(scene, "secrets_revelados", set()) or set()),
+        flags=dict(getattr(wm, "arc_flags", {}) or {}),
+        reputation_thresholds=thresholds,
+    )
+
+
 def espinha_armada(arc: dict[str, Any] | None, est: EstadoArco) -> bool:
     """True quando a espinha atingiu `escalation.arm_at` — o Diretor passa a
     dirigir a narração pro clímax. `free_master` desliga o arco inteiro."""

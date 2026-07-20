@@ -10,7 +10,9 @@ from engine.authority.arco import (
     avaliar_condicao,
     escolher_ending,
     espinha_armada,
+    snapshot_de_wm,
 )
+from engine.memory.working_memory import WorkingMemory
 from engine.schema.v2 import EndingSpec, validar_modulo
 
 # Thresholds reais do módulo (reputation_thresholds das facções).
@@ -144,6 +146,47 @@ def test_espinha_armada_e_free_master():
     # Mestre Livre desliga o arco
     arc_livre = {"spine": "guerra-das-vilas", "escalation": {"arm_at": 4}, "free_master": True}
     assert not espinha_armada(arc_livre, EstadoArco(fronts={"guerra-das-vilas": 6}))
+
+
+# ── Adapter do estado vivo (snapshot_de_wm) ──────────────────────────────────
+
+def _wm() -> WorkingMemory:
+    return WorkingMemory.nova_sessao("drevamor", "Drevamor", "sess-test")
+
+
+_MODULO = {"factions": [{"id": "os-tharn", "reputation_thresholds": {
+    "hostile": -20, "neutral": 0, "friendly": 20, "allied": 50}}]}
+
+
+def test_snapshot_le_faction_standings_e_thresholds_do_modulo():
+    wm = _wm()
+    wm.faction_standings = {"os-tharn": 55}
+    est = snapshot_de_wm(wm, _MODULO)
+    assert est.faction_rep["os-tharn"] == 55
+    assert est.reputation_thresholds["os-tharn"]["allied"] == 50
+    # avalia ponta-a-ponta com o threshold vindo do módulo
+    assert avaliar_condicao(
+        {"type": "faction_reputation", "target": "os-tharn", "value": "allied"}, est)
+
+
+def test_snapshot_le_front_do_relogio_ativo_e_do_latente():
+    wm = _wm()
+    wm.narrative.fronts_latentes = {"guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 2}}
+    est = snapshot_de_wm(wm, _MODULO)
+    assert est.fronts["guerra-das-vilas"] == 2  # latente
+    # relógio ATIVO sobrescreve o latente do mesmo id
+    wm.narrative.relogios = {"guerra-das-vilas": {"nome": "Guerra", "atual": 6, "max": 6}}
+    est2 = snapshot_de_wm(wm, _MODULO)
+    assert est2.fronts["guerra-das-vilas"] == 6
+
+
+def test_snapshot_defaults_graciosos_para_estado_ausente():
+    # quests_completas / secrets_revelados ainda não são estado (passo 3) →
+    # vazios, sem quebrar. F2/F4 simplesmente não disparam ainda.
+    est = snapshot_de_wm(_wm(), _MODULO)
+    assert est.quests_completas == set()
+    assert est.secrets_revelados == set()
+    assert escolher_ending(_ENDINGS, est) is None
 
 
 # ── Schema v2: os endings validam como EndingSpec + ModuloV2 aceita `arc` ─────
