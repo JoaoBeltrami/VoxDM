@@ -29,6 +29,7 @@ Extraídos antes da voz — o jogador nunca ouve. Opcionais; máx 1 por tipo por
 - `[COMPANION_HP: id|±N motivo]` · `[COMPANION_REMOVE: id]` (morte, dispensa, fim de summon).
 
 **Cena e persistência:**
+- `[SEGREDO_REVELADO: segredo-id]` — jogador DECLAROU um segredo do módulo (verdade desvendada).
 - `[CICATRIZ: texto]` — marca permanente (sobreviveu a 0 PV ou custo físico dramático).
 - `[DESCANSO: curto|longo]` — restaura slots e features.
 - `[VOZ: npc-id|pitch|rate]` — assinatura TTS na 1ª fala. Ex: `[VOZ: lyssa|+5Hz|-10%]`.

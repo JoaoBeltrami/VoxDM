@@ -214,3 +214,23 @@ def test_modulo_v2_aceita_arc_e_endings():
     })
     assert m.arc.spine == "guerra-das-vilas"
     assert m.endings[0].id == "f"
+
+
+# ── passo 3b ponta-a-ponta: marker [SEGREDO_REVELADO] → F4 dispara ────────────
+
+def test_marker_segredo_revelado_destrava_f4():
+    """Caminho B (jogador declara): o Mestre confirma via [SEGREDO_REVELADO],
+    o pipeline popula secrets_revelados, e o Diretor vê o F4 disparar."""
+    from api.turn_pipeline import aplicar_pos_turno
+
+    wm = _wm()
+    assert "verdade-do-cisma" not in wm.secrets_revelados
+    aplicar_pos_turno(
+        wm,
+        "Eu digo que Valdrek foi um tirano e o cisma foi armado.",
+        "Você declara a verdade em praça. [SEGREDO_REVELADO: verdade-do-cisma]",
+    )
+    assert "verdade-do-cisma" in wm.secrets_revelados
+    # snapshot → o F4 (secret_revealed) dispara
+    est = snapshot_de_wm(wm, _MODULO)
+    assert escolher_ending(_ENDINGS, est)["id"] == "legado-de-valdrek"

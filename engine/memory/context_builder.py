@@ -351,6 +351,16 @@ class ContextBuilder:
             npc_honesty = _buscar_honesty_npc(schema, npc_ativo)
             revelar = npc_honesty >= 0.5
 
+            # Diretor de Arco (passo 3b, caminho A "NPC conta"): o NPC honesto
+            # ENTREGA a verdade → o segredo está revelado pra campanha (alimenta
+            # F4). Quem mente (revelar=False) passa o lie_content — o jogador não
+            # "sabe" a verdade ainda. O caminho B ("jogador declara") é o marker
+            # [SEGREDO_REVELADO] no turn_pipeline.
+            if revelar:
+                sid = str(secret.get("id", "")).strip()
+                if sid:
+                    working_mem.secrets_revelados.add(sid)
+
             visiveis.append(SecretVisivel(
                 npc_id=npc_ativo,
                 content=secret.get("content", ""),

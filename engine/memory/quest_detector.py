@@ -204,6 +204,13 @@ def detectar_e_aplicar_quests(
         log.info("quest_avancou", quest_id=qid, stage_id=sid,
                  era=working_mem.quest_stages.get(qid, "novo"))
 
+        # Diretor de Arco (passo 3b): quest CONCLUÍDA = chegou na ÚLTIMA stage do
+        # catálogo → entra em quests_completas (alimenta F2/trégua e as
+        # war-effort quests que decidem F1/F3). Idempotente (set).
+        if stages_validos and sid == stages_validos[-1]:
+            working_mem.quests_completas.add(qid)
+            log.info("quest_concluida", quest_id=qid, stage_final=sid)
+
     # Limpa marcadores e colapsa linhas em branco residuais
     limpa = _RE_Q.sub("", resposta)
     limpa = _RE_TRAILING_WS.sub("\n\n", limpa).rstrip()
