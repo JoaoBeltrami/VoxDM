@@ -311,3 +311,9 @@ export async function trocarLlmBackend(session_id: string, backend: LlmBackend):
     return false;
   }
 }
+
+/** URL da amostra de voz — o jogador escolhe de ouvido, dentro do jogo (21/07).
+ *  Backend só aceita vozes da allowlist (api/routes/health.py). */
+export function urlAmostraVoz(voice: string): string {
+  return `${API_BASE}/voice/preview?voice=${encodeURIComponent(voice)}`;
+}

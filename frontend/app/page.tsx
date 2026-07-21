@@ -31,7 +31,7 @@ import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/u
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem, PersonagemSalvoItem } from "@/lib/api";
-import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos } from "@/lib/api";
+import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos, urlAmostraVoz } from "@/lib/api";
 
 // Vozes do Mestre — curada manualmente (ADR-004, 20/07).
 // O Edge TTS só tem TRÊS vozes pt-BR nativas, e são de geração antiga — é daí
@@ -537,6 +537,23 @@ export default function Home() {
   // Diretor de Arco: o overlay de CONCLUSÃO é dispensável (o jogador pode querer
   // reler o epílogo na tela). Clímax/epílogo (faixa discreta) seguem sempre.
   const [desfechoFechado, setDesfechoFechado] = useState(false);
+
+  // Amostra de voz nas Opções (21/07): a voz é o elo fraco da imersão
+  // (ADR-004) e escolher entre 10 candidatas exigia caçar MP3 no disco.
+  // Um <audio> só, reusado — nunca duas vozes falando por cima.
+  const amostraRef = useRef<HTMLAudioElement | null>(null);
+  const [vozTocando, setVozTocando] = useState<string | null>(null);
+  const ouvirVoz = useCallback((id: string) => {
+    if (!amostraRef.current) amostraRef.current = new Audio();
+    const a = amostraRef.current;
+    a.pause();
+    if (vozTocando === id) { setVozTocando(null); return; }  // clique de novo = para
+    a.src = urlAmostraVoz(id);
+    a.onended = () => setVozTocando(null);
+    a.onerror = () => setVozTocando(null);
+    setVozTocando(id);
+    void a.play().catch(() => setVozTocando(null));
+  }, [vozTocando]);
   const inimigosAntRef = useRef<Record<string, { nome: string; estado: string }>>({});
   const morteFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -2384,23 +2401,34 @@ export default function Home() {
           <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-vox-gold">Voz do Mestre (Edge TTS)</p>
           <div className="space-y-2">
             {VOZES_PTBR.map(v => (
-              <button
+              <div
                 key={v.id}
-                onClick={() => handleSalvarVoz(v.id)}
-                className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
+                className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition ${
                   vozSelecionada === v.id
                     ? "border-vox-accent-primary bg-vox-accent-primary/15 text-vox-accent-glow"
                     : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-vox-accent-primary/40 hover:text-vox-text-primary"
                 }`}
               >
-                <span>{v.label}</span>
-                {vozSelecionada === v.id && (
-                  <span className="text-violet-400">✓</span>
-                )}
-              </button>
+                <button onClick={() => handleSalvarVoz(v.id)} className="flex flex-1 items-center justify-between text-left">
+                  <span>{v.label}</span>
+                  {vozSelecionada === v.id && <span className="text-violet-400">✓</span>}
+                </button>
+                <button
+                  onClick={() => ouvirVoz(v.id)}
+                  title={`Ouvir ${v.label}`}
+                  aria-label={`Ouvir amostra: ${v.label}`}
+                  className={`shrink-0 rounded-md border px-2 py-1 text-xs transition ${
+                    vozTocando === v.id
+                      ? "border-vox-gold bg-vox-gold/15 text-vox-gold-bright"
+                      : "border-vox-border-soft text-vox-text-muted hover:border-vox-gold-dim hover:text-vox-gold"
+                  }`}
+                >
+                  {vozTocando === v.id ? "⏸" : "▶"}
+                </button>
+              </div>
             ))}
           </div>
-          <p className="text-xs text-vox-text-muted">Escolha salva automaticamente.</p>
+          <p className="text-xs text-vox-text-muted">▶ ouve uma frase de mesa antes de decidir. Escolha salva automaticamente.</p>
         </div>
 
         {/* Perfil de personalidade do Mestre — overlay aplicado sobre master_system.md */}

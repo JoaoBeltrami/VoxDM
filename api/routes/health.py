@@ -27,7 +27,7 @@ import time
 from typing import Any
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Response
 
 from config import settings
 
@@ -162,3 +162,63 @@ async def health_deps() -> dict[str, Any]:
         "total_ms": total_ms,
         "deps": deps,
     }
+
+
+# ── Amostra de voz (21/07) ────────────────────────────────────────────────────
+# Por que existe: a imersão da voz é o elo fraco do produto (ADR-004) e o
+# seletor de Opções lista 10 candidatas — mas escolher exigia sair do app e
+# caçar MP3s no disco. Com a amostra tocável, a decisão vira 30 segundos de
+# ouvido dentro do próprio jogo.
+#
+# Armadilha: a voz vem do CLIENTE. Sem allowlist, isso vira um proxy de síntese
+# arbitrária pro serviço da Microsoft (e um vetor de custo/abuso). A lista é a
+# mesma do seletor do frontend — mudou lá, muda aqui.
+_VOZES_PERMITIDAS: frozenset[str] = frozenset({
+    "pt-BR-FranciscaNeural",
+    "pt-BR-AntonioNeural",
+    "pt-BR-ThalitaMultilingualNeural",
+    "en-US-AndrewMultilingualNeural",
+    "en-US-BrianMultilingualNeural",
+    "de-DE-FlorianMultilingualNeural",
+    "it-IT-GiuseppeMultilingualNeural",
+    "fr-FR-RemyMultilingualNeural",
+    "en-US-AvaMultilingualNeural",
+    "de-DE-SeraphinaMultilingualNeural",
+})
+
+# Frase de teste: PT-BR de mesa, com nome próprio de fantasia e uma fala entre
+# aspas — é onde as vozes multilíngues costumam entregar o sotaque.
+_FRASE_AMOSTRA = (
+    "A neblina desce sobre Drevamor. Aldric ergue os olhos do balcão e diz: "
+    "“você chegou tarde, forasteiro.”"
+)
+
+# Cache em memória: a mesma voz só é sintetizada uma vez por processo.
+_cache_amostras: dict[str, bytes] = {}
+
+
+@router.get("/voice/preview")
+async def voice_preview(voice: str) -> Response:
+    """Devolve um MP3 curto da voz pedida, pro jogador escolher de ouvido."""
+    if voice not in _VOZES_PERMITIDAS:
+        raise HTTPException(status_code=400, detail="voz não disponível")
+
+    if voice not in _cache_amostras:
+        try:
+            from engine.voice.tts import Idioma, TTSEngine
+            audio = await asyncio.wait_for(
+                TTSEngine().sintetizar(_FRASE_AMOSTRA, idioma=Idioma.PTBR, voice=voice),
+                timeout=20.0,
+            )
+        except Exception as e:
+            log.warning("voice_preview_falhou", voz=voice, erro=str(e)[:120])
+            raise HTTPException(status_code=503, detail="síntese indisponível") from e
+        if not audio:
+            raise HTTPException(status_code=503, detail="síntese vazia")
+        _cache_amostras[voice] = audio
+
+    return Response(
+        content=_cache_amostras[voice],
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
