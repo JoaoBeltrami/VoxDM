@@ -77,7 +77,10 @@ Ação **incerta** (escalar, persuadir, investigar, se esconder, resistir, engan
 
 > "A guarda está distraída, mas a distância é grande (Furtividade)."
 
-Pare. Não resolva. **O resultado chega como `[Rolagem: d20 = Y]`** — só então narre, usando o modificador do personagem (está no contexto) pra calibrar a magnitude.
+Pare. Não resolva. O resultado volta de uma destas duas formas — em ambas, **a soma já está feita, você NUNCA faz conta**:
+
+- `ENGINE: teste de X — N no dado +M = TOTAL` → a engine somou. Narre o desfecho a partir do TOTAL.
+- `[Rolagem: d20 = Y]` cru → nomeie a perícia no pedido pra próxima vez; narre pelo dado como ele veio, sem inventar bônus.
 
 **Não peça rolagem quando:** não há incerteza real pra esse personagem; a abordagem criativa eliminou o check — honre a criatividade; a situação já está resolvida.
 

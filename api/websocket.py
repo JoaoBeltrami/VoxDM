@@ -276,6 +276,7 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
+from engine.authority.checks import resolver_check
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 
@@ -1773,6 +1774,29 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
                 sessao.working_mem.sair_combate()
                 sessao.combate_pendente = None  # fuga explícita descarta a pendência
+
+            # ── CHECK-BONUS-1 (playtest 21/07): a engine soma o modificador ──
+            # A toolbar manda o dado CRU (`[Rolagem: d20 = 5]`) e o prompt pedia
+            # ao Mestre pra "usar o modificador do personagem" — aritmética por
+            # LLM, logo probabilística: "alguns não aplicaram o bônus". Aqui a
+            # engine resolve e entrega o TOTAL pronto. Só age quando a última
+            # fala do Mestre pediu um teste NOMEADO (alta confiança); pedido de
+            # ataque e fala ambígua não passam por `eh_teste_pericia`, e sem
+            # perícia identificada não se inventa bônus.
+            if not sessao.combate_pendente:
+                _d20_check = extrair_d20_jogador(texto_jogador)
+                if _d20_check is not None:
+                    _pericia_pedida = eh_teste_pericia(
+                        _ultima_fala_do_mestre(sessao.working_mem)
+                    )
+                    if _pericia_pedida:
+                        _linha_check = resolver_check(
+                            sessao.working_mem, _d20_check, _pericia_pedida
+                        )
+                        if _linha_check:
+                            texto_jogador = _linha_check
+                            log.info("check_resolvido", session_id=session_id,
+                                     pericia=_pericia_pedida, bruto=_d20_check)
 
             # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
             # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
