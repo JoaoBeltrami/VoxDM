@@ -26,7 +26,7 @@ import structlog
 from config import settings
 from engine.llm.types import RE_COMBATE as _RE_COMBATE
 from engine.llm.types import RE_ROLAGEM as _RE_ROLAGEM
-from engine.llm.types import ContextoMontado, SecretVisivel
+from engine.llm.types import ContextoMontado, SecretVisivel, e_turno_de_rolagem
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.qdrant_client import QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory
@@ -488,6 +488,16 @@ class ContextBuilder:
         # manual de regras entre cada turno de diálogo.
         _tem_rolagem = bool(_RE_ROLAGEM.search(transcricao))
         _tem_combate = working_mem.em_combate or bool(_RE_COMBATE.search(transcricao))
+        # RAG-INUTIL-1 (playtest 21/07): o turno 23 gastou 1886ms — 31% do turno
+        # — pra buscar com a query "[Rolagem: d20 = 5]" e devolver 0 chunks de
+        # lore e 2 de regra irrelevantes ("Bless" 0.49, "Crossbow, hand" 0.47,
+        # raspando o threshold de 0.45). Um marcador de rolagem não tem conteúdo
+        # semântico: a busca não podia dar certo. Em COMBATE a query de regras é
+        # montada com classe/nível (tem conteúdo próprio) e continua valendo.
+        _so_rolagem = e_turno_de_rolagem(transcricao)
+        if _so_rolagem and not _tem_combate:
+            _tem_rolagem = False
+            log.debug("rag_pulado_turno_so_rolagem", transcricao=transcricao[:40])
         if _tem_rolagem and _tem_combate:
             _top_k_regras = 2  # combate ativo + rolagem — reduzido de 3
             if working_mem.player_class:
@@ -512,13 +522,24 @@ class ContextBuilder:
                 return []
             return await self._qdrant.buscar_regras(query_regras, top_k=_top_k_regras)
 
+        # Lore e episódico partem da fala do jogador. Num turno que é só rolagem
+        # não HÁ fala — buscar por "[Rolagem: d20 = 5]" é pagar latência por
+        # ruído (RAG-INUTIL-1). O que importa nesse turno já está no brief.
+        async def _talvez_buscar_lore() -> list[dict[str, Any]]:
+            if _so_rolagem:
+                return []
+            return await self._qdrant.buscar_modulo(query_modulo, top_k=TOP_K_SEMANTICO + 2)
+
+        async def _talvez_buscar_episodico() -> list[dict[str, Any]]:
+            if _so_rolagem:
+                return []
+            return await self._qdrant.buscar(
+                transcricao, colecao="voxdm_episodic", top_k=TOP_K_EPISODICO,
+            )
+
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
-            self._qdrant.buscar_modulo(query_modulo, top_k=TOP_K_SEMANTICO + 2),
-            self._qdrant.buscar(
-                transcricao,
-                colecao="voxdm_episodic",
-                top_k=TOP_K_EPISODICO,
-            ),
+            _talvez_buscar_lore(),
+            _talvez_buscar_episodico(),
             _talvez_buscar_regras(),
             return_exceptions=True,
         )

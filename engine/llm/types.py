@@ -42,6 +42,28 @@ RE_COMBATE_CONDICIONAL = re.compile(
     re.IGNORECASE,
 )
 
+# Sobra depois de tirar o marcador de rolagem: se o jogador só clicou no dado,
+# o resto é ruído ("", ".", "Rolagem"). Acima disso ele escreveu uma ação real.
+_MAX_SOBRA_ROLAGEM = 12
+_RE_QUALQUER_ROLAGEM = re.compile(r"\[Rolagem\s*:[^\]]*\]", re.IGNORECASE)
+
+
+def e_turno_de_rolagem(texto_jogador: str) -> bool:
+    """True quando o turno do jogador é ESSENCIALMENTE só uma rolagem.
+
+    Fonte única de duas decisões que dependem disso (playtest 21/07):
+      - COMBAT-GHOST-3: rolar dado É lutar — o guard de combate-fantasma não
+        pode ler `[Rolagem: d20 = 13]` como "o jogador parou de lutar".
+      - RAG-INUTIL-1: um marcador de rolagem não tem conteúdo semântico, então
+        buscar lore/regras com ele por query devolve lixo caro.
+    PURA/testável.
+    """
+    if not _RE_QUALQUER_ROLAGEM.search(texto_jogador):
+        return False
+    sobra = _RE_QUALQUER_ROLAGEM.sub("", texto_jogador).strip(" .,;:!?-\n\t")
+    return len(sobra) <= _MAX_SOBRA_ROLAGEM
+
+
 RE_COMBATE = re.compile(
     r"\b("
     # ── Nível 1: ataques sem ambiguidade ──────────────────────────────────────

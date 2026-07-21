@@ -41,6 +41,7 @@ from engine.llm.extractor import (
     _variante_proxima,
 )
 from engine.llm.types import RE_COMBATE as _RE_COMBATE_JOGADOR
+from engine.llm.types import e_turno_de_rolagem as _e_turno_de_rolagem
 from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
@@ -755,27 +756,6 @@ _RE_D20_JOGADOR = re.compile(
     r"\[Rolagem\s*:\s*(?:[^\[\]]*?\s)?d(\d+)\s*([+-]\d+)?\s*=\s*(-?\d+)",
     re.IGNORECASE,
 )
-
-
-# Sobra depois de tirar o marcador de rolagem: se o jogador só clicou no dado,
-# o resto é ruído ("", ".", "Rolagem"). Acima disso ele escreveu uma ação de
-# verdade e o texto deve ser julgado pelos regexes normais.
-_MAX_SOBRA_ROLAGEM = 12
-_RE_QUALQUER_ROLAGEM = re.compile(r"\[Rolagem\s*:[^\]]*\]", re.IGNORECASE)
-
-
-def _e_turno_de_rolagem(texto_jogador: str) -> bool:
-    """True quando o turno do jogador é ESSENCIALMENTE só uma rolagem.
-
-    COMBAT-GHOST-3: `[Rolagem: d20 = 13]` não tem verbo de ataque, então o guard
-    de combate-fantasma o lia como "o jogador parou de lutar" e encerrava o
-    combate no meio da troca de golpes. Rolar dado é a forma mais ativa de estar
-    em combate que existe. PURA/testável.
-    """
-    if not _RE_QUALQUER_ROLAGEM.search(texto_jogador):
-        return False
-    sobra = _RE_QUALQUER_ROLAGEM.sub("", texto_jogador).strip(" .,;:!?-\n\t")
-    return len(sobra) <= _MAX_SOBRA_ROLAGEM
 
 
 def extrair_d20_jogador(texto_jogador: str) -> int | None:
