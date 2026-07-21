@@ -142,6 +142,16 @@ class WorkingMemory:
     def arc_flags(self, v: dict[str, Any]) -> None: self.scene.arc_flags = v
 
     @property
+    def arc_fase(self) -> str: return self.scene.arc_fase
+    @arc_fase.setter
+    def arc_fase(self, v: str) -> None: self.scene.arc_fase = v
+
+    @property
+    def arc_ending_id(self) -> str: return self.scene.arc_ending_id
+    @arc_ending_id.setter
+    def arc_ending_id(self, v: str) -> None: self.scene.arc_ending_id = v
+
+    @property
     def npc_estados_emocionais(self) -> dict[str, str]: return self.scene.npc_estados_emocionais
     @npc_estados_emocionais.setter
     def npc_estados_emocionais(self, v: dict[str, str]) -> None: self.scene.npc_estados_emocionais = v

@@ -56,6 +56,11 @@ class SceneState:
     # um final pra sempre naquela campanha (decisão "c", 20/07). Reservadas do
     # módulo padrão: paz-morta (F2), verdade-queimada (F4), magia-morta (F1).
     arc_flags: dict[str, Any] = field(default_factory=dict)
+    # Máquina de estados do arco (passo 4): normal → climax → epilogo → concluida.
+    # O Diretor detecta o final no pós-turno; o prompt do turno SEGUINTE recebe a
+    # diretiva de clímax; depois o epílogo; depois a campanha está encerrada.
+    arc_fase: str = "normal"
+    arc_ending_id: str = ""
 
     # Identidade única de NPC (05/07) — fonte canônica de UMA chave por pessoa.
     # npc_registro: canônico → {"nome": str, "retrato_seed": str}. A seed nasce

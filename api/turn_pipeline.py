@@ -1734,6 +1734,17 @@ def aplicar_pos_turno(
     # N2/F3: garante voz TTS determinística pra cada NPC presente (gênero-safe).
     garantir_vozes_npcs(working_mem)
 
+    # 17d. DIRETOR DE ARCO (passo 4): avalia se um final de campanha disparou e
+    # conduz normal → clímax → epílogo → concluída. A transição é aqui (pós-turno)
+    # porque o prompt do turno SEGUINTE é quem injeta a diretiva. Falha silenciosa:
+    # arco quebrado nunca derruba o turno.
+    if texto_jogador.strip():
+        try:
+            from engine.authority.arco import conduzir_arco
+            conduzir_arco(working_mem)
+        except Exception as _e_arco:
+            log.warning("arco_conduzir_falhou", erro=str(_e_arco)[:100])
+
     # 17c. CANON-MORTOS-2 (A/B 17/07): reconcilia abates pendentes. O kill da
     # engine roda pré-LLM — se o combatente só virou conhecido-da-cena AGORA
     # (extração/[NPC] acima), a flag `morto` não foi gravada na hora. Segunda
