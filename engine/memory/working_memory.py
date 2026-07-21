@@ -1053,8 +1053,14 @@ class WorkingMemory:
         # NPCs presentes + estados emocionais (resto do scene)
         if len(scene_lines) > 2:
             linhas.append("\n".join(scene_lines[2:]))
-        # Catálogo de quests só com quests engajadas
-        if self.quests_modulo and self.character.active_quest_hooks:
+        # Catálogo de quests — SEMPRE, não só com quests engajadas.
+        # QUEST-DEADLOCK-1 (playtest 21/07): a condição antiga era circular. O
+        # catálogo só aparecia com `active_quest_hooks` cheio, mas os hooks só
+        # enchem quando uma quest começa, e ela só começa se o Mestre emitir
+        # `[Q: id:stage]` com um id que ele nunca viu. 23 turnos em Kaelmünd
+        # (que TEM esforco-guerra-kaelmund) terminaram com quest_stages {} e
+        # xp 0 — a campanha não podia nem começar nem chegar a um final.
+        if self.quests_modulo:
             linhas.append(f"\n{self.quests_modulo}")
         # Consequências
         narr_txt = self.narrative.to_prompt()

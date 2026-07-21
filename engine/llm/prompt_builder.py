@@ -435,6 +435,19 @@ def _montar_mensagens_brief(
         if regras.strip():
             secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
 
+    # Catálogo de quests + como sinalizar avanço. QUEST-DEADLOCK-1 (playtest
+    # 21/07): este bloco não existia no caminho do brief, então o Mestre nunca
+    # via um único id de quest — e sem id não há `[Q: ...]`, sem `[Q: ...]` não
+    # há avanço, sem avanço a espinha da guerra não anda e a campanha não chega
+    # a final nenhum. ~800 chars estáveis por sessão (prefixo cacheável).
+    _quests_catalogo = getattr(wm, "quests_modulo", "")
+    if _quests_catalogo:
+        _quests_instrucao = _carregar_quests()
+        secoes.append(
+            f"\n{_quests_catalogo}"
+            + (f"\n{_quests_instrucao}" if _quests_instrucao else "")
+        )
+
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
     brief = montar_brief(wm, contexto.transcricao_atual or "")
     secoes.append("\n" + brief.to_prompt())

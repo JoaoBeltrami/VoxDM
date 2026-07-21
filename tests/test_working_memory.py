@@ -863,16 +863,23 @@ def test_linha_inimigos_omitida_quando_todos_mortos():
     assert "Inimigos:" not in texto
 
 
-# ── Fix TOKEN-1: quests_modulo omitido sem quests ativas ────────────────────
+# ── QUEST-DEADLOCK-1 revoga o TOKEN-1 ───────────────────────────────────────
+#
+# O TOKEN-1 economizava ~600 chars omitindo o catálogo enquanto nenhuma quest
+# estivesse ativa. O preço só apareceu no playtest de 21/07: os hooks só enchem
+# quando uma quest começa, e ela só começa se o Mestre emitir `[Q: id:stage]`
+# com um id que ele nunca viu. 23 turnos em Kaelmünd terminaram com
+# quest_stages {} e xp 0 — a campanha não podia começar nem chegar a um final.
+# A economia era real; o que ela comprava era um jogo sem missões.
 
-def test_quests_modulo_omitido_sem_quests_ativas():
-    """quests_modulo não aparece no prompt quando não há quests ativas."""
+def test_quests_modulo_injetado_mesmo_sem_quests_ativas():
+    """O catálogo é a única fonte de ids válidos — tem que estar sempre lá."""
     wm = _wm()
     wm.quests_modulo = "QUESTS DO MÓDULO:\n- Missão Teste"
-    wm.active_quest_hooks = []  # nenhuma quest ativa
+    wm.active_quest_hooks = []  # nenhuma quest ativa AINDA
     texto = wm.para_texto()
-    assert "QUESTS DO MÓDULO" not in texto
-    assert "Missão Teste" not in texto
+    assert "QUESTS DO MÓDULO" in texto
+    assert "Missão Teste" in texto
 
 
 def test_quests_modulo_injetado_com_quests_ativas():

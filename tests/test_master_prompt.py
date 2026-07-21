@@ -750,3 +750,45 @@ def test_formatar_relacoes_fallback_alvo_id_sem_nome():
     ]
     resultado = _formatar_relacoes(relacoes)
     assert resultado.count("CONHECE: strahd-von-zarovich") == 1
+
+
+# ── QUEST-DEADLOCK-1 (playtest 21/07) ────────────────────────────────────────
+#
+# O catálogo de quests só entrava no prompt quando `active_quest_hooks` já
+# estava cheio — mas os hooks só enchem quando uma quest começa, e ela só começa
+# se o Mestre emitir `[Q: id:stage]` com um id que ele nunca viu. Deadlock.
+# Sessão real (sess-cac7ae249bb3): 23 turnos em Kaelmünd, quest_stages {}, xp 0.
+# Estes testes travam os DOIS caminhos de prompt.
+
+_CATALOGO_FAKE = (
+    "Quests disponíveis: esforco-guerra-kaelmund(contrato-de-ferro,o-lacre)"
+)
+
+
+def test_catalogo_de_quests_entra_sem_quest_engajada_no_caminho_brief():
+    from engine.llm.prompt_builder import _montar_mensagens_brief
+
+    ctx = _contexto_minimo("Eu pergunto ao ferreiro sobre a guerra.")
+    ctx.working_memory.quests_modulo = _CATALOGO_FAKE
+    assert not ctx.working_memory.active_quest_hooks   # nenhuma quest começou
+
+    system = _montar_mensagens_brief(ctx)[0]["content"]
+    assert "esforco-guerra-kaelmund" in system
+    assert "[Q:" in system   # a instrução de como sinalizar veio junto
+
+
+def test_catalogo_de_quests_entra_sem_quest_engajada_no_caminho_legado():
+    wm = _contexto_minimo().working_memory
+    wm.quests_modulo = _CATALOGO_FAKE
+    assert not wm.active_quest_hooks
+    assert "esforco-guerra-kaelmund" in wm.para_texto()
+
+
+def test_sem_catalogo_no_modulo_nenhum_bloco_de_quest_e_inventado():
+    """Módulo sem quests (ou Session Zero) não ganha bloco vazio."""
+    from engine.llm.prompt_builder import _montar_mensagens_brief
+
+    ctx = _contexto_minimo()
+    ctx.working_memory.quests_modulo = ""
+    system = _montar_mensagens_brief(ctx)[0]["content"]
+    assert "Quests disponíveis" not in system
