@@ -462,3 +462,127 @@ def test_marker_segredo_revelado_destrava_f4():
     # snapshot → o F4 (secret_revealed) dispara
     est = snapshot_de_wm(wm, _MODULO)
     assert escolher_ending(_ENDINGS, est)["id"] == "legado-de-valdrek"
+
+
+# ── passo 5: a CAMPANHA INTEIRA pelo caminho que roda ao vivo ────────────────
+#
+# Por que este teste existe: todos os testes acima chamam os efeitos direto,
+# pulando o pipeline de turno. O que decide se o Beltrami chega num final numa
+# sessão real é a sequência do websocket:
+#     detectar_e_aplicar_quests → aplicar_recompensas_avancos → aplicar_pos_turno
+# Este teste percorre essa sequência, turno a turno, com o texto que o Mestre
+# emitiria de verdade (marcadores incluídos) e o módulo real — até a campanha
+# CONCLUIR. É a rede de segurança da tese do ADR-002: a história tem que acabar.
+
+def _sessao_real() -> tuple[WorkingMemory, dict, dict, dict]:
+    """WM zerada + catálogo/efeitos/módulo reais de 'Os Filhos de Valdrek'."""
+    import json
+    from pathlib import Path
+
+    from engine.memory.quest_detector import (
+        carregar_catalog_modulo,
+        carregar_efeitos_modulo,
+    )
+    raiz = Path(__file__).resolve().parent.parent
+    caminho = str(raiz / "modulo_teste" / "modulo_teste_v1.2.json")
+    modulo = json.loads(Path(caminho).read_text(encoding="utf-8"))
+
+    wm = _wm()
+    # A espinha nasce do módulo, como no POST /session/start.
+    wm.narrative.fronts_latentes = {
+        f["id"]: {"nome": f["name"], "segmentos": f["segments"], "filled": f["filled"]}
+        for f in modulo["fronts"]
+    }
+    return wm, carregar_catalog_modulo(caminho), carregar_efeitos_modulo(caminho), modulo
+
+
+def _turno(wm, catalog, efeitos, jogador: str, mestre: str) -> None:
+    """Um turno completo, na ORDEM do websocket (linhas 2310–2342)."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        detectar_e_aplicar_quests,
+    )
+    limpa, avancos = detectar_e_aplicar_quests(mestre, wm, catalog)
+    aplicar_recompensas_avancos(avancos, efeitos, wm)
+    aplicar_pos_turno(wm, jogador, limpa)
+
+
+def test_campanha_inteira_chega_ao_fim_pelo_caminho_real():
+    """Do turno 1 ao epílogo: o jogador escolhe Tharnvik, a guerra enche,
+    F1 dispara, o Diretor encena o clímax e ENCERRA."""
+    from engine.authority.arco import diretiva_de_arco
+
+    wm, catalog, efeitos, modulo = _sessao_real()
+    assert wm.arc_fase == "normal"
+    assert diretiva_de_arco(wm, modulo) == ""          # silêncio no começo
+
+    # Turnos 1–2: o esforço de guerra de Tharnvik, stage a stage.
+    _turno(wm, catalog, efeitos,
+           "Escolto o comboio de aço até a forja dos Tharn.",
+           "O aço chega. Bjorn cospe no chão e assente. [Q: esforco-guerra-tharnvik:comboio-de-aco]")
+    _turno(wm, catalog, efeitos,
+           "Recruto os pescadores para a linha de frente.",
+           "Trinta homens marcham sem saber voltar. [Q: esforco-guerra-tharnvik:carne-para-a-linha]")
+
+    # A espinha andou e já arma — o Mestre passa a sentir a pressão no prompt.
+    guerra = wm.narrative.fronts_latentes["guerra-das-vilas"]
+    assert guerra["filled"] >= modulo["arc"]["escalation"]["arm_at"]
+    assert "SE APROXIMA DA CABEÇA" in diretiva_de_arco(wm, modulo)
+    assert wm.arc_fase == "normal"                     # ainda não é hora
+
+    # Turno 3: a trégua morre — porta fechada, guerra 6/6, Tharn aliado.
+    _turno(wm, catalog, efeitos,
+           "Mando queimar a mesa da trégua.",
+           "A mesa arde. Não há mais para onde voltar. [Q: esforco-guerra-tharnvik:a-tregua-morta]")
+
+    assert wm.arc_flags.get("paz-morta") is True
+    assert wm.arc_fase == "climax"                     # o Diretor assumiu
+    assert wm.arc_ending_id == "uma-vila-domina"
+    d = diretiva_de_arco(wm, modulo)
+    assert "CLÍMAX DA CAMPANHA" in d
+
+    # Turnos 4–5: o clímax se encena e a campanha fecha.
+    _turno(wm, catalog, efeitos, "Levo o estandarte ao alto do porto.",
+           "A bandeira dos Tharn sobe sobre Drevamor.")
+    assert wm.arc_fase == "epilogo"
+    assert "EPÍLOGO" in diretiva_de_arco(wm, modulo)
+
+    _turno(wm, catalog, efeitos, "Olho o mar e penso no preço.",
+           "As velas somem no horizonte. O silêncio pesa mais que a guerra.")
+    assert wm.arc_fase == "concluida"
+
+    # Terminal: mais turnos não reabrem a campanha.
+    _turno(wm, catalog, efeitos, "Sigo vivendo.", "O mundo segue.")
+    assert wm.arc_fase == "concluida"
+    assert "CAMPANHA CONCLUÍDA" in diretiva_de_arco(wm, modulo)
+
+
+def test_campanha_inteira_e_visivel_na_tela_do_jogador():
+    """O que o teste acima prova na engine, este prova na UI: o payload WS
+    carrega a espinha andando e o nome do final no fecho."""
+    from api.websocket import _snapshot_arco
+
+    wm, catalog, efeitos, _modulo = _sessao_real()
+    # O módulo já nasce com a guerra em 1/6 (fricção autorada, não relógio
+    # invisível) — a barra aparece desde o primeiro turno, de propósito.
+    assert _snapshot_arco(wm)["espinha"]["filled"] == 1
+
+    _turno(wm, catalog, efeitos, "Escolto o comboio.",
+           "O aço chega. [Q: esforco-guerra-tharnvik:comboio-de-aco]")
+    snap = _snapshot_arco(wm)
+    assert snap["fase"] == "normal"
+    assert snap["espinha"]["filled"] == 2 and snap["espinha"]["segmentos"] == 6
+
+    for jog, mes in [
+        ("Recruto os pescadores.", "Trinta homens marcham. [Q: esforco-guerra-tharnvik:carne-para-a-linha]"),
+        ("Queimo a mesa da trégua.", "A mesa arde. [Q: esforco-guerra-tharnvik:a-tregua-morta]"),
+        ("Ergo o estandarte.", "A bandeira sobe."),
+        ("Olho o mar.", "O silêncio pesa."),
+    ]:
+        _turno(wm, catalog, efeitos, jog, mes)
+
+    fim = _snapshot_arco(wm)
+    assert fim["fase"] == "concluida"
+    assert fim["ending_nome"]            # a tela de fecho tem um nome pra exibir
+    assert fim["ending_id"] == "uma-vila-domina"

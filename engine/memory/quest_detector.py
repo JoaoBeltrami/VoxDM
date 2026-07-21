@@ -30,8 +30,12 @@ log = structlog.get_logger()
 
 # Formato: [Q:kebab-case-id:kebab-case-stage]
 # Restrito a letras minúsculas, números e hífens para prevenir injeção de texto
+# Tolera espaço em volta dos dois-pontos: TODOS os outros marcadores do projeto
+# são `[NOME: valor]`, então o LLM tem prior forte pra escrever `[Q: id:stage]`.
+# Sem essa folga o marcador é silenciosamente descartado e a quest NUNCA avança
+# — e, desde o Diretor de Arco, a campanha nunca chega ao final (21/07).
 _RE_Q = re.compile(
-    r"\[Q:([a-z0-9][a-z0-9-]{0,48}):([a-z0-9][a-z0-9-]{0,48})\]",
+    r"\[Q:\s*([a-z0-9][a-z0-9-]{0,48})\s*:\s*([a-z0-9][a-z0-9-]{0,48})\s*\]",
     re.IGNORECASE,
 )
 
