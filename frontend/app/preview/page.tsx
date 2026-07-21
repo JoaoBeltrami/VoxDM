@@ -117,7 +117,7 @@ export default function PreviewPage() {
     fase: FASES_ARCO[arcoFase],
     ending_id: "sangue-e-ferro",
     ending_nome: "Sangue e Ferro",
-    espinha: { id: "guerra-das-vilas", nome: "A guerra", filled: 4 + arcoFase, segmentos: 6 },
+    espinha: { id: "guerra-das-vilas", nome: "As três vilas marcham para a guerra", filled: 4 + arcoFase, segmentos: 6 },
   };
   // 8s no preview (in-game são ~2s) — janela folgada pra inspecionar o beat.
   const dispararEncontro = () => {

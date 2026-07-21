@@ -37,8 +37,10 @@ export function EspinhaDaCampanha({ arco }: { arco: ArcoInfo }) {
 
   return (
     <div className="flex items-center gap-2" title={`${e.nome}: ${e.filled}/${e.segmentos}`}>
+      {/* O nome vem do módulo e pode ser uma frase inteira ("As três vilas
+          marcham para a guerra") — trunca aqui, o título já mostra por extenso. */}
       <span
-        className={`text-[10px] uppercase tracking-widest font-display ${
+        className={`max-w-[18ch] truncate text-[10px] uppercase tracking-widest font-display ${
           iminente ? "text-red-400" : "text-[var(--vox-text-muted)]"
         }`}
       >
