@@ -246,6 +246,9 @@ _MAX_INVENT_REWARD: int = 40        # inventário máximo (deixa margem para ite
 # Diretor de Arco: reputação de facção do jogador — clamp defensivo (allied=50).
 _MIN_FACTION_STANDING: int = -100
 _MAX_FACTION_STANDING: int = 100
+# Flag RESERVADA com consequência mecânica (ver SCHEMA_ARCO.md): quebrar o
+# artefato mata a magia no mundo E zera os slots do jogador.
+_FLAG_MAGIA_MORTA: str = "magia-morta"
 
 
 def carregar_efeitos_modulo(modulo_path: str) -> dict[str, dict[str, list[dict]]]:
@@ -385,6 +388,25 @@ def aplicar_recompensas_avancos(
                              filled=fr["filled"], segmentos=seg, quest_id=qid)
                 else:
                     log.warning("front_advance_alvo_desconhecido", target=alvo, quest_id=qid)
+
+            elif tipo == "flag_set":
+                # Diretor de Arco (passo 5): ato IRREVERSÍVEL fecha uma porta —
+                # a flag entra em arc_flags e o ending correspondente passa a não
+                # disparar mais (`flag X == false` no `when`). Decisão "c" 20/07:
+                # só o irreversível tranca; logística/sabotagem são recuperáveis.
+                alvo = str(efeito.get("target", "")).strip()
+                if alvo:
+                    working_mem.arc_flags[alvo] = True if valor is None else valor
+                    log.info("arc_flag_setada", flag=alvo,
+                             valor=working_mem.arc_flags[alvo], quest_id=qid)
+                    # Flag RESERVADA com consequência mecânica: a magia morre no
+                    # mundo E na ficha (decisão "a" 20/07) — quem quebrou o
+                    # Cajado termina a campanha sem o que o define.
+                    if alvo == _FLAG_MAGIA_MORTA and working_mem.arc_flags[alvo]:
+                        for nivel in list(working_mem.spell_slots.keys()):
+                            working_mem.spell_slots[nivel]["current"] = 0
+                        recompensas.append("✦ A magia morreu no mundo")
+                        log.info("magia_morta_slots_zerados", quest_id=qid)
 
             elif tipo in ("npc_disposition_change", "location_state_change"):
                 # Efeitos de mundo — logados, não modificam WorkingMemory

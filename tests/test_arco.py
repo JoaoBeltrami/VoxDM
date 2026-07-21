@@ -216,6 +216,85 @@ def test_modulo_v2_aceita_arc_e_endings():
     assert m.endings[0].id == "f"
 
 
+# ── passo 5: portas fechadas (flag) + módulo real ────────────────────────────
+
+def test_flag_ausente_conta_como_false():
+    """Porta fechada: `flag paz-morta == false` passa quando ninguém matou a paz."""
+    est = EstadoArco()
+    assert avaliar_condicao({"type": "flag", "target": "paz-morta", "value": False}, est)
+    est_morta = EstadoArco(flags={"paz-morta": True})
+    assert not avaliar_condicao({"type": "flag", "target": "paz-morta", "value": False}, est_morta)
+
+
+def test_modulo_real_tem_arc_e_4_endings_validos():
+    """O módulo padrão agora carrega o arco autorado (grill 20/07)."""
+    import json
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent
+    m = json.loads((raiz / "modulo_teste" / "modulo_teste_v1.2.json").read_text(encoding="utf-8"))
+    mod = validar_modulo(m)
+    assert mod.arc.spine == "guerra-das-vilas"
+    assert {e.id for e in mod.endings} == {
+        "legado-de-valdrek", "paz-costurada", "uma-vila-domina", "tudo-queima"}
+    ids_quests = {q["id"] for q in m["quests"]}
+    assert {"esforco-guerra-tharnvik", "esforco-guerra-kaelmund",
+            "esforco-guerra-drevamor", "tregua-das-vilas"} <= ids_quests
+
+
+def test_cadeia_tharnvik_leva_ao_climax_de_f1():
+    """A matemática da campanha: completar UMA war-effort → guerra 6/6 + allied
+    → F1 dispara. Roda os efeitos REAIS do módulo, stage a stage."""
+    import json
+    from pathlib import Path
+
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        carregar_efeitos_modulo,
+    )
+    raiz = Path(__file__).resolve().parent.parent
+    caminho = str(raiz / "modulo_teste" / "modulo_teste_v1.2.json")
+    m = json.loads(Path(caminho).read_text(encoding="utf-8"))
+    efeitos = carregar_efeitos_modulo(caminho)
+
+    wm = _wm()
+    wm.narrative.fronts_latentes = {
+        f["id"]: {"nome": f["name"], "segmentos": f["segments"], "filled": f["filled"]}
+        for f in m["fronts"]
+    }
+    for stage in ("comboio-de-aco", "carne-para-a-linha", "a-tregua-morta"):
+        aplicar_recompensas_avancos([("esforco-guerra-tharnvik", stage)], efeitos, wm)
+
+    assert wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 6  # 1+1+2+2
+    assert wm.faction_standings["os-tharn"] == 55                          # ≥ allied(50)
+    assert wm.arc_flags.get("paz-morta") is True                           # porta fechada
+
+    est = snapshot_de_wm(wm, m)
+    vencedor = escolher_ending(m["endings"], est)
+    assert vencedor["id"] == "uma-vila-domina"
+
+
+def test_cajado_quebrado_mata_a_magia_do_jogador():
+    """Decisão 'a' (20/07): a magia morre no mundo E na ficha."""
+    from pathlib import Path
+
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        carregar_efeitos_modulo,
+    )
+    raiz = Path(__file__).resolve().parent.parent
+    caminho = str(raiz / "modulo_teste" / "modulo_teste_v1.2.json")
+    efeitos = carregar_efeitos_modulo(caminho)
+
+    wm = _wm()
+    wm.spell_slots = {1: {"max": 4, "current": 4}, 2: {"max": 3, "current": 3}}
+    aplicar_recompensas_avancos(
+        [("esforco-guerra-drevamor", "o-cajado-quebrado")], efeitos, wm)
+
+    assert wm.arc_flags.get("magia-morta") is True
+    assert wm.spell_slots[1]["current"] == 0
+    assert wm.spell_slots[2]["current"] == 0
+
+
 # ── passo 3b ponta-a-ponta: marker [SEGREDO_REVELADO] → F4 dispara ────────────
 
 def test_marker_segredo_revelado_destrava_f4():

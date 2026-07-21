@@ -25,6 +25,7 @@ Exemplo:
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from engine.state.character import _PERICIA_ATRIBUTO, PlayerCharacter
 from engine.state.combat import CombatState
@@ -134,6 +135,11 @@ class WorkingMemory:
     def quests_completas(self) -> set[str]: return self.scene.quests_completas
     @quests_completas.setter
     def quests_completas(self, v: set[str]) -> None: self.scene.quests_completas = v
+
+    @property
+    def arc_flags(self) -> dict[str, Any]: return self.scene.arc_flags
+    @arc_flags.setter
+    def arc_flags(self, v: dict[str, Any]) -> None: self.scene.arc_flags = v
 
     @property
     def npc_estados_emocionais(self) -> dict[str, str]: return self.scene.npc_estados_emocionais
