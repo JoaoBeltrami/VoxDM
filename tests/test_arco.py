@@ -366,6 +366,53 @@ def test_mestre_livre_desliga_o_arco():
     assert diretiva_de_arco(wm, mod) == ""      # nem dirige
 
 
+# ── persistência do arco: a campanha atravessa 3 sessões ─────────────────────
+
+def test_arco_sobrevive_a_restart():
+    """Roundtrip real: _wm_para_dm_state → CharacterState → aplicar_character_state.
+    Sem isto a guerra 'desanda' no restart e o final nunca chega."""
+    from api.routes.session import _wm_para_dm_state
+    from engine.persistence.character_store import CharacterState
+
+    # Sessão 1: meio da campanha — guerra andando, aliado de Tharnvik, uma porta
+    # fechada, um segredo revelado e uma quest concluída.
+    wm1 = _wm()
+    wm1.narrative.fronts_latentes = {
+        "guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 4}}
+    wm1.faction_standings = {"os-tharn": 35}
+    wm1.arc_flags["paz-morta"] = True
+    wm1.quests_completas.add("esforco-guerra-tharnvik")
+    wm1.secrets_revelados.add("verdade-do-cisma")
+    wm1.arc_fase = "climax"
+    wm1.arc_ending_id = "uma-vila-domina"
+
+    state = CharacterState(session_id="sess-test", dm_state=_wm_para_dm_state(wm1))
+
+    # Sessão 2 (restart): WM nova recebe o estado persistido
+    wm2 = _wm()
+    wm2.aplicar_character_state(state)
+
+    assert wm2.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 4
+    assert wm2.faction_standings["os-tharn"] == 35
+    assert wm2.arc_flags.get("paz-morta") is True
+    assert "esforco-guerra-tharnvik" in wm2.quests_completas
+    assert "verdade-do-cisma" in wm2.secrets_revelados
+    assert wm2.arc_fase == "climax"
+    assert wm2.arc_ending_id == "uma-vila-domina"
+
+
+def test_sets_do_arco_sao_uniao_nao_substituicao():
+    """Segredo revelado não volta a ser segredo: união preserva o que a sessão
+    viva já sabe E o que veio do disco."""
+    from engine.persistence.character_store import CharacterState
+
+    wm = _wm()
+    wm.secrets_revelados.add("descoberto-agora")
+    wm.aplicar_character_state(CharacterState(
+        session_id="s", dm_state={"secrets_revelados": ["de-outra-sessao"]}))
+    assert wm.secrets_revelados == {"descoberto-agora", "de-outra-sessao"}
+
+
 # ── passo 3b ponta-a-ponta: marker [SEGREDO_REVELADO] → F4 dispara ────────────
 
 def test_marker_segredo_revelado_destrava_f4():
