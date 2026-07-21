@@ -334,6 +334,9 @@ def test_snapshot_npcs_trust_so_da_cena_atual():
 
     wm = WorkingMemory.nova_sessao("vila", "Vila", "sess-test")
     wm.npcs_presentes = ["mira"]
+    # NPC-PRESENCA-NOMEADA (21/07): a cadeira é de quem foi nomeado.
+    from engine.npc.identity import registrar_npc
+    registrar_npc(wm, "mira", "Mira")
     wm.apresentar_npc("mira")
     wm.apresentar_npc("velho-de-tres-cenas-atras")
     wm.trust_levels = {"mira": 2, "velho-de-tres-cenas-atras": 3}

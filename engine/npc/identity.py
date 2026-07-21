@@ -108,13 +108,21 @@ def registrar_npc(wm: Any, npc_id: str, nome: str | None = None) -> str:
     """
     canonico = resolver_npc(wm, npc_id)
     entrada = _registro(wm).get(canonico)
+    # `batizado` = alguém fez o ATO de nomear, com um nome que é nome de gente.
+    # NPC-PRESENCA-NOMEADA (21/07): a diferença entre "Gorvoth" e "Sorveteiro"
+    # não está na string — as duas são uma palavra capitalizada. Está na
+    # procedência: uma foi dada pelo Mestre, a outra o próprio sistema derivou
+    # do id. Só a primeira é nome formal.
+    batizado = bool(nome) and parece_nome_proprio(nome or "")
     if entrada is None:
         _registro(wm)[canonico] = {
-            "nome": (nome or canonico.replace("-", " ").title()).strip()[:60],
+            "nome": (nome or _kebab_para_nome(canonico)).strip()[:60],
             "retrato_seed": canonico,
+            "batizado": batizado,
         }
-    elif nome and not entrada.get("nome"):
+    elif nome and (not entrada.get("nome") or batizado and not entrada.get("batizado")):
         entrada["nome"] = nome.strip()[:60]
+        entrada["batizado"] = batizado or bool(entrada.get("batizado"))
     return canonico
 
 
@@ -163,12 +171,47 @@ def precisa_de_batismo(wm: Any, min_turnos: int = 2) -> list[tuple[str, str]]:
         entrada = reg.get(resolver_npc(wm, str(nid)))
         if not entrada:
             continue
-        nome = str(entrada.get("nome", ""))
-        if parece_nome_proprio(nome):
+        if entrada.get("batizado"):
             continue
+        nome = str(entrada.get("nome", ""))
         if int(entrada.get("turnos_em_cena", 0)) >= min_turnos:
             pendentes.append((resolver_npc(wm, str(nid)), nome or str(nid)))
     return pendentes
+
+
+def _kebab_para_nome(npc_id: str) -> str:
+    """Mesmo default de `registrar_npc` — id kebab vira Título Com Espaços."""
+    return str(npc_id).replace("-", " ").title()
+
+
+def npcs_visiveis(wm: Any) -> list[str]:
+    """Quem merece uma CADEIRA na cena — retrato e nome no HUD.
+
+    Regra do Beltrami (21/07): figurante não é personagem. Só entra quem foi
+    formalmente NOMEADO; a exceção são os NPCs autorais do módulo, que já
+    nascem com uma revelação prevista e por isso seguram a cadeira com nome
+    provisório até o reveal. O resto ("homem gordo e simpático", "sorveteiro")
+    continua existindo na prosa como cenário — só não ganha rosto nem ficha.
+
+    Não confundir com `npcs_presentes`: aquela lista é a verdade da ENGINE
+    (trust, grafo, alvo de ataque) e continua com todo mundo. Esta é a verdade
+    da TELA. PURA/testável.
+    """
+    from engine.combat.npc_statblocks import e_npc_fixo
+
+    reg = _registro(wm)
+    apresentados = getattr(getattr(wm, "scene", None), "npcs_apresentados", set()) or set()
+    visiveis: list[str] = []
+    for nid in list(getattr(wm, "npcs_presentes", []) or []):
+        canonico = resolver_npc(wm, str(nid))
+        if canonico not in apresentados and str(nid) not in apresentados:
+            continue
+        if e_npc_fixo(canonico):
+            visiveis.append(canonico)      # autoral: cadeira garantida
+            continue
+        if (reg.get(canonico) or {}).get("batizado"):
+            visiveis.append(canonico)
+    return visiveis
 
 
 def garantir_registro(wm: Any) -> None:
@@ -260,6 +303,9 @@ def revelar_nome(wm: Any, id_atual: str, nome_novo: str) -> str:
     if not para or para == de:
         if de in _registro(wm) and nome_novo.strip():
             _registro(wm)[de]["nome"] = nome_novo.strip()[:60]
+            # Revelar o nome É o ato de batismo — a partir daqui o NPC tem
+            # cadeira na cena (NPC-PRESENCA-NOMEADA, 21/07).
+            _registro(wm)[de]["batizado"] = parece_nome_proprio(nome_novo)
         return de
     # NPC-IDENTITY-CONFLATION-1 (rodada grimdark 18/07): identidade AUTORAL é
     # inviolável. Na sessão real, o extractor batizou o guarda do portão de
@@ -295,6 +341,7 @@ def revelar_nome(wm: Any, id_atual: str, nome_novo: str) -> str:
             "nome": nome_novo.strip()[:60],
             # A seed do retrato NUNCA re-seeda — herda da entrada original.
             "retrato_seed": entrada_de.get("retrato_seed", de),
+            "batizado": parece_nome_proprio(nome_novo),
         }
         # CANON-MORTOS: morto continua morto mesmo se o nome for revelado
         # depois (ex: alguém nomeia o corpo) — a flag viaja no rename.

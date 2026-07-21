@@ -279,6 +279,7 @@ from api.turn_pipeline import (
 from engine.authority.checks import resolver_check
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
+from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
@@ -635,9 +636,12 @@ async def _enviar_retratos_npcs(websocket: WebSocket, sessao: SessaoAtiva) -> No
         from urllib.parse import quote
 
         from engine.memory.working_memory import _id_para_nome
+        from engine.npc.identity import npcs_visiveis
 
         wm = sessao.working_mem
-        apresentados = set(wm.npcs_presentes) & wm.npcs_apresentados
+        # Regra do Beltrami (21/07): rosto é pra quem tem nome. Figurante
+        # descritivo ("homem gordo e simpático") fica na prosa, sem retrato.
+        apresentados = npcs_visiveis(wm)
         novos = [n for n in apresentados if n not in sessao.retratos_enviados]
         if not novos:
             return
@@ -1183,17 +1187,19 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         # Só quem está NA CENA (presentes∩apresentados) — npcs_apresentados é
         # cumulativo da sessão inteira e fazia o HUD mostrar NPCs de 3 locais
         # atrás como "presentes" (teste ao vivo 10/06).
+        # NPC-PRESENCA-NOMEADA (21/07): a cadeira na cena é de quem foi
+        # NOMEADO — mais NPC autoral do módulo, que segura o lugar com nome
+        # provisório até o reveal. `npcs_presentes` (verdade da engine)
+        # continua completo; isto aqui é a verdade da TELA.
         "npcs_trust": {
             npc: wm.trust_levels.get(npc, 1)
-            for npc in wm.npcs_apresentados
-            if npc in set(wm.npcs_presentes)
+            for npc in _npcs_visiveis(wm)
         },
         # CANON-MORTOS (12/07): quem está na cena MORTO — o frontend mostra o
         # retrato em grayscale (corpo presente) em vez de fingir que está vivo.
         "npcs_mortos": [
-            npc for npc in wm.npcs_apresentados
-            if npc in set(wm.npcs_presentes)
-            and wm.scene.npc_registro.get(
+            npc for npc in _npcs_visiveis(wm)
+            if wm.scene.npc_registro.get(
                 wm.scene.npc_aliases.get(npc, npc), {}
             ).get("morto")
         ],

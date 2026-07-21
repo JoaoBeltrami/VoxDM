@@ -28,6 +28,7 @@ from api.turn_pipeline import (
 from engine.llm.prompt_builder import montar_mensagens
 from engine.llm.types import ContextoMontado
 from engine.memory.working_memory import WorkingMemory
+from engine.npc.identity import registrar_npc
 
 
 def _wm(**kw) -> WorkingMemory:
@@ -983,7 +984,10 @@ async def test_retrato_enviado_uma_vez_por_npc():
 
     wm = _wm()
     wm.npcs_presentes = ["mira", "figurante-anonimo"]
-    wm.apresentar_npc("mira")  # só apresentados ganham rosto
+    # NPC-PRESENCA-NOMEADA (21/07): rosto é de quem foi apresentado E NOMEADO.
+    # O figurante anônimo fica na prosa, sem retrato — é a regra nova em ação.
+    registrar_npc(wm, "mira", "Mira")
+    wm.apresentar_npc("mira")
     sessao = SimpleNamespace(working_mem=wm, retratos_enviados=set())
 
     ws = _WsColetor()
@@ -1006,6 +1010,9 @@ async def test_retrato_url_deterministica_por_npc():
     for _ in range(2):
         wm = _wm()
         wm.npcs_presentes = ["mira"]
+        # NPC-PRESENCA-NOMEADA (21/07): rosto é de quem foi NOMEADO — em produção
+        # quem chega aqui veio de um `[NPC: mira|Mira]` do Mestre.
+        registrar_npc(wm, "mira", "Mira")
         wm.apresentar_npc("mira")
         ws = _WsColetor()
         await _enviar_retratos_npcs(ws, SimpleNamespace(working_mem=wm, retratos_enviados=set()))

@@ -151,7 +151,12 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     # Fase 2 — Voz
-    STT_MODEL: str = "small"   # "small" melhor WER pt-BR; RTX 2060 Super suporta
+    # Medido em 21/07 na RTX 2060 Super, 10 falas PT-BR do módulo (áudio Edge
+    # TTS, com os hotwords de produção). WER médio: small 8,67% | medium 4,17% |
+    # large-v3-turbo 3,67%. Latência média por fala: 0,66s | 1,04s | 0,58s — o
+    # turbo é MAIS RÁPIDO que o small (decoder destilado de 4 camadas) e erra
+    # menos da metade. ~1,6GB de VRAM em float16.
+    STT_MODEL: str = "large-v3-turbo"
     STT_DEVICE: str = "cuda"
     STT_LANGUAGE: str = "pt"
     TTS_VOICE_PTBR: str = "pt-BR-FranciscaNeural"
