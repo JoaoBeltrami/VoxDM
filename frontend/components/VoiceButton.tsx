@@ -243,12 +243,24 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
 
   // ── Fallback texto ──────────────────────────────────────────────────────────
 
+  // O composer cresce com o texto (1→6 linhas). Antes era rows={1} fixo: uma
+  // ação de duas frases já rolava dentro de uma fresta de 16px, e quem joga por
+  // texto (RDP sem microfone, ADR-003) não conseguia reler o que ia enviar.
+  const ajustarAltura = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  };
+
   const enviarTexto = () => {
     const t = texto.trim();
     if (!t || desabilitado) return;
     onEnviar(modoOOC ? `[OOC] ${t}` : t);
     setTexto("");
-    inputRef.current?.focus();
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.focus();
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -429,17 +441,17 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
         </Chip>
       </div>
 
-      {/* Fallback texto */}
-      <div className="flex w-full max-w-lg items-end gap-2 rounded-2xl border border-vox-border-subtle bg-vox-bg-panel/60 px-3 py-2">
+      {/* Composer de texto — caminho principal quando não há microfone */}
+      <div className="flex w-full max-w-lg items-end gap-2 rounded-2xl border border-vox-border-subtle bg-vox-bg-panel/60 px-3 py-2 focus-within:border-vox-accent-primary/50">
         <textarea
           ref={inputRef}
           value={texto}
-          onChange={e => setTexto(e.target.value)}
+          onChange={e => { setTexto(e.target.value); ajustarAltura(e.target); }}
           onKeyDown={onKeyDown}
-          placeholder={semVoz ? "O que você faz? (Enter para enviar)" : "ou escreva aqui… (Enter para enviar)"}
+          placeholder="O que você faz?"
           disabled={desabilitado}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-xs text-vox-text-secondary placeholder-vox-text-muted outline-none disabled:opacity-40"
+          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-vox-text-primary placeholder-vox-text-muted outline-none disabled:opacity-40"
         />
         <Button
           variant="primary"
@@ -452,15 +464,19 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
         </Button>
       </div>
 
-      {!semVoz && (
-        <p className="text-[10px] tracking-wide text-vox-text-muted/70">
-          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Espaço</kbd> segure pra falar
-          <span className="mx-1.5">·</span>
-          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Ctrl</kbd> cancela
-          <span className="mx-1.5">·</span>
-          <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Enter</kbd> Mestre
-        </p>
-      )}
+      <p className="text-[10px] tracking-wide text-vox-text-muted/70">
+        {!semVoz && (
+          <>
+            <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Espaço</kbd> segure pra falar
+            <span className="mx-1.5">·</span>
+            <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Ctrl</kbd> cancela
+            <span className="mx-1.5">·</span>
+          </>
+        )}
+        <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Enter</kbd> envia
+        <span className="mx-1.5">·</span>
+        <kbd className="rounded border border-vox-border-strong bg-vox-bg-elevated px-1 font-mono">Shift+Enter</kbd> quebra linha
+      </p>
     </div>
   );
 }

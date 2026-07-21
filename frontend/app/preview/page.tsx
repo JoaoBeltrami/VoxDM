@@ -20,6 +20,7 @@
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MasterResponse } from "@/components/MasterResponse";
+import { VoiceButton } from "@/components/VoiceButton";
 import type { TurnoHistorico } from "@/hooks/useGameSession";
 import { EspinhaDaCampanha, DesfechoOverlay, type ArcoInfo } from "@/components/ArcoDaCampanha";
 import {
@@ -264,6 +265,11 @@ export default function PreviewPage() {
               playerDescriptor="humano ladino"
               modoRoteiro
             />
+          </div>
+
+          {/* O dock REAL — o composer é o caminho principal de quem joga por texto. */}
+          <div className="border-t border-vox-border-subtle px-4 py-3">
+            <VoiceButton sessionId="preview" onEnviar={() => {}} />
           </div>
         </div>
       }
