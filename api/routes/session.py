@@ -850,6 +850,16 @@ def _wm_para_dm_state(wm: WorkingMemory) -> dict:
         # precisa sobreviver pra manter o mesmo rosto entre sessões.
         "npc_registro":         {k: dict(v) for k, v in wm.scene.npc_registro.items()},
         "npc_aliases":          dict(wm.scene.npc_aliases),
+        # DIRETOR DE ARCO — a campanha atravessa ~3 sessões: sem isto o arco
+        # reinicia a cada restart (a guerra "desandaria" e o final nunca chegaria).
+        # faction_standings é o que decide QUAL final dispara (F1/F3) e nunca foi
+        # persistido antes. fronts_latentes (o fill da espinha) já vai acima.
+        "faction_standings":    dict(wm.faction_standings),
+        "arc_flags":            dict(wm.arc_flags),
+        "arc_fase":             wm.arc_fase or "normal",
+        "arc_ending_id":        wm.arc_ending_id or "",
+        "quests_completas":     sorted(wm.quests_completas),
+        "secrets_revelados":    sorted(wm.secrets_revelados),
     }
 
 

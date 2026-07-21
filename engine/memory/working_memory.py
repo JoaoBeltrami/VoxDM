@@ -925,6 +925,28 @@ class WorkingMemory:
                 self.narrative.fronts_latentes = {
                     str(k): dict(v) for k, v in fronts_lat.items() if isinstance(v, dict)
                 }
+            # DIRETOR DE ARCO: a campanha atravessa ~3 sessões — sem isto a guerra
+            # "desanda" no restart e o final nunca chega. faction_standings decide
+            # QUAL final dispara; os sets são MONOTÔNICOS (segredo revelado não
+            # volta a ser segredo), então união em vez de "só se vazio".
+            standings = dm_state.get("faction_standings", {})
+            if standings and not self.scene.faction_standings:
+                self.scene.faction_standings = {
+                    str(k): int(v) for k, v in standings.items()
+                    if isinstance(v, (int, float))
+                }
+            for k, v in (dm_state.get("arc_flags", {}) or {}).items():
+                self.scene.arc_flags.setdefault(str(k), v)
+            self.scene.quests_completas.update(
+                str(q) for q in (dm_state.get("quests_completas", []) or []) if q
+            )
+            self.scene.secrets_revelados.update(
+                str(s) for s in (dm_state.get("secrets_revelados", []) or []) if s
+            )
+            fase_salva = str(dm_state.get("arc_fase", "") or "")
+            if fase_salva and self.scene.arc_fase == "normal":
+                self.scene.arc_fase = fase_salva
+                self.scene.arc_ending_id = str(dm_state.get("arc_ending_id", "") or "")
             # Ritual P2: perfil do jogador acumula entre sessões (merge se vazio)
             estilo = dm_state.get("estilo_jogador", {})
             if estilo and not self.narrative.estilo_jogador:
