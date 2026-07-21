@@ -32,11 +32,23 @@ import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem, PersonagemSalvoItem } from "@/lib/api";
 import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos } from "@/lib/api";
 
-// Vozes pt-BR disponíveis no Edge TTS — curada manualmente
+// Vozes do Mestre — curada manualmente (ADR-004, 20/07).
+// O Edge TTS só tem TRÊS vozes pt-BR nativas, e são de geração antiga — é daí
+// que vem a queixa de "imersão fraca". As MULTILINGUAL (geração nova da Azure)
+// falam português com prosódia bem melhor, ao custo de um sotaque leve. Ficam
+// disponíveis pra escolha: pro Mestre, a naturalidade costuma valer mais que o
+// sotaque. Amostras comparáveis em Downloads/voxdm_vozes.
 const VOZES_PTBR = [
-  { id: "pt-BR-FranciscaNeural",             label: "Francisca (feminina)" },
-  { id: "pt-BR-AntonioNeural",               label: "Antonio (masculino)" },
-  { id: "pt-BR-ThalitaMultilingualNeural",   label: "Thalita (feminina jovem)" },
+  { id: "pt-BR-FranciscaNeural",             label: "Francisca (pt-BR, feminina)" },
+  { id: "pt-BR-AntonioNeural",               label: "Antonio (pt-BR, masculino)" },
+  { id: "pt-BR-ThalitaMultilingualNeural",   label: "Thalita (pt-BR, feminina jovem)" },
+  { id: "en-US-AndrewMultilingualNeural",    label: "Andrew (nova geração, masculina)" },
+  { id: "en-US-BrianMultilingualNeural",     label: "Brian (nova geração, masculina)" },
+  { id: "de-DE-FlorianMultilingualNeural",   label: "Florian (nova geração, grave)" },
+  { id: "it-IT-GiuseppeMultilingualNeural",  label: "Giuseppe (nova geração, masculina)" },
+  { id: "fr-FR-RemyMultilingualNeural",      label: "Remy (nova geração, masculina)" },
+  { id: "en-US-AvaMultilingualNeural",       label: "Ava (nova geração, feminina)" },
+  { id: "de-DE-SeraphinaMultilingualNeural", label: "Seraphina (nova geração, feminina)" },
 ];
 
 const VOZ_PADRAO = "pt-BR-FranciscaNeural";
