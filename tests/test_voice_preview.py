@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.routes.health import _cache_amostras, _VOZES_PERMITIDAS
+from api.routes.health import _VOZES_PERMITIDAS, _cache_amostras
 
 _RAIZ = Path(__file__).resolve().parent.parent
 
