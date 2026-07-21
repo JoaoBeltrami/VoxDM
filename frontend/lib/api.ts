@@ -91,6 +91,13 @@ export interface MensagemWS {
   relogios?: Record<string, { nome: string; atual: number; max: number }>;
   // Imersão P4: crônica da sessão (timeline) + retrato de NPC (tipo="npc_retrato")
   cronica?: string[];
+  /** Diretor de Arco (20/07): fase da campanha + final disparado + progresso da espinha. */
+  arco?: {
+    fase: "normal" | "climax" | "epilogo" | "concluida";
+    ending_id: string;
+    ending_nome: string;
+    espinha: { id: string; nome: string; filled: number; segmentos: number } | null;
+  };
   npc_id?: string;
   // PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo do módulo)
   quests_improvisadas?: { id: string; titulo: string; objetivo: string; status: string }[];

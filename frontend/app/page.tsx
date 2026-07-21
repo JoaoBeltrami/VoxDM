@@ -22,6 +22,7 @@ import { PanelDrawer } from "@/components/PanelDrawer";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
 import { SceneHeader } from "@/components/SceneHeader";
+import { EspinhaDaCampanha, DesfechoOverlay } from "@/components/ArcoDaCampanha";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { InitiativeBar } from "@/components/InitiativeBar";
 import { RolagemBanner } from "@/components/RolagemBanner";
@@ -408,7 +409,7 @@ export default function Home() {
     condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions, partyRestorada, dispensarPartyBanner,
-    iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, npcRetratos, classFeatures, sceneImageUrl,
+    iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, arco, npcRetratos, classFeatures, sceneImageUrl,
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
@@ -533,6 +534,9 @@ export default function Home() {
   // Detecta transição de qualquer inimigo para o estado "morto" — exibe nome
   // em destaque por 1.5s. Análogo ao battleSplash mas focado na morte.
   const [morteFlash, setMorteFlash] = useState<{ nome: string; id: number } | null>(null);
+  // Diretor de Arco: o overlay de CONCLUSÃO é dispensável (o jogador pode querer
+  // reler o epílogo na tela). Clímax/epílogo (faixa discreta) seguem sempre.
+  const [desfechoFechado, setDesfechoFechado] = useState(false);
   const inimigosAntRef = useRef<Record<string, { nome: string; estado: string }>>({});
   const morteFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -1255,6 +1259,12 @@ export default function Home() {
         )}
 
         {/* Feature 5: Flash de morte de inimigo nomeado — 1.5s */}
+        {/* Diretor de Arco: clímax/epílogo discretos; conclusão em tela cheia. */}
+        <DesfechoOverlay
+          arco={arco.fase === "concluida" && desfechoFechado ? { ...arco, fase: "normal" } : arco}
+          onFechar={() => setDesfechoFechado(true)}
+        />
+
         {morteFlash && (
           <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center">
             <div className="animate-morte-flash text-center">
@@ -1465,6 +1475,8 @@ export default function Home() {
         </header>
 
         <SceneHeader locationNome={locationNome} timeOfDay={timeOfDay} />
+        {/* Diretor de Arco: a campanha tem destino — o relógio-mestre à vista. */}
+        <div className="flex justify-center pb-1"><EspinhaDaCampanha arco={arco} /></div>
         <NpcsPresentes npcsTrust={npcsTrust} retratos={npcRetratos} falanteAtivo={falanteAtivo} mortos={npcsMortos} />
       </>
     );

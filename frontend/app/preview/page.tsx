@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { EspinhaDaCampanha, DesfechoOverlay, type ArcoInfo } from "@/components/ArcoDaCampanha";
 import {
   Button,
   Card,
@@ -93,6 +94,15 @@ export default function PreviewPage() {
   // Palco Vivo Ato 1 — clima do orb + demo do Encontro sem sessão.
   const [orbMood, setOrbMood] = useState<OrbMood>("neutro");
   const [encontroDemo, setEncontroDemo] = useState(false);
+  // Diretor de Arco (21/07): cicla as 4 fases da campanha com a espinha andando.
+  const FASES_ARCO: ArcoInfo["fase"][] = ["normal", "climax", "epilogo", "concluida"];
+  const [arcoFase, setArcoFase] = useState(0);
+  const arcoMock: ArcoInfo = {
+    fase: FASES_ARCO[arcoFase],
+    ending_id: "sangue-e-ferro",
+    ending_nome: "Sangue e Ferro",
+    espinha: { id: "guerra-das-vilas", nome: "A guerra", filled: 4 + arcoFase, segmentos: 6 },
+  };
   // 8s no preview (in-game são ~2s) — janela folgada pra inspecionar o beat.
   const dispararEncontro = () => {
     setEncontroDemo(true);
@@ -202,6 +212,13 @@ export default function PreviewPage() {
                 clima: {orbMood}
               </button>
               <button
+                onClick={() => setArcoFase((f) => (f + 1) % FASES_ARCO.length)}
+                className="btn-emboss rounded-md border border-vox-gold-faint px-2 py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-gold-bright"
+              >
+                arco: {FASES_ARCO[arcoFase]}
+              </button>
+              <div className="w-full pt-1"><EspinhaDaCampanha arco={arcoMock} /></div>
+              <button
                 onClick={dispararEncontro}
                 className="btn-emboss rounded-md border border-vox-gold-faint px-2 py-1 text-[10px] text-vox-text-secondary transition hover:border-vox-gold-dim hover:text-vox-gold-bright"
               >
@@ -213,6 +230,7 @@ export default function PreviewPage() {
       }
       center={
         <div className="flex flex-col h-full">
+          <DesfechoOverlay arco={arcoMock} onFechar={() => setArcoFase(0)} />
           <RolagemBanner
             visible={esperandoRolagem}
             atributo="Persuasão"

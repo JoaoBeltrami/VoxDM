@@ -366,6 +366,37 @@ def test_mestre_livre_desliga_o_arco():
     assert diretiva_de_arco(wm, mod) == ""      # nem dirige
 
 
+# ── contrato: o arco chega ao HUD pelo snapshot WS ───────────────────────────
+
+def test_snapshot_ws_expoe_o_arco():
+    """A engine sabe terminar a história — o payload precisa contar isso ao HUD."""
+    from api.websocket import _snapshot_arco
+    from engine.authority.arco import limpar_cache_modulo
+
+    limpar_cache_modulo()
+    wm = _wm()
+    wm.narrative.fronts_latentes = {
+        "guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 3}}
+    wm.arc_fase = "climax"
+    wm.arc_ending_id = "uma-vila-domina"
+
+    arco = _snapshot_arco(wm)
+    assert arco["fase"] == "climax"
+    assert arco["ending_id"] == "uma-vila-domina"
+    assert arco["ending_nome"] == "Uma vila domina"      # resolvido do módulo real
+    assert arco["espinha"]["filled"] == 3
+    assert arco["espinha"]["segmentos"] == 6
+
+
+def test_snapshot_arco_silencioso_na_session_zero():
+    """Mesma regra do SZ-RELOGIOS-1: o jogador nem é o personagem ainda."""
+    from api.websocket import _snapshot_arco
+    wm = _wm()
+    wm.session_zero_ativa = True
+    wm.arc_fase = "climax"
+    assert _snapshot_arco(wm)["fase"] == "normal"
+
+
 # ── persistência do arco: a campanha atravessa 3 sessões ─────────────────────
 
 def test_arco_sobrevive_a_restart():

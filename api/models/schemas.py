@@ -244,6 +244,9 @@ class MensagemWS(BaseModel):
     relogios: dict[str, dict] = Field(default_factory=dict)
     # Imersão P4 — crônica: timeline de eventos-chave da sessão (cap 40)
     cronica: list[str] = Field(default_factory=list)
+    # Diretor de Arco (20/07) — {fase, ending_id, ending_nome, espinha:{filled,
+    # segmentos,...}}. A engine sabe terminar a história; o HUD precisa mostrar.
+    arco: dict = Field(default_factory=dict)
     # Estado de combate — enviado no "fim" para sincronizar CombatTracker
     em_combate: bool = False
     # inimigo_id → {nome, estado, hp_rel, ca, hp_max, hp_atual, ...} — espelha

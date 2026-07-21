@@ -1118,6 +1118,49 @@ async def _beat_turno_inimigo(
         log.warning("beat_turno_inimigo_falhou", erro=str(e)[:120])
 
 
+def _snapshot_arco(wm: Any) -> dict[str, Any]:
+    """Estado do arco de campanha para o HUD (Diretor de Arco, 20/07).
+
+    `fase` = normal|climax|epilogo|concluida · `ending_id`/`ending_nome` = o final
+    disparado · `espinha` = progresso do relógio-mestre (filled/segmentos), que
+    vive LATENTE e por isso não aparece em `relogios`. Silencioso na Session Zero
+    (mesma regra do SZ-RELOGIOS-1) e falha silenciosa: arco quebrado não derruba
+    o payload — o HUD só não mostra o arco.
+    """
+    vazio: dict[str, Any] = {"fase": "normal", "ending_id": "", "ending_nome": "", "espinha": None}
+    if getattr(wm, "session_zero_ativa", False):
+        return vazio
+    try:
+        from engine.authority.arco import carregar_modulo_arco
+        mod = carregar_modulo_arco()
+        arc = mod.get("arc") or {}
+        if not arc or arc.get("free_master"):
+            return vazio
+        spine_id = str(arc.get("spine", ""))
+        fronts = getattr(wm.narrative, "fronts_latentes", {}) or {}
+        relogios = getattr(wm.narrative, "relogios", {}) or {}
+        espinha = None
+        if spine_id in fronts:
+            f = fronts[spine_id]
+            espinha = {"id": spine_id, "nome": f.get("nome", ""),
+                       "filled": int(f.get("filled", 0)), "segmentos": int(f.get("segmentos", 0))}
+        elif spine_id in relogios:
+            r = relogios[spine_id]
+            espinha = {"id": spine_id, "nome": r.get("nome", ""),
+                       "filled": int(r.get("atual", 0)), "segmentos": int(r.get("max", 0))}
+        eid = str(getattr(wm, "arc_ending_id", "") or "")
+        nome = next((e.get("name", "") for e in mod.get("endings", []) if e.get("id") == eid), "")
+        return {
+            "fase": str(getattr(wm, "arc_fase", "normal") or "normal"),
+            "ending_id": eid,
+            "ending_nome": nome,
+            "espinha": espinha,
+        }
+    except Exception as e:
+        log.warning("snapshot_arco_falhou", erro=str(e)[:100])
+        return vazio
+
+
 def _snapshot_estado(wm: Any) -> dict[str, Any]:
     """Coleta o estado da sessão para os payloads `fim`.
 
@@ -1176,6 +1219,11 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         ),
         # Imersão P4 — timeline da sessão
         "cronica": list(wm.narrative.cronica),
+        # DIRETOR DE ARCO (20/07): a engine sabe terminar a história — a tela
+        # precisa saber também. Fase + final disparado + progresso da ESPINHA
+        # (o relógio-mestre da campanha, que vive latente e não aparece em
+        # `relogios`). Sem isto o desfecho acontece e o jogador não vê nada.
+        "arco": _snapshot_arco(wm),
         "em_combate": wm.em_combate,
         "inimigos_combate": dict(wm.inimigos_combate),
         "rodada_combate": wm.rodada_combate,

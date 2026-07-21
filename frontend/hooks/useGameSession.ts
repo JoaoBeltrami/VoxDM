@@ -145,6 +145,13 @@ interface EstadoSessao {
   relogios: Record<string, { nome: string; atual: number; max: number }>;
   // Imersão P4: crônica (timeline) + retratos de NPC por id
   cronica: string[];
+  /** Diretor de Arco: a campanha caminha pro fim — e o HUD mostra. */
+  arco: {
+    fase: "normal" | "climax" | "epilogo" | "concluida";
+    ending_id: string;
+    ending_nome: string;
+    espinha: { id: string; nome: string; filled: number; segmentos: number } | null;
+  };
   npcRetratos: Record<string, string>;
   // PLAY5-QUEST: missões improvisadas pelo Mestre (fora do catálogo do módulo) —
   // dado já existia no snapshot do backend mas não tinha campo aqui (B1, 30/06).
@@ -254,6 +261,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   cicatrizes: [],
   relogios: {},
   cronica: [],
+  arco: { fase: "normal", ending_id: "", ending_nome: "", espinha: null },
   npcRetratos: {},
   questsImprovisadas: [],
   classFeatures: {},
@@ -653,6 +661,7 @@ export function useGameSession() {
           cicatrizes: msg.cicatrizes ?? [],
           relogios: (msg.relogios ?? {}) as Record<string, { nome: string; atual: number; max: number }>,
           cronica: msg.cronica ?? [],
+          arco: msg.arco ?? ESTADO_INICIAL.arco,
           questsImprovisadas: msg.quests_improvisadas ?? [],
         };
 
