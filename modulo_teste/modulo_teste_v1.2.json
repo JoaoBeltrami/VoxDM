@@ -1017,6 +1017,302 @@
           ]
         }
       ]
+    },
+    {
+      "id": "esforco-guerra-tharnvik",
+      "name": "O punho de Tharnvik",
+      "description": "Esforço de guerra de Tharnvik (facção os-tharn). Bjorn quer supremacia militar e os artefatos de Drevamor. Escalada moral: arma a máquina, alimenta ela com gente, e mata a paz.",
+      "stages": [
+        {
+          "id": "comboio-de-aco",
+          "description": "Tomar/escoltar um comboio de aço e armas para Tharnvik. Logística suja, custo baixo.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-tharn",
+              "value": 15
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 1
+            },
+            {
+              "effect": "xp_gain",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "id": "carne-para-a-linha",
+          "description": "Recrutar os Sem-Vila como linha de frente. Bjorn quer NÚMEROS, não vidas — o jogador sabe que está mandando gente para morrer.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-tharn",
+              "value": 20
+            },
+            {
+              "effect": "faction_standing_change",
+              "target": "os-sem-vila",
+              "value": -20
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "xp_gain",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "id": "a-tregua-morta",
+          "description": "Sabotar/matar o emissário que ia costurar a trégua entre Kaelmünd e Drevamor. Não se vence a guerra: mata-se a paz. ATO IRREVERSÍVEL.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-tharn",
+              "value": 20
+            },
+            {
+              "effect": "faction_standing_change",
+              "target": "os-kael",
+              "value": -20
+            },
+            {
+              "effect": "faction_standing_change",
+              "target": "os-dreva",
+              "value": -20
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "flag_set",
+              "target": "paz-morta",
+              "value": true
+            },
+            {
+              "effect": "xp_gain",
+              "value": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "esforco-guerra-kaelmund",
+      "name": "O contrato de Kaelmünd",
+      "description": "Esforço de guerra de Kaelmünd (facção os-kael). Tom FRIO e burocrático: chantagem, contrato, reter suprimento. Mata sem sujar a mão.",
+      "stages": [
+        {
+          "id": "contrato-de-ferro",
+          "description": "Forçar um contrato leonino: reter suprimento para estrangular a barganha de um rival.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-kael",
+              "value": 15
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 1
+            },
+            {
+              "effect": "xp_gain",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "id": "o-lacre",
+          "description": "Recuperar a Crônica para Kaelmünd — LACRADA. Carregar sem abrir é lealdade; abrir trai o contratante, mas revela a verdade do cisma.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-kael",
+              "value": 20
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "item_gain",
+              "value": "Crônica de Valdrek (lacrada)"
+            },
+            {
+              "effect": "xp_gain",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "id": "a-verdade-reescrita",
+          "description": "Entregar a Crônica para ser reescrita/queimada — Kaelmünd forja o legado de Valdrek para legitimar a própria reivindicação. A verdade morre. ATO IRREVERSÍVEL.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-kael",
+              "value": 20
+            },
+            {
+              "effect": "faction_standing_change",
+              "target": "os-dreva",
+              "value": -20
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "flag_set",
+              "target": "verdade-queimada",
+              "value": true
+            },
+            {
+              "effect": "xp_gain",
+              "value": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "esforco-guerra-drevamor",
+      "name": "O último muro",
+      "description": "Esforço de guerra de Drevamor (facção os-dreva). A PRESA: tem os artefatos e está sendo esquartejada. Escala por DESESPERO, não por ambição.",
+      "stages": [
+        {
+          "id": "os-muros",
+          "description": "Aguentar o cerco: requisitar o que a vila não tem — comida, gente, ferro.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-dreva",
+              "value": 15
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 1
+            },
+            {
+              "effect": "xp_gain",
+              "value": 200
+            }
+          ]
+        },
+        {
+          "id": "represalia",
+          "description": "A presa mostra os dentes — atacar de volta. O defensor vira agressor e a guerra escala.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-dreva",
+              "value": 20
+            },
+            {
+              "effect": "faction_standing_change",
+              "target": "os-tharn",
+              "value": -10
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "xp_gain",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "id": "o-cajado-quebrado",
+          "description": "Usar/quebrar o artefato de Valdrek como arma. Funciona — e MATA A MAGIA NO MUNDO (e na ficha de quem conjura). ATO IRREVERSÍVEL.",
+          "on_complete": [
+            {
+              "effect": "faction_standing_change",
+              "target": "os-dreva",
+              "value": 20
+            },
+            {
+              "effect": "front_advance",
+              "target": "guerra-das-vilas",
+              "value": 2
+            },
+            {
+              "effect": "flag_set",
+              "target": "magia-morta",
+              "value": true
+            },
+            {
+              "effect": "xp_gain",
+              "value": 400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tregua-das-vilas",
+      "name": "O conselho das três vilas",
+      "description": "Costurar a paz pelo MEDO: Vyrmathax cobiça os artefatos. O jogador precisa de um conselho favorável à trégua com representante das TRÊS vilas — arranjado por chantagem, política ou guerra (rota é narrativa).",
+      "stages": [
+        {
+          "id": "a-sombra-vermelha",
+          "description": "Descobrir/provar que Vyrmathax cobiça os artefatos — a alavanca que torna a guerra suicida.",
+          "on_complete": [
+            {
+              "effect": "front_advance",
+              "target": "divida-de-vyrmathax",
+              "value": 2
+            },
+            {
+              "effect": "xp_gain",
+              "value": 250
+            }
+          ]
+        },
+        {
+          "id": "reunir-os-tres",
+          "description": "Conseguir os três representantes à mesa. Três rotas à escolha do jogador: CHANTAGEM (o segredo de cada líder), POLÍTICA (favores, contratos) ou GUERRA (provar força — quem te teme, senta).",
+          "on_complete": [
+            {
+              "effect": "front_advance",
+              "target": "divida-de-vyrmathax",
+              "value": 2
+            },
+            {
+              "effect": "xp_gain",
+              "value": 300
+            }
+          ]
+        },
+        {
+          "id": "o-conselho",
+          "description": "O conselho: os três engolem o orgulho porque a alternativa é pior. Trégua selada — de vidro.",
+          "on_complete": [
+            {
+              "effect": "information",
+              "value": "As três vilas assinaram uma trégua de medo."
+            },
+            {
+              "effect": "xp_gain",
+              "value": 400
+            }
+          ]
+        }
+      ]
     }
   ],
   "secrets": [
@@ -1695,6 +1991,220 @@
       "to": "halvard-aprova-osmund",
       "type": "knows_secret",
       "weight": 1.0
+    }
+  ],
+  "arc": {
+    "spine": "guerra-das-vilas",
+    "target_sessions": 3,
+    "escalation": {
+      "cadence": "per_session",
+      "arm_at": 4
+    },
+    "free_master": false
+  },
+  "endings": [
+    {
+      "id": "legado-de-valdrek",
+      "name": "O legado de Valdrek",
+      "priority": 30,
+      "tone": "revelação",
+      "when": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "type": "secret_revealed",
+            "target": "verdade-do-cisma"
+          },
+          {
+            "type": "flag",
+            "target": "verdade-queimada",
+            "value": false
+          }
+        ]
+      },
+      "climax": {
+        "directive": "O jogador segura a verdade do cisma (Valdrek virou tirano; Kaila o envenenou; o cisma em três foi trava deliberada contra a tirania). A verdade é UMA — o que ele FAZ com ela é a escolha. Apresente as três portas e encene a que ele tomar.",
+        "branches": [
+          {
+            "choice_id": "expor",
+            "label": "Expor a verdade",
+            "beats": [
+              "reunir a prova",
+              "a revelação pública",
+              "o mito de Valdrek desmorona"
+            ],
+            "epilogue": "A mentira morre em praça. Sem o mito pra brigar, as três vilas ficam com as próprias mãos e um futuro sem herói pra culpar — honesto, e incerto."
+          },
+          {
+            "choice_id": "desmascarar",
+            "label": "Desmascarar a mão de Vyrmathax",
+            "beats": [
+              "seguir o rastro até a mão",
+              "expor o títere",
+              "a verdadeira ameaça nomeada"
+            ],
+            "epilogue": "O inimigo de verdade tem escamas. As vilas, atônitas, param de se olhar e olham pro céu vermelho."
+          },
+          {
+            "choice_id": "reivindicar",
+            "label": "Reivindicar o legado",
+            "beats": [
+              "reclamar a Crônica e os artefatos",
+              "a coroação improvisada",
+              "as vilas dobram o joelho — por escolha ou medo"
+            ],
+            "epilogue": "O reino refeito sob uma mão só: a sua. Resta a pergunta que Valdrek nunca respondeu — salvador, ou o próximo tirano?"
+          }
+        ]
+      }
+    },
+    {
+      "id": "paz-costurada",
+      "name": "Paz costurada",
+      "priority": 25,
+      "tone": "tenso",
+      "when": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "type": "front_filled",
+            "target": "divida-de-vyrmathax",
+            "value": 4
+          },
+          {
+            "type": "quest_completed",
+            "target": "tregua-das-vilas"
+          },
+          {
+            "type": "flag",
+            "target": "paz-morta",
+            "value": false
+          }
+        ]
+      },
+      "climax": {
+        "directive": "A ameaça de Vyrmathax virou inegável e o conselho das três vilas foi costurado no MEDO, não na confiança. Encene o conselho: orgulho engolido porque a alternativa é pior — ou a resistência conjunta contra a vanguarda da dragã.",
+        "beats": [
+          "a ameaça provada diante dos três",
+          "o orgulho engolido",
+          "as armas baixadas umas contra as outras"
+        ]
+      },
+      "epilogue": "A paz foi selada no medo, não na confiança. As três vilas largam o osso porque há uma sombra vermelha maior no céu. Vyrmathax recua — por ora. A dívida ainda será cobrada, e ninguém confia em ninguém. Uma trégua de vidro."
+    },
+    {
+      "id": "uma-vila-domina",
+      "name": "Uma vila domina",
+      "priority": 20,
+      "tone": "sombrio",
+      "when": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "type": "front_filled",
+            "target": "guerra-das-vilas",
+            "value": 6
+          },
+          {
+            "type": "flag",
+            "target": "magia-morta",
+            "value": false
+          },
+          {
+            "operator": "OR",
+            "conditions": [
+              {
+                "type": "faction_reputation",
+                "target": "os-tharn",
+                "value": "allied",
+                "comparison": "at_least"
+              },
+              {
+                "type": "faction_reputation",
+                "target": "os-kael",
+                "value": "allied",
+                "comparison": "at_least"
+              },
+              {
+                "type": "faction_reputation",
+                "target": "os-dreva",
+                "value": "allied",
+                "comparison": "at_least"
+              }
+            ]
+          }
+        ]
+      },
+      "climax": {
+        "directive": "A guerra chegou à cabeça e UMA das três vilas estabelecidas tem a mão do jogador. Encene a tomada final: cerco, queda do rival, a bandeira sobre as ruínas. Nomeie os mortos que o jogador conheceu.",
+        "beats": [
+          "o golpe final da vila vencedora",
+          "a última resistência rui",
+          "o líder rival cai — morto ou rendido",
+          "a bandeira sobe sobre as ruínas"
+        ]
+      },
+      "epilogue": "A guerra acaba com uma bandeira só sobre três vilas. A vila vencedora dita a paz — e a paz do vencedor é feita de silêncio e medo. O que custou, custou em nomes que você conheceu."
+    },
+    {
+      "id": "tudo-queima",
+      "name": "Tudo queima — os Sem-Vila herdam",
+      "priority": 10,
+      "tone": "sombrio",
+      "when": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "type": "front_filled",
+            "target": "guerra-das-vilas",
+            "value": 6
+          },
+          {
+            "operator": "OR",
+            "conditions": [
+              {
+                "type": "faction_reputation",
+                "target": "os-sem-vila",
+                "value": "allied",
+                "comparison": "at_least"
+              },
+              {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "faction_reputation",
+                    "target": "os-tharn",
+                    "value": "allied",
+                    "comparison": "below"
+                  },
+                  {
+                    "type": "faction_reputation",
+                    "target": "os-kael",
+                    "value": "allied",
+                    "comparison": "below"
+                  },
+                  {
+                    "type": "faction_reputation",
+                    "target": "os-dreva",
+                    "value": "allied",
+                    "comparison": "below"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "climax": {
+        "directive": "A guerra encheu e NINGUÉM venceu (ou os Sem-Vila venceram). Encene as três vilas queimando ao mesmo tempo e os marginalizados saindo das margens.",
+        "beats": [
+          "nenhum lado cede",
+          "fogo em Tharnvik, Kaelmünd e Drevamor",
+          "os Sem-Vila saem das margens",
+          "a velha ordem cai"
+        ]
+      },
+      "epilogue": "Nenhuma vila venceu — as três viraram brasa. Dos escombros e das margens, os Sem-Vila herdam uma terra arrasada e livre de senhores. Uma ordem nova, nascida da cinza, sem promessa de ser melhor."
     }
   ]
 }

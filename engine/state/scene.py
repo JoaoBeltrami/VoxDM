@@ -14,6 +14,7 @@ Armadilha: npcs_apresentados é set — NPCs do local mas que não foram nomeado
 import re
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 # Janela deslizante de diálogo
 MAX_DIALOGOS = 6
@@ -51,6 +52,10 @@ class SceneState:
     # = quests que chegaram à última stage. Alimentam F4 (segredo) e F2 (trégua).
     secrets_revelados: set[str] = field(default_factory=set)
     quests_completas: set[str] = field(default_factory=set)
+    # Flags de arco (portas fechadas): ato IRREVERSÍVEL seta uma flag que tranca
+    # um final pra sempre naquela campanha (decisão "c", 20/07). Reservadas do
+    # módulo padrão: paz-morta (F2), verdade-queimada (F4), magia-morta (F1).
+    arc_flags: dict[str, Any] = field(default_factory=dict)
 
     # Identidade única de NPC (05/07) — fonte canônica de UMA chave por pessoa.
     # npc_registro: canônico → {"nome": str, "retrato_seed": str}. A seed nasce

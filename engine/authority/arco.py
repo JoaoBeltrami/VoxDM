@@ -77,7 +77,13 @@ def _avaliar_folha(cond: dict[str, Any], est: EstadoArco) -> bool:
         return alvo in est.secrets_revelados
     if tipo == "flag":
         esperado = True if valor is None else valor
-        return est.flags.get(alvo) == esperado
+        atual = est.flags.get(alvo)
+        # Porta fechada (decisão "c"): comparação BOOLEANA trata flag AUSENTE como
+        # False — `flag paz-morta == false` precisa passar quando ninguém matou a
+        # paz ainda (antes, None == False dava falso e o F2 nunca disparava).
+        if isinstance(esperado, bool):
+            return bool(atual) is esperado
+        return atual == esperado
 
     log.warning("arco_leaf_desconhecida", tipo=tipo)
     return False  # tipo desconhecido → não satisfeita (seguro)
