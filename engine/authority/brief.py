@@ -58,6 +58,7 @@ class NarrationBrief:
     evento_mundo: str = ""
     tier: str = "seco"
     rolling_summary: str = ""
+    batismo_pendente: str = ""
 
     def to_prompt(self) -> str:
         """Bloco compacto pro system prompt. Caps aplicados na montagem
@@ -73,6 +74,8 @@ class NarrationBrief:
             linhas.extend(self.fatos_resolvidos)
         if self.evento_mundo:
             linhas.append(f"EVENTO A TECER: {self.evento_mundo[:MAX_CHARS_FATO]}")
+        if self.batismo_pendente:
+            linhas.append(self.batismo_pendente[:MAX_CHARS_FATO * 2])
         tier = self.tier if self.tier in _TIERS_VALIDOS else "seco"
         if tier == "epico":
             linhas.append("TOM: momento-chave — narre denso, com peso dramático.")
@@ -95,13 +98,26 @@ def _fato_local(wm: Any) -> str:
     return " | ".join(partes)
 
 
+def _nome_legivel(wm: Any, npc_id: str) -> str:
+    """Nome do registro canônico; o id kebab só como último recurso.
+
+    NPC-SEM-BATISMO-2 (playtest 21/07): o brief imprimia `id.replace("-"," ")`,
+    então o Mestre lia "Em cena: tavern eiro, pessoa andar superior" e re-usava
+    isso como se fosse gente — o descritor voltava cimentado a cada turno.
+    """
+    registro = getattr(getattr(wm, "scene", None), "npc_registro", {}) or {}
+    entrada = registro.get(npc_id) or {}
+    nome = str(entrada.get("nome", "")).strip()
+    return nome or str(npc_id).replace("-", " ")
+
+
 def _fato_npcs(wm: Any) -> str:
     """NPCs em cena numa linha: apresentados por nome, resto como contagem."""
     presentes = list(getattr(wm, "npcs_presentes", []) or [])
     if not presentes:
         return ""
     apresentados = getattr(getattr(wm, "scene", None), "npcs_apresentados", set()) or set()
-    conhecidos = [str(n).replace("-", " ") for n in presentes if n in apresentados]
+    conhecidos = [_nome_legivel(wm, str(n)) for n in presentes if n in apresentados]
     fundo = len(presentes) - len(conhecidos)
     partes: list[str] = []
     if conhecidos:
@@ -167,6 +183,31 @@ def _evento_mundo(wm: Any) -> str:
     return ""
 
 
+def _batismo_pendente(wm: Any) -> str:
+    """Cobra nome próprio de quem já está em cena há turnos e segue sem nome.
+
+    NPC-SEM-BATISMO-2 (playtest 21/07): o registro da sessão tinha
+    `tavern-eiro → "homem gordo e simpático"` e `pessoa-andar-superior` depois
+    de 23 turnos. O fix de julho só ensinou o Mestre a inventar nome QUANDO
+    PERGUNTADO; quem nunca é interrogado morre sem nome. Um por turno — batizar
+    a taverna inteira de uma vez soa a chamada de classe.
+    """
+    try:
+        from engine.npc.identity import precisa_de_batismo
+        pendentes = precisa_de_batismo(wm)
+    except Exception as e:
+        log.warning("batismo_pendente_falhou", erro=str(e)[:80])
+        return ""
+    if not pendentes:
+        return ""
+    npc_id, descritor = pendentes[0]
+    return (
+        f"BATIZE: {descritor} já cruzou o caminho do jogador mais de uma vez e "
+        f"segue sem nome. Dê um nome próprio na narração e registre com "
+        f"[NPC: {npc_id}|Nome]."
+    )
+
+
 def montar_brief(
     wm: Any,
     fala_jogador: str,
@@ -196,6 +237,7 @@ def montar_brief(
         evento_mundo=_evento_mundo(wm),
         tier=tier if tier in _TIERS_VALIDOS else "seco",
         rolling_summary=str(getattr(wm, "resumo_rolling", "") or ""),
+        batismo_pendente=_batismo_pendente(wm),
     )
     log.debug(
         "narration_brief_montado",

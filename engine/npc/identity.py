@@ -118,14 +118,72 @@ def registrar_npc(wm: Any, npc_id: str, nome: str | None = None) -> str:
     return canonico
 
 
+# Palavras que denunciam DESCRITOR no lugar de nome próprio. NPC-SEM-BATISMO-2
+# (playtest 21/07): o registro da sessão tinha `tavern-eiro → "homem gordo e
+# simpático"`, `pessoa-andar-superior`, `homem-urgente`. O fix de julho só
+# ensinou o Mestre a inventar nome QUANDO PERGUNTADO — ninguém batiza sozinho.
+_PALAVRAS_DESCRITOR: frozenset[str] = frozenset({
+    "homem", "mulher", "velho", "velha", "jovem", "garoto", "garota", "menino",
+    "menina", "sujeito", "pessoa", "figura", "vulto", "criatura", "estranho",
+    "estranha", "forasteiro", "encapuzado", "encapuzada", "taverneiro", "tavern",
+    "guarda", "soldado", "mercador", "ferreiro", "moleiro", "moinheiro",
+    "camponês", "camponesa", "aldeão", "aldeã", "andar", "superior", "urgente",
+})
+
+
+def parece_nome_proprio(nome: str) -> bool:
+    """True quando `nome` parece nome de gente, não descrição de gente.
+
+    Conservador nos dois sentidos: "Bjorn" e "Bjorn Tharnsson" passam; "homem
+    gordo e simpático", "Velho Moinheiro" e "Pessoa Andar Superior" não. Nome de
+    3+ palavras é quase sempre descrição — nomes de verdade no módulo têm 1 ou 2.
+    PURA/testável.
+    """
+    limpo = (nome or "").strip()
+    if not limpo:
+        return False
+    palavras = limpo.split()
+    if len(palavras) > 2:
+        return False
+    if any(p.lower().strip(",.;") in _PALAVRAS_DESCRITOR for p in palavras):
+        return False
+    return limpo[0].isupper()
+
+
+def precisa_de_batismo(wm: Any, min_turnos: int = 2) -> list[tuple[str, str]]:
+    """(id, descritor) dos NPCs presentes que já apareceram e seguem sem nome.
+
+    Alimenta o empurrão no briefing. Só entra quem está EM CENA agora e já
+    cruzou o caminho do jogador `min_turnos` vezes — figurante de passagem não
+    precisa de certidão de nascimento.
+    """
+    reg = _registro(wm)
+    pendentes: list[tuple[str, str]] = []
+    for nid in list(getattr(wm, "npcs_presentes", []) or []):
+        entrada = reg.get(resolver_npc(wm, str(nid)))
+        if not entrada:
+            continue
+        nome = str(entrada.get("nome", ""))
+        if parece_nome_proprio(nome):
+            continue
+        if int(entrada.get("turnos_em_cena", 0)) >= min_turnos:
+            pendentes.append((resolver_npc(wm, str(nid)), nome or str(nid)))
+    return pendentes
+
+
 def garantir_registro(wm: Any) -> None:
     """Backfill: todo NPC em npcs_presentes ganha entrada canônica.
 
     Cobre os NPCs do módulo (que entram via inferência Neo4j, sem passar pelos
-    call-sites de registro) sem tocar o bootstrap da sessão.
+    call-sites de registro) sem tocar o bootstrap da sessão. Também conta há
+    quantos turnos cada um está em cena — é o contador que decide quem já
+    merece um nome de verdade (`precisa_de_batismo`).
     """
     for nid in list(wm.npcs_presentes):
-        registrar_npc(wm, str(nid))
+        canonico = registrar_npc(wm, str(nid))
+        entrada = _registro(wm).get(canonico)
+        if entrada is not None:
+            entrada["turnos_em_cena"] = int(entrada.get("turnos_em_cena", 0)) + 1
 
 
 def marcar_morto(wm: Any, npc_id: str) -> str | None:
