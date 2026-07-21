@@ -1996,3 +1996,59 @@ def test_dano_narrado_prosa_neutra_nao_dispara():
 
     assert dano_narrado_sem_marker("Sua lâmina corta o ar, sem encontrar nada.", True) is False
     assert dano_narrado_sem_marker("O vento corta a duna em silêncio.", True) is False
+
+
+# ── COMBAT-GHOST-3 (playtest 21/07, sess-cac7ae249bb3) ───────────────────────
+#
+# O turno que é só `[Rolagem: d20 = 13]` — o que a toolbar manda quando o Mestre
+# pede ataque — não tem verbo de ataque, então o guard de combate-fantasma o lia
+# como "o jogador parou de lutar". Do turno 20 ao 23 o jogador trocava socos e
+# facadas com em_combate=False: sem combat.md, sem saves.md, sem inimigo
+# registrado, sem CA/dano/XP. O Mestre improvisava a briga em prosa.
+
+def test_turno_so_de_rolagem_e_reconhecido_como_acao():
+    from api.turn_pipeline import _e_turno_de_rolagem
+
+    assert _e_turno_de_rolagem("[Rolagem: d20 = 13]")
+    assert _e_turno_de_rolagem("  [Rolagem: d20 = 5].  ")
+    assert _e_turno_de_rolagem("[Rolagem: Ataque (+3) d20+3 = 18]")
+    # Ação escrita de verdade continua sendo julgada pelos regexes normais
+    assert not _e_turno_de_rolagem(
+        "Guardo a faca e saio andando pela estrada [Rolagem: d20 = 9]")
+    assert not _e_turno_de_rolagem("Converso com o taverneiro sobre o preço")
+    assert not _e_turno_de_rolagem("")
+
+
+def test_rolar_dado_nao_encerra_combate_sem_inimigo_registrado():
+    """A cena exata do playtest: briga sem inimigo capturado pelo extractor,
+    jogador respondendo só com rolagem. O combate tem que SOBREVIVER."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmünd", "sess-ghost3")
+    wm.entrar_combate()
+    assert not wm.inimigos_combate            # o alvo nunca foi registrado
+
+    for _ in range(6):                        # muito além do teto de 4 rodadas
+        aplicar_pos_turno(
+            wm,
+            "[Rolagem: d20 = 13]",
+            "Você acerta um golpe firme no peito do oponente, que cambaleia.",
+        )
+    assert wm.em_combate, "combate morreu no meio da luta (COMBAT-GHOST-3)"
+
+
+def test_combate_fantasma_de_verdade_ainda_expira():
+    """A proteção original continua: quem sai da cena não fica em combate eterno."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmünd", "sess-ghost3b")
+    wm.entrar_combate()
+    for _ in range(5):
+        aplicar_pos_turno(
+            wm,
+            "Sigo pela estrada conversando com o moleiro sobre a colheita.",
+            "A estrada segue tranquila sob o sol da tarde.",
+        )
+    assert not wm.em_combate

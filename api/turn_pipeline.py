@@ -757,6 +757,27 @@ _RE_D20_JOGADOR = re.compile(
 )
 
 
+# Sobra depois de tirar o marcador de rolagem: se o jogador só clicou no dado,
+# o resto é ruído ("", ".", "Rolagem"). Acima disso ele escreveu uma ação de
+# verdade e o texto deve ser julgado pelos regexes normais.
+_MAX_SOBRA_ROLAGEM = 12
+_RE_QUALQUER_ROLAGEM = re.compile(r"\[Rolagem\s*:[^\]]*\]", re.IGNORECASE)
+
+
+def _e_turno_de_rolagem(texto_jogador: str) -> bool:
+    """True quando o turno do jogador é ESSENCIALMENTE só uma rolagem.
+
+    COMBAT-GHOST-3: `[Rolagem: d20 = 13]` não tem verbo de ataque, então o guard
+    de combate-fantasma o lia como "o jogador parou de lutar" e encerrava o
+    combate no meio da troca de golpes. Rolar dado é a forma mais ativa de estar
+    em combate que existe. PURA/testável.
+    """
+    if not _RE_QUALQUER_ROLAGEM.search(texto_jogador):
+        return False
+    sobra = _RE_QUALQUER_ROLAGEM.sub("", texto_jogador).strip(" .,;:!?-\n\t")
+    return len(sobra) <= _MAX_SOBRA_ROLAGEM
+
+
 def extrair_d20_jogador(texto_jogador: str) -> int | None:
     """Extrai o valor BRUTO (1-20) de uma rolagem de d20 enviada pelo jogador.
 
@@ -1249,7 +1270,14 @@ def aplicar_pos_turno(
             # ação de combate do jogador, ele está obviamente lutando — zera o
             # contador. Combate fantasma real (jogador conversando/andando) não
             # tem verbo de ataque e continua expirando em 4 rodadas.
-            if _RE_COMBATE_JOGADOR.search(texto_jogador):
+            # COMBAT-GHOST-3 (playtest 21/07, sess-cac7ae249bb3): o turno que é
+            # SÓ uma rolagem — `[Rolagem: d20 = 13]`, que é o que a toolbar manda
+            # quando o Mestre pede ataque — não tem verbo de ataque nenhum, então
+            # caía no else e incrementava o contador. O jogador estava trocando
+            # socos e facadas ("acerta um golpe firme no peito do oponente") com
+            # `em_combate=False` do turno 20 ao 23: sem combat.md, sem saves.md,
+            # sem inimigo registrado, sem CA/dano/XP. Rolar É lutar.
+            if _RE_COMBATE_JOGADOR.search(texto_jogador) or _e_turno_de_rolagem(texto_jogador):
                 working_mem.rodadas_sem_acao_inimigo = 0
             else:
                 working_mem.rodadas_sem_acao_inimigo += 1
@@ -1260,7 +1288,9 @@ def aplicar_pos_turno(
             # Algum inimigo vivo precisa ser mencionado na narração
             resp_lower = resposta_completa.lower()
             mencionado = any(n.lower() in resp_lower for n in vivos if n)
-            if mencionado:
+            # Mesma razão do ramo acima (COMBAT-GHOST-3): quem está rolando dado
+            # não migrou pra fora da cena de combate.
+            if mencionado or _e_turno_de_rolagem(texto_jogador):
                 working_mem.rodadas_sem_acao_inimigo = 0
             else:
                 working_mem.rodadas_sem_acao_inimigo += 1
