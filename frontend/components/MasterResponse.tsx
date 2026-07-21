@@ -53,6 +53,35 @@ function dividirEmBaloes(texto: string): string[] {
   return baloes.length > 0 ? baloes : [trim];
 }
 
+/**
+ * Realça o que está entre aspas.
+ *
+ * Por que existe (21/07): a imersão da voz é o elo fraco (ADR-004) e esta
+ * semana o jogo vai ser LIDO, não ouvido. Sem timbre pra separar o Mestre
+ * narrando do NPC falando, quem tem que atuar é a tipografia — fala de
+ * personagem sai em dourado claro, a narração fica no branco de sempre.
+ *
+ * Conservador de propósito: só aspas retas ou curvas fechadas, até 400 chars.
+ * Aspas soltas (apóstrofo, aspas não fechadas) passam batido como texto normal.
+ */
+const RE_FALA = /([“"][^”"\n]{1,400}[”"])/g;
+const ehFala = (s: string): boolean =>
+  s.length > 1 && /^[“"]/.test(s) && /[”"]$/.test(s);
+
+function realcarFalas(texto: string) {
+  const partes = texto.split(RE_FALA);
+  if (partes.length === 1) return texto;
+  return partes.map((parte, i) =>
+    ehFala(parte) ? (
+      <span key={i} className="text-vox-gold-bright">
+        {parte}
+      </span>
+    ) : (
+      parte
+    ),
+  );
+}
+
 export function MasterResponse({
   historico,
   respostaAtual,
@@ -65,7 +94,9 @@ export function MasterResponse({
   const getOpacity = (idx: number) => {
     const dist = total - 1 - idx;
     if (dist <= 2) return 1;
-    return Math.max(0.35, 1 - dist * 0.1);
+    // Modo roteiro é pra LER: o piso alto mantém a sessão inteira relegível.
+    // No modo Mesa o fade continua fundo, porque ali o foco é o turno atual.
+    return Math.max(modoRoteiro ? 0.8 : 0.35, 1 - dist * 0.1);
   };
 
   return (
@@ -145,13 +176,13 @@ export function MasterResponse({
             const baloes = dividirEmBaloes(turno.mestre);
             if (modoRoteiro) {
               return (
-                <div className="self-start w-full max-w-[72ch] flex flex-col gap-3">
+                <div className="mx-auto w-full max-w-[68ch] flex flex-col gap-3">
                   {baloes.map((b, bidx) => (
                     <p
                       key={bidx}
                       className="font-atmospheric text-[17px] leading-[1.75] text-vox-text-primary"
                     >
-                      {b}
+                      {realcarFalas(b)}
                     </p>
                   ))}
                   <TurnoResumo diff={turno.diff} />
@@ -188,7 +219,7 @@ export function MasterResponse({
                         padding="md"
                         className="font-atmospheric text-base leading-relaxed text-vox-text-primary"
                       >
-                        {b}
+                        {realcarFalas(b)}
                         {ultimo && (
                           <>
                             <TurnoResumo diff={turno.diff} />
@@ -242,9 +273,9 @@ export function MasterResponse({
       {/* Token streaming em tempo real */}
       {respostaAtual && (
         modoRoteiro ? (
-          <div className="self-start w-full max-w-[72ch]">
+          <div className="mx-auto w-full max-w-[68ch]">
             <p className="font-atmospheric text-[17px] leading-[1.75] text-vox-text-primary whitespace-pre-wrap">
-              {respostaAtual}
+              {realcarFalas(respostaAtual)}
               <span className="ml-1 inline-block h-3.5 w-0.5 animate-pulse bg-vox-accent-glow align-middle" />
             </p>
           </div>
@@ -258,7 +289,7 @@ export function MasterResponse({
               padding="md"
               className="font-atmospheric text-base leading-relaxed text-vox-text-primary"
             >
-              {respostaAtual}
+              {realcarFalas(respostaAtual)}
               <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-vox-accent-glow align-middle" />
             </Card>
           </div>

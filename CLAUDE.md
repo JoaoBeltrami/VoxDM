@@ -1150,6 +1150,25 @@ Principais mudanças em arquivos existentes: `engine/state/{narrative,scene,char
 | `frontend/components/palco/PresenceCard.tsx` + `CombatTracker.tsx` | Prop `retratoId` → miniatura Pollinations de criatura (seed sha1) no card de inimigo; morto = grayscale. Régua de iniciativa fica como pills (decisão) | ✅ Atualizado |
 | `frontend/app/page.tsx` + `frontend/app/preview/page.tsx` | `playerDescriptor` no MasterResponse; preview troca todos os Avatar por Portrait/OrbIcon | ✅ Atualizado |
 
+### Diretor de Arco — a campanha tem FINAL (Sessão 20–21/07)
+
+> ADR-002: a engine era EPISÓDICA — nenhuma história ENCERRAVA, logo não havia
+> Momento de CONSEGUI. O Diretor de Arco escala a espinha (a guerra das vilas),
+> dispara o final por condições, encena clímax e epílogo, e CONCLUI a campanha.
+> Story-agnostic: o arco vive no schema do módulo, não no código.
+
+| Arquivo | O que faz | Status |
+|---|---|---|
+| `engine/authority/arco.py` | Avaliador puro + máquina de estado da campanha. `avaliar_condicao` (reusa o DSL de TriggerCondition dos secrets), `endings_disparados`, `escolher_ending` (maior prioridade), `snapshot_de_wm`, `espinha_armada`, `carregar_modulo_arco` (cache), `conduzir_arco` (normal→climax→epilogo→concluida), `diretiva_de_arco` (injeção no prompt). Armadilha: flag ausente conta como False — `paz-morta == false` precisa disso | ✅ Criado |
+| `engine/schema/v2.py` | `ArcSpec`/`ArcEscalation`/`ClimaxSpec`/`ClimaxBranch`/`EndingSpec` + `arc`/`endings` em `ModuloV2` | ✅ Atualizado |
+| `modulo_teste/modulo_teste_v1.2.json` | Bloco `arc` + 4 finais + 4 quests de esforço de guerra (Tharnvik/Kaelmund/Drevamor/trégua) | ✅ Atualizado |
+| `engine/memory/quest_detector.py` | `faction_standing_change` agora APLICADO (era só logado — a guerra nunca andava); efeitos novos `front_advance` (avança a espinha, com teto) e `flag_set` (reservada `magia-morta` zera spell slots); quest completa no último stage | ✅ Atualizado |
+| `api/turn_pipeline.py` | Step 15c `[SEGREDO_REVELADO]`, step 17c reconciliação CANON-MORTOS-2, step 17d `conduzir_arco`, clamp `_XP_MARKER_MAX` | ✅ Atualizado |
+| `api/websocket.py` | `_snapshot_arco(wm)` no ponto único `_snapshot_estado` → os 4 payloads herdam o campo `arco` | ✅ Atualizado |
+| `frontend/components/ArcoDaCampanha.tsx` | `<EspinhaDaCampanha>` (relógio-mestre em segmentos; só aparece com filled>0, vermelho ≥66%, some na conclusão) + `<DesfechoOverlay>` (faixa discreta em clímax/epílogo, painel dourado em tela cheia na conclusão) | ✅ Criado |
+| `frontend/components/MasterResponse.tsx` | Legibilidade pra semana de leitura (ADR-004): `realcarFalas()` põe o que está entre aspas em dourado (sem timbre, quem atua é a tipografia), coluna centrada 68ch, piso de opacidade 0.8 no modo roteiro (a sessão é pra reler) | ✅ Atualizado |
+| `tests/test_arco.py` | 30 testes — condições, escolha por prioridade, portas fechadas, máquina de estado, persistência, snapshot WS, silêncio na Session Zero | ✅ Criado |
+
 ---
 
 ## Documentos de Referência

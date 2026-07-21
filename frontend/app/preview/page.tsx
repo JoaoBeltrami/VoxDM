@@ -19,6 +19,8 @@
 
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { MasterResponse } from "@/components/MasterResponse";
+import type { TurnoHistorico } from "@/hooks/useGameSession";
 import { EspinhaDaCampanha, DesfechoOverlay, type ArcoInfo } from "@/components/ArcoDaCampanha";
 import {
   Button,
@@ -84,6 +86,19 @@ const MENSAGENS_MOCK = [
     mestre: "Aldric ri seco. \"Vyrmathax é o nome que se sussurra, garoto. Quem fala alto desaparece.\" Ele inclina o copo na sua direção. (Persuasão)",
   },
 ];
+
+const HISTORICO_MOCK: TurnoHistorico[] = MENSAGENS_MOCK.map((m, i) => ({
+  id: i,
+  jogador: m.jogador,
+  mestre: m.mestre,
+  tipo: "normal",
+  latencia_ms: 1200 + i * 180,
+  chunks_lore: ["aldric-drevasson"],
+  chunks_regras: [],
+  diff: i === MENSAGENS_MOCK.length - 1
+    ? { xp_delta: 50, gold_delta: -10, itens_ganhos: ["pista do pacto"] }
+    : undefined,
+}));
 
 export default function PreviewPage() {
   const { mode, setMode } = useViewMode();
@@ -238,36 +253,17 @@ export default function PreviewPage() {
             onDismiss={() => setEsperandoRolagem(false)}
           />
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {MENSAGENS_MOCK.map((m, idx) => (
-              <div key={idx} className="space-y-2 animate-fade-in-up">
-                {/* Bolha do jogador */}
-                <div className="flex justify-end">
-                  <Card variant="bare" padding="md" rounded="xl" elevation={1} className="max-w-[75%] bg-violet-900/40 border-violet-800/40">
-                    <p className="text-sm text-violet-100">{m.jogador}</p>
-                  </Card>
-                </div>
-
-                {/* Bolha do mestre — OrbIcon (abolição das letras 03/07) */}
-                <div className="flex items-start gap-3">
-                  <OrbIcon />
-                  <Card variant="panel" padding="lg" rounded="xl" elevation={2} className="max-w-[80%]">
-                    <p className="text-vox-text-primary leading-relaxed font-atmospheric text-base">
-                      {m.mestre}
-                    </p>
-                    {idx === MENSAGENS_MOCK.length - 1 && (
-                      <TurnoResumo
-                        diff={{
-                          xp_delta: 50,
-                          gold_delta: -10,
-                          itens_ganhos: ["pista do pacto"],
-                        }}
-                      />
-                    )}
-                  </Card>
-                </div>
-              </div>
-            ))}
+          {/* O componente REAL de narração — o que o jogador lê de fato.
+              Verificável sem sessão: medida da coluna, fade do histórico e
+              realce das falas entre aspas. */}
+          <div className="flex-1 overflow-y-auto">
+            <MasterResponse
+              historico={HISTORICO_MOCK}
+              respostaAtual=""
+              playerName="Fael"
+              playerDescriptor="humano ladino"
+              modoRoteiro
+            />
           </div>
         </div>
       }
