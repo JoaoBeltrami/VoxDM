@@ -439,6 +439,18 @@ def _montar_mensagens_brief(
     brief = montar_brief(wm, contexto.transcricao_atual or "")
     secoes.append("\n" + brief.to_prompt())
 
+    # DIRETOR DE ARCO (passo 4): a voz da engine dirigindo o desfecho — pressão
+    # de escalada quando a espinha arma, diretiva de CLÍMAX quando um final
+    # dispara, semente de EPÍLOGO pra encerrar. Vazio no fluxo normal; vale nos
+    # DOIS caminhos (brief e legado). Falha silenciosa nunca derruba o turno.
+    try:
+        from engine.authority.arco import diretiva_de_arco
+        _bloco_arco = diretiva_de_arco(contexto.working_memory)
+        if _bloco_arco:
+            secoes.append(_bloco_arco)
+    except Exception as _e_arco:
+        log.warning("arco_diretiva_falhou", erro=str(_e_arco)[:100])
+
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
     turnos = wm.dialogo_recente
     historico = turnos[:-1] if turnos else []
@@ -1133,6 +1145,18 @@ def montar_mensagens(
             )
             secoes.append(_bloco_rolling)
             chars_rolling = len(_bloco_rolling)
+
+    # DIRETOR DE ARCO (passo 4): a voz da engine dirigindo o desfecho — pressão
+    # de escalada quando a espinha arma, diretiva de CLÍMAX quando um final
+    # dispara, semente de EPÍLOGO pra encerrar. Vazio no fluxo normal; vale nos
+    # DOIS caminhos (brief e legado). Falha silenciosa nunca derruba o turno.
+    try:
+        from engine.authority.arco import diretiva_de_arco
+        _bloco_arco = diretiva_de_arco(contexto.working_memory)
+        if _bloco_arco:
+            secoes.append(_bloco_arco)
+    except Exception as _e_arco:
+        log.warning("arco_diretiva_falhou", erro=str(_e_arco)[:100])
 
     system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
 

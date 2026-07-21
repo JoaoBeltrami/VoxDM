@@ -160,6 +160,134 @@ def snapshot_de_wm(wm: Any, modulo: dict[str, Any] | None = None) -> EstadoArco:
     )
 
 
+_modulo_cache: dict[str, Any] | None = None
+
+
+def carregar_modulo_arco() -> dict[str, Any]:
+    """Módulo do arco (arc/endings/factions/fronts) — cache por processo."""
+    global _modulo_cache
+    if _modulo_cache is not None:
+        return _modulo_cache
+    import json
+    from pathlib import Path
+
+    from config import settings
+    try:
+        caminho = Path(settings.DEFAULT_MODULE_PATH)
+        if not caminho.is_absolute():
+            caminho = Path(__file__).parent.parent.parent / str(
+                settings.DEFAULT_MODULE_PATH).lstrip("./")
+        _modulo_cache = json.loads(caminho.read_text(encoding="utf-8"))
+    except Exception as e:  # módulo ausente/corrompido → arco desligado, jogo segue
+        log.warning("arco_modulo_falhou", erro=str(e)[:120])
+        _modulo_cache = {}
+    return _modulo_cache
+
+
+def limpar_cache_modulo() -> None:
+    """Descarta o cache do módulo (uso em testes)."""
+    global _modulo_cache
+    _modulo_cache = None
+
+
+def conduzir_arco(wm: Any, modulo: dict[str, Any] | None = None) -> str:
+    """Máquina de estados do arco, chamada no PÓS-TURNO. Devolve a fase nova.
+
+    normal → (final disparou) climax → (clímax narrado) epilogo → (epílogo
+    narrado) concluida. O prompt do turno SEGUINTE lê a fase e injeta a diretiva
+    — por isso a transição acontece aqui, depois da narração.
+    `free_master` (Mestre Livre) desliga o arco inteiro.
+    """
+    mod = modulo if modulo is not None else carregar_modulo_arco()
+    arc = mod.get("arc") or {}
+    if not arc or arc.get("free_master"):
+        return getattr(wm, "arc_fase", "normal")
+
+    fase = str(getattr(wm, "arc_fase", "normal") or "normal")
+    if fase == "climax":
+        wm.arc_fase = "epilogo"
+        log.info("arco_fase", de="climax", para="epilogo", ending=wm.arc_ending_id)
+        return "epilogo"
+    if fase == "epilogo":
+        wm.arc_fase = "concluida"
+        log.info("arco_campanha_concluida", ending=wm.arc_ending_id)
+        return "concluida"
+    if fase != "normal":
+        return fase  # concluida — nada a fazer
+
+    vencedor = escolher_ending(mod.get("endings", []), snapshot_de_wm(wm, mod))
+    if vencedor:
+        wm.arc_fase = "climax"
+        wm.arc_ending_id = str(vencedor.get("id", ""))
+        log.info("arco_final_disparou", ending=wm.arc_ending_id)
+        return "climax"
+    return "normal"
+
+
+def diretiva_de_arco(wm: Any, modulo: dict[str, Any] | None = None) -> str:
+    """Bloco a injetar no prompt conforme a fase do arco (vazio em 'normal' sem
+    espinha armada). É a voz da engine dirigindo o desfecho — a LLM só narra."""
+    mod = modulo if modulo is not None else carregar_modulo_arco()
+    arc = mod.get("arc") or {}
+    if not arc or arc.get("free_master"):
+        return ""
+
+    fase = str(getattr(wm, "arc_fase", "normal") or "normal")
+    ending = next(
+        (e for e in mod.get("endings", []) if e.get("id") == getattr(wm, "arc_ending_id", "")),
+        None,
+    )
+
+    if fase == "climax" and ending:
+        climax = ending.get("climax") or {}
+        linhas = [
+            "\n=== CLÍMAX DA CAMPANHA ===",
+            f"A história chegou ao desfecho: {ending.get('name', '')}.",
+            str(climax.get("directive", "")).strip(),
+        ]
+        beats = climax.get("beats") or []
+        if beats:
+            linhas.append("Beats a cumprir: " + " → ".join(str(b) for b in beats) + ".")
+        branches = climax.get("branches") or []
+        if branches:
+            linhas.append(
+                "ESCOLHA DO JOGADOR — apresente as portas e encene a que ele tomar: "
+                + " | ".join(
+                    f"{b.get('label') or b.get('choice_id')}" for b in branches
+                ) + "."
+            )
+        linhas.append("Encene o clímax AGORA. Não adie, não abra subtrama nova.")
+        return "\n".join(x for x in linhas if x)
+
+    if fase == "epilogo" and ending:
+        semente = str(ending.get("epilogue", "")).strip()
+        if not semente:
+            branches = (ending.get("climax") or {}).get("branches") or []
+            semente = str((branches[0] if branches else {}).get("epilogue", "")).strip()
+        return (
+            "\n=== EPÍLOGO — ENCERRE A CAMPANHA ===\n"
+            f"{semente}\n"
+            "Narre o fecho em 3-5 frases: o que ficou do mundo, o que custou, e o "
+            "que o personagem leva. Depois PARE — a campanha acabou."
+        )
+
+    if fase == "concluida":
+        return (
+            "\n=== CAMPANHA CONCLUÍDA ===\n"
+            "A história terminou. Não reabra o arco; responda como epílogo/OOC."
+        )
+
+    # normal — só a pressão de escalada quando a espinha está armada
+    if espinha_armada(arc, snapshot_de_wm(wm, mod)):
+        return (
+            "\n=== A GUERRA SE APROXIMA DA CABEÇA ===\n"
+            "A espinha da campanha está prestes a estourar. Aumente a pressão: "
+            "sinais de que o desfecho é iminente, urgência nas facções, o mundo "
+            "cobrando uma decisão. NÃO resolva ainda."
+        )
+    return ""
+
+
 def espinha_armada(arc: dict[str, Any] | None, est: EstadoArco) -> bool:
     """True quando a espinha atingiu `escalation.arm_at` — o Diretor passa a
     dirigir a narração pro clímax. `free_master` desliga o arco inteiro."""

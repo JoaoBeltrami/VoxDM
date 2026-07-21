@@ -295,6 +295,77 @@ def test_cajado_quebrado_mata_a_magia_do_jogador():
     assert wm.spell_slots[2]["current"] == 0
 
 
+# ── passo 4: o Diretor conduz normal → clímax → epílogo → concluída ──────────
+
+_MOD_ARCO = {
+    "arc": {"spine": "guerra-das-vilas", "escalation": {"arm_at": 4}},
+    "factions": [{"id": "os-tharn", "reputation_thresholds": {"allied": 50}}],
+    "endings": [{
+        "id": "uma-vila-domina", "name": "Uma vila domina", "priority": 20,
+        "when": {"operator": "AND", "conditions": [
+            {"type": "front_filled", "target": "guerra-das-vilas", "value": 6},
+            {"type": "faction_reputation", "target": "os-tharn", "value": "allied"},
+        ]},
+        "climax": {"directive": "Encene a tomada final.", "beats": ["o golpe final", "a bandeira sobe"]},
+        "epilogue": "Uma bandeira só sobre três vilas.",
+    }],
+}
+
+
+def _wm_no_climax() -> WorkingMemory:
+    wm = _wm()
+    wm.narrative.fronts_latentes = {
+        "guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 6}}
+    wm.faction_standings = {"os-tharn": 55}
+    return wm
+
+
+def test_maquina_de_estados_do_arco():
+    from engine.authority.arco import conduzir_arco
+    wm = _wm_no_climax()
+    assert wm.arc_fase == "normal"
+    assert conduzir_arco(wm, _MOD_ARCO) == "climax"
+    assert wm.arc_ending_id == "uma-vila-domina"
+    assert conduzir_arco(wm, _MOD_ARCO) == "epilogo"
+    assert conduzir_arco(wm, _MOD_ARCO) == "concluida"
+    # concluída é terminal — não reabre
+    assert conduzir_arco(wm, _MOD_ARCO) == "concluida"
+
+
+def test_diretiva_climax_epilogo_e_concluida():
+    from engine.authority.arco import conduzir_arco, diretiva_de_arco
+    wm = _wm_no_climax()
+    conduzir_arco(wm, _MOD_ARCO)                      # → climax
+    d = diretiva_de_arco(wm, _MOD_ARCO)
+    assert "CLÍMAX DA CAMPANHA" in d and "Encene a tomada final." in d
+    assert "o golpe final" in d                        # beats entram
+    conduzir_arco(wm, _MOD_ARCO)                       # → epilogo
+    d2 = diretiva_de_arco(wm, _MOD_ARCO)
+    assert "EPÍLOGO" in d2 and "Uma bandeira só sobre três vilas." in d2
+    conduzir_arco(wm, _MOD_ARCO)                       # → concluida
+    assert "CAMPANHA CONCLUÍDA" in diretiva_de_arco(wm, _MOD_ARCO)
+
+
+def test_pressao_de_escalada_quando_espinha_arma():
+    from engine.authority.arco import diretiva_de_arco
+    wm = _wm()
+    wm.narrative.fronts_latentes = {
+        "guerra-das-vilas": {"nome": "Guerra", "segmentos": 6, "filled": 4}}
+    d = diretiva_de_arco(wm, _MOD_ARCO)
+    assert "SE APROXIMA DA CABEÇA" in d
+    # abaixo do arm_at → silêncio total
+    wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] = 2
+    assert diretiva_de_arco(wm, _MOD_ARCO) == ""
+
+
+def test_mestre_livre_desliga_o_arco():
+    from engine.authority.arco import conduzir_arco, diretiva_de_arco
+    mod = {**_MOD_ARCO, "arc": {**_MOD_ARCO["arc"], "free_master": True}}
+    wm = _wm_no_climax()
+    assert conduzir_arco(wm, mod) == "normal"   # não dispara final
+    assert diretiva_de_arco(wm, mod) == ""      # nem dirige
+
+
 # ── passo 3b ponta-a-ponta: marker [SEGREDO_REVELADO] → F4 dispara ────────────
 
 def test_marker_segredo_revelado_destrava_f4():
