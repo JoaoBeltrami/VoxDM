@@ -586,3 +586,86 @@ def test_campanha_inteira_e_visivel_na_tela_do_jogador():
     assert fim["fase"] == "concluida"
     assert fim["ending_nome"]            # a tela de fecho tem um nome pra exibir
     assert fim["ending_id"] == "uma-vila-domina"
+
+
+# ── Alcance dos finais pelo caminho REAL do marker (verificação 23/07) ────────
+#
+# A lente final-alcancavel da auditoria pré-sessão. O norte do projeto é a
+# campanha CHEGAR a um final; estes testes travam que os caminhos autorais
+# disparam de verdade — não por simulação que pula o parser de [Q:], mas pelo
+# mesmo caminho que roda ao vivo (detectar_e_aplicar_quests marca quest_completed
+# + aplicar_recompensas_avancos aplica os efeitos de front/facção/flag).
+
+def _mod_efeitos_catalogo():
+    import json
+    from pathlib import Path
+
+    from engine.memory.quest_detector import (
+        carregar_catalog_modulo,
+        carregar_efeitos_modulo,
+    )
+    raiz = Path(__file__).resolve().parent.parent
+    caminho = str(raiz / "modulo_teste" / "modulo_teste_v1.2.json")
+    mod = json.loads(Path(caminho).read_text(encoding="utf-8"))
+    return mod, carregar_efeitos_modulo(caminho), carregar_catalog_modulo(caminho)
+
+
+def _wm_com_fronts(mod):
+    wm = _wm()
+    wm.narrative.fronts_latentes = {
+        f["id"]: {"nome": f["name"], "segmentos": f["segments"], "filled": f["filled"]}
+        for f in mod["fronts"]
+    }
+    return wm
+
+
+def _completar_quest(wm, qid, mod, efeitos, catalog):
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        detectar_e_aplicar_quests,
+    )
+    stages = [q for q in mod["quests"] if q["id"] == qid][0]["stages"]
+    for s in stages:
+        _, avancos = detectar_e_aplicar_quests(f"cena. [Q: {qid}:{s['id']}]", wm, catalog)
+        aplicar_recompensas_avancos(avancos, efeitos, wm)
+
+
+def test_final_paz_costurada_e_alcancavel():
+    """O final que o Beltrami desenhou: a trégua enche a dívida de Vyrmathax a
+    4/8 e o conselho da paz fecha. (paz-costurada, priority 25.)"""
+    mod, efeitos, catalog = _mod_efeitos_catalogo()
+    wm = _wm_com_fronts(mod)
+    _completar_quest(wm, "tregua-das-vilas", mod, efeitos, catalog)
+
+    div = wm.narrative.fronts_latentes["divida-de-vyrmathax"]
+    assert div["filled"] >= 4
+    assert "tregua-das-vilas" in wm.quests_completas
+    assert not wm.arc_flags.get("paz-morta")
+    v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
+    assert v and v["id"] == "paz-costurada"
+
+
+def test_final_dominacao_e_alcancavel():
+    """Uma vila esmaga as outras: cadeia de guerra completa. (uma-vila-domina.)"""
+    mod, efeitos, catalog = _mod_efeitos_catalogo()
+    wm = _wm_com_fronts(mod)
+    _completar_quest(wm, "esforco-guerra-tharnvik", mod, efeitos, catalog)
+    v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
+    assert v and v["id"] == "uma-vila-domina"
+
+
+def test_pular_pro_ultimo_stage_nao_dispara_final():
+    """Robustez: os efeitos são cumulativos. Emitir só o último [Q:] não
+    'ganha' a campanha num turno — os ganhos de facção/front dos stages
+    anteriores não aconteceram."""
+    mod, efeitos, catalog = _mod_efeitos_catalogo()
+    wm = _wm_com_fronts(mod)
+    ultimo = [q for q in mod["quests"] if q["id"] == "esforco-guerra-tharnvik"][0]["stages"][-1]["id"]
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        detectar_e_aplicar_quests,
+    )
+    _, av = detectar_e_aplicar_quests(f"cena. [Q: esforco-guerra-tharnvik:{ultimo}]", wm, catalog)
+    aplicar_recompensas_avancos(av, efeitos, wm)
+    v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
+    assert v is None

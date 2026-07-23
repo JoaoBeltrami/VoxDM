@@ -115,6 +115,16 @@ def test_tier_seco_no_turno_comum():
     assert "turno comum" in s
 
 
+def test_tier_relaxa_apos_campanha_concluida():
+    """R1 (verificação 23/07): pós-conclusão o tom volta ao comum — não fica
+    épico pra sempre se o jogador continua depois do fim."""
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
+    wm.arc_fase = "epilogo"
+    assert _tier_do_turno(wm, "Contemplo o campo") == "epico"   # epílogo tem peso
+    wm.arc_fase = "concluida"
+    assert _tier_do_turno(wm, "Sigo vivendo") == "seco"         # denouement relaxa
+
+
 def test_tier_epico_em_linha_engine_de_critico():
     wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
     assert _tier_do_turno(wm, "ENGINE: teste de Ataque — 20 NATURAL no dado") == "epico"

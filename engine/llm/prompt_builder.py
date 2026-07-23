@@ -261,7 +261,11 @@ def _tier_do_turno(wm: Any, transcricao: str) -> str:
     pacing; a linha ENGINE de um crítico/abate também levanta o tom.
     """
     fase = getattr(wm, "arc_fase", "normal")
-    if fase in ("climax", "epilogo", "concluida"):
+    # Clímax e epílogo pedem peso. "concluida" NÃO entra (verificação 23/07): a
+    # campanha já acabou — a tela de fim entregou o Momento de CONSEGUI. Se o
+    # jogador dispensa e segue jogando, todo turno pós-fim viraria "momento-chave"
+    # pra sempre; o desfecho relaxa pro tom comum, como um denouement.
+    if fase in ("climax", "epilogo"):
         return "epico"
     if float(getattr(wm, "pacing_nivel", 0) or 0) >= 7:
         return "epico"
