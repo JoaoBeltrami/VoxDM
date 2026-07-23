@@ -654,10 +654,31 @@ def test_final_dominacao_e_alcancavel():
     assert v and v["id"] == "uma-vila-domina"
 
 
-def test_pular_pro_ultimo_stage_nao_dispara_final():
-    """Robustez: os efeitos são cumulativos. Emitir só o último [Q:] não
-    'ganha' a campanha num turno — os ganhos de facção/front dos stages
-    anteriores não aconteceram."""
+def test_pular_pro_ultimo_stage_de_quest_NAO_linear_nao_dispara_final():
+    """Quest com desfecho alternativo (o-pacto-rachado) NÃO auto-completa —
+    emitir só o último [Q:] não 'ganha' um final ramificado sem os passos
+    intermediários. O guard contra instant-win vale para quests não-lineares.
+    QUEST-SKIP-1 (23/07) mudou isso só para quests LINEARES (war-effort/trégua),
+    onde os estágios são marcos sequenciais e pular auto-completa de propósito."""
+    mod, efeitos, catalog = _mod_efeitos_catalogo()
+    wm = _wm_com_fronts(mod)
+    ultimo = [q for q in mod["quests"] if q["id"] == "o-pacto-rachado"][0]["stages"][-1]["id"]
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        detectar_e_aplicar_quests,
+    )
+    _, av = detectar_e_aplicar_quests(f"cena. [Q: o-pacto-rachado:{ultimo}]", wm, catalog)
+    aplicar_recompensas_avancos(av, efeitos, wm)
+    # só o estágio emitido — sem auto-completar os anteriores
+    assert [s for _, s in av] == [ultimo]
+    v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
+    assert v is None
+
+
+def test_pular_pro_ultimo_stage_de_quest_LINEAR_autocompleta_e_dispara():
+    """A robustez do QUEST-SKIP-1: numa quest linear, chegar no último estágio
+    implica ter cumprido os anteriores — a guerra enche e o final dispara mesmo
+    se o Mestre emitir um único [Q:]. É o que salvou o playtest estendido."""
     mod, efeitos, catalog = _mod_efeitos_catalogo()
     wm = _wm_com_fronts(mod)
     ultimo = [q for q in mod["quests"] if q["id"] == "esforco-guerra-tharnvik"][0]["stages"][-1]["id"]
@@ -667,5 +688,6 @@ def test_pular_pro_ultimo_stage_nao_dispara_final():
     )
     _, av = detectar_e_aplicar_quests(f"cena. [Q: esforco-guerra-tharnvik:{ultimo}]", wm, catalog)
     aplicar_recompensas_avancos(av, efeitos, wm)
+    assert wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 6
     v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
-    assert v is None
+    assert v and v["id"] == "uma-vila-domina"

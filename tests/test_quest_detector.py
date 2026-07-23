@@ -815,3 +815,89 @@ def test_render_do_modulo_real_traz_a_quest_do_playtest():
     assert "O contrato de Kaelmünd" in texto
     assert "contrato-de-ferro" in texto
     assert len(texto) < 3000          # legível, não um dump de roteiro
+
+
+# ── QUEST-SKIP-1 (playtest estendido 23/07) ──────────────────────────────────
+#
+# Com 8 quests mostrando o "próximo passo", o Mestre pula estágios: emitiu
+# `carne-para-a-linha` (2º) sem `comboio-de-aco` (1º), a guerra foi 1/6 -> 3/6
+# em vez de 4/6, e nunca chegou a 6/6 pra disparar o final. Quest LINEAR
+# auto-completa os estágios pulados.
+
+def test_quests_lineares_do_modulo():
+    from config import settings
+    from engine.memory.quest_detector import carregar_quests_lineares
+    lin = carregar_quests_lineares(settings.DEFAULT_MODULE_PATH)
+    assert "esforco-guerra-tharnvik" in lin
+    assert "tregua-das-vilas" in lin
+    assert "o-pacto-rachado" not in lin      # tem desfecho alternativo
+
+
+def test_pular_estagio_em_quest_linear_autocompleta_os_pulados():
+    from config import settings
+    from engine.memory.quest_detector import (
+        carregar_catalog_modulo,
+        detectar_e_aplicar_quests,
+    )
+    from engine.memory.working_memory import WorkingMemory
+
+    catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    wm = WorkingMemory.nova_sessao("tharnvik", "Tharnvik", "s")
+    # o Mestre pula direto pro 2º estágio, como no playtest
+    _, avancos = detectar_e_aplicar_quests(
+        "cena. [Q: esforco-guerra-tharnvik:carne-para-a-linha]", wm, catalog)
+    ids = [s for _, s in avancos]
+    assert "comboio-de-aco" in ids           # o 1º foi auto-completado
+    assert "carne-para-a-linha" in ids
+    assert ids.index("comboio-de-aco") < ids.index("carne-para-a-linha")  # em ordem
+
+
+def test_quest_nao_linear_nao_autocompleta():
+    from config import settings
+    from engine.memory.quest_detector import (
+        carregar_catalog_modulo,
+        detectar_e_aplicar_quests,
+    )
+    from engine.memory.working_memory import WorkingMemory
+
+    catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    # o-pacto-rachado NÃO é linear (desfecho alternativo) — pular não completa
+    _, avancos = detectar_e_aplicar_quests(
+        "cena. [Q: o-pacto-rachado:pacto-resolvido]", wm, catalog)
+    ids = [s for _, s in avancos]
+    assert ids == ["pacto-resolvido"]        # só o emitido, sem preencher
+
+
+def test_linear_autocompletar_leva_a_guerra_a_6_de_6():
+    """O caminho do playtest, agora robusto: emitir carne-para-a-linha e depois
+    a-tregua-morta enche a guerra e dispara o final mesmo pulando o 1º estágio."""
+    import json
+
+    from config import settings
+    from engine.authority.arco import escolher_ending, snapshot_de_wm
+    from engine.memory.quest_detector import (
+        aplicar_recompensas_avancos,
+        carregar_catalog_modulo,
+        carregar_efeitos_modulo,
+        detectar_e_aplicar_quests,
+    )
+    from engine.memory.working_memory import WorkingMemory
+
+    mod = json.load(open(settings.DEFAULT_MODULE_PATH, encoding="utf-8"))
+    catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    efeitos = carregar_efeitos_modulo(settings.DEFAULT_MODULE_PATH)
+    wm = WorkingMemory.nova_sessao("tharnvik", "Tharnvik", "s")
+    wm.narrative.fronts_latentes = {
+        f["id"]: {"nome": f["name"], "segmentos": f["segments"], "filled": f["filled"]}
+        for f in mod["fronts"]
+    }
+    # o Mestre emite só 2 marcadores, pulando estágios — como fez no playtest
+    for sid in ("carne-para-a-linha", "a-tregua-morta"):
+        _, av = detectar_e_aplicar_quests(
+            f"cena. [Q: esforco-guerra-tharnvik:{sid}]", wm, catalog)
+        aplicar_recompensas_avancos(av, efeitos, wm)
+    guerra = wm.narrative.fronts_latentes["guerra-das-vilas"]
+    assert guerra["filled"] == 6             # 1 inicial + 1+2+2 dos 3 estágios
+    v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
+    assert v and v["id"] == "uma-vila-domina"

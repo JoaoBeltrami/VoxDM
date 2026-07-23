@@ -257,6 +257,36 @@ def catalog_para_texto(
 # Cache do parse do módulo (mesmo padrão de `carregar_modulo_arco`): o arquivo
 # não muda em runtime, e o bloco é re-renderizado a cada avanço de quest.
 _CACHE_LEGIVEIS: dict[str, list[dict[str, Any]]] = {}
+_CACHE_LINEARES: dict[str, set[str]] = {}
+
+
+def carregar_quests_lineares(modulo_path: str) -> set[str]:
+    """IDs de quests marcadas `"linear": true` no módulo.
+
+    QUEST-SKIP-1 (playtest estendido 23/07): com 8 quests mostrando o "próximo
+    passo", o Mestre pula estágios (emitiu `carne-para-a-linha` sem `comboio-de-
+    aco`) e a guerra travou em 3/6, longe do 6/6 que dispara o final. Numa quest
+    LINEAR os estágios são marcos sequenciais — chegar no estágio N implica ter
+    cumprido 1..N. A flag no módulo (não hardcode) diz quais quests podem
+    auto-completar assim; quests com estágios de DESFECHO alternativo
+    (o-pacto-rachado, a-verdade-enterrada) NÃO são lineares e ficam de fora.
+    """
+    import json
+    from pathlib import Path
+
+    path = Path(modulo_path)
+    if not path.exists():
+        return set()
+    try:
+        dados = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            str(q.get("id", "")).strip()
+            for q in dados.get("quests", [])
+            if q.get("linear") and q.get("id")
+        }
+    except Exception as e:
+        log.warning("quests_lineares_falhou", erro=str(e)[:100])
+        return set()
 
 
 def renderizar_quests(working_mem: WorkingMemory, modulo_path: str | None = None) -> str:
@@ -301,6 +331,13 @@ def detectar_e_aplicar_quests(
     if not catalog:
         return resposta, []
 
+    from config import settings
+
+    _caminho = settings.DEFAULT_MODULE_PATH
+    if _caminho not in _CACHE_LINEARES:
+        _CACHE_LINEARES[_caminho] = carregar_quests_lineares(_caminho)
+    _lineares = _CACHE_LINEARES[_caminho]
+
     avancos: list[tuple[str, str]] = []
 
     for m in _RE_Q.finditer(resposta):
@@ -321,10 +358,23 @@ def detectar_e_aplicar_quests(
         if working_mem.quest_stages.get(qid) == sid:
             continue
 
+        # QUEST-SKIP-1: quest LINEAR — chegar no estágio N implica 1..N. Se o
+        # Mestre pulou estágios (emitiu o 3º sem o 1º/2º), aplicamos os efeitos
+        # dos intermediários pulados EM ORDEM, senão a espinha da guerra nunca
+        # enche e o final não dispara. Só para quests marcadas `linear` no módulo
+        # (as com desfecho alternativo ficam de fora).
+        atual = working_mem.quest_stages.get(qid)
+        idx_atual = stages_validos.index(atual) if atual in stages_validos else -1
+        idx_alvo = stages_validos.index(sid)
+        if qid in _lineares and idx_alvo > idx_atual + 1:
+            for pulado in stages_validos[idx_atual + 1:idx_alvo]:
+                avancos.append((qid, pulado))
+                log.info("quest_estagio_pulado_autocompletado", quest_id=qid, stage_id=pulado)
+
         working_mem.atualizar_quest_stage(qid, sid)
         avancos.append((qid, sid))
         log.info("quest_avancou", quest_id=qid, stage_id=sid,
-                 era=working_mem.quest_stages.get(qid, "novo"))
+                 era=atual or "novo")
 
         # Diretor de Arco (passo 3b): quest CONCLUÍDA = chegou na ÚLTIMA stage do
         # catálogo → entra em quests_completas (alimenta F2/trégua e as
