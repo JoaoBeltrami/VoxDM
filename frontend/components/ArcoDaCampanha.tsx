@@ -78,7 +78,7 @@ export function DesfechoOverlay({
   if (arco.fase === "climax" || arco.fase === "epilogo") {
     const isClimax = arco.fase === "climax";
     return (
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center p-3">
+      <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex justify-center p-3">
         <div
           className={`rounded-full border px-4 py-1.5 text-xs font-display uppercase tracking-[0.2em] backdrop-blur-sm animate-fade-in ${
             isClimax
@@ -94,8 +94,13 @@ export function DesfechoOverlay({
   }
 
   // Concluída: o Momento de CONSEGUI. Tela cheia, sem pressa.
+  // DESFECHO-TRAVADO-1 (auditoria 22/07): o pai monta este overlay dentro de um
+  // wrapper `pointer-events-none` (AppShell). Sem `pointer-events-auto` aqui, o
+  // botão Fechar nunca recebia clique e o véu deixava cliques vazarem pro jogo
+  // atrás — o fim da campanha aparecia e NÃO SAÍA. A camada interativa reativa
+  // os eventos só neste painel.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-veil-fade">
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-veil-fade">
       <div className="mx-6 max-w-xl text-center animate-crit-pop">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--vox-text-muted)]">
           fim da campanha

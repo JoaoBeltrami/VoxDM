@@ -183,6 +183,13 @@ export function useSyncTextoVoz({
           iniciadoRef.current = true; // libera o relógio mesmo sem áudio
           setTextoVisivel(textoRef.current);
           cursorRef.current = textoRef.current.length;
+          // KARAOKE-FLASH-2 (auditoria 22/07): sem isto, quando o áudio finalmente
+          // chegava (turno lento, p90 7,6s) o ramo `startTimeRef===null` do Caso B
+          // zerava o cursor e APAGAVA o texto já revelado, recomeçando letra por
+          // letra — o pior dos mundos pra quem lê. Nasce o relógio "no fim": o
+          // Caso B pula o wipe e o cursor fica onde está.
+          startTimeRef.current =
+            performance.now() - (textoRef.current.length / CHARS_POR_SEGUNDO) * 1000;
         }, aguardarAudioMs);
       }
       setTextoVisivel("");
