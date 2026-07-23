@@ -101,6 +101,7 @@ class ContextBuilder:
         self._qdrant = QdrantMemoryClient()
         self._neo4j = Neo4jMemoryClient()
         self._schema_cache: dict[str, Any] | None = None
+        self._ids_grafo_cache: set[str] | None = None
         # Cache de relações Neo4j (teste #3/#4: as MESMAS 3 entidades eram
         # consultadas TODO turno — ~2s desperdiçados em timeout). TTL longo
         # (_TTL_RELS_CACHE) + stale-while-revalidate no _buscar_rels: uma vez
@@ -150,6 +151,26 @@ class ContextBuilder:
                     self._schema_cache = json.load(f)
                 log.info("schema_carregado", path=str(caminho))
         return self._schema_cache
+
+    def _ids_no_grafo(self) -> set[str]:
+        """IDs que EXISTEM no Neo4j — as entidades declaradas pelo módulo.
+
+        NEO4J-FANTASMA-SERIAL-1 (auditoria 22/07): a maior fatia isolada de
+        context_ms (até 1886ms num turno do playtest) era gasta consultando no
+        grafo NPCs que o próprio Mestre acabou de inventar (ferreiro,
+        ladroes-da-estrada, sacerdote-da-terra) — que NUNCA estarão lá. O grafo
+        só tem as entidades autorais do módulo. Cacheado (schema é estático).
+        """
+        if self._ids_grafo_cache is None:
+            schema = self._carregar_schema()
+            ids: set[str] = set()
+            for chave in ("npcs", "entities", "companions", "locations", "factions"):
+                for x in schema.get(chave, []):
+                    xid = str(x.get("id", "")).strip()
+                    if xid:
+                        ids.add(xid)
+            self._ids_grafo_cache = ids
+        return self._ids_grafo_cache
 
     # ── Avaliação de trigger_conditions ──────────────────────────────────────
 
@@ -565,10 +586,17 @@ class ContextBuilder:
         chunks_ep = _selecionar_por_relevancia(chunks_ep_disp, TOP_K_EPISODICO)
 
         # ── Entidades para consulta no Neo4j ─────────────────────────────────
-        # Combina npcs_presentes + entidades mencionadas na transcrição
+        # Combina npcs_presentes + entidades mencionadas na transcrição.
+        # NEO4J-FANTASMA-SERIAL-1: `entidades_mencionadas` JÁ é filtrada contra o
+        # schema; o vazamento era `npcs_presentes`, que traz NPCs inventados em
+        # runtime direto pro grafo. Filtramos contra os ids que existem lá — um
+        # NPC de runtime (ou renomeado) retornaria vazio de qualquer forma, então
+        # pular a consulta é ganho puro de latência, sem perda de contexto.
         entidades_mencionadas = self._extrair_entidades_mencionadas(transcricao)
+        ids_grafo = self._ids_no_grafo()
+        presentes_no_grafo = [n for n in working_mem.npcs_presentes[:3] if n in ids_grafo]
         ids_para_grafo: list[str] = list(
-            dict.fromkeys(working_mem.npcs_presentes[:3] + entidades_mencionadas[:3])
+            dict.fromkeys(presentes_no_grafo + entidades_mencionadas[:3])
         )  # dict.fromkeys preserva ordem e deduplica
 
         # ── Relações do grafo (paralelo) ──────────────────────────────────────
