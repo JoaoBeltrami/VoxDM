@@ -290,6 +290,17 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
     transcricao = getattr(contexto, "transcricao_atual", "") or ""
     blocos: list[str] = []
 
+    # Anti-repetição — as imagens sensoriais dos últimos turnos. GUARDA-REPETICAO
+    # (auditoria 22/07): alimentada todo turno, nunca LIDA no brief. Lendo em vez
+    # de ouvir, reabrir com "o frio cortante da noite" 5 vezes é gritante. O
+    # resumo não codifica a imagem EXATA — por isso viaja verbatim (cap 4, ~160c).
+    ambiente = list(getattr(wm, "ambiente_recente", []) or [])
+    if ambiente:
+        blocos.append(
+            "\n=== AMBIENTAÇÃO JÁ DESCRITA (não repita estas imagens) ===\n"
+            + "\n".join(f"• {a}" for a in ambiente)
+        )
+
     em_combate = bool(getattr(wm, "em_combate", False))
     acao_combate = bool(_RE_COMBATE.search(transcricao))
 

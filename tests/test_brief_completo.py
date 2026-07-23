@@ -153,3 +153,20 @@ def test_cena_calma_de_exploracao_fica_enxuta():
     from engine.llm.prompt_builder import _carregar_social
     social = _carregar_social() or ""
     assert social[:40] not in s
+
+
+# ── GUARDA-REPETICAO: anti-repetição de imagem no brief ──────────────────────
+
+def test_ambiente_recente_entra_no_brief():
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
+    wm.narrative.registrar_ambiente("o frio cortante da noite")
+    wm.narrative.registrar_ambiente("o cheiro de fumaça de lenha")
+    s = _system(wm, "Sigo em frente")
+    assert "não repita" in s
+    assert "frio cortante" in s and "cheiro de fumaça" in s
+
+
+def test_sem_ambiente_nao_injeta_bloco():
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
+    s = _system(wm, "Sigo em frente")
+    assert "AMBIENTAÇÃO JÁ DESCRITA" not in s
