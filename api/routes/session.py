@@ -49,8 +49,8 @@ from engine.memory.quest_detector import (
     carregar_catalog_modulo,
     carregar_efeitos_modulo,
     carregar_fronts_modulo,
-    catalog_para_texto,
     detectar_e_aplicar_quests,
+    renderizar_quests,
 )
 from engine.memory.session_writer import SessionWriter
 from engine.memory.working_memory import WorkingMemory
@@ -205,8 +205,9 @@ async def iniciar_sessao(
     from config import settings
     _quest_catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
     _quest_efeitos = carregar_efeitos_modulo(settings.DEFAULT_MODULE_PATH)
-    _quests_modulo_txt = catalog_para_texto(_quest_catalog)
-    working_mem.quests_modulo = _quests_modulo_txt
+    # QUEST-OPACA-1 (22/07): o bloco traz nome + descrição do próximo estágio,
+    # não slugs. Re-renderizado a cada avanço por `renderizar_quests`.
+    _quests_modulo_txt = renderizar_quests(working_mem)
 
     # Schema v2 — fronts autorais entram como ameaças LATENTES (pilar Mundo Vivo).
     # SÓ em sessão NOVA: uma sessão continuada restaura seus próprios fronts/relógios

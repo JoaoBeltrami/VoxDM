@@ -21,6 +21,7 @@ Exemplo:
 """
 
 import re
+from typing import Any
 
 import structlog
 
@@ -46,6 +47,51 @@ from engine.markers import RE_STRIP_MARCADORES as _RE_MESTRE_VET  # noqa: E402
 
 # Também limpa espaços/newlines residuais deixados pelos marcadores
 _RE_TRAILING_WS = re.compile(r"\n{3,}")
+
+
+def carregar_quests_legiveis(modulo_path: str) -> list[dict[str, Any]]:
+    """Quests com NOME e DESCRIÇÃO por estágio — o que o Mestre precisa pra agir.
+
+    QUEST-OPACA-1 (mini-playtest 22/07): `carregar_catalog_modulo` devolve só
+    ids, e `catalog_para_texto` imprimia `esforco-guerra-kaelmund(contrato-de-
+    ferro,o-lacre,...)`. O módulo TEM título ("O contrato de Kaelmünd") e
+    descrição por estágio — tudo descartado. Resultado: joguei 4 turnos indo
+    exatamente atrás dessa quest, o Mestre narrou o beat inteiro (aceitou o
+    trabalho, escoltou o ferro, entregou, pagou) e não emitiu um `[Q:]` sequer.
+    Ele não tinha como saber o que o slug significava.
+
+    Returns:
+        [{id, nome, descricao, stages: [{id, descricao}]}] — vazio se ausente.
+    """
+    import json
+    from pathlib import Path
+
+    path = Path(modulo_path)
+    if not path.exists():
+        return []
+    try:
+        dados = json.loads(path.read_text(encoding="utf-8"))
+        saida: list[dict[str, Any]] = []
+        for q in dados.get("quests", []):
+            qid = str(q.get("id", "")).strip()
+            if not qid:
+                continue
+            stages = [
+                {"id": str(s.get("id", "")).strip(),
+                 "descricao": str(s.get("description", "") or "").strip()}
+                for s in q.get("stages", []) if s.get("id")
+            ]
+            if stages:
+                saida.append({
+                    "id": qid,
+                    "nome": str(q.get("name", "") or "").strip(),
+                    "descricao": str(q.get("description", "") or "").strip(),
+                    "stages": stages,
+                })
+        return saida
+    except Exception as e:
+        log.warning("quests_legiveis_falhou", erro=str(e))
+        return []
 
 
 def carregar_catalog_modulo(modulo_path: str) -> dict[str, list[str]]:
@@ -147,19 +193,91 @@ def carregar_agendas_modulo(modulo_path: str) -> dict[str, str]:
         return {}
 
 
-def catalog_para_texto(catalog: dict[str, list[str]]) -> str:
-    """Serializa o catálogo para texto compacto injetado no prompt do LLM.
+# Teto por descrição de estágio. O módulo tem descrições de até ~180 chars;
+# 110 basta pra o Mestre reconhecer o beat sem virar um dump de roteiro.
+_MAX_DESC_STAGE = 110
 
-    Exemplo de saída:
-        Quests disponíveis: combate-inicial(encontro-carnicais) | o-reconhecimento(receber-missao,visitar-vilas,reportar)
+
+def catalog_para_texto(
+    catalog: dict[str, list[str]],
+    quests_legiveis: list[dict[str, Any]] | None = None,
+    stages_atuais: dict[str, str] | None = None,
+) -> str:
+    """Serializa as quests pro prompt — o PRÓXIMO passo jogável de cada uma.
+
+    QUEST-OPACA-1 (mini-playtest 22/07): a versão antiga imprimia só slugs
+    (`esforco-guerra-kaelmund(contrato-de-ferro,o-lacre,a-verdade-reescrita)`).
+    O Mestre narrou o beat inteiro de `contrato-de-ferro` — aceitar o trabalho,
+    escoltar o ferro, entregar, receber o ouro — e não emitiu `[Q:]` nenhum,
+    porque não tinha como saber o que aquele slug queria dizer.
+
+    Mostra UM estágio por quest (o próximo não cumprido), não a lista inteira:
+    é menor, é acionável, não entrega spoiler dos beats futuros e ainda induz a
+    ordem certa — o detector aceita qualquer stage do catálogo, então um menu
+    completo convidava a pular pro final.
+
+    `quests_legiveis` vem de `carregar_quests_legiveis`; sem ele, cai no formato
+    antigo de ids (compatibilidade com callers e testes existentes).
     """
     if not catalog:
         return ""
-    partes = [
-        f"{qid}({','.join(stages)})"
-        for qid, stages in catalog.items()
-    ]
-    return "Quests disponíveis: " + " | ".join(partes)
+
+    if not quests_legiveis:
+        partes = [f"{qid}({','.join(stages)})" for qid, stages in catalog.items()]
+        return "Quests disponíveis: " + " | ".join(partes)
+
+    stages_atuais = stages_atuais or {}
+    linhas: list[str] = []
+    for q in quests_legiveis:
+        qid = q["id"]
+        if qid not in catalog:
+            continue
+        stages = q["stages"]
+        atual = stages_atuais.get(qid)
+        proximo = stages[0]
+        if atual:
+            ids = [s["id"] for s in stages]
+            if atual in ids:
+                if ids.index(atual) >= len(ids) - 1:
+                    continue                       # quest concluída — sai da lista
+                proximo = stages[ids.index(atual) + 1]
+        desc = proximo["descricao"][:_MAX_DESC_STAGE]
+        nome = f" ({q['nome']})" if q.get("nome") else ""
+        marca = "em curso" if atual else "não iniciada"
+        linhas.append(f"• {qid}{nome} [{marca}] → próximo `{proximo['id']}`: {desc}")
+
+    if not linhas:
+        return ""
+    return (
+        "=== MISSÕES DO MÓDULO (o próximo passo de cada uma) ===\n"
+        + "\n".join(linhas)
+    )
+
+
+# Cache do parse do módulo (mesmo padrão de `carregar_modulo_arco`): o arquivo
+# não muda em runtime, e o bloco é re-renderizado a cada avanço de quest.
+_CACHE_LEGIVEIS: dict[str, list[dict[str, Any]]] = {}
+
+
+def renderizar_quests(working_mem: WorkingMemory, modulo_path: str | None = None) -> str:
+    """Recalcula `wm.quests_modulo` com o próximo passo de cada quest.
+
+    Chamado no início da sessão e a cada avanço — o bloco mostra o PRÓXIMO
+    estágio, então ele muda quando uma quest anda. Sem isso o Mestre continuaria
+    vendo o primeiro passo de uma missão que já cumpriu.
+    """
+    from config import settings
+
+    caminho = modulo_path or settings.DEFAULT_MODULE_PATH
+    if caminho not in _CACHE_LEGIVEIS:
+        _CACHE_LEGIVEIS[caminho] = carregar_quests_legiveis(caminho)
+    texto = catalog_para_texto(
+        carregar_catalog_modulo(caminho),
+        quests_legiveis=_CACHE_LEGIVEIS[caminho],
+        stages_atuais=dict(working_mem.quest_stages),
+    )
+    working_mem.quests_modulo = texto
+    return texto
 
 
 def detectar_e_aplicar_quests(
@@ -214,6 +332,13 @@ def detectar_e_aplicar_quests(
         if stages_validos and sid == stages_validos[-1]:
             working_mem.quests_completas.add(qid)
             log.info("quest_concluida", quest_id=qid, stage_final=sid)
+
+    # O bloco de quests mostra o PRÓXIMO passo — avançou, mudou.
+    if avancos:
+        try:
+            renderizar_quests(working_mem)
+        except Exception as e:
+            log.warning("quests_render_falhou", erro=str(e)[:100])
 
     # Limpa marcadores e colapsa linhas em branco residuais
     limpa = _RE_Q.sub("", resposta)

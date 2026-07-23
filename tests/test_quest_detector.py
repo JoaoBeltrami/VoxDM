@@ -735,3 +735,83 @@ def test_fugiu_documentado_no_markers_lista():
 
     frag = Path("engine/llm/prompts/fragments/markers_lista.md").read_text(encoding="utf-8")
     assert "[FUGIU]" in frag
+
+
+# ── QUEST-OPACA-1 (mini-playtest 22/07) ──────────────────────────────────────
+#
+# Com o catálogo em slugs, joguei 4 turnos indo exatamente atrás de
+# `esforco-guerra-kaelmund`. O Mestre narrou o beat inteiro — aceitou o
+# trabalho, escoltou o ferro, entregou, pagou — e não emitiu um `[Q:]` sequer:
+# não tinha como saber o que "contrato-de-ferro" significava.
+# Com nome + descrição do próximo passo, os MESMOS 4 turnos avançaram a quest
+# dois estágios e moveram a reputação da facção (os-kael: 20).
+
+def _quests_legiveis_fake():
+    return [{
+        "id": "esforco-guerra-kaelmund",
+        "nome": "O contrato de Kaelmünd",
+        "descricao": "",
+        "stages": [
+            {"id": "contrato-de-ferro", "descricao": "Forçar um contrato leonino."},
+            {"id": "o-lacre", "descricao": "Recuperar a Crônica LACRADA."},
+            {"id": "a-verdade-reescrita", "descricao": "Entregar a Crônica para ser queimada."},
+        ],
+    }]
+
+
+def test_bloco_traz_nome_e_descricao_do_proximo_passo():
+    texto = catalog_para_texto(
+        {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]},
+        quests_legiveis=_quests_legiveis_fake(),
+    )
+    assert "O contrato de Kaelmünd" in texto
+    assert "contrato-de-ferro" in texto
+    assert "Forçar um contrato leonino" in texto
+    assert "não iniciada" in texto
+
+
+def test_bloco_mostra_um_estagio_por_vez_nao_o_menu_inteiro():
+    """Menu completo convidava a pular pro final — o detector aceita qualquer
+    stage do catálogo, sem impor ordem."""
+    texto = catalog_para_texto(
+        {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]},
+        quests_legiveis=_quests_legiveis_fake(),
+    )
+    assert "a-verdade-reescrita" not in texto      # spoiler do beat 3 fica fora
+
+
+def test_bloco_avanca_com_a_quest():
+    cat = {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]}
+    texto = catalog_para_texto(
+        cat, quests_legiveis=_quests_legiveis_fake(),
+        stages_atuais={"esforco-guerra-kaelmund": "contrato-de-ferro"},
+    )
+    assert "o-lacre" in texto and "em curso" in texto
+    assert "Recuperar a Crônica" in texto
+
+
+def test_quest_concluida_sai_da_lista():
+    texto = catalog_para_texto(
+        {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]},
+        quests_legiveis=_quests_legiveis_fake(),
+        stages_atuais={"esforco-guerra-kaelmund": "a-verdade-reescrita"},
+    )
+    assert texto == ""
+
+
+def test_sem_quests_legiveis_cai_no_formato_antigo():
+    """Compatibilidade: caller sem o módulo parseado continua funcionando."""
+    texto = catalog_para_texto({"q1": ["s1", "s2"]})
+    assert "q1(s1,s2)" in texto
+
+
+def test_render_do_modulo_real_traz_a_quest_do_playtest():
+    from config import settings
+    from engine.memory.quest_detector import renderizar_quests
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "sess-quest-opaca")
+    texto = renderizar_quests(wm, settings.DEFAULT_MODULE_PATH)
+    assert "O contrato de Kaelmünd" in texto
+    assert "contrato-de-ferro" in texto
+    assert len(texto) < 3000          # legível, não um dump de roteiro
