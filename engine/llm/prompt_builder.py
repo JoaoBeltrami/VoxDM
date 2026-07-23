@@ -251,6 +251,130 @@ def _carregar_social() -> str | None:
     return _ler_prompt(_SOCIAL_PATH)
 
 
+def _tier_do_turno(wm: Any, transcricao: str) -> str:
+    """"epico" nos momentos que pedem peso; "seco" no resto.
+
+    TOM-CHAPADO-1 (auditoria 22/07): `montar_brief` aceita `tier`, mas o caminho
+    de produção nunca o passava — TODO turno saía "TOM: turno comum, 1-3 frases".
+    Clímax da campanha, epílogo e picos de tensão saíam secos como "ando até a
+    porta". Sinais robustos e baratos: a fase do arco (autoridade da engine) e o
+    pacing; a linha ENGINE de um crítico/abate também levanta o tom.
+    """
+    fase = getattr(wm, "arc_fase", "normal")
+    if fase in ("climax", "epilogo", "concluida"):
+        return "epico"
+    if float(getattr(wm, "pacing_nivel", 0) or 0) >= 7:
+        return "epico"
+    t = (transcricao or "").upper()
+    if "ENGINE:" in t and ("NATURAL" in t or "ABATE" in t or "MORTO" in t):
+        return "epico"
+    return "seco"
+
+
+def _blocos_de_cena(contexto: Any) -> list[str]:
+    """Estado + protocolo + nudges que o rolling summary NÃO consegue codificar.
+
+    NUDGES/COMBATE/MESMICE-BRIEF (auditoria 22/07): o caminho do brief (produção,
+    BRIEF_ATIVO=True) nasceu enxuto demais e deixou de fora blocos que o caminho
+    legado sempre teve. Um resumo de médio prazo carrega "o que aconteceu", mas
+    não carrega CONTRA QUEM o jogador luta agora (CA/PV/ficha do inimigo), o
+    PROTOCOLO de como rodar o combate (combat.md), a VOZ distinta de cada NPC
+    (social.md + assinaturas) nem os empurrões pontuais de marcador ([CENA],
+    [INIMIGO], [COMPANION], [ROLAGENS]). Sem isso: o Mestre narra a luta cego,
+    todo NPC soa igual, e o mundo não muda quando o jogador viaja.
+
+    Reusa os MESMOS carregadores do caminho legado — o conteúdo não pode divergir,
+    só o gate. PURA sobre o contexto; não muta nada.
+    """
+    wm = contexto.working_memory
+    transcricao = getattr(contexto, "transcricao_atual", "") or ""
+    blocos: list[str] = []
+
+    em_combate = bool(getattr(wm, "em_combate", False))
+    acao_combate = bool(_RE_COMBATE.search(transcricao))
+
+    # ── Combate: protocolo (estático) + estado (dinâmico) ─────────────────────
+    if em_combate or acao_combate:
+        combat_texto = _carregar_combat()
+        if combat_texto:
+            blocos.append(f"\n{combat_texto}")
+        saves_texto = _carregar_saves()
+        if saves_texto:
+            blocos.append(f"\n{saves_texto}")
+    if em_combate:
+        # Contra quem, quantos, feridos, ficha SRD, distância, rodada — o bloco
+        # que o brief simplesmente não tinha (COMBATE-CEGO-BRIEF-1).
+        estado_combate = wm.combat.to_prompt() if getattr(wm, "combat", None) else ""
+        if estado_combate:
+            blocos.append(f"\n=== {estado_combate}")
+
+    # ── Social: camada + assinatura de voz por NPC ────────────────────────────
+    npcs_presentes = list(getattr(wm, "npcs_presentes", []) or [])
+    if not em_combate and npcs_presentes:
+        social_texto = _carregar_social()
+        if social_texto:
+            blocos.append(f"\n{social_texto}")
+        voz_dupla = _carregar_voz_dupla()
+        if voz_dupla:
+            blocos.append(f"\n{voz_dupla}")
+        try:
+            from engine.memory.working_memory import _id_para_nome as _id_nome_voz
+            from engine.npc.identity import retrato_seed as _seed_identidade
+            from engine.npc.persona import bloco_assinaturas
+
+            def _seed_voz(nid: str) -> str:
+                try:
+                    return _seed_identidade(wm, nid)
+                except Exception:
+                    return nid
+
+            bloco_voz_npc = bloco_assinaturas(npcs_presentes, _id_nome_voz, seed_de=_seed_voz)
+            if bloco_voz_npc:
+                blocos.append(bloco_voz_npc)
+        except Exception as e:
+            log.warning("brief_voz_npc_falhou", erro=str(e)[:80])
+
+    # ── Nudges de marcador (mesmos do caminho legado) ─────────────────────────
+    if _RE_VIAGEM.search(transcricao):
+        blocos.append(
+            "\n=== DESLOCAMENTO PEDIDO ===\n"
+            "O jogador indicou ir a outro lugar. Se a narração SAIR do local atual, "
+            "EMITA [CENA: local-id|Nome|hora] no fim da resposta — local de passagem "
+            "(estrada, trilha, portão, floresta) TAMBÉM é cena nova: improvise um id "
+            "kebab-case (ex.: [CENA: estrada-norte|Estrada ao Norte|noite]). Sem o "
+            "marcador a engine não atualiza local, NPCs presentes, trilha nem imagem."
+        )
+    if em_combate and not getattr(wm, "inimigos_combate", None):
+        blocos.append(
+            "\n=== COMBATE SEM COMBATENTE REGISTRADO ===\n"
+            "O combate está ativo mas NENHUM oponente foi registrado. EMITA "
+            "[INIMIGO: id|Nome|indice-srd] pra cada oponente desta luta AGORA — "
+            "sem isso a engine não resolve ataques, não aplica dano e não encerra "
+            "o combate direito. Se a luta já se resolveu narrativamente (rendição, "
+            "aperto de mãos, sparring encerrado), deixe a cena esfriar em paz."
+        )
+    if _RE_RECRUTAMENTO.search(transcricao):
+        blocos.append(
+            "\n=== RECRUTAMENTO SENDO FECHADO ===\n"
+            "O jogador está fechando a contratação/aliança de um NPC nesta fala. "
+            "Se o acordo for selado NESTA resposta, EMITA "
+            "[COMPANION_ADD: id|nome|tipo|hp|ca|atq|dano] (tipo: hireling|"
+            "familiar|animal|summon) — sem isso o aliado não aparece na ficha "
+            "nem luta ao seu lado."
+        )
+    roll_vis = getattr(wm, "roll_visibility", "result_only")
+    if roll_vis in ("open", "result_only") and (em_combate or _RE_ROLAGEM.search(transcricao)):
+        blocos.append(
+            "\n[ROLAGENS DO MESTRE] Sempre que o Mestre rolar um dado internamente "
+            "(ataque de NPC, teste secreto, evento aleatório), escreva "
+            "[Rolagem visível: dX=Y] ANTES da narração do resultado, onde X é o "
+            "tipo do dado e Y é o valor (ex: [Rolagem visível: d20=14]). "
+            "Limite: no máximo 1 por turno. Não inventar números — usar o dado sorteado."
+        )
+
+    return blocos
+
+
 def _carregar_recap() -> str | None:
     """Instrução de recap de abertura (sessão continuada). None se ausente."""
     return _ler_prompt(_RECAP_PATH)
@@ -448,8 +572,14 @@ def _montar_mensagens_brief(
             + (f"\n{_quests_instrucao}" if _quests_instrucao else "")
         )
 
+    # Estado de combate, protocolo, voz de NPC e nudges — tudo que o rolling
+    # summary não codifica (COMBATE-CEGO / MESMICE / NUDGES-MORTOS, auditoria
+    # 22/07). Reusa os carregadores do caminho legado; gate espelhado.
+    secoes.extend(_blocos_de_cena(contexto))
+
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
-    brief = montar_brief(wm, contexto.transcricao_atual or "")
+    _tier = _tier_do_turno(wm, contexto.transcricao_atual or "")
+    brief = montar_brief(wm, contexto.transcricao_atual or "", tier=_tier)
     secoes.append("\n" + brief.to_prompt())
 
     # DIRETOR DE ARCO (passo 4): a voz da engine dirigindo o desfecho — pressão

@@ -109,11 +109,17 @@ def test_flag_on_historico_de_dialogo_preservado(monkeypatch):
 
 
 def test_flag_on_system_e_bem_menor_que_o_normal(monkeypatch):
-    """A métrica-fim da tese: mesmo contexto inflado, o system do brief é uma
-    fração do system normal."""
-    wm = _wm()
-    wm.npcs_presentes = [f"npc-{i}" for i in range(8)]
-    wm.scene.npcs_apresentados = set(wm.npcs_presentes)
+    """A tese "LLM-fino" segue de pé no turno COMUM: sem combate nem NPC, o brief
+    larga o dump de RAG + a tralha acumulada do para_texto e fica bem menor.
+
+    Nota (auditoria 22/07): o limiar antigo era 0.75 medido numa cena SOCIAL com
+    8 NPCs. Aquele número refletia um brief que — indevidamente — não carregava a
+    voz distinta de cada NPC (MESMICE-NPC / VOZ-DUPLA) nem o estado de combate
+    (COMBATE-CEGO). Corrigido isso, numa cena social o brief carrega social.md +
+    assinaturas de voz nos DOIS caminhos, então o gap ali é legitimamente menor.
+    A leveza real do brief é no turno de exploração, medida aqui.
+    """
+    wm = _wm()  # exploração: sem NPC presente, sem combate
     wm.resumo_rolling = "resumo. " * 80
     ctx_kwargs = dict(
         chunks_semanticos=[{"text": "lore " * 120} for _ in range(4)],
@@ -124,7 +130,7 @@ def test_flag_on_system_e_bem_menor_que_o_normal(monkeypatch):
     monkeypatch.setattr(settings, "BRIEF_ATIVO", True)
     invalidar_cache()
     brief = montar_mensagens(_contexto(wm, **ctx_kwargs))[0]["content"]
-    assert len(brief) < len(normal) * 0.75, (
+    assert len(brief) < len(normal) * 0.85, (
         f"brief ({len(brief)}) deveria ser bem menor que o normal ({len(normal)})"
     )
 
