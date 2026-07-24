@@ -224,3 +224,23 @@ def test_instrucao_de_ritmo_chega_ao_prompt():
     wm.iteracoes = 2          # → longo
     s2 = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
     assert "RESPIRAR" in s2
+
+
+def test_orcamento_de_palavras_acompanha_o_ritmo():
+    """TELL C, diagnóstico de 24/07: o modelo não obedece "UMA frase" (adesão
+    0/5 em 16 turnos), mas escreve SEMPRE até encher o teto de palavras — 67 a
+    94, colado nos 80 declarados. O teto é lido como ALVO, não como limite.
+    Logo, a alavanca do ritmo é o ORÇAMENTO, não a contagem de frases."""
+    from engine.llm.prompt_builder import _lembrete_saida
+
+    assert "30 palavras" in _lembrete_saida("curto")
+    assert "80 palavras" in _lembrete_saida("medio")
+    assert "110 palavras" in _lembrete_saida("longo")
+    assert "80 palavras" in _lembrete_saida("valor-invalido")   # fallback seguro
+
+
+def test_prompt_do_turno_curto_pede_orcamento_menor():
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    s = _system(wm, "Quem é o dono daqui?")        # pergunta curta → curto
+    assert "30 palavras" in s
+    assert "80 palavras" not in s

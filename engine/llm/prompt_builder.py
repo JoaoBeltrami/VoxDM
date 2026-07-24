@@ -171,14 +171,35 @@ BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chun
 # corridas, mesmo com a engine pedindo "UMA frase". O metrônomo estava aqui,
 # hard-coded. Agora o teto de segurança (não estourar o TTS) fica, mas o número
 # de frases é do TOM — que a engine varia por turno.
-_LEMBRETE_SAIDA = (
-    "\n---\n"
-    "[LEMBRETE] PT-BR falado — sem markdown, listas, asteriscos. "
-    "Siga o TOM acima para o fôlego deste turno. Máximo 80 palavras — acima "
-    "disso a fala é CORTADA no meio. "
-    "Termine com ponto/!/? completo — nunca no meio de uma frase. "
-    "Comece DIRETO na narração, sem prefácio."
-)
+# TELL C — diagnóstico definitivo (16 turnos, corpus no estilo do Beltrami,
+# 24/07): pedir "UMA frase" NÃO funciona (adesão 0/5), mas a contagem de
+# PALAVRAS fica cravada em 67-94, colada no teto de 80. O modelo não lê "máximo
+# 80" como limite: lê como ALVO, e escreve até encher o orçamento. Por isso
+# pedir menos frases só produzia frases mais longas — o ritmo não mudava.
+# A alavanca real é o ORÇAMENTO, não a contagem de frases.
+_TETO_PALAVRAS: dict[str, int] = {"curto": 30, "medio": 80, "longo": 110}
+
+
+def _lembrete_saida(ritmo: str = "medio") -> str:
+    """Lembrete final do prompt, com o orçamento de palavras DO TURNO.
+
+    Fica na posição de recência (fim do system) — é a instrução mais forte que o
+    modelo lê, e é justamente por isso que o número aqui precisa variar junto
+    com o TOM. Um teto fixo transforma todo turno no mesmo tamanho.
+    """
+    teto = _TETO_PALAVRAS.get(ritmo, 80)
+    return (
+        "\n---\n"
+        "[LEMBRETE] PT-BR falado — sem markdown, listas, asteriscos. "
+        f"Máximo {teto} palavras nesta resposta — acima disso a fala é CORTADA "
+        "no meio. Siga o TOM acima para o fôlego. "
+        "Termine com ponto/!/? completo — nunca no meio de uma frase. "
+        "Comece DIRETO na narração, sem prefácio."
+    )
+
+
+# Compat: callers/testes antigos que importam a constante seguem funcionando.
+_LEMBRETE_SAIDA = _lembrete_saida()
 
 
 
@@ -652,7 +673,10 @@ def _montar_mensagens_brief(
     except Exception as _e_arco:
         log.warning("arco_diretiva_falhou", erro=str(_e_arco)[:100])
 
-    system_content = "\n".join(secoes) + _LEMBRETE_SAIDA
+    # O orçamento de palavras acompanha o fôlego do turno (TELL C): teto fixo
+    # transforma toda resposta no mesmo tamanho, porque o modelo escreve ATÉ
+    # encher o orçamento.
+    system_content = "\n".join(secoes) + _lembrete_saida(_ritmo)
     turnos = wm.dialogo_recente
     historico = turnos[:-1] if turnos else []
     mensagens: list[dict[str, str]] = [{"role": "system", "content": system_content}]
