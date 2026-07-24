@@ -33,12 +33,24 @@ def test_bloco_dossie_lista_tracos_e_proibe_rotular():
     assert "nunca rotule" in bloco.lower() or "nunca nomeie" in bloco.lower()
 
 
-def test_bloco_dossie_vazio_sem_tracos():
+def test_regra_vale_mesmo_sem_dossie_ainda():
+    """Medição 24/07 (benchmark/run_tells): o dossiê nasce no 1º encontro e só
+    chega ao prompt no turno SEGUINTE. Se a regra dependesse dos traços, os
+    primeiros turnos com um NPC novo — quando a impressão se forma — ficariam
+    sem ela, e a emoção voltava rotulada. Regra sempre; traços quando houver."""
     wm = WorkingMemory.nova_sessao("k", "K", "s")
     wm.npcs_presentes = ["mira"]
     registrar_npc(wm, "mira", "Mira")
     wm.scene.npcs_apresentados = {"mira"}
-    assert bloco_dossie(wm, wm.npcs_presentes) == ""
+    bloco = bloco_dossie(wm, wm.npcs_presentes)
+    assert "nunca rotule" in bloco.lower()
+    assert "•" not in bloco          # sem traços listados — só a regra
+
+
+def test_bloco_vazio_sem_npc_em_cena():
+    """Cena sem ninguém não paga o bloco — custo-zero."""
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    assert bloco_dossie(wm, []) == ""
 
 
 def test_bloco_dossie_pula_npc_nao_apresentado():

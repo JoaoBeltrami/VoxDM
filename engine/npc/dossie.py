@@ -155,16 +155,35 @@ def bloco_dossie(
             continue
         nome = id_para_nome(nid) if id_para_nome else str(nid)
         linhas.append(f"• {nome}: {'; '.join(tracos[:MAX_TRACOS])}")
-    if not linhas:
+
+    # A REGRA vale mesmo sem dossiê ainda. Medição 24/07 (benchmark/run_tells):
+    # o dossiê nasce no 1º encontro e só chega ao prompt no turno SEGUINTE — se
+    # o bloco inteiro dependesse dos traços, justamente os primeiros turnos com
+    # um NPC novo (quando a impressão se forma) ficavam sem a instrução, e a
+    # emoção voltava rotulada. Traços quando houver; regra sempre.
+    if not linhas and not _tem_npc_em_cena(wm, npcs_presentes):
         return ""
+
+    corpo = ("\n" + "\n".join(linhas)) if linhas else ""
     return (
-        "\n=== QUEM SÃO OS NPCs (mostre pelo CORPO, nunca rotule o sentimento) ===\n"
-        + "\n".join(linhas)
-        + "\nUse estes tiques/gestos pra MOSTRAR o que o NPC sente — o copo que "
-        "ele não larga, o passo pra trás, o olhar que desvia. NUNCA nomeie a "
-        'emoção ("com uma mistura de curiosidade e desconfiança"): renderize-a '
-        "no corpo. Mantenha cada NPC DISTINTO."
+        "\n=== OS NPCs SÃO CORPOS (mostre, nunca rotule o sentimento) ===" + corpo
+        + "\nMostre o que o NPC sente pelo CORPO — o copo que ele não larga, o "
+        "passo pra trás, o olhar que desvia, a mão no cabo da faca. NUNCA nomeie "
+        'a emoção ("com uma mistura de curiosidade e desconfiança", "ar de '
+        'aprovação", "com ceticismo"): renderize-a em gesto. Cada NPC DISTINTO.'
     )
+
+
+def _tem_npc_em_cena(wm: Any, npcs_presentes: list[str] | set[str]) -> bool:
+    """True se há ao menos um NPC apresentado e vivo na cena."""
+    apresentados = getattr(wm.scene, "npcs_apresentados", set()) or set()
+    for nid in npcs_presentes:
+        canon = resolver_npc(wm, str(nid))
+        if (nid in apresentados or canon in apresentados) and not (
+            wm.scene.npc_registro.get(canon, {}).get("morto")
+        ):
+            return True
+    return False
 
 
 def tem_dossie(wm: Any, npc_id: str) -> bool:
