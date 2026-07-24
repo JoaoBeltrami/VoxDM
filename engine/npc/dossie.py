@@ -20,6 +20,7 @@ Exemplo:
     # → scene.to_prompt() passa a listar "gorvoth [voz baixa e pausada; ...]"
 """
 
+from collections.abc import Callable
 from typing import Any
 
 import structlog
@@ -39,10 +40,13 @@ _SYSTEM_DOSSIE = (
     "narração do Mestre. Responda APENAS com JSON válido, sem texto antes ou "
     'depois, no formato:\n{"tracos": ["traço 1", "traço 2", "traço 3"]}\n'
     "Regras:\n"
-    "- 2 a 3 traços CONCRETOS e DISTINTOS entre si (maneirismo de fala, "
-    "postura, valor, medo, tique) — coisas que mudam COMO ele fala e age.\n"
+    "- 2 a 3 traços FÍSICOS e VISÍVEIS: um gesto, um tique com um objeto, uma "
+    "postura, um maneirismo de fala — coisas que a câmera FILMARIA. Ex.: 'nunca "
+    "larga o copo', 'bate no cabo da faca ao mentir', 'fala olhando pro chão'.\n"
     "- Cada traço com no máximo 8 palavras.\n"
     "- PROIBIDO traço genérico ('é misterioso', 'é amigável', 'é forte').\n"
+    "- PROIBIDO rotular emoção ('olhar de gratidão', 'ar desconfiado') — dê o "
+    "GESTO que mostra a emoção, não o nome dela.\n"
     "- Se a narração não der material suficiente, INVENTE traços coerentes "
     "com o que foi mostrado — nunca devolva lista vazia."
 )
@@ -117,6 +121,50 @@ def aplicar_dossie(wm: Any, npc_id: str, tracos: list[str]) -> None:
         return
     entrada["tracos"] = tracos_ok
     log.info("dossie_aplicado", npc_id=canon, tracos=tracos_ok)
+
+
+def bloco_dossie(
+    wm: Any,
+    npcs_presentes: list[str] | set[str],
+    id_para_nome: Callable[[str], str] | None = None,
+    cap: int = 3,
+) -> str:
+    """Bloco de prompt com os traços FÍSICOS de cada NPC apresentado em cena.
+
+    ADR-005 Camada 1-B (grill 23/07): a queixa "todo NPC soa igual" + o tell de
+    "o Mestre ROTULA a emoção ('com uma mistura de curiosidade e desconfiança')
+    em vez de MOSTRAR pelo corpo". O dossiê já gera traços distintos, mas eles
+    entravam só no caminho legado (scene.to_prompt) — no BRIEF (produção) o
+    Mestre nunca os via, então não tinha uma pessoa concreta pra descrever e
+    caía no rótulo genérico. Este bloco leva os traços ao brief E manda o Mestre
+    usá-los como corpo visível, proibindo nomear o sentimento.
+
+    Retorna "" quando nenhum NPC em cena tem dossiê — custo-zero.
+    """
+    apresentados = getattr(wm.scene, "npcs_apresentados", set()) or set()
+    linhas: list[str] = []
+    for nid in list(npcs_presentes)[:cap]:
+        canon = resolver_npc(wm, str(nid))
+        if nid not in apresentados and canon not in apresentados:
+            continue
+        entrada = wm.scene.npc_registro.get(canon, {})
+        if entrada.get("morto"):
+            continue
+        tracos = entrada.get("tracos") or []
+        if not tracos:
+            continue
+        nome = id_para_nome(nid) if id_para_nome else str(nid)
+        linhas.append(f"• {nome}: {'; '.join(tracos[:MAX_TRACOS])}")
+    if not linhas:
+        return ""
+    return (
+        "\n=== QUEM SÃO OS NPCs (mostre pelo CORPO, nunca rotule o sentimento) ===\n"
+        + "\n".join(linhas)
+        + "\nUse estes tiques/gestos pra MOSTRAR o que o NPC sente — o copo que "
+        "ele não larga, o passo pra trás, o olhar que desvia. NUNCA nomeie a "
+        'emoção ("com uma mistura de curiosidade e desconfiança"): renderize-a '
+        "no corpo. Mantenha cada NPC DISTINTO."
+    )
 
 
 def tem_dossie(wm: Any, npc_id: str) -> bool:

@@ -346,6 +346,13 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
             bloco_voz_npc = bloco_assinaturas(npcs_presentes, _id_nome_voz, seed_de=_seed_voz)
             if bloco_voz_npc:
                 blocos.append(bloco_voz_npc)
+
+            # ADR-005 Camada 1-B: os traços FÍSICOS do dossiê — o corpo que o
+            # Mestre mostra em vez de rotular a emoção. Vivia só no legado.
+            from engine.npc.dossie import bloco_dossie
+            bloco_traços = bloco_dossie(wm, npcs_presentes, _id_nome_voz)
+            if bloco_traços:
+                blocos.append(bloco_traços)
         except Exception as e:
             log.warning("brief_voz_npc_falhou", erro=str(e)[:80])
 
