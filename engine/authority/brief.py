@@ -42,11 +42,18 @@ _TIERS_VALIDOS = frozenset({"seco", "epico"})
 
 # TELL C (ADR-005 + medição 24/07): o fôlego do turno, decidido pela engine.
 # Os três registros que um mestre humano alterna sem pensar.
+# Medição de 24/07 (16 turnos): pedir CONTAGEM não funciona — adesão 0/5 a "UMA
+# frase". O modelo encompria porque preenche SLOTS DE CONTEÚDO (ambiente + fala
+# + gesto + gancho) e, sob teto de palavras, só comprime cada slot. A alavanca é
+# tirar ou abrir SLOT, não contar palavra: sem ambiente e sem gancho, a resposta
+# encurta sozinha — como um mestre humano que responde a pergunta e para.
 _INSTRUCAO_RITMO: dict[str, str] = {
-    "curto": "TOM: corte SECO — UMA frase, no máximo duas. Responda e cale.",
-    "medio": "TOM: turno comum — 2 a 3 frases diretas, sem florear.",
-    "longo": "TOM: deixe a cena RESPIRAR — 4 a 5 frases, um detalhe sensorial "
-             "que ninguém pediu, o mundo seguindo sem o jogador.",
+    "curto": "TOM: responda e PARE. Só a reação direta ao que ele fez/perguntou "
+             "— nada de descrever o ambiente, nada de terceiros entrando, nada "
+             "de gancho no fim. A cena fica parada esperando ele.",
+    "medio": "TOM: turno comum — a reação e um gesto, sem florear.",
+    "longo": "TOM: deixe a cena RESPIRAR — a reação, o ambiente ao redor, um "
+             "detalhe que ninguém pediu e o mundo seguindo sem o jogador.",
 }
 _RITMOS_VALIDOS = frozenset(_INSTRUCAO_RITMO)
 

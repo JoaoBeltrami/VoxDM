@@ -220,7 +220,8 @@ def test_instrucao_de_ritmo_chega_ao_prompt():
     wm = WorkingMemory.nova_sessao("k", "K", "s")
     wm.iteracoes = 1          # → curto
     s = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
-    assert "UMA frase" in s
+    assert "responda e PARE" in s.lower() or "responda e pare" in s.lower()
+    assert "nada de gancho" in s          # o slot removido é o que encurta
     wm.iteracoes = 2          # → longo
     s2 = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
     assert "RESPIRAR" in s2

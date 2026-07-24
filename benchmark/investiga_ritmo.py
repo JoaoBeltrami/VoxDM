@@ -104,7 +104,10 @@ async def rodar() -> list[dict]:
                     m_tom = re.search(r"TOM: ([^\n]+)", sysmsg)
                     if m_tom:
                         linha = m_tom.group(1)
-                        if "UMA frase" in linha:
+                        # Casar pelo MIOLO da instrução, não por número de
+                        # frases: desde 24/07 o ritmo é definido por SLOT de
+                        # conteúdo ("responda e PARE") e não por contagem.
+                        if "PARE" in linha or "UMA frase" in linha:
                             pedido = "curto"
                         elif "RESPIRAR" in linha:
                             pedido = "longo"
