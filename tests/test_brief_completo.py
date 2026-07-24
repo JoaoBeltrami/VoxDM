@@ -109,10 +109,13 @@ def test_tier_epico_com_pacing_alto():
 
 
 def test_tier_seco_no_turno_comum():
+    """Tier seco = sem peso dramático. O TEXTO do TOM varia com o ritmo
+    (tell C, 24/07) — o que não pode aparecer é a instrução de momento-chave."""
     wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
     assert _tier_do_turno(wm, "Ando até a porta") == "seco"
     s = _system(wm, "Ando até a porta")
-    assert "turno comum" in s
+    assert "momento-chave" not in s
+    assert "TOM:" in s
 
 
 def test_tier_relaxa_apos_campanha_concluida():
@@ -180,3 +183,44 @@ def test_sem_ambiente_nao_injeta_bloco():
     wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
     s = _system(wm, "Sigo em frente")
     assert "AMBIENTAÇÃO JÁ DESCRITA" not in s
+
+
+# ── TELL C: o ritmo varia por decisão da ENGINE ──────────────────────────────
+#
+# Medição 24/07: dizer "1-3 frases" em TODO turno É a monotonia — o modelo
+# converge no mesmo tamanho e a sessão vira metrônomo. Quem alterna é a engine.
+
+def test_pergunta_curta_pede_corte_seco():
+    from engine.llm.prompt_builder import _ritmo_do_turno
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    assert _ritmo_do_turno(wm, "Quanto custa?") == "curto"
+    assert _ritmo_do_turno(wm, "Olho ao redor") == "curto"
+
+
+def test_local_novo_pede_ar():
+    from engine.llm.prompt_builder import _ritmo_do_turno
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    assert _ritmo_do_turno(wm, "Vou para a estrada ao norte com calma") == "longo"
+
+
+def test_ritmo_rotaciona_e_nao_repete_tres_vezes():
+    """A alternância é o ponto: três turnos comuns seguidos não podem sair
+    todos com o mesmo fôlego."""
+    from engine.llm.prompt_builder import _ritmo_do_turno
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    fala = "Converso com o ferreiro sobre o preço do aço nesta temporada"
+    vistos = []
+    for i in range(3):
+        wm.iteracoes = i
+        vistos.append(_ritmo_do_turno(wm, fala))
+    assert len(set(vistos)) == 3, f"ritmo não variou: {vistos}"
+
+
+def test_instrucao_de_ritmo_chega_ao_prompt():
+    wm = WorkingMemory.nova_sessao("k", "K", "s")
+    wm.iteracoes = 1          # → curto
+    s = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
+    assert "UMA frase" in s
+    wm.iteracoes = 2          # → longo
+    s2 = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
+    assert "RESPIRAR" in s2

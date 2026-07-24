@@ -40,6 +40,16 @@ MAX_CHARS_BRIEF = 2_000
 # Tiers válidos — mesmo vocabulário de engine/combat/narration.classificar_tier.
 _TIERS_VALIDOS = frozenset({"seco", "epico"})
 
+# TELL C (ADR-005 + medição 24/07): o fôlego do turno, decidido pela engine.
+# Os três registros que um mestre humano alterna sem pensar.
+_INSTRUCAO_RITMO: dict[str, str] = {
+    "curto": "TOM: corte SECO — UMA frase, no máximo duas. Responda e cale.",
+    "medio": "TOM: turno comum — 2 a 3 frases diretas, sem florear.",
+    "longo": "TOM: deixe a cena RESPIRAR — 4 a 5 frases, um detalhe sensorial "
+             "que ninguém pediu, o mundo seguindo sem o jogador.",
+}
+_RITMOS_VALIDOS = frozenset(_INSTRUCAO_RITMO)
+
 
 @dataclass
 class NarrationBrief:
@@ -57,6 +67,7 @@ class NarrationBrief:
     estado_vital: str = ""
     evento_mundo: str = ""
     tier: str = "seco"
+    ritmo: str = "medio"
     rolling_summary: str = ""
     batismo_pendente: str = ""
 
@@ -80,7 +91,12 @@ class NarrationBrief:
         if tier == "epico":
             linhas.append("TOM: momento-chave — narre denso, com peso dramático.")
         else:
-            linhas.append("TOM: turno comum — 1-3 frases diretas, sem florear.")
+            # TELL C (ADR-005): dizer "1-3 frases" TODO turno É a monotonia — o
+            # modelo converge no mesmo tamanho sempre, e a sessão inteira vira um
+            # metrônomo. Quem decide o fôlego é a ENGINE (autoridade-primeiro), e
+            # ela varia de propósito: um mestre humano às vezes corta com uma
+            # frase, às vezes deixa a cena respirar.
+            linhas.append(_INSTRUCAO_RITMO.get(self.ritmo, _INSTRUCAO_RITMO["medio"]))
         if self.rolling_summary:
             linhas.append(f"O QUE JÁ ACONTECEU NA SESSÃO:\n{self.rolling_summary}")
         return "\n".join(linhas)
@@ -214,6 +230,7 @@ def montar_brief(
     *,
     fatos_resolvidos: list[str] | None = None,
     tier: str = "seco",
+    ritmo: str = "medio",
 ) -> NarrationBrief:
     """Compõe o NarrationBrief a partir da WM — função PURA (não muta nada).
 
@@ -236,6 +253,7 @@ def montar_brief(
         estado_vital=_estado_vital(wm),
         evento_mundo=_evento_mundo(wm),
         tier=tier if tier in _TIERS_VALIDOS else "seco",
+        ritmo=ritmo if ritmo in _RITMOS_VALIDOS else "medio",
         rolling_summary=str(getattr(wm, "resumo_rolling", "") or ""),
         batismo_pendente=_batismo_pendente(wm),
     )

@@ -164,10 +164,18 @@ BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chun
 # após os blocos de lore/regras que "enterram" a Regra Zero do master_system.
 # Mantido curto para não inflar tokens: master_system já cobre as regras completas;
 # aqui repetimos só os pontos ÚNICOS que ele não repete (2-4 frases, "comece direto").
+# TELL C (diagnóstico 24/07, benchmark/run_tells): este lembrete fecha TODO
+# prompt — posição de recência, a instrução mais forte que o modelo lê. Ele
+# cravava "2 a 4 frases", o que sobrescrevia qualquer TOM de ritmo vindo antes:
+# a métrica mostrou `curtos = 0.00` (nenhum turno com uma frase) em TODAS as
+# corridas, mesmo com a engine pedindo "UMA frase". O metrônomo estava aqui,
+# hard-coded. Agora o teto de segurança (não estourar o TTS) fica, mas o número
+# de frases é do TOM — que a engine varia por turno.
 _LEMBRETE_SAIDA = (
     "\n---\n"
     "[LEMBRETE] PT-BR falado — sem markdown, listas, asteriscos. "
-    "2 a 4 frases, máximo 80 palavras — acima disso a fala é CORTADA no meio. "
+    "Siga o TOM acima para o fôlego deste turno. Máximo 80 palavras — acima "
+    "disso a fala é CORTADA no meio. "
     "Termine com ponto/!/? completo — nunca no meio de uma frase. "
     "Comece DIRETO na narração, sem prefácio."
 )
@@ -273,6 +281,31 @@ def _tier_do_turno(wm: Any, transcricao: str) -> str:
     if "ENGINE:" in t and ("NATURAL" in t or "ABATE" in t or "MORTO" in t):
         return "epico"
     return "seco"
+
+
+def _ritmo_do_turno(wm: Any, transcricao: str) -> str:
+    """Fôlego deste turno: "curto" | "medio" | "longo" — decisão da ENGINE.
+
+    TELL C (ADR-005, medido em 24/07): a instrução fixa "1-3 frases" ia em TODO
+    turno, e o modelo convergia no mesmo tamanho sempre — a sessão virava um
+    metrônomo. Um mestre humano alterna sem pensar: corta com uma frase, deixa a
+    cena respirar, volta ao comum. Aqui a alternância é da engine, não do acaso
+    do LLM.
+
+    Sinais (nesta ordem): pergunta curta pede resposta curta; local novo pede ar;
+    fora isso, rotaciona pelo nº do turno pra nunca repetir três vezes seguidas.
+    PURA/testável — sem estado novo, sem I/O.
+    """
+    fala = (transcricao or "").strip()
+    # Pergunta objetiva / fala curta → o humano responde e cala.
+    if fala.endswith("?") and len(fala.split()) <= 12:
+        return "curto"
+    if 0 < len(fala.split()) <= 4:
+        return "curto"
+    # Chegou a um lugar novo → o mundo merece uma respirada.
+    if _RE_VIAGEM.search(fala):
+        return "longo"
+    return ("medio", "curto", "longo")[int(getattr(wm, "iteracoes", 0) or 0) % 3]
 
 
 def _blocos_de_cena(contexto: Any) -> list[str]:
@@ -601,7 +634,10 @@ def _montar_mensagens_brief(
 
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
     _tier = _tier_do_turno(wm, contexto.transcricao_atual or "")
-    brief = montar_brief(wm, contexto.transcricao_atual or "", tier=_tier)
+    _ritmo = _ritmo_do_turno(wm, contexto.transcricao_atual or "")
+    brief = montar_brief(
+        wm, contexto.transcricao_atual or "", tier=_tier, ritmo=_ritmo
+    )
     secoes.append("\n" + brief.to_prompt())
 
     # DIRETOR DE ARCO (passo 4): a voz da engine dirigindo o desfecho — pressão
