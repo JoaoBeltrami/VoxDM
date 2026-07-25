@@ -252,6 +252,15 @@ def _normalizar_para_tts(texto: str) -> str:
     (em-dash lido como pausa abrupta, múltiplos pontos de exclamação como
     staccato, quebras de linha como silêncio total).
     """
+    # UNICODE-EXOTICO-1 (A/B de modelo, 24/07): a família `openai/gpt-oss` —
+    # agora o FALLBACK da cascata — emite caracteres tipográficos exóticos que
+    # o Edge TTS não pronuncia bem. Medido na saída real: "Bem‑vindo" com
+    # U+2011 (hífen NÃO-QUEBRÁVEL), que atravessava o strip inteiro e chegava ao
+    # sintetizador. Normalizados pro equivalente ASCII antes de qualquer coisa.
+    texto = texto.replace("‑", "-")          # hífen não-quebrável
+    texto = texto.replace(" ", " ")          # espaço não-quebrável
+    texto = texto.replace("​", "")           # zero-width space
+    texto = texto.replace("‘", "'").replace("’", "'")   # aspas simples curvas
     texto = texto.replace(" — ", ", ")           # em-dash narrativo → vírgula com pausa
     texto = texto.replace("—", ", ")             # em-dash sem espaço
     texto = texto.replace("–", ", ")             # en-dash

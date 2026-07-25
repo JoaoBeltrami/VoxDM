@@ -161,3 +161,29 @@ def test_eco_parcial_do_lembrete_sem_colchete_e_removido():
         "Comece DIRETO na narração, sem prefácio."
     )
     assert _limpar_markdown(eco).strip() == narracao
+
+
+# ── UNICODE-EXOTICO-1 (A/B de modelo, 24/07) ─────────────────────────────────
+#
+# A família openai/gpt-oss — agora o FALLBACK da cascata — emite tipografia
+# exótica que o Edge TTS não pronuncia bem. Colhido da saída REAL do
+# gpt-oss-120b: "Bem‑vindo" com U+2011 (hífen não-quebrável), que atravessava
+# todo o strip e chegava ao sintetizador.
+
+def test_hifen_nao_quebravel_do_gpt_oss_vira_ascii():
+    from engine.voice.tts import _normalizar_para_tts
+
+    saida_real = "Bem‑vindo ao Salão dos Sussurros."
+    limpo = _normalizar_para_tts(saida_real)
+    assert "‑" not in limpo
+    assert "Bem-vindo" in limpo
+
+
+def test_outros_invisiveis_tambem_somem():
+    from engine.voice.tts import _normalizar_para_tts
+
+    sujo = "O ferreiro​ ergue o ‘martelo’."
+    limpo = _normalizar_para_tts(sujo)
+    for exotico in (" ", "​", "‘", "’"):
+        assert exotico not in limpo, f"sobreviveu: {exotico!r}"
+    assert "O ferreiro ergue o 'martelo'." == limpo
