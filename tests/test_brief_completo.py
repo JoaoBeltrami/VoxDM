@@ -245,3 +245,66 @@ def test_prompt_do_turno_curto_pede_orcamento_menor():
     s = _system(wm, "Quem é o dono daqui?")        # pergunta curta → curto
     assert "30 palavras" in s
     assert "80 palavras" not in s
+
+
+# ── CACHE-PREFIXO (25/07) ────────────────────────────────────────────────────
+#
+# O Groq cacheia o prefixo IDÊNTICO entre chamadas e — a linha que importa pro
+# free tier — token cacheado NÃO conta pro rate limit. Com 100K TPD no 70B
+# (~24 turnos em cena social), manter o protocolo cacheado decide se a sessão
+# termina. Estes testes travam a ORDEM: estático antes, dinâmico depois.
+
+def _prefixo_comum(a: str, b: str) -> float:
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    return i / max(len(a), 1)
+
+
+def _wm_combate(estado="intacto", rodada=1, ambiente=()):
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmünd", "s")
+    wm.entrar_combate()
+    wm.registrar_inimigo("bandido", "Bandido", estado)
+    wm.combat.rodada_combate = rodada
+    for a in ambiente:
+        wm.narrative.registrar_ambiente(a)
+    return wm
+
+
+def _sys_combate(wm, regras=None):
+    ctx = ContextoMontado(
+        working_memory=wm, chunks_semanticos=[], chunks_episodicos=[],
+        chunks_regras=regras or [], relacoes_grafo=[], secrets_visiveis=[],
+        transcricao_atual="Ataco o bandido",
+    )
+    return _montar_mensagens_brief(ctx)[0]["content"]
+
+
+def test_estado_de_combate_nao_derruba_o_protocolo_do_cache():
+    a = _sys_combate(_wm_combate("intacto", 1))
+    b = _sys_combate(_wm_combate("ferido", 2))
+    assert _prefixo_comum(a, b) > 0.90
+
+
+def test_regra_srd_do_turno_nao_derruba_o_cache():
+    """A MECÂNICA DO TURNO é dinâmica: se voltar pra cima dos guias, o prefixo
+    despenca (medido: 94% → 64% quando o spell detector disparava)."""
+    a = _sys_combate(_wm_combate())
+    b = _sys_combate(_wm_combate(), regras=[{"text": "Bola de Fogo — 8d6, CD 15 DES"}])
+    assert _prefixo_comum(a, b) > 0.90
+
+
+def test_pior_caso_tudo_mudando_ainda_cacheia():
+    a = _sys_combate(_wm_combate("intacto", 1))
+    b = _sys_combate(_wm_combate("ferido", 3, ambiente=["o frio cortante da noite"]),
+                     regras=[{"text": "Bola de Fogo — 8d6"}])
+    assert _prefixo_comum(a, b) > 0.90
+
+
+def test_guias_estaticos_vem_antes_do_estado_dinamico():
+    """A garantia estrutural: no prompt, combat.md aparece ANTES do estado."""
+    s = _sys_combate(_wm_combate("ferido", 2))
+    from engine.llm.prompt_builder import _carregar_combat
+    guia = (_carregar_combat() or "")[:60]
+    assert guia and guia in s
+    assert s.index(guia) < s.index("COMBATE ATIVO")

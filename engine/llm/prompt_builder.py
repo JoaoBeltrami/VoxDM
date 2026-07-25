@@ -346,7 +346,8 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
     """
     wm = contexto.working_memory
     transcricao = getattr(contexto, "transcricao_atual", "") or ""
-    blocos: list[str] = []
+    estaticos: list[str] = []   # guias/protocolo — idênticos entre turnos
+    dinamicos: list[str] = []   # estado da cena — muda a cada turno
 
     # Anti-repetição — as imagens sensoriais dos últimos turnos. GUARDA-REPETICAO
     # (auditoria 22/07): alimentada todo turno, nunca LIDA no brief. Lendo em vez
@@ -354,7 +355,7 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
     # resumo não codifica a imagem EXATA — por isso viaja verbatim (cap 4, ~160c).
     ambiente = list(getattr(wm, "ambiente_recente", []) or [])
     if ambiente:
-        blocos.append(
+        dinamicos.append(
             "\n=== AMBIENTAÇÃO JÁ DESCRITA (não repita estas imagens) ===\n"
             + "\n".join(f"• {a}" for a in ambiente)
         )
@@ -366,26 +367,26 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
     if em_combate or acao_combate:
         combat_texto = _carregar_combat()
         if combat_texto:
-            blocos.append(f"\n{combat_texto}")
+            estaticos.append(f"\n{combat_texto}")
         saves_texto = _carregar_saves()
         if saves_texto:
-            blocos.append(f"\n{saves_texto}")
+            estaticos.append(f"\n{saves_texto}")
     if em_combate:
         # Contra quem, quantos, feridos, ficha SRD, distância, rodada — o bloco
         # que o brief simplesmente não tinha (COMBATE-CEGO-BRIEF-1).
         estado_combate = wm.combat.to_prompt() if getattr(wm, "combat", None) else ""
         if estado_combate:
-            blocos.append(f"\n=== {estado_combate}")
+            dinamicos.append(f"\n=== {estado_combate}")
 
     # ── Social: camada + assinatura de voz por NPC ────────────────────────────
     npcs_presentes = list(getattr(wm, "npcs_presentes", []) or [])
     if not em_combate and npcs_presentes:
         social_texto = _carregar_social()
         if social_texto:
-            blocos.append(f"\n{social_texto}")
+            estaticos.append(f"\n{social_texto}")
         voz_dupla = _carregar_voz_dupla()
         if voz_dupla:
-            blocos.append(f"\n{voz_dupla}")
+            estaticos.append(f"\n{voz_dupla}")
         try:
             from engine.memory.working_memory import _id_para_nome as _id_nome_voz
             from engine.npc.identity import retrato_seed as _seed_identidade
@@ -399,20 +400,20 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
 
             bloco_voz_npc = bloco_assinaturas(npcs_presentes, _id_nome_voz, seed_de=_seed_voz)
             if bloco_voz_npc:
-                blocos.append(bloco_voz_npc)
+                dinamicos.append(bloco_voz_npc)
 
             # ADR-005 Camada 1-B: os traços FÍSICOS do dossiê — o corpo que o
             # Mestre mostra em vez de rotular a emoção. Vivia só no legado.
             from engine.npc.dossie import bloco_dossie
             bloco_traços = bloco_dossie(wm, npcs_presentes, _id_nome_voz)
             if bloco_traços:
-                blocos.append(bloco_traços)
+                dinamicos.append(bloco_traços)
         except Exception as e:
             log.warning("brief_voz_npc_falhou", erro=str(e)[:80])
 
     # ── Nudges de marcador (mesmos do caminho legado) ─────────────────────────
     if _RE_VIAGEM.search(transcricao):
-        blocos.append(
+        dinamicos.append(
             "\n=== DESLOCAMENTO PEDIDO ===\n"
             "O jogador indicou ir a outro lugar. Se a narração SAIR do local atual, "
             "EMITA [CENA: local-id|Nome|hora] no fim da resposta — local de passagem "
@@ -421,7 +422,7 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
             "marcador a engine não atualiza local, NPCs presentes, trilha nem imagem."
         )
     if em_combate and not getattr(wm, "inimigos_combate", None):
-        blocos.append(
+        dinamicos.append(
             "\n=== COMBATE SEM COMBATENTE REGISTRADO ===\n"
             "O combate está ativo mas NENHUM oponente foi registrado. EMITA "
             "[INIMIGO: id|Nome|indice-srd] pra cada oponente desta luta AGORA — "
@@ -430,7 +431,7 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
             "aperto de mãos, sparring encerrado), deixe a cena esfriar em paz."
         )
     if _RE_RECRUTAMENTO.search(transcricao):
-        blocos.append(
+        dinamicos.append(
             "\n=== RECRUTAMENTO SENDO FECHADO ===\n"
             "O jogador está fechando a contratação/aliança de um NPC nesta fala. "
             "Se o acordo for selado NESTA resposta, EMITA "
@@ -440,7 +441,7 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
         )
     roll_vis = getattr(wm, "roll_visibility", "result_only")
     if roll_vis in ("open", "result_only") and (em_combate or _RE_ROLAGEM.search(transcricao)):
-        blocos.append(
+        dinamicos.append(
             "\n[ROLAGENS DO MESTRE] Sempre que o Mestre rolar um dado internamente "
             "(ataque de NPC, teste secreto, evento aleatório), escreva "
             "[Rolagem visível: dX=Y] ANTES da narração do resultado, onde X é o "
@@ -448,7 +449,7 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
             "Limite: no máximo 1 por turno. Não inventar números — usar o dado sorteado."
         )
 
-    return blocos
+    return estaticos, dinamicos
 
 
 def _carregar_recap() -> str | None:
@@ -628,13 +629,6 @@ def _montar_mensagens_brief(
                 secoes.append(grimdark_frag)
                 log.info("grimdark_fragmento_injetado", dm_profile=dm_profile_attr)
 
-    # Regras SRD do turno (spell detector) — mecânica engine-fornecida, faz
-    # parte dos "fatos que a engine entrega", não do dump cortado.
-    if contexto.chunks_regras:
-        regras = "\n".join(str(c.get("text", c)) for c in contexto.chunks_regras[:3])
-        if regras.strip():
-            secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
-
     # Catálogo de quests + como sinalizar avanço. QUEST-DEADLOCK-1 (playtest
     # 21/07): este bloco não existia no caminho do brief, então o Mestre nunca
     # via um único id de quest — e sem id não há `[Q: ...]`, sem `[Q: ...]` não
@@ -651,7 +645,21 @@ def _montar_mensagens_brief(
     # Estado de combate, protocolo, voz de NPC e nudges — tudo que o rolling
     # summary não codifica (COMBATE-CEGO / MESMICE / NUDGES-MORTOS, auditoria
     # 22/07). Reusa os carregadores do caminho legado; gate espelhado.
-    secoes.extend(_blocos_de_cena(contexto))
+    # ORDEM IMPORTA (CACHE-PREFIXO 25/07): só os ESTÁTICOS entram aqui, no fim do
+    # prefixo cacheável. Os dinâmicos vão depois das regras SRD, lá embaixo.
+    _cena_estatica, _cena_dinamica = _blocos_de_cena(contexto)
+    secoes.extend(_cena_estatica)
+
+    # ── ZONA DINÂMICA — daqui pra baixo o conteúdo muda a cada turno ─────────
+    # Tudo acima é prefixo cacheável (e token cacheado não conta pro rate limit
+    # do free tier). As regras SRD do spell detector vivem AQUI, não lá em cima
+    # onde estavam: elas mudam por turno e derrubavam ~5,3k chars do cache toda
+    # vez que o detector disparava (medido: prefixo comum 94% → 64%).
+    if contexto.chunks_regras:
+        regras = "\n".join(str(c.get("text", c)) for c in contexto.chunks_regras[:3])
+        if regras.strip():
+            secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
+    secoes.extend(_cena_dinamica)
 
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
     _tier = _tier_do_turno(wm, contexto.transcricao_atual or "")
