@@ -1,5 +1,5 @@
 # VoxDM — Instruções para Claude Code
-> Atualizado: 24 de junho de 2026 — **Sessão de fixes do playtest + pacote do mestre veterano (shipped na main)**. Rebuild do frontend (launcher BG1 + FichaViva + telas com identidade `--vox-*`). Pacote veterano: voz distinta por NPC (`engine/npc/persona.py` — registro/tique de TEXTO + pitch/rate de ÁUDIO determinísticos), reincorporação (`[REINCORPORAR]`), presságio de relógio (`[PRESSÁGIO]`). Playtest #N (24 turnos social) → 7 fixes: **F1 extractor rejeita LUGAR/DEIDADE/anônimo + cap em npcs_presentes** (causa-raiz: prompt 29k→20,5k, cortou a cascata pro Gemini), thinking não-todo-turno, relógio slow-burn, volume fora do cinema, ficha por portal, Ctrl cancela STT, crônica popula ("🤝 Conheceu X"). **1484/1484 testes, build verde, tudo na main.** ⚠️ Pendente: novo playtest valida F1/vozes/relógio/crônica ao vivo. Histórico detalhado: `.internal/ESTADO.md` + memórias `bugs_conhecidos_sessao_fixes` / `roadmap_mestre_virtual_pilares`.
+> Atualizado: 25 de julho de 2026 — **A Camada 1 virou NÚMERO e a campanha chega ao FINAL.** O norte foi REESCRITO (ADR-005): gravar saiu do gate; a ordem de dev agora é a hierarquia de necessidades psicológicas do jogador. `engine/quality/tells.py` + `benchmark/run_tells.py` + `benchmark/investiga_ritmo.py` medem "o Mestre soa humano?" — os 3 tells caíram (emoção rotulada 1.00→0.00/turno, renarração 0.00, ritmo desvio 1.06→1.68). Auditoria de componentes: fallback migrado pro `gpt-oss-20b` (o antigo desliga 16/08), degrau de TPD na cascata, LEMBRETE que vazava pro TTS. **2214/2214 testes, ruff e tsc limpos, tudo na main.** Histórico: `.internal/ESTADO.md` + `.internal/ADR/`.
 > Leia TUDO antes de escrever qualquer código.
 
 ---
@@ -7,13 +7,45 @@
 ## Identidade
 
 VoxDM é uma engine de narração de RPG de mesa por voz, controlada 100% por fala.
-Projeto pessoal do Beltrami — desenvolvimento ao vivo, conteúdo simultâneo para YouTube.
+Projeto pessoal do Beltrami. **Gravar NÃO é mais o gate** (ADR-005, 23/07): o alvo é
+UX single-player boa o bastante pra valer multiplayer + mobile.
 
 ---
 
-## Fase Atual
+## Norte atual (ADR-005 — leia antes de priorizar qualquer coisa)
 
-**Fase 6 concluída. 5 rounds de auditoria de imersão (25 bugs). Auditoria de robustez (5 bugs). 621/621 testes. tsc clean. Pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser) + teste e2e local com GPU.**
+**A ordem de desenvolvimento é a hierarquia de necessidades psicológicas do jogador,
+e é ordem de DEPENDÊNCIA (cada camada segura a de cima), não de preferência:**
+
+1. **Mente responsiva** — "há uma inteligência reagindo a MIM". ← **GATE ATUAL**
+2. **Agência consequente** — "minhas escolhas mudam o mundo e podem dar errado" (risco SENTIDO, não mecânica correta)
+3. **Estado compreensível** — inventário/itens/checks legíveis no momento certo
+4. **Canal sensorial** — a voz
+5. **Moldura** — UI/design
+6. **Pertencimento** — multiplayer/mobile
+
+Voz (4) e moldura (5) são dials de FUNDO: melhoram sempre, não gateiam nada.
+Multiplayer só depois de 1-3 segurarem. **Auth-para-saves (continuidade solo) ≠
+auth-multiplayer** — não confundir.
+
+**Camada 1 está medida e verde** (os 3 tells zerados/normalizados na régua). O que
+falta é o Beltrami JOGAR e dizer se bate com o que ele sente — a régua mede AUSÊNCIA
+de tell de máquina, não PRESENÇA de alma.
+
+### Como medir qualidade narrativa (obrigatório antes de afirmar "melhorou")
+- `engine/quality/tells.py` — detector puro dos 3 tells (emoção rotulada / renarração
+  da ação do jogador / ritmo monótono).
+- `benchmark/run_tells.py` — A/B contra corpus congelado. `benchmark/investiga_ritmo.py`
+  — 16 turnos no estilo real do Beltrami + correlação "fôlego pedido × entregue".
+- **N≥3 e MEDIANA.** A variância do LLM é MAIOR que o efeito perseguido: medições da
+  mesma engine deram 0.67 e 1.17. Uma corrida isolada mente nas duas direções.
+- ⚠️ **Reinicie o uvicorn antes de medir.** Os `.md` têm hot reload por mtime; constantes
+  PYTHON (`_LEMBRETE_SAIDA`, `_ritmo_do_turno`) NÃO — medir sem restart mede código velho.
+
+---
+
+## Fases históricas (referência)
+
 - Fase 0 (setup local, GPU): ✅ CONCLUÍDA. Único pendente: Cloudflare Tunnel (precisa `cloudflared tunnel login` no browser).
 - Fase 1 (ingestão): ✅ CONCLUÍDA. `make ingest` re-executado (09/05) com 96 chunks GPU em 3.9s. `qdrant_uploader.py` corrigido: race condition 409 Conflict após delete resolvido com retry backoff.
 - Fase 2 (voz): ✅ CONCLUÍDA (API). Loop fechado: MediaRecorder → POST /transcribe → Faster-Whisper GPU → WS → Edge TTS → audio_chunk → Web Audio API. Pendente: validar com GPU local (marco: latência <2s ponta a ponta).
@@ -443,6 +475,33 @@ NÃO assumir NEO4J_USER=neo4j → AuraDB Free usa o ID da instância como userna
 NÃO usar kokoro-tts         → usar: pip install kokoro
 NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1
+
+# Quotas do free tier — o que MORDE é o TPD, não o TPM (medido 25/07)
+NÃO otimizar só pra TPM   → llama-3.3-70b tem 12K TPM mas só 100K TPD:
+                            ~19-27 turnos POR DIA (3,6k tok/turno em exploração,
+                            5,2k em combate). MENOS QUE UMA SESSÃO — o primário
+                            estoura no meio da partida, todo dia.
+NÃO assumir que a doc está certa → a doc dizia "6K TPM" (dobrou pra 12K sem aviso).
+                            Conferir console.groq.com/docs/rate-limits a cada /estado.
+Cascata atual: 70B (100K TPD) → gpt-oss-120b (200K) → gpt-oss-20b (200K) → Gemini → Ollama.
+                            O degrau do meio existe SÓ por causa disso.
+NÃO pôr modelo novo em NARRATIVE_LIGHT → essa rota existe pra POUPAR cota.
+NÃO pôr modelo não-testado em NARRATIVE_GRIM → essa rota existe pra GARANTIR que
+                            ficção sombria não seja recusada; safety não medido = risco.
+
+# Modelos de RACIOCÍNIO (openai/gpt-oss, gemini "full")
+NÃO trocar por um deles sem tratar → gastam tokens em `reasoning` ANTES do `content`.
+                            Medido: max_tokens=120 → 447 chars de raciocínio e content
+                            VAZIO. O projeto tem chamadas em 120 (dossiê de NPC!).
+                            `GroqProvider._extras()` passa reasoning_effort="low".
+
+# Prompt e código que o consome DERIVAM em silêncio (4 ocorrências em 2 dias)
+NÃO reescrever texto de prompt sem grepar quem o consome → já mordeu em:
+                            `_LEMBRETE_SAIDA` vs strip do TTS (o jogador OUVIA a
+                            instrução interna); voz_dupla.md (aspas simples) vs o
+                            realce do frontend (aspas duplas); texto do TOM vs o
+                            parser do benchmark. Teste que amarra os dois lados
+                            vale mais que o fix.
 
 # Modelos depreciados / problemáticos
 NÃO usar Gemini para conversão → free tier extinto (quota=0). Usar: Groq llama-3.3-70b-versatile
