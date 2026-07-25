@@ -1123,6 +1123,31 @@ async def _beat_turno_inimigo(
         log.warning("beat_turno_inimigo_falhou", erro=str(e)[:120])
 
 
+def _cena_social(wm: Any) -> bool:
+    """A cena é SOCIAL de verdade — ou só tem gente ao fundo?
+
+    LIGHT-MORTO-1: a regra 2 do roteador (NPC em cena → 70B, nunca 8B) nasceu
+    de um playtest real em que o 8B deixou o Mestre robótico em diálogo — é uma
+    boa regra. O problema era o SINAL: `bool(npcs_presentes)` conta qualquer NPC,
+    inclusive os que a inferência do Neo4j pôs no local e com quem o jogador
+    nunca falou. Bastava entrar numa vila povoada pra TODO turno virar 70B, e
+    `NARRATIVE_LIGHT` — que existe justamente pra poupar cota — nunca mais
+    disparava.
+
+    Isso importa muito mais desde a auditoria de quotas (25/07): no free tier o
+    70B tem 100K TPD, ~19-27 turnos por DIA. Queimar esse orçamento em turno de
+    travessia é o pior uso possível dele.
+
+    Sinal novo: NPC APRESENTADO (o jogador engajou com ele nesta cena), não
+    apenas presente. Cena social de verdade continua indo pro 70B.
+    """
+    presentes = set(getattr(wm, "npcs_presentes", []) or [])
+    if not presentes:
+        return False
+    apresentados = getattr(getattr(wm, "scene", None), "npcs_apresentados", set()) or set()
+    return bool(presentes & set(apresentados))
+
+
 def _snapshot_arco(wm: Any) -> dict[str, Any]:
     """Estado do arco de campanha para o HUD (Diretor de Arco, 20/07).
 
@@ -2175,7 +2200,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 pacing_nivel=sessao.working_mem.pacing_nivel,
                 cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
                 turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
-                npc_na_cena=bool(sessao.working_mem.npcs_presentes),
+                npc_na_cena=_cena_social(sessao.working_mem),
                 light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
                 dm_profile=_dm_prof,
                 grimdark_ativo=_grim,
@@ -2194,7 +2219,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             log.info("task_type_escolhido", task=_task_turno.value,
                      em_combate=sessao.working_mem.em_combate,
                      pacing=round(sessao.working_mem.pacing_nivel, 1),
-                     npc_na_cena=bool(sessao.working_mem.npcs_presentes),
+                     npc_na_cena=_cena_social(sessao.working_mem),
                      light_seguidos=sessao.working_mem.turnos_light_consecutivos,
                      session_id=session_id)
 

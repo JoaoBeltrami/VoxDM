@@ -87,3 +87,62 @@ def test_degrau_do_meio_esta_registrado_no_router():
     r = LLMRouter()
     assert PROV_GROQ_120B in r._providers
     assert "gpt-oss-120b" in r._providers[PROV_GROQ_120B]._modelo
+
+
+# ── LIGHT-MORTO-1 (auditoria 22/07, priorizado 25/07 pelo achado de TPD) ─────
+#
+# `NARRATIVE_LIGHT` existe pra POUPAR a cota do 70B em turno de filler. Ela
+# nunca disparava depois do 1º NPC entrar em cena, porque o sinal era
+# `bool(npcs_presentes)` — qualquer NPC, inclusive os que o Neo4j infere no
+# local e com quem o jogador nunca falou. Numa vila povoada, TODO turno virava
+# 70B. Com 100K TPD (19-27 turnos/dia), isso é queimar o recurso mais escasso
+# do projeto em travessia.
+
+def _wm_com_npcs(presentes, apresentados=()):
+    from engine.memory.working_memory import WorkingMemory
+    wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmünd", "s")
+    wm.npcs_presentes = list(presentes)
+    wm.scene.npcs_apresentados = set(apresentados)
+    return wm
+
+
+def test_npc_so_de_fundo_nao_e_cena_social():
+    """Atravessar uma vila povoada não é diálogo — libera o LIGHT."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs(["taverneiro", "ferreiro", "guarda"])  # ninguém apresentado
+    assert _cena_social(wm) is False
+
+
+def test_npc_apresentado_e_cena_social():
+    """A regra 2 continua valendo onde ela nasceu: diálogo vai pro 70B."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs(["taverneiro", "ferreiro"], apresentados=["taverneiro"])
+    assert _cena_social(wm) is True
+
+
+def test_cena_vazia_nao_e_social():
+    from api.websocket import _cena_social
+
+    assert _cena_social(_wm_com_npcs([])) is False
+
+
+def test_apresentado_que_saiu_da_cena_nao_conta():
+    """npcs_apresentados é cumulativo da SESSÃO — quem ficou pra trás não
+    transforma a estrada num salão de baile."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs([], apresentados=["taverneiro"])
+    assert _cena_social(wm) is False
+
+
+def test_filler_com_npc_de_fundo_escolhe_light():
+    """O efeito final: o turno de travessia volta a poupar o 70B."""
+    from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+
+    task = escolher_task_type_narrativo(
+        em_combate=False, pacing_nivel=1.0, turnos_sem_tensao=3,
+        npc_na_cena=False,           # agora que o sinal é preciso
+    )
+    assert task is TaskType.NARRATIVE_LIGHT
