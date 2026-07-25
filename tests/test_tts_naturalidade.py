@@ -129,3 +129,35 @@ class TestNuancesPontuacao:
         assert "... ..." not in resultado
 
 
+
+
+# ── LEMBRETE-VAZA-1 (review 24/07) ───────────────────────────────────────────
+#
+# O strip do TTS casava `[LEMBRETE DE SAÍDA`, texto que não existe mais — o
+# marcador real é `[LEMBRETE]`. Quando o LLM ecoava o lembrete, o jogador OUVIA
+# a instrução interna ("PT-BR falado, sem markdown, listas, asteriscos…").
+# Este teste amarra o strip ao lembrete REAL: se alguém reescrever um sem o
+# outro, ele quebra.
+
+def test_lembrete_real_nunca_chega_ao_tts():
+    from engine.llm.prompt_builder import _lembrete_saida
+    from engine.voice.tts import _limpar_markdown
+
+    narracao = "O ferreiro cospe no chão e vira as costas."
+    for ritmo in ("curto", "medio", "longo"):
+        limpo = _limpar_markdown(narracao + _lembrete_saida(ritmo))
+        assert limpo.strip() == narracao, f"lembrete '{ritmo}' vazou: {limpo!r}"
+
+
+def test_eco_parcial_do_lembrete_sem_colchete_e_removido():
+    """O LLM às vezes ecoa as linhas sem o marcador — o strip pega por linha."""
+    from engine.voice.tts import _limpar_markdown
+
+    narracao = "A porta range e cede um palmo."
+    eco = (
+        f"{narracao}\n"
+        "PT-BR falado — sem markdown, listas, asteriscos.\n"
+        "Máximo 80 palavras nesta resposta.\n"
+        "Comece DIRETO na narração, sem prefácio."
+    )
+    assert _limpar_markdown(eco).strip() == narracao

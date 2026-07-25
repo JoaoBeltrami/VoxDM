@@ -177,8 +177,13 @@ def _limpar_markdown(texto: str) -> str:
     # Remove o _LEMBRETE_SAIDA inteiro: o marcador + tudo que vem depois até o fim.
     # O LLM às vezes ecoa o lembrete no final da resposta — removendo o bloco
     # completo preserva a narração que veio antes.
-    texto = re.sub(r'---\s*\n?\s*\[LEMBRETE DE SAÍDA[\s\S]*', '', texto, flags=re.IGNORECASE)
-    texto = re.sub(r'\[LEMBRETE DE SAÍDA[\s\S]*', '', texto, flags=re.IGNORECASE)
+    # LEMBRETE-VAZA-1 (review 24/07): o regex casava `[LEMBRETE DE SAÍDA`, texto
+    # que NÃO EXISTE mais — o marcador real é `[LEMBRETE]` (prompt_builder
+    # `_lembrete_saida`). Resultado: quando o LLM ecoava o lembrete, o jogador
+    # OUVIA "PT-BR falado, sem markdown, listas, asteriscos…". Agora casa
+    # qualquer coisa que abra com `[LEMBRETE`, e o `---` que o antecede também.
+    texto = re.sub(r'-{2,}\s*\n?\s*\[LEMBRETE[\s\S]*', '', texto, flags=re.IGNORECASE)
+    texto = re.sub(r'\[LEMBRETE[\s\S]*', '', texto, flags=re.IGNORECASE)
     texto = re.sub(r'\[INSTRUÇÕES INTERNAS.*?\]', '', texto, flags=re.DOTALL | re.IGNORECASE)
 
     # ── Eco de linhas do _LEMBRETE_SAIDA sem o marcador de colchete ──────────
@@ -186,7 +191,14 @@ def _limpar_markdown(texto: str) -> str:
     texto = re.sub(r'^Responda em prosa falada.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
     texto = re.sub(r'^Use apenas vírgulas.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
     texto = re.sub(r'^PROIBIDO:.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
-    texto = re.sub(r'^Comece DIRETO com.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    # LEMBRETE-VAZA-1: alinhados ao texto ATUAL do lembrete. O antigo casava
+    # "Comece DIRETO com", e hoje a frase é "Comece DIRETO na narração" — o eco
+    # passava batido. Genéricos de propósito, pra sobreviver à próxima redação.
+    texto = re.sub(r'^Comece DIRETO\b.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^PT-BR falado\b.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^M[áa]ximo \d+ palavras\b.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Siga o TOM\b.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
+    texto = re.sub(r'^Termine com ponto\b.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
     texto = re.sub(r'^Escreva como narrador humano.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
     texto = re.sub(r'^O jogador ouve, não lê.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
     texto = re.sub(r'^Nunca use markdown.*$', '', texto, flags=re.MULTILINE | re.IGNORECASE)
