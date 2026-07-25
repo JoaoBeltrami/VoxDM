@@ -43,6 +43,13 @@ class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda s
 # Mantemos como constantes pra evitar typos espalhados.
 PROV_GROQ_70B:    Final[str] = "groq-70b"
 PROV_GROQ_8B:     Final[str] = "groq-8b"
+# FREE-TIER-TPD (auditoria 24/07): degrau novo entre o 70B e o 8B. No free tier
+# o limite que MORDE não é o TPM — é o TPD. O 70B tem 100K tokens/dia, o que dá
+# ~19-27 turnos (medido: 3,6k tok/turno em exploração, 5,2k em combate/social) —
+# MENOS que uma sessão. Ou seja: o primário estoura no meio de toda partida e a
+# queda ia direto pro modelo pequeno. O gpt-oss-120b tem 200K TPD (o dobro) e é
+# mais rápido no 1º token, então vira o amortecedor natural.
+PROV_GROQ_120B:   Final[str] = "groq-120b"
 PROV_GEMINI:      Final[str] = "gemini-flash"
 PROV_OLLAMA:      Final[str] = "ollama-local"
 PROV_OLLAMA_GRIM: Final[str] = "ollama-grim"   # modelo uncensored para ficção sombria
@@ -63,6 +70,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # Narrativa: qualidade > velocidade. 70B primeiro, Gemini é par.
     TaskType.NARRATIVE: [
         PROV_GROQ_70B,
+        PROV_GROQ_120B,     # amortecedor de TPD — ver FREE-TIER-TPD acima
         PROV_GROQ_8B,
         PROV_GEMINI,
         PROV_OLLAMA,
@@ -71,6 +79,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # Mesma cascata da default mas explicita a intenção (telemetria).
     TaskType.NARRATIVE_CLIMAX: [
         PROV_GROQ_70B,
+        PROV_GROQ_120B,     # no clímax, o degrau grande vem antes do Gemini
         PROV_GEMINI,        # pular 8B em climax: queremos qualidade
         PROV_GROQ_8B,
         PROV_OLLAMA,
@@ -86,6 +95,10 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # Grim: ficção sombria (massacre, tortura, horror de fantasia) — pula 8B
     # (amarelea mais) e termina no modelo uncensored como GARANTIA.
     # groq-70b → gemini (BLOCK_NONE já configurado) → ollama-grim (abliterated).
+    # NÃO inserir o gpt-oss-120b aqui sem TESTAR recusa antes (24/07): esta
+    # cascata existe pra GARANTIR que ficção sombria seja narrada, e ela pula o
+    # 8B porque ele amarela. O gpt-oss tem safety training próprio, não medido —
+    # o ganho de TPD não vale arriscar a garantia que é o motivo desta rota.
     TaskType.NARRATIVE_GRIM: [
         PROV_GROQ_70B,
         PROV_GEMINI,

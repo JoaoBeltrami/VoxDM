@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # oficial. É modelo de RACIOCÍNIO: o provider passa reasoning_effort="low"
     # automaticamente, senão o content volta VAZIO em max_tokens baixo.
     # ~1000 tok/s vs 560 do llama-3.1-8b-instant.
+    # Degrau do MEIO da cascata (FREE-TIER-TPD): o 70B tem só 100K tokens/dia
+    # no free tier — ~19-27 turnos, menos que uma sessão. Este segura o resto da
+    # partida com qualidade, em vez de despencar direto no modelo pequeno.
+    GROQ_MODEL_MEIO: str = "openai/gpt-oss-120b"
     GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-20b"
     GEMINI_API_KEY_V2: str = ""           # 1 chave (legado, usado se KEYS vazio)
     # Múltiplas chaves Gemini separadas por vírgula. Cada chave gerada num

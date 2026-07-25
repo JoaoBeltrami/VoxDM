@@ -36,6 +36,7 @@ from engine.llm.tasks import (
     PROV_GEMINI,
     PROV_GROQ_8B,
     PROV_GROQ_70B,
+    PROV_GROQ_120B,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
@@ -66,6 +67,7 @@ class LLMRouter:
         # porque cada provider usa httpx.AsyncClient *por chamada*.
         self._providers: dict[str, BaseLLMProvider] = {
             PROV_GROQ_70B:    GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
+            PROV_GROQ_120B:   GroqProvider(nome=PROV_GROQ_120B, modelo=settings.GROQ_MODEL_MEIO),
             PROV_GROQ_8B:     GroqProvider(nome=PROV_GROQ_8B,  modelo=settings.GROQ_MODEL_FALLBACK),
             PROV_GEMINI:      GeminiProvider(),
             PROV_OLLAMA:      OllamaProvider(),
