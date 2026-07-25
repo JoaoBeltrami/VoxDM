@@ -47,3 +47,48 @@ perguntas:
   - pergunta: "o que é a condição envenenado?"
     source_ids_esperados: [poisoned]
     colecao: voxdm_rules
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # NÍVEL DIFÍCIL — adicionado 24/07 pra medir troca de EMBEDDING
+  #
+  # As 10 perguntas acima são todas "quem é <nome>": o nome está LITERAL no
+  # chunk, então qualquer embedding acerta e o benchmark satura em 100%
+  # Recall@5 — inútil pra comparar modelos.
+  #
+  # Estas abaixo NÃO repetem o nome do alvo: exigem casar CONCEITO (papel,
+  # motivação, relação) com o texto. É onde o MiniLM-L12-v2 (0,248 no MTEB-BR,
+  # 2º pior de 93) deve cair e um e5-large/BGE-M3 (~0,64) deve segurar.
+  # Escritas no jeito que o Beltrami fala com o Mestre, não em queries de busca.
+  # ══════════════════════════════════════════════════════════════════════════
+
+  - pergunta: "quem cuida dos feridos e tem a confiança de todo mundo na vila?"
+    source_ids_esperados: [yrsa-a-curandeira]
+    colecao: voxdm_modules
+
+  - pergunta: "quem acha que essa guerra é suicídio coletivo?"
+    source_ids_esperados: [yrsa-a-curandeira]
+    colecao: voxdm_modules
+
+  - pergunta: "tem alguém que trocou de lado e carrega culpa por isso?"
+    source_ids_esperados: [osmund-o-exilado]
+    colecao: voxdm_modules
+
+  - pergunta: "quem foi chamado de traidor por se recusar a atacar?"
+    source_ids_esperados: [osmund-o-exilado]
+    colecao: voxdm_modules
+
+  - pergunta: "quem lembra de quando as vilas ainda faziam festa juntas?"
+    source_ids_esperados: [edda-a-velha]
+    colecao: voxdm_modules
+
+  - pergunta: "com quem eu negocio se preciso da força dos gigantes?"
+    source_ids_esperados: [mundr]
+    colecao: voxdm_modules
+
+  - pergunta: "quem separa afeto de negócio na hora de fechar um trato?"
+    source_ids_esperados: [mundr]
+    colecao: voxdm_modules
+
+  - pergunta: "quem manda na milícia que defende a vila do porto?"
+    source_ids_esperados: [osmund-o-exilado]
+    colecao: voxdm_modules
