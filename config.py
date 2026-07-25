@@ -51,7 +51,11 @@ class Settings(BaseSettings):
 
     # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
     # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
-    GROQ_MODEL_FALLBACK: str = "llama-3.1-8b-instant"
+    # DESLIGA em 16/08/2026 (console.groq.com/docs/deprecations) — substituto
+    # oficial. É modelo de RACIOCÍNIO: o provider passa reasoning_effort="low"
+    # automaticamente, senão o content volta VAZIO em max_tokens baixo.
+    # ~1000 tok/s vs 560 do llama-3.1-8b-instant.
+    GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-20b"
     GEMINI_API_KEY_V2: str = ""           # 1 chave (legado, usado se KEYS vazio)
     # Múltiplas chaves Gemini separadas por vírgula. Cada chave gerada num
     # projeto Google Cloud diferente tem quota free SEPARADA (1500 RPD por

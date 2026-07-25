@@ -104,6 +104,22 @@ def _e_quota_disfarcada(exc: BaseException) -> bool:
 class GroqProvider(BaseLLMProvider):
     """Provider Groq — uma instância por modelo (70B, 8B etc.)."""
 
+    # MODELOS DE RACIOCÍNIO (auditoria 24/07): a família `openai/gpt-oss` gasta
+    # tokens num campo `reasoning` ANTES de emitir `content` — mesma armadilha
+    # documentada no CLAUDE.md pro gemini-2.5-flash "full". Medido: com
+    # max_tokens=120 e o esforço default, 447 chars foram pro raciocínio e o
+    # content voltou VAZIO (finish=length). O projeto tem chamadas em 120 (o
+    # gerador de dossiê de NPC, entre elas), então migrar sem isto quebraria a
+    # narração de forma intermitente e silenciosa. Com effort="low": 25 chars de
+    # raciocínio e o texto sai normal.
+    _RACIOCINIO_LOW = ("gpt-oss",)
+
+    def _extras(self) -> dict[str, str]:
+        """kwargs específicos do modelo (vazio pros modelos comuns)."""
+        if any(marca in self._modelo for marca in self._RACIOCINIO_LOW):
+            return {"reasoning_effort": "low"}
+        return {}
+
     def __init__(self, *, nome: str, modelo: str) -> None:
         self.nome = nome
         self._modelo = modelo
@@ -150,6 +166,7 @@ class GroqProvider(BaseLLMProvider):
                 messages=mensagens,  # type: ignore[arg-type]
                 temperature=temperatura,
                 max_tokens=max_tokens,
+                **self._extras(),
             )
             texto = resp.choices[0].message.content or ""
         except _ERROS_RECUPERAVEIS as e:
@@ -190,6 +207,7 @@ class GroqProvider(BaseLLMProvider):
                 temperature=temperatura,
                 max_tokens=max_tokens,
                 stream=True,
+                **self._extras(),
             )
         except _ERROS_RECUPERAVEIS as e:
             raise LLMRetriable(
