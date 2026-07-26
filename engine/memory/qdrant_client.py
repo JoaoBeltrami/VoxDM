@@ -14,6 +14,7 @@ Exemplo:
 """
 
 import asyncio
+import functools
 from typing import Any
 
 import structlog
@@ -156,7 +157,11 @@ class QdrantMemoryClient:
         loop = asyncio.get_running_loop()
 
         # Embedding em executor — sentence-transformers bloqueia CPU por 200-500ms
-        vetor_array = await loop.run_in_executor(None, embedder.gerar, [query])
+        # modo="query": a família E5 distingue pergunta de documento (ver
+        # _EXIGE_PREFIXO_E5 no embedder). Sem isso, a busca degrada.
+        vetor_array = await loop.run_in_executor(
+            None, functools.partial(embedder.gerar, [query], modo="query")
+        )
         vetor: list[float] = vetor_array[0].tolist()
 
         resultados = await loop.run_in_executor(

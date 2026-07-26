@@ -81,7 +81,17 @@ def _hf_offline_temporario() -> Iterator[None]:
 log = structlog.get_logger()
 
 MODELO_NOME: str = settings.EMBEDDING_MODEL
-VECTOR_SIZE = 384
+
+# Família E5 exige prefixo "query:" / "passage:" no texto — foi assim que ela foi
+# treinada, e sem isso a assimetria pergunta↔documento desaparece (perda medida
+# na literatura em torno de 3-5 pontos de nDCG). Detectado pelo NOME do modelo pra
+# que trocar `EMBEDDING_MODEL` no .env não exija mexer em código.
+_EXIGE_PREFIXO_E5: bool = "e5" in MODELO_NOME.lower()
+# Dimensão do vetor. MUDA com o modelo (MiniLM-L12-v2 = 384; multilingual-e5-large
+# = 1024) — por isso é derivada do modelo carregado, não fixa. O valor abaixo é só
+# o fallback pro caso "lista vazia antes de qualquer load".
+_VECTOR_SIZE_FALLBACK = 1024
+VECTOR_SIZE = _VECTOR_SIZE_FALLBACK
 BATCH_SIZE = 64
 
 # Modelo PROCESS-WIDE (não por instância). Teste ao vivo #4 (13/06): o modelo
@@ -144,6 +154,7 @@ class Embedder:
         self,
         textos: list[str],
         show_progress: bool = False,
+        modo: str = "passage",
     ) -> np.ndarray[Any, Any]:
         """
         Gera embeddings para uma lista de textos.
@@ -151,14 +162,23 @@ class Embedder:
         Args:
             textos: Lista de strings para embedar.
             show_progress: Exibe barra de progresso (útil para batches grandes).
+            modo: "passage" (documento indexado) ou "query" (busca do jogador).
+                Só tem efeito em modelos da família E5 — ver `_prefixo_e5`.
 
         Returns:
             Array numpy de shape (len(textos), VECTOR_SIZE).
         """
         if not textos:
-            return np.empty((0, VECTOR_SIZE), dtype=np.float32)
+            return np.empty((0, self.vector_size), dtype=np.float32)
 
         modelo = self._carregar_modelo()
+        if _EXIGE_PREFIXO_E5:
+            # E5 foi TREINADO com estes prefixos; sem eles o modelo perde boa
+            # parte do ganho e a assimetria query↔passage some. É o erro clássico
+            # de quem migra pra essa família — por isso fica no embedder, e não
+            # na responsabilidade de cada caller.
+            alvo = modo if modo in ("query", "passage") else "passage"
+            textos = [f"{alvo}: {x}" for x in textos]
 
         t0 = time.perf_counter()
         vetores: np.ndarray[Any, Any] = modelo.encode(
@@ -184,4 +204,12 @@ class Embedder:
 
     @property
     def vector_size(self) -> int:
+        # Fonte da verdade é o modelo — o uploader do Qdrant cria a coleção com
+        # `vetores.shape[1]`, então trocar de modelo não exige tocar em nada aqui.
+        modelo = _modelo_global
+        if modelo is not None:
+            try:
+                return int(modelo.get_sentence_embedding_dimension())
+            except Exception:
+                pass
         return VECTOR_SIZE

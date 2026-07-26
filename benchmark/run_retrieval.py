@@ -14,9 +14,8 @@ Exemplo:
 
 import asyncio
 import json
-import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -62,10 +61,12 @@ async def _buscar(
     top_k: int = 5,
 ) -> tuple[list[str], float]:
     """Retorna (source_ids top-k, tempo_s)."""
-    from qdrant_client import QdrantClient
 
     t0 = time.perf_counter()
-    vetor = embedder.gerar([pergunta])[0].tolist()
+    # modo="query": E5 é ASSIMÉTRICO (pergunta e documento levam prefixos
+    # diferentes). Sem isso a pergunta é embeddada como se fosse documento e
+    # o retrieval degrada — medido: 88,9% → 72,2% de Recall@5.
+    vetor = embedder.gerar([pergunta], modo="query")[0].tolist()
     r = client.query_points(collection_name=colecao, query=vetor, limit=top_k, with_payload=True)
     elapsed = time.perf_counter() - t0
     source_ids = [p.payload.get("source_id", "") for p in r.points if p.payload]
@@ -110,7 +111,7 @@ async def rodar_benchmark() -> dict[str, Any]:
     media_mrr = sum(mrrs) / len(mrrs)
 
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "media_recall_at_5": round(media_recall, 3),
         "media_mrr": round(media_mrr, 3),
         "perguntas": linhas,

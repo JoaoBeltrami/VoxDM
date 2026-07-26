@@ -38,7 +38,7 @@ async def _query_legacy(texto: str, top_k: int = TOP_K) -> dict[str, Any]:
 
     t0 = time.perf_counter()
     embedder = Embedder()
-    vetor = embedder.gerar([texto])[0].tolist()
+    vetor = embedder.gerar([texto], modo="query")[0].tolist()  # lado da PERGUNTA
     tempos["embedding"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()

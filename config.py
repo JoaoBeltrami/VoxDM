@@ -156,6 +156,19 @@ class Settings(BaseSettings):
     QDRANT_COLECAO_BESTIARY: str = "voxdm_bestiary"
 
     # Fase 1 — Embeddings
+    # MIGRAÇÃO TESTADA E REVERTIDA (25/07) — ver `.internal/ESTADO.md`.
+    # O MTEB-BR (arxiv 2607.04581) diz que este modelo é o 2º PIOR de 93 (0,248
+    # vs ~0,641 do multilingual-e5-large), então migrei de verdade: re-ingeri as
+    # 4 coleções em 1024 dims e MEDI no gabarito difícil. Resultado real:
+    #   MiniLM (atual):        Recall@5 88,9% · MRR 0,861
+    #   multilingual-e5-large: Recall@5 83,3% · MRR 0,727   ← PIOR
+    # E o E5 quebra o `score_threshold=0.45` do qdrant_client: a distribuição
+    # dele é comprimida e "receita de bolo de cenoura" passava o filtro com 5
+    # resultados. Benchmark de terceiro não substitui medição no SEU corpus.
+    # Reabrir só com: gabarito maior + threshold recalibrado por modelo.
+    # ⚠️ A infra da troca FICA PRONTA: `_EXIGE_PREFIXO_E5` no embedder trata os
+    # prefixos query:/passage: sozinho, e `scripts/reembed_qdrant.py` migra as
+    # coleções preservando a memória episódica.
     EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     # Fase 2 — Voz
