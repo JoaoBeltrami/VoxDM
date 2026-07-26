@@ -27,12 +27,25 @@ MIN_PALAVRAS = 10
 
 # Campos de texto a extrair por categoria (em ordem de prioridade)
 # knowledge é lista → normalizado para string em _extrair_texto_campo()
+# ENRIQUECIMENTO 25/07 (antes da re-ingestão): auditoria comparou o que o schema
+# TEM com o que virava embedding. Achados:
+#   • `factions` declarava "goals" e o schema v1.2 usa "goal" (singular) — as 4
+#     facções geravam ZERO chunks. O OBJETIVO DE CADA VILA NA GUERRA, que é a
+#     espinha da campanha, nunca esteve no índice. Ambos ficam aqui por compat.
+#   • `agenda` (o plano de fundo do NPC), `political_allegiance` (de que lado ele
+#     está — numa campanha de guerra entre facções!), `disposition` e as
+#     `abilities` da dragã não eram embeddados.
+# Campos de MÁQUINA (honesty 0.4, trigger_condition, reputation_thresholds,
+# min_trust_level, linear) seguem de fora de propósito: número e condição não
+# respondem pergunta de jogador e só diluiriam o vetor.
 _CAMPOS_POR_CATEGORIA: dict[str, list[str]] = {
     "locations":   ["description", "atmosphere"],
-    "npcs":        ["description", "backstory", "personality", "speech_style", "knowledge"],
-    "companions":  ["description", "backstory", "personality", "speech_style", "knowledge"],
-    "entities":    ["description"],
-    "factions":    ["description", "goals"],
+    "npcs":        ["description", "backstory", "personality", "speech_style",
+                    "knowledge", "agenda"],
+    "companions":  ["description", "backstory", "personality", "speech_style",
+                    "knowledge", "agenda"],
+    "entities":    ["description", "abilities"],
+    "factions":    ["description", "goal", "goals"],
     "items":       ["description", "lore"],
     "artifacts":   ["description", "lore"],
     "quests":      ["description", "summary"],
@@ -209,6 +222,42 @@ def _extrair_texto_campo(elem: dict[str, Any], campo: str) -> str | None:
             return str(ap).strip() or None
         return None
 
+    # ── Campos derivados (enriquecimento 25/07) ──────────────────────────────
+    # Renderizados em PROSA, não como valor cru: o jogador pergunta "de que lado
+    # ele está?", não "political_allegiance=os-tharn". O id sozinho não casa com
+    # nada; o texto com o nome da facção casa. `_nomes_faccao` é injetado em
+    # extrair_chunks (o mapa id→nome vive no schema, não no elemento).
+    if campo == "_lado":
+        partes: list[str] = []
+        fac = elem.get("political_allegiance")
+        if fac:
+            nome_fac = (elem.get("_nomes_faccao") or {}).get(str(fac), str(fac))
+            partes.append(f"É aliado da facção {nome_fac}")
+        disp = str(elem.get("disposition", "") or "").strip().lower()
+        _DISP = {
+            "hostile": "hostil ao jogador por padrão",
+            "friendly": "receptivo ao jogador por padrão",
+            "neutral": "neutro com o jogador por padrão",
+        }
+        if disp in _DISP:
+            partes.append(_DISP[disp])
+        return ". ".join(partes) + "." if partes else None
+
+    if campo == "_membros":
+        ids = elem.get("members")
+        if not isinstance(ids, list) or not ids:
+            return None
+        mapa = elem.get("_nomes_npc") or {}
+        nomes = [str(mapa.get(str(i), str(i)).replace("-", " ")) for i in ids]
+        return "Membros: " + ", ".join(nomes) + "."
+
+    if campo == "abilities":
+        val = elem.get("abilities")
+        if isinstance(val, list):
+            itens = [str(v).strip() for v in val if v]
+            return "Capacidades: " + "; ".join(itens) if itens else None
+        return None
+
     val = elem.get(campo)
     if not val or not isinstance(val, str):
         return None
@@ -235,8 +284,22 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
     # Campos extras implícitos para NPCs e companions (não declarados em _CAMPOS_POR_CATEGORIA
     # para manter retrocompatibilidade — injetados por categoria aqui)
     _CAMPOS_EXTRAS: dict[str, list[str]] = {
-        "npcs":       ["_ext_appearance"],
-        "companions": ["_ext_appearance"],
+        "npcs":       ["_ext_appearance", "_lado"],
+        "companions": ["_ext_appearance", "_lado"],
+        "factions":   ["_membros"],
+    }
+
+    # Mapas id→nome pros campos derivados (_lado, _membros): o texto precisa do
+    # NOME legível — "aliado da facção Os Tharn" casa com pergunta de jogador;
+    # "os-tharn" não casa com nada.
+    _nomes_faccao = {
+        str(f.get("id", "")): str(f.get("name", f.get("id", "")))
+        for f in schema.get("factions", []) if isinstance(f, dict)
+    }
+    _nomes_npc = {
+        str(n.get("id", "")): str(n.get("name", n.get("id", "")))
+        for grupo in ("npcs", "companions")
+        for n in schema.get(grupo, []) if isinstance(n, dict)
     }
 
     for categoria, campos in _CAMPOS_POR_CATEGORIA.items():
@@ -252,6 +315,8 @@ def extrair_chunks(schema: dict[str, Any]) -> list[ChunkRecord]:
             if not isinstance(elem, dict):
                 continue
 
+            # Cópia rasa com os mapas — não muta o schema recebido.
+            elem = {**elem, "_nomes_faccao": _nomes_faccao, "_nomes_npc": _nomes_npc}
             source_id: str = str(elem.get("id", "unknown"))
             source_name: str = str(elem.get("name", source_id))
             chunk_index_offset = 0

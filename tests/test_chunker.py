@@ -168,3 +168,69 @@ def test_retorno_e_chunk_record() -> None:
     chaves_obrigatorias = {"text", "source_type", "source_id", "source_name", "chunk_index", "campo"}
     for chunk in chunks:
         assert chaves_obrigatorias.issubset(chunk.keys()), f"chunk sem chaves: {chunk}"
+
+
+# ── ENRIQUECIMENTO PRÉ-RE-INGESTÃO (25/07) ───────────────────────────────────
+#
+# Auditoria antes da troca de embedding: o que o schema TEM vs o que virava
+# vetor. O achado grave: `factions` declarava "goals" e o schema v1.2 usa "goal"
+# — as 4 facções geravam ZERO chunks. O objetivo de cada vila na guerra (a
+# espinha da campanha) nunca esteve no índice.
+
+def _modulo_real():
+    import json
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent
+    return json.loads((raiz / "modulo_teste" / "modulo_teste_v1.2.json").read_text(encoding="utf-8"))
+
+
+def test_faccoes_geram_chunks():
+    """Regressão do bug goal/goals — 0 chunks de facção era o estado anterior."""
+    from ingestor.chunker import extrair_chunks
+
+    chunks = [c for c in extrair_chunks(_modulo_real()) if c["source_type"] == "faction"]
+    assert chunks, "facções sem chunk — o objetivo da guerra some do índice"
+    textos = " ".join(c["text"] for c in chunks)
+    assert "Supremacia militar" in textos      # goal dos Tharn
+
+
+def test_goal_singular_e_plural_aceitos():
+    """v1.2 usa `goal`; módulos futuros podem usar `goals`. Os dois indexam."""
+    from ingestor.chunker import extrair_chunks
+
+    schema = {"factions": [
+        {"id": "a", "name": "A", "goal": "Dominar o vale a qualquer custo e reunir os clãs."},
+        {"id": "b", "name": "B", "goals": "Proteger a floresta antiga contra os invasores do norte."},
+    ]}
+    ids = {c["source_id"] for c in extrair_chunks(schema)}
+    assert ids == {"a", "b"}
+
+
+def test_lado_politico_vira_prosa_pesquisavel():
+    """"political_allegiance: os-tharn" não casa com pergunta nenhuma; o NOME da
+    facção casa. Numa campanha de guerra, saber de que lado o NPC está é RAG."""
+    from ingestor.chunker import extrair_chunks
+
+    chunks = [c for c in extrair_chunks(_modulo_real()) if c["campo"] == "_lado"]
+    assert chunks
+    texto = " ".join(c["text"] for c in chunks)
+    assert "aliado da facção" in texto
+    assert "os-tharn" not in texto          # id cru não vaza pro vetor
+
+
+def test_membros_da_faccao_por_nome():
+    from ingestor.chunker import extrair_chunks
+
+    chunks = [c for c in extrair_chunks(_modulo_real()) if c["campo"] == "_membros"]
+    assert chunks
+    assert "Bjorn Tharnsson" in " ".join(c["text"] for c in chunks)
+
+
+def test_campos_de_maquina_ficam_fora_do_vetor():
+    """honesty=0.4 e reputation_thresholds não respondem pergunta de jogador —
+    só diluem o embedding."""
+    from ingestor.chunker import extrair_chunks
+
+    texto = " ".join(c["text"] for c in extrair_chunks(_modulo_real()))
+    for ruido in ("honesty", "reputation_thresholds", "min_trust_level", "trigger_condition"):
+        assert ruido not in texto
