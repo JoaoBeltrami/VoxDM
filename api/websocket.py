@@ -2495,12 +2495,42 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # frontend deriva o nome do id. Só fora de combate (lá os personagens
             # são inimigos, tratados pelo extractor de combate) e fora da Sessão
             # Zero. Falha silenciosa.
-            if settings.EXTRACTOR_NPC_ATIVO and _extractors_pos_turno_liberados(
+            # TAIL-EXTRACTOR-SERIAL-1: os dois extractors pós-turno (NPC e
+            # quest) são chamadas LLM INDEPENDENTES — mutam domínios diferentes
+            # (registro de NPC vs quests improvisadas) e leem a mesma narração.
+            # Awaitados em série custavam 0,6-1,3s no fecho do turno, DEPOIS do
+            # áudio já ter saído: o jogador não vê, mas o turno seguinte espera.
+            # Largam juntos aqui; cada bloco abaixo só aguarda o SEU (a ordem de
+            # aplicação na WorkingMemory continua determinística).
+            _gate_extractors = _extractors_pos_turno_liberados(
                 sessao.working_mem.em_combate,
                 idle_nudge,
                 sessao.working_mem.session_zero_ativa,
                 era_session_zero,
-            ):
+            )
+            _task_quests = None
+            if settings.EXTRACTOR_QUEST_ATIVO and _gate_extractors:
+                from engine.llm.extractor import extrair_quests_cena as _extr_q
+                _task_quests = asyncio.create_task(
+                    asyncio.wait_for(
+                        _extr_q(
+                            sessao.groq,
+                            resposta_limpa,
+                            list(sessao.working_mem.quests_improvisadas),
+                        ),
+                        timeout=8.0,
+                    )
+                )
+                # Se o jogador desconectar no meio do turno, o await lá embaixo
+                # nunca acontece (CancelledError não é pego pelos `except
+                # Exception` do caminho) e a task ficaria órfã com exceção
+                # não-recuperada. O callback só MARCA como lida — quem awaita
+                # continua recebendo a exceção normalmente.
+                _task_quests.add_done_callback(
+                    lambda _t: None if _t.cancelled() else _t.exception()
+                )
+
+            if settings.EXTRACTOR_NPC_ATIVO and _gate_extractors:
                 try:
                     from engine.llm.extractor import (
                         aplicar_npcs_extraidos,
@@ -2567,25 +2597,12 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # captura missões novas/concluídas como estado rastreável — injetado
             # no prompt do próximo turno (continuidade) e exposto no snapshot pro
             # quest log. Mesmos guards do extractor de NPC. Falha silenciosa.
-            if settings.EXTRACTOR_QUEST_ATIVO and _extractors_pos_turno_liberados(
-                sessao.working_mem.em_combate,
-                idle_nudge,
-                sessao.working_mem.session_zero_ativa,
-                era_session_zero,
-            ):
+            if _task_quests is not None:
                 try:
-                    from engine.llm.extractor import (
-                        aplicar_quests_extraidas,
-                        extrair_quests_cena,
-                    )
-                    quests_ext = await asyncio.wait_for(
-                        extrair_quests_cena(
-                            sessao.groq,
-                            resposta_limpa,
-                            list(sessao.working_mem.quests_improvisadas),
-                        ),
-                        timeout=8.0,
-                    )
+                    from engine.llm.extractor import aplicar_quests_extraidas
+
+                    # Já estava rodando em paralelo com o extractor de NPC.
+                    quests_ext = await _task_quests
                     if quests_ext:
                         novas, concluidas = aplicar_quests_extraidas(
                             sessao.working_mem, quests_ext
