@@ -57,6 +57,12 @@ from engine.voice.language import Idioma
 
 log = structlog.get_logger()
 
+# PENDENCIA-CONGELA-INIMIGO-1: por quantos turnos uma declaração de ataque sem
+# rolagem ainda segura o beat dos inimigos. 1 cobre o caso real que motivou a
+# persistência (o jogador quase nunca rola no turno EXATO seguinte); acima disso
+# o combate estava congelando — inimigo que não revida é risco não-sentido.
+_MAX_TURNOS_PENDENCIA = 1
+
 # Set de referências a tasks fire-and-forget (scene_image, etc.) — módulo-level.
 # Sem isso, o GC pode coletar tasks "floating" antes de terminarem.
 # O discard callback remove a referência quando a task completa.
@@ -1035,7 +1041,14 @@ async def _beat_turno_inimigo(
     # sem este guard os inimigos agiam ANTES da rolagem existir ("narra o turno
     # inteiro antes de eu rolar"). Em ambos os casos a ordem de turno já foi (ou
     # está sendo) resolvida pela engine — o beat é só o fallback prompt-only.
-    if engine_resolveu_turno or getattr(sessao, "combate_pendente", None):
+    if engine_resolveu_turno:
+        return
+    # A pendência segura os inimigos só enquanto a rolagem é plausível. Passado
+    # o teto, ela continua VIVA (o d20 ainda resolve quando chegar) mas para de
+    # congelar o combate — ver PENDENCIA-CONGELA-INIMIGO-1 no ramo que incrementa
+    # `turnos`, acima.
+    _pend_ativa = getattr(sessao, "combate_pendente", None)
+    if _pend_ativa and int(_pend_ativa.get("turnos", 0)) <= _MAX_TURNOS_PENDENCIA:
         return
     vivos = {
         iid: d for iid, d in wm.inimigos_combate.items() if d.get("estado") != "morto"
@@ -1884,10 +1897,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         # EXATO seguinte à declaração. Fix: a pendência PERSISTE
                         # até um d20 de verdade chegar ou o combate encerrar
                         # (clear de segurança logo após o pipeline, abaixo).
+                        # PENDENCIA-CONGELA-INIMIGO-1: a pendência PERSISTE (a
+                        # janela de rolagem precisa sobreviver a turnos de
+                        # conversa), mas ela também bloqueia o beat do inimigo —
+                        # e sem teto isso vira combate CONGELADO: o jogador
+                        # declara o ataque, muda de assunto, e os inimigos nunca
+                        # revidam. Numa camada cujo ponto é o RISCO SENTIDO
+                        # (ADR-005), inimigo parado é o pior defeito possível.
+                        # O contador não descarta a pendência — só para de
+                        # segurar os inimigos depois de _MAX_TURNOS_PENDENCIA.
+                        sessao.combate_pendente["turnos"] = (
+                            int(sessao.combate_pendente.get("turnos", 0)) + 1
+                        )
                         log.info(
                             "combate_pendente_persiste_sem_rolagem",
                             session_id=session_id,
                             alvo=sessao.combate_pendente.get("alvo"),
+                            turnos=sessao.combate_pendente["turnos"],
                         )
                 elif (
                     sessao.working_mem.em_combate

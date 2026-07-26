@@ -391,8 +391,13 @@ def test_ws_pendencia_persiste_ate_rolagem_de_verdade_chegar(client):
         ws.send_json({"texto": "Espera, deixa eu ver uma coisa antes."})
         while ws.receive_json()["tipo"] != "fim":
             pass
-    assert sessions[sid].combate_pendente == {"tipo": "ataque", "alvo": "goblin"}, \
+    _pend = sessions[sid].combate_pendente
+    # Igualdade de dict virou frágil: PENDENCIA-CONGELA-INIMIGO-1 acrescentou o
+    # contador `turnos`. O que este teste protege é a INTENÇÃO — a pendência
+    # sobrevive ao turno de conversa, mirando o mesmo alvo.
+    assert _pend and _pend["tipo"] == "ataque" and _pend["alvo"] == "goblin", (
         "pendência não pode sumir num turno que não é rolagem"
+    )
 
     # Turno 2: agora sim o d20 chega — resolve contra o alvo original.
     with client.websocket_connect(f"/ws/game/{sid}") as ws:
@@ -2052,3 +2057,57 @@ def test_combate_fantasma_de_verdade_ainda_expira():
             "A estrada segue tranquila sob o sol da tarde.",
         )
     assert not wm.em_combate
+
+
+# ── PENDENCIA-CONGELA-INIMIGO-1 (fila 🟡 → Camada 2 do ADR-005) ──────────────
+#
+# A pendência de ataque bloqueia o beat dos inimigos de propósito: eles não podem
+# agir antes da rolagem do jogador. Mas ela PERSISTE por turnos de conversa (fix
+# de 02/07) — e sem teto isso vira combate CONGELADO: o jogador declara o ataque,
+# muda de assunto, e os inimigos nunca revidam. Numa camada cujo ponto é o RISCO
+# SENTIDO, inimigo parado é o pior defeito possível.
+
+def test_pendencia_segura_o_inimigo_no_turno_seguinte():
+    """Comportamento que NÃO pode regredir: logo após declarar, o inimigo espera
+    a rolagem em vez de agir antes dela."""
+    from api.websocket import _MAX_TURNOS_PENDENCIA
+
+    pend_recem_criada = {"tipo": "ataque", "alvo": "goblin"}
+    assert int(pend_recem_criada.get("turnos", 0)) <= _MAX_TURNOS_PENDENCIA
+
+
+def test_pendencia_para_de_congelar_apos_o_teto():
+    """Passado o teto, o beat volta a rodar — a pendência segue viva pra resolver
+    o d20 quando ele chegar, mas não segura mais o combate."""
+    from api.websocket import _MAX_TURNOS_PENDENCIA
+
+    pend_velha = {"tipo": "ataque", "alvo": "goblin",
+                  "turnos": _MAX_TURNOS_PENDENCIA + 1}
+    assert int(pend_velha["turnos"]) > _MAX_TURNOS_PENDENCIA
+    assert pend_velha["alvo"] == "goblin"   # não foi descartada
+
+
+def test_contador_de_turnos_incrementa_em_turno_sem_rolagem(client):
+    """O caminho real: dois turnos de conversa depois da declaração e o contador
+    passa do teto — os inimigos voltam a agir."""
+    from api.state import sessions
+    from api.websocket import _MAX_TURNOS_PENDENCIA
+
+    sid = _criar_sessao_ws(client)
+    sessao = sessions[sid]
+    sessao.working_mem.entrar_combate()
+    sessao.working_mem.registrar_inimigo("goblin", "Goblin", "intacto")
+    sessao.working_mem.aplicar_stats_inimigo("goblin", ca=5, hp_max=20)
+    sessao.combate_pendente = {"tipo": "ataque", "alvo": "goblin"}
+
+    for _ in range(_MAX_TURNOS_PENDENCIA + 1):
+        with client.websocket_connect(f"/ws/game/{sid}") as ws:
+            ws.send_json({"texto": "Olho ao redor procurando uma saída."})
+            while ws.receive_json()["tipo"] != "fim":
+                pass
+
+    pend = sessions[sid].combate_pendente
+    assert pend, "a pendência não pode ser descartada — o d20 ainda resolve"
+    assert int(pend["turnos"]) > _MAX_TURNOS_PENDENCIA, (
+        f"contador parado em {pend.get('turnos')} — inimigo seguiria congelado"
+    )
