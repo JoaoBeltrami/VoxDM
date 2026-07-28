@@ -184,6 +184,28 @@ def _kebab_para_nome(npc_id: str) -> str:
     return str(npc_id).replace("-", " ").title()
 
 
+def nome_exibicao(wm: Any, npc_id: str) -> str:
+    """O nome pelo qual o Mestre deve CHAMAR este NPC. Fonte única da verdade.
+
+    Resolve alias → lê `npc_registro[canon]["nome"]` → cai no kebab só se não
+    houver registro. Existe porque o projeto tinha DUAS respostas pra mesma
+    pergunta: `brief.py::_nome_legivel` (lia o registro, correto) e
+    `working_memory._id_para_nome` (kebab → Title Case, ignora o registro).
+
+    O prompt usava as duas ao mesmo tempo — o brief dizia "Kael" enquanto a
+    assinatura de voz e o dossiê diziam "Guardiao Da Noite" pro MESMO NPC, no
+    MESMO system prompt. Enquanto id e nome coincidiam ("tharos"/"Tharos") a
+    divergência era invisível; ela aparece exatamente quando o NPC é batizado,
+    que é o caso que interessa.
+
+    `_id_para_nome` continua válido pra TTS/voice_manager, onde a seed É o id.
+    """
+    canon = resolver_npc(wm, str(npc_id))
+    entrada = _registro(wm).get(canon) or {}
+    nome = str(entrada.get("nome", "")).strip()
+    return nome or _kebab_para_nome(canon)
+
+
 def npcs_visiveis(wm: Any) -> list[str]:
     """Quem merece uma CADEIRA na cena — retrato e nome no HUD.
 

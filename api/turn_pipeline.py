@@ -46,7 +46,7 @@ from engine.magic.slot_tracker import detectar_tipo_descanso, restaurar_slots
 from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
-from engine.npc.identity import registrar_npc, resolver_falado
+from engine.npc.identity import parece_nome_proprio, registrar_npc, resolver_falado
 
 log = structlog.get_logger()
 
@@ -1257,9 +1257,25 @@ def aplicar_pos_turno(
             # socos e facadas ("acerta um golpe firme no peito do oponente") com
             # `em_combate=False` do turno 20 ao 23: sem combat.md, sem saves.md,
             # sem inimigo registrado, sem CA/dano/XP. Rolar É lutar.
-            if _RE_COMBATE_JOGADOR.search(texto_jogador) or _e_turno_de_rolagem(texto_jogador):
+            # COMBATE-FANTASMA-RAIZ (playtest 26/07, sess-68ebf02e5fa8): antes
+            # havia só dois caminhos — verbo de ataque OU rolagem zeravam; o resto
+            # incrementava. Uma rolagem ZERAR é forte demais: `[Rolagem: d20 = 13]`
+            # é o que a toolbar manda tanto pra ataque quanto pra PERSUASÃO. Num
+            # jantar em Kaelmünd o jogador rolou Persuasão de tempos em tempos e o
+            # contador nunca chegou a 4 — resultado: em_combate=True com
+            # inimigos_combate={} por ~19 turnos. Como `_beat_turno_inimigo` aborta
+            # sem inimigo (`if not vivos: return`), ele ficou INVULNERÁVEL (HP 28/28
+            # em 45 turnos), e o combate fantasma ainda desligou o extractor de NPC,
+            # o dossiê, a assinatura de voz e inflou o pacing até 10.
+            #
+            # Agora são TRÊS caminhos. Verbo de ataque continua zerando (é prova de
+            # luta — COMBAT-GHOST-2/3 dependem disso). Rolagem apenas SEGURA: não
+            # zera, não incrementa — ela é ambígua, então não conta pra nenhum lado.
+            # Só turno sem verbo e sem rolagem incrementa. Em luta real o jogador
+            # ataca; num jantar as falas comuns fazem o contador subir e expirar.
+            if _RE_COMBATE_JOGADOR.search(texto_jogador):
                 working_mem.rodadas_sem_acao_inimigo = 0
-            else:
+            elif not _e_turno_de_rolagem(texto_jogador):
                 working_mem.rodadas_sem_acao_inimigo += 1
             if working_mem.rodadas_sem_acao_inimigo >= 4:
                 working_mem.sair_combate()
@@ -1705,6 +1721,27 @@ def aplicar_pos_turno(
             continue
         chave = _chave_dedup(npc_id)
         if chave in _presentes_chaves:
+            # RENAME-BLOQUEADO-1 (playtest 26/07): este `continue` seco descartava
+            # o NOME que vinha no marcador. Quem já estava em cena era imutável —
+            # o Mestre apresentava o NPC como "Kael" e a engine seguia reinjetando
+            # o descritor ("Guardião da Noite") todo turno, até o Mestre desistir e
+            # usar o descritor de volta. Sintoma relatado: "trouxe o guardião com
+            # outro nome sendo que já tinha apresentado como Kael".
+            # O dedup de PRESENÇA continua certo (não duplicar a cadeira na cena);
+            # o que ele não pode é bloquear a atualização de IDENTIDADE.
+            _nome_marcado = (m.group(2) or "").strip()[:60]
+            if _nome_marcado and parece_nome_proprio(_nome_marcado):
+                _id_existente = _mapa_canon_para_id.get(_canonico(npc_id), npc_id)
+                try:
+                    # registrar_npc só promove quando o nome atual está vazio ou
+                    # quando o novo é próprio e o antigo não era — nunca rebaixa
+                    # um nome já batizado de volta pra descritor.
+                    registrar_npc(working_mem, _id_existente, _nome_marcado)
+                    log.info("npc_nome_revelado_em_cena",
+                             id=_id_existente, nome=_nome_marcado)
+                except Exception as _e_rn:
+                    log.warning("npc_rename_falhou",
+                                id=_id_existente, erro=str(_e_rn)[:80])
             continue  # mesmo NPC (talvez só com epíteto) já presente
         conjunto = _chave_conjunto(npc_id)
         if conjunto and conjunto in _presentes_conjuntos:

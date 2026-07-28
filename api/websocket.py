@@ -139,6 +139,7 @@ def _extractors_pos_turno_liberados(
     idle_nudge: bool,
     session_zero_ativa: bool,
     era_session_zero: bool,
+    tem_inimigo_registrado: bool = True,
 ) -> bool:
     """Decide se os extractors pós-turno (NPC/quest improvisados) podem rodar.
 
@@ -148,9 +149,18 @@ def _extractors_pos_turno_liberados(
     como NPC presente + quest 'encontrar-tharn'. Gatear também por `era_session_zero`
     (estado no INÍCIO do turno) pula o turno de conclusão. Extractors só em jogo:
     fora de combate, fora de idle, e nem durante nem encerrando a Session Zero.
+
+    COMBATE-FANTASMA-RAIZ (playtest 26/07): `em_combate` sozinho é um gate ruim.
+    Numa cena de jantar com a flag presa ligada e ZERO inimigos registrados, este
+    gate desligou o extractor de NPC por ~19 turnos — e com ele o único caminho de
+    `revelar_nome`, que é como um NPC apresentado ("Kael") trava o nome próprio.
+    Resultado sentido pelo jogador: "trouxe o guardião com outro nome sendo que já
+    tinha apresentado como Kael". O gate existe pra não poluir cena de LUTA; luta
+    de verdade tem inimigo registrado.
     """
+    combate_real = em_combate and tem_inimigo_registrado
     return (
-        not em_combate
+        not combate_real
         and not idle_nudge
         and not session_zero_ativa
         and not era_session_zero
@@ -397,7 +407,11 @@ def _resolver_ataque_engine(
 # 12s. Resultado em campo: o turno "trava num loop" enquanto o `gather` espera
 # os timeouts. Limitar a poucas conexões em voo elimina o storm — as sentenças
 # sintetizam em pequenas levas e o áudio flui suave.
-_TTS_MAX_CONCORRENTE: int = 3
+# 26/07: era 3, mas o teto EFETIVO era 2 — o semáforo interno de
+# engine/voice/tts.py é aninhado neste e o menor vence, então este número nunca
+# foi a restrição vinculante. Benchmark contra o Edge TTS real (ver comentário
+# em tts.py) mostrou 6 seguro e 2,8× mais rápido. Os dois precisam subir juntos.
+_TTS_MAX_CONCORRENTE: int = 6
 # Semáforo por event loop — evita "bound to a different event loop" quando a
 # suíte de testes cria loops distintos. Criado preguiçosamente no 1º uso.
 _TTS_SEMAFOROS: dict[Any, asyncio.Semaphore] = {}
@@ -2507,6 +2521,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 idle_nudge,
                 sessao.working_mem.session_zero_ativa,
                 era_session_zero,
+                bool(sessao.working_mem.inimigos_combate),
             )
             _task_quests = None
             if settings.EXTRACTOR_QUEST_ATIVO and _gate_extractors:
@@ -2577,6 +2592,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 idle_nudge,
                 sessao.working_mem.session_zero_ativa,
                 era_session_zero,
+                bool(sessao.working_mem.inimigos_combate),
             ):
                 try:
                     from engine.npc.dossie import npcs_sem_dossie_na_cena

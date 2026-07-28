@@ -24,22 +24,38 @@ import re
 import wave
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import edge_tts
 import structlog
 
 from engine.voice.language import Idioma
 
-# Semáforo global: máximo 2 chamadas Edge TTS simultâneas.
-# Mais que isso causa NoAudioReceived por rate-limit do servidor Microsoft.
-_edge_sem: asyncio.Semaphore | None = None
+# Teto de chamadas Edge TTS simultâneas.
+#
+# Era 2, com a justificativa "mais que isso causa NoAudioReceived por rate-limit
+# do servidor Microsoft". A auditoria do playtest 26/07 mediu contra o Edge TTS
+# REAL (5 sentenças de um turno de produção, N=3, mediana): conc=2 → 3644ms,
+# conc=5 → 1324ms, conc=8 → 1250ms — ZERO falhas em qualquer nível. A latência
+# por sentença fica ~1,2s independente da concorrência (é round-trip puro).
+# O teto de 2 era o maior custo de latência do turno: com TTS respondendo por
+# 3937ms de um turno de 6540ms, a voz — não o LLM (1003ms) — era o gargalo.
+#
+# Armadilha: este semáforo é ANINHADO com `_TTS_MAX_CONCORRENTE` em
+# api/websocket.py. O MENOR dos dois é que vale — subir só um não faz nada.
+_EDGE_MAX_CONCORRENTE = 6
+# Por event loop: a suíte de testes cria loops distintos, e um Semaphore global
+# ligado a outro loop levanta "bound to a different event loop".
+_edge_sems: dict[Any, asyncio.Semaphore] = {}
 
 
 def _obter_edge_sem() -> asyncio.Semaphore:
-    global _edge_sem
-    if _edge_sem is None:
-        _edge_sem = asyncio.Semaphore(2)
-    return _edge_sem
+    loop = asyncio.get_running_loop()
+    sem = _edge_sems.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(_EDGE_MAX_CONCORRENTE)
+        _edge_sems[loop] = sem
+    return sem
 
 log = structlog.get_logger(__name__)
 

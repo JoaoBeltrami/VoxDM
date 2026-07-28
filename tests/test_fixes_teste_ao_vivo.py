@@ -430,3 +430,32 @@ def test_montar_hotwords_sessao_vem_antes_do_modulo():
         assert stt._montar_hotwords("  ") is None
     finally:
         stt._VOCAB_MODULO = original
+
+
+# ── COMBATE-FANTASMA-RAIZ (playtest 26/07, sess-68ebf02e5fa8) ─────────────────
+
+
+def test_rolagem_social_repetida_nao_sustenta_combate_fantasma():
+    """Rolar Persuasão num jantar não pode manter `em_combate` vivo pra sempre.
+
+    Sessão real: `em_combate=True` + `inimigos_combate={}` por ~19 turnos porque
+    toda rolagem ZERAVA o contador. Como o beat do inimigo aborta sem inimigo
+    registrado, o jogador ficou com HP 28/28 em 45 turnos — sem risco nenhum.
+    Uma rolagem é ambígua (a toolbar manda o mesmo texto pra ataque e pra perícia),
+    então ela SEGURA o contador, mas não o zera: as falas comuns entre as rolagens
+    fazem o combate fantasma expirar.
+    """
+    wm = _wm_combate_sem_inimigos()
+    for _ in range(4):
+        aplicar_pos_turno(wm, "[Rolagem: d20 = 14]", "O guardião ergue a taça.")
+        aplicar_pos_turno(wm, "Pergunto sobre a rota de Tharnvik.", "Ele hesita.")
+    assert not wm.em_combate, "combate fantasma sobreviveu a rolagens sociais"
+
+
+def test_rolagem_nao_incrementa_o_contador_de_combate_fantasma():
+    """A rolagem é neutra: não zera (não prova luta) e não pune (pode ser ataque)."""
+    wm = _wm_combate_sem_inimigos()
+    aplicar_pos_turno(wm, "Ando até a porta.", "Você caminha.")
+    antes = wm.rodadas_sem_acao_inimigo
+    aplicar_pos_turno(wm, "[Rolagem: d20 = 9]", "O dado rola.")
+    assert wm.rodadas_sem_acao_inimigo == antes, "rolagem mexeu no contador"

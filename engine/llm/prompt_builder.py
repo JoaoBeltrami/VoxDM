@@ -380,7 +380,13 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
 
     # ── Social: camada + assinatura de voz por NPC ────────────────────────────
     npcs_presentes = list(getattr(wm, "npcs_presentes", []) or [])
-    if not em_combate and npcs_presentes:
+    # COMBATE-FANTASMA-RAIZ (26/07): o gate era `not em_combate` puro. Com a flag
+    # presa ligada e nenhum inimigo registrado (cena social), a camada social + a
+    # assinatura de voz + o dossiê de corpos saíram do prompt por ~19 turnos —
+    # justamente os blocos da Camada 1-B (o NPC mostra emoção pelo CORPO). Luta de
+    # verdade tem inimigo registrado; jantar não.
+    _em_luta_real = em_combate and bool(getattr(wm, "inimigos_combate", None))
+    if not _em_luta_real and npcs_presentes:
         social_texto = _carregar_social()
         if social_texto:
             estaticos.append(f"\n{social_texto}")
@@ -388,8 +394,16 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
         if voz_dupla:
             estaticos.append(f"\n{voz_dupla}")
         try:
-            from engine.memory.working_memory import _id_para_nome as _id_nome_voz
+            # 26/07: era `_id_para_nome` (kebab -> Title Case), que IGNORA o nome do
+            # registro. Com o NPC batizado, o mesmo prompt chamava a mesma pessoa de
+            # "Kael" no brief e de "Guardiao Da Noite" aqui. `nome_exibicao` e a fonte
+            # unica: alias -> registro -> kebab.
+            from engine.npc.identity import nome_exibicao as _nome_npc_prompt
             from engine.npc.identity import retrato_seed as _seed_identidade
+
+            def _nome_no_prompt(_nid: str) -> str:
+                return _nome_npc_prompt(wm, _nid)
+
             from engine.npc.persona import bloco_assinaturas
 
             def _seed_voz(nid: str) -> str:
@@ -398,14 +412,14 @@ def _blocos_de_cena(contexto: Any) -> list[str]:
                 except Exception:
                     return nid
 
-            bloco_voz_npc = bloco_assinaturas(npcs_presentes, _id_nome_voz, seed_de=_seed_voz)
+            bloco_voz_npc = bloco_assinaturas(npcs_presentes, _nome_no_prompt, seed_de=_seed_voz)
             if bloco_voz_npc:
                 dinamicos.append(bloco_voz_npc)
 
             # ADR-005 Camada 1-B: os traços FÍSICOS do dossiê — o corpo que o
             # Mestre mostra em vez de rotular a emoção. Vivia só no legado.
             from engine.npc.dossie import bloco_dossie
-            bloco_traços = bloco_dossie(wm, npcs_presentes, _id_nome_voz)
+            bloco_traços = bloco_dossie(wm, npcs_presentes, _nome_no_prompt)
             if bloco_traços:
                 dinamicos.append(bloco_traços)
         except Exception as e:
@@ -876,9 +890,13 @@ def montar_mensagens(
         # pela SEED de identidade (id original de criação — NPC-IDENTIDADE 05/07:
         # rename via name-reveal não troca a personalidade), injetada só fora de
         # combate e quando há NPC presente. Mantém o ferreiro ≠ bruxa entre sessões.
-        # Import local espelha o _id_para_nome lazy abaixo (evita ciclo de import).
-        from engine.memory.working_memory import _id_para_nome as _id_nome_voz
+        # Import local (evita ciclo de import).
+        from engine.npc.identity import nome_exibicao as _nome_npc_prompt
         from engine.npc.identity import retrato_seed as _seed_identidade
+
+        def _nome_no_prompt(_nid: str) -> str:
+            return _nome_npc_prompt(wm, _nid)
+
         from engine.npc.persona import bloco_assinaturas
 
         def _seed_voz(nid: str) -> str:
@@ -888,7 +906,7 @@ def montar_mensagens(
                 return nid  # stub de teste sem scene.npc_registro
 
         bloco_voz_npc = bloco_assinaturas(
-            getattr(wm, "npcs_presentes", []), _id_nome_voz, seed_de=_seed_voz
+            getattr(wm, "npcs_presentes", []), _nome_no_prompt, seed_de=_seed_voz
         )
         if bloco_voz_npc:
             secoes.append(bloco_voz_npc)
