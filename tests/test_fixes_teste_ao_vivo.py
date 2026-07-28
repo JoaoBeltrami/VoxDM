@@ -197,7 +197,9 @@ def test_pacing_decai_firme_apos_combate():
     wm.pacing_nivel = 10.0
     wm.saiu_combate_recentemente = True
     aplicar_pos_turno(wm, "Respiro fundo e olho ao redor.", "A poeira assenta.")
-    assert wm.pacing_nivel == pytest.approx(8.5)
+    # PACING-INTEGRADOR-1: o dreno de aftermath (-1.2) agora soma com o retorno
+    # à média, então a queda é maior que os -1.5 fixos de antes.
+    assert wm.pacing_nivel == pytest.approx(7.93, abs=0.05)
 
 
 # ══ Teste ao vivo 10/06 — lote B ══════════════════════════════════════════════

@@ -621,11 +621,53 @@ def test_fecho_injetado_no_prompt_so_em_modo_episodio():
 
 
 def test_pico_pacing_acompanha_ajustes():
+    """Pico sobe com PERIGO real, não com a flag ligada.
+
+    Este teste antes ASSERTAVA o bug (PACING-INTEGRADOR-1): 4 turnos com a flag
+    `em_combate` e zero eventos exigiam pico >= 8.0. Foi exatamente esse
+    comportamento que produziu, no playtest 26/07, um clímax de 10 turnos com o
+    jogador em HP cheio — a flag ficou presa numa cena de jantar.
+    """
     wm = _wm()
     for _ in range(4):
-        wm.narrative.ajustar_pacing(em_combate=True, saiu_combate_recentemente=False, trust_mudou=False)
+        wm.narrative.ajustar_pacing(
+            em_combate=True, saiu_combate_recentemente=False,
+            trust_mudou=False, eventos=["dano_no_jogador"],
+        )
     assert wm.narrative.pico_pacing >= 8.0
     assert wm.narrative.turnos_total == 4
+
+
+def test_combate_sem_perigo_nao_vira_climax():
+    """O contrapositivo — a garantia que faltava.
+
+    Flag ligada e nada acontecendo NÃO pode escalar pra clímax: é o que separa
+    "estou em combate" de "estou em perigo". `_tier_do_turno` vira 'epico' em
+    pacing >= 7, então o teto aqui é o que impede o TOM épico falso.
+    """
+    wm = _wm()
+    for _ in range(20):
+        wm.narrative.ajustar_pacing(
+            em_combate=True, saiu_combate_recentemente=False, trust_mudou=False
+        )
+    assert wm.narrative.pacing_nivel < 7.0, "combate fantasma escalou a clímax"
+
+
+def test_piso_do_pacing_nao_e_absorvente():
+    """Zerado, o meter tem que VOLTAR — antes 0.0 era estado absorvente.
+
+    O ramo que subia fora de combate exigia `turnos_sem_tensao <= 3`, mas esse
+    contador só zera com combate/trust. Do 4º turno calmo em diante só existia
+    drenagem, e `max(0.0, ...)` prendia em zero pra sempre (16 turnos seguidos
+    na telemetria do playtest).
+    """
+    wm = _wm()
+    wm.narrative.pacing_nivel = 0.0
+    for _ in range(10):
+        wm.narrative.ajustar_pacing(
+            em_combate=False, saiu_combate_recentemente=False, trust_mudou=False
+        )
+    assert wm.narrative.pacing_nivel > 1.5, "pacing preso no piso"
 
 
 # ══ PACOTE 2 — Mundo Vivo restante + Ritual ══════════════════════════════════
@@ -638,9 +680,14 @@ def test_tracking_de_arco_roda_no_pipeline():
     turnos_total/pico_pacing sobem e momento_de_fecho() pode disparar."""
     wm = _wm()
     wm.entrar_combate()
+    base = wm.narrative.pacing_nivel
     aplicar_pos_turno(wm, "Ataco o goblin!", "O aço encontra carne.")
     assert wm.narrative.turnos_total == 1
-    assert wm.narrative.pico_pacing >= 4.0  # combate subiu o pacing e o pico seguiu
+    # O que este teste prova é o WIRING, não a magnitude: um turno de combate sem
+    # dano nem abate move o meter pouco de propósito (PACING-INTEGRADOR-1) — antes
+    # dava um salto de +1.5 por FLAG, que é o que fabricava clímax falso.
+    assert wm.narrative.pacing_nivel > base
+    assert wm.narrative.pico_pacing == pytest.approx(wm.narrative.pacing_nivel)
 
 
 # ── NPC toma a iniciativa ────────────────────────────────────────────────────
@@ -1105,9 +1152,15 @@ def test_pacing_drena_pico_fora_de_combate():
     wm = _wm()
     wm.pacing_nivel = 10.0
     aplicar_pos_turno(wm, "Converso com o taverneiro.", "Ele sorri e serve a cerveja.")
-    assert wm.pacing_nivel == pytest.approx(8.8)
+    assert wm.pacing_nivel == pytest.approx(8.95, abs=0.05)
     aplicar_pos_turno(wm, "Pergunto das estradas.", "Ele aponta o norte.")
-    assert wm.pacing_nivel == pytest.approx(7.6)
+    assert wm.pacing_nivel == pytest.approx(8.06, abs=0.05)
+    # O que importa não é o número e sim a FORMA: retorno à média assintótico,
+    # que desce rápido no alto e devagar perto da base (antes era linear e
+    # colava no zero).
+    for _ in range(15):
+        aplicar_pos_turno(wm, "Sigo conversando.", "Ele responde.")
+    assert 2.0 < wm.pacing_nivel < 4.0, "não convergiu pra base"
 
 
 def test_session_zero_proibe_rolagens_no_prompt():

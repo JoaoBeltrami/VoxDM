@@ -259,3 +259,36 @@ def test_set_primario_none_remove_override():
     r.set_primario(None)
     assert r._override_primario is None
     assert r._cascata_efetiva(TaskType.NARRATIVE)[0] == PROV_GROQ_70B  # volta ao default
+
+
+# ── ROUTER-SEM-COTA (playtest 26/07) ─────────────────────────────────────────
+
+
+def test_rate_limit_tira_o_provider_da_cascata_temporariamente():
+    """Quem estourou cota sai da fila — não paga round-trip de 19KB por turno."""
+    r = LLMRouter()
+    antes = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)]
+    assert len(antes) >= 2, "cascata precisa de 2+ providers pro teste valer"
+
+    r._penalizar(antes[0], "rate_limit")
+    depois = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)]
+    assert antes[0] not in depois
+    assert depois[0] == antes[1], "o próximo degrau assume"
+
+
+def test_erro_transitorio_nao_penaliza():
+    """Rede e 5xx são transitórios: o provider continua na fila."""
+    r = LLMRouter()
+    antes = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)]
+    for categoria in ("rede", "timeout", "servidor", "vazio"):
+        r._penalizar(antes[0], categoria)
+    assert [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)] == antes
+
+
+def test_todos_penalizados_ainda_devolve_cascata():
+    """Sem narrador é pior que round-trip: cooldown cede quando todos caíram."""
+    r = LLMRouter()
+    antes = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)]
+    for nome in antes:
+        r._penalizar(nome, "rate_limit")
+    assert [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)] == antes

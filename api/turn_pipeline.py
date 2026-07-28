@@ -1312,10 +1312,24 @@ def aplicar_pos_turno(
         # centralizado em NarrativeState.ajustar_pacing(), única fonte de
         # verdade (era duplicado inline aqui, valores tinham divergido do
         # método testado — auditoria de dead code de 01/07).
+        # PACING-INTEGRADOR-1 (26/07): o meter passa a andar por EVENTO, não pela
+        # flag. `em_combate` sozinho mentia — no playtest a flag ficou ligada ~19
+        # turnos numa cena de jantar e levou o pacing de 0.4 a 10.0 com o jogador
+        # em HP cheio o tempo todo. Perigo é dano e morte, não estar "em combate".
+        #
+        # O dano é lido da RESPOSTA por regex em vez do HP porque o `[DANO]` só é
+        # aplicado no step ~16, depois deste — ler o HP aqui pegaria o valor do
+        # turno anterior. Custo zero e sem reordenar o pipeline.
+        _eventos_pacing: list[str] = []
+        if _RE_DANO.search(resposta_completa):
+            _eventos_pacing.append("dano_no_jogador")
+        if _RE_INIMIGO_MORTO_MARKER.search(resposta_completa):
+            _eventos_pacing.append("abate")
         working_mem.ajustar_pacing(
             em_combate=working_mem.em_combate,
             saiu_combate_recentemente=working_mem.saiu_combate_recentemente,
             trust_mudou=mudancas_trust,
+            eventos=_eventos_pacing,
         )
         log.debug("pacing_atualizado", nivel=round(working_mem.pacing_nivel, 1))
 

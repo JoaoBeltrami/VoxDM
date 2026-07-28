@@ -13,6 +13,7 @@ Armadilha: cartas_improviso são one-shot — uma vez usadas (ou após decay),
 """
 
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from config import settings
@@ -26,6 +27,27 @@ _MAX_VOZES = 20
 _MAX_QUESTS_IMPROV = 6
 _MAX_AMBIENTE = 4
 
+
+
+# ── Pacing: curva por evento (PACING-INTEGRADOR-1, 26/07) ────────────────────
+# Nível de repouso. É o mesmo default de `pacing_nivel` — a curva SEMPRE tende
+# pra cá quando nada acontece, nos dois sentidos.
+_PACING_BASE = 3.0
+# Fração do caminho até a base percorrida por turno (τ ≈ 6 turnos). Baixo demais
+# e o meter cola nos extremos de novo; alto demais e o clímax não dura nada.
+_PACING_ALPHA = 0.15
+# O que EMPURRA. Nota de design: `turno_combate` é fraco de propósito — estar em
+# combate não é perigo, tomar dano é. Foi confundir os dois que produziu um
+# clímax de 10 turnos com o jogador em HP cheio.
+_IMPULSO_PACING: dict[str, float] = {
+    "entrar_combate": 2.0,
+    "dano_no_jogador": 2.2,
+    "abate": 1.6,
+    "critico": 1.4,
+    "trust": 1.0,
+    "turno_combate": 0.35,
+    "aftermath": -1.2,
+}
 
 @dataclass
 class NarrativeState:
@@ -398,15 +420,41 @@ class NarrativeState:
 
     # ── Pacing ────────────────────────────────────────────────────────────────
 
-    def ajustar_pacing(self, em_combate: bool, saiu_combate_recentemente: bool, trust_mudou: bool) -> None:
-        """Aplica regras de pacing baseado no estado do turno (calibração de playtest 09/06/26).
+    def ajustar_pacing(
+        self,
+        em_combate: bool,
+        saiu_combate_recentemente: bool,
+        trust_mudou: bool,
+        eventos: Iterable[str] | None = None,
+    ) -> None:
+        """Move o pacing por EVENTO, com retorno à média. Único ponto de verdade.
 
-        Combate eleva o pacing; ao sair do combate ele drena rápido (-1.5, não
-        -0.5 — testes mostraram o meter pinado em ~10 por 40min de exploração
-        pós-combate); um pico alto (>6) também drena sozinho mesmo sem combate
-        (evita platô artificial de clímax); turnos calmos consecutivos drenam
-        mais devagar (-0.6). Único ponto de verdade — chamado pelo pipeline,
-        nunca reimplementado inline.
+        PACING-INTEGRADOR-1 (playtest 26/07). A versão anterior era um acumulador
+        de sinal constante com clamp duro e sem força restauradora, e saturava nos
+        DOIS extremos — medido na telemetria de 50 turnos: colou em 0.0 nos turnos
+        15-30 e em 10.0 nos turnos 37-46.
+
+        - PISO ABSORVENTE: o único ramo que subia fora de combate (`+0.2`) exigia
+          `turnos_sem_tensao <= 3`, mas esse contador é um LATCH que só zera com
+          combate ou trust. Do 4º turno calmo em diante só existia o ramo `-0.6`,
+          e `max(0.0, ...)` prendia em 0.0 pra sempre. Sair do piso sem combate
+          era impossível.
+        - TETO: `+1.5` por FLAG de combate ligada, sem dreno durante a luta. E a
+          flag mentia — no playtest ela ficou ligada ~19 turnos numa cena de
+          jantar (ver COMBATE-FANTASMA-RAIZ), com HP 28/28 do começo ao fim, e
+          mesmo assim o meter foi de 0.4 a 10.0. Ele media "a flag está ligada",
+          não "há perigo".
+
+        Agora o nível é empurrado por eventos REAIS (`eventos`) e puxado de volta
+        pra `_PACING_BASE` por uma fração fixa a cada turno (τ ≈ 6 turnos). O
+        clamp vira rede de segurança em vez de regime de operação: combate denso
+        oscila alto sem colar em 10, combate fantasma (flag ligada, zero eventos)
+        estabiliza perto da base, e exploração pós-clímax desce sozinha sem travar
+        no zero.
+
+        `eventos` é opcional pra manter a assinatura antiga válida — sem eventos,
+        `em_combate` ainda vale como um empurrão fraco (`turno_combate`), que é o
+        comportamento mínimo que os callers legados esperam.
         """
         # Arco da sessão (modo episódio): turno real contado + pico registrado
         self.turnos_total += 1
@@ -416,17 +464,20 @@ class NarrativeState:
         else:
             self.turnos_sem_tensao += 1
 
-        # Pacing meter
+        marcados = set(eventos or ())
         if em_combate:
-            self.pacing_nivel = min(10.0, self.pacing_nivel + 1.5)
-        elif saiu_combate_recentemente:
-            self.pacing_nivel = max(0.0, self.pacing_nivel - 1.5)
-        elif self.pacing_nivel > 6.0:
-            self.pacing_nivel = max(0.0, self.pacing_nivel - 1.2)
-        elif self.turnos_sem_tensao > 3:
-            self.pacing_nivel = max(0.0, self.pacing_nivel - 0.6)
-        else:
-            self.pacing_nivel = min(10.0, self.pacing_nivel + 0.2)
+            marcados.add("turno_combate")
+        if trust_mudou:
+            marcados.add("trust")
+        if saiu_combate_recentemente:
+            marcados.add("aftermath")
+
+        for ev in marcados:
+            self.pacing_nivel += _IMPULSO_PACING.get(ev, 0.0)
+        # Retorno à média: o que puxa o meter de volta ao normal quando nada
+        # acontece — é isto que faltava, e sem isto os extremos eram absorventes.
+        self.pacing_nivel += (_PACING_BASE - self.pacing_nivel) * _PACING_ALPHA
+        self.pacing_nivel = max(0.0, min(10.0, self.pacing_nivel))
         self.pico_pacing = max(self.pico_pacing, self.pacing_nivel)
 
     def momento_de_fecho(self) -> bool:

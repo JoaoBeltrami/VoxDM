@@ -24,6 +24,7 @@ Exemplo:
     texto = wm.para_texto()          # → compõe slices dos 5 substates
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -1012,8 +1013,16 @@ class WorkingMemory:
     def decay_cartas(self) -> bool:
         return self.narrative.decay_cartas()
 
-    def ajustar_pacing(self, em_combate: bool, saiu_combate_recentemente: bool, trust_mudou: bool) -> None:
-        self.narrative.ajustar_pacing(em_combate, saiu_combate_recentemente, trust_mudou)
+    def ajustar_pacing(
+        self,
+        em_combate: bool,
+        saiu_combate_recentemente: bool,
+        trust_mudou: bool,
+        eventos: "Iterable[str] | None" = None,
+    ) -> None:
+        self.narrative.ajustar_pacing(
+            em_combate, saiu_combate_recentemente, trust_mudou, eventos
+        )
 
     # ── Composição do prompt ─────────────────────────────────────────────────
 

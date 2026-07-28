@@ -46,6 +46,11 @@ from engine.telemetry import emit_llm_decisao
 
 log = structlog.get_logger(__name__)
 
+# Quanto tempo um provider fica fora da cascata após dizer que estourou cota.
+# 15 min: cobre a janela de TPM inteira e, no caso de TPD, apenas re-testa
+# 4×/hora em vez de 1×/turno.
+_COOLDOWN_COTA_S = 900.0
+
 # GRIM-REATIVA-1: categorias de LLMRetriable que significam "o modelo filtrou
 # conteúdo" (não erro de infra) — em cena sombria, qualquer uma gruda a
 # escalação reativa. "refusal" = Gemini/Groq hard refusal; "recusa" = variante
@@ -73,6 +78,9 @@ class LLMRouter:
             PROV_OLLAMA:      OllamaProvider(),
             PROV_OLLAMA_GRIM: OllamaGrimProvider(),
         }
+        # ROUTER-SEM-COTA (playtest 26/07): provider → instante (monotonic) até o
+        # qual ele fica FORA da cascata por ter estourado cota. Ver `_penalizar`.
+        self._penalizado_ate: dict[str, float] = {}
         # Flag de cena sombria para os providers que suportam amarelada check.
         self._cena_sombria: bool = False
         # Override por sessão — quando setado, esse provider vai pra frente da
@@ -164,11 +172,52 @@ class LLMRouter:
         except Exception as e:  # noqa: BLE001 — telemetria é best-effort
             log.warning("telemetria_llm_falhou", erro=str(e)[:120])
 
+    def _cooldowns(self) -> dict[str, float]:
+        """Mapa provider → fim do cooldown, criado sob demanda.
+
+        Lazy porque parte da suíte monta o router com `LLMRouter.__new__` e
+        popula só os campos que o caso precisa (ver tests/test_grimdark.py) —
+        um campo novo em `__init__` quebraria esses testes sem que houvesse
+        nada de errado com eles.
+        """
+        atual = getattr(self, "_penalizado_ate", None)
+        if atual is None:
+            atual = {}
+            self._penalizado_ate = atual
+        return atual
+
+    def _penalizar(self, nome: str, categoria: str) -> None:
+        """Tira da cascata, por um tempo, quem acabou de dizer que está sem cota.
+
+        ROUTER-SEM-COTA (playtest 26/07): `disponivel` responde "tem chave", nunca
+        "tem cota". Sem memória de esgotamento, depois que o TPD do groq-70b fechou
+        no turno ~14 os 36 turnos seguintes subiram o body INTEIRO (19 KB) só pra
+        colher 429 e cair pro próximo degrau — round-trip inútil em todo turno de
+        uma sessão de uma hora.
+
+        Só rate_limit penaliza: erro de rede ou 5xx é transitório e o provider deve
+        continuar na fila. O TTL é curto porque não dá pra distinguir TPM (janela de
+        minuto) de TPD (dia) pela resposta — errar pra menos custa um round-trip,
+        errar pra mais desliga um provider bom por horas.
+        """
+        if categoria != "rate_limit":
+            return
+        self._cooldowns()[nome] = time.monotonic() + _COOLDOWN_COTA_S
+        log.info("provider_em_cooldown", provider=nome, segundos=_COOLDOWN_COTA_S)
+
     def _providers_disponiveis(self, task: TaskType) -> list[BaseLLMProvider]:
-        """Cascata filtrada por disponibilidade — pula providers sem chave/serviço."""
+        """Cascata filtrada por disponibilidade — pula sem chave/serviço ou em cooldown.
+
+        Se TODOS estiverem penalizados, ignora o cooldown e devolve a cascata
+        cheia: melhor pagar o round-trip do que ficar sem narrador.
+        """
         cascata = self._cascata_efetiva(task)
-        return [self._providers[n] for n in cascata
-                if n in self._providers and self._providers[n].disponivel]
+        vivos = [self._providers[n] for n in cascata
+                 if n in self._providers and self._providers[n].disponivel]
+        agora = time.monotonic()
+        penalizados = self._cooldowns()
+        sem_cooldown = [p for p in vivos if penalizados.get(p.nome, 0.0) <= agora]
+        return sem_cooldown or vivos
 
     async def completar(
         self,
@@ -242,6 +291,7 @@ class LLMRouter:
                 )
                 return texto
             except LLMRetriable as e:
+                self._penalizar(p.nome, e.categoria)
                 log.warning(
                     "llm_provider_fallback",
                     provider=p.nome,
@@ -348,6 +398,7 @@ class LLMRouter:
                         provider=p.nome, categoria=e.categoria,
                     )
                     raise
+                self._penalizar(p.nome, e.categoria)
                 log.warning(
                     "llm_provider_fallback_stream",
                     provider=p.nome,
