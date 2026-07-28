@@ -2111,3 +2111,45 @@ def test_contador_de_turnos_incrementa_em_turno_sem_rolagem(client):
     assert int(pend["turnos"]) > _MAX_TURNOS_PENDENCIA, (
         f"contador parado em {pend.get('turnos')} — inimigo seguiria congelado"
     )
+
+
+# ── DANO-SEM-CAUSA-1 (playtest 26/07) ────────────────────────────────────────
+
+
+def test_dano_registra_a_causa_pro_jogador():
+    """A engine sabia POR QUE o HP caiu e jogava fora.
+
+    `strip_marcadores` remove `[DANO: -8 motivo]` antes do texto chegar ao
+    jogador, então sobrava só o número caindo. No playtest ele tomou 8 de dano
+    FORA de combate num turno em que só disse "sigo o caminho" e reportou "tomei
+    dano do nada". Risco que não é LEGÍVEL não é risco sentido.
+    """
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-vital")
+    wm.player_hp = 30
+    wm.player_hp_max = 30
+    aplicar_pos_turno(wm, "Sigo o caminho.",
+                      "A armadilha dispara. [DANO: -8 espinhos ocultos na trilha]")
+
+    eventos = wm.drenar_eventos_vitais()
+    assert len(eventos) == 1
+    ev = eventos[0]
+    assert ev["tipo"] == "dano"
+    assert ev["valor"] == 8
+    assert "espinhos" in ev["motivo"], "a causa foi perdida"
+    assert ev["hp"] == 22 and ev["hp_max"] == 30
+
+
+def test_drenar_eventos_vitais_e_idempotente():
+    """Drenar duas vezes não repete o toast no turno seguinte."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-vital2")
+    wm.player_hp = 20
+    wm.player_hp_max = 30
+    aplicar_pos_turno(wm, "Bebo a poção.", "O calor volta. [CURA: +5]")
+    assert len(wm.drenar_eventos_vitais()) == 1
+    assert wm.drenar_eventos_vitais() == []

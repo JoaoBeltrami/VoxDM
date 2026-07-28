@@ -2911,6 +2911,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # abre o dado por ISTO, sem depender de a prosa do Mestre casar
                     # com um regex.
                     check_pedido=((sessao.check_pendente or {}).get("pericia") or ""),
+                    eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
                 ).model_dump_json()
             )
 

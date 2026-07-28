@@ -1620,18 +1620,25 @@ def aplicar_pos_turno(
                 dano = teto_improvisado
             antes = working_mem.player_hp
             depois = working_mem.character.aplicar_dano(dano)
+            _motivo = m.group(2).strip()[:80]
             log.info(
-                "dano_jogador",
-                dano=dano,
-                hp=f"{antes}->{depois}",
-                motivo=m.group(2).strip()[:60] or None,
+                "dano_jogador", dano=dano, hp=f"{antes}->{depois}",
+                motivo=_motivo or None,
+            )
+            # A causa acompanha o número até o jogador — ver DANO-SEM-CAUSA-1.
+            working_mem.character.registrar_evento_vital(
+                "dano", dano, _motivo, depois, working_mem.player_hp_max
             )
             if depois == 0:
                 log.warning("jogador_a_zero_hp", policy=working_mem.death_policy)
         for m in _RE_CURA.finditer(resposta_completa):
             antes = working_mem.player_hp
-            depois = working_mem.character.aplicar_cura(int(m.group(1)))
-            log.info("cura_jogador", cura=int(m.group(1)), hp=f"{antes}->{depois}")
+            _cura = int(m.group(1))
+            depois = working_mem.character.aplicar_cura(_cura)
+            log.info("cura_jogador", cura=_cura, hp=f"{antes}->{depois}")
+            working_mem.character.registrar_evento_vital(
+                "cura", _cura, "", depois, working_mem.player_hp_max
+            )
 
     # 16d. Cicatriz permanente — [CICATRIZ: texto] (dedup + cap no substate).
     # Gate de gatilho (playtest 03/07): o LLM emitia cicatriz em momento

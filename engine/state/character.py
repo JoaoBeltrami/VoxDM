@@ -137,6 +137,30 @@ class PlayerCharacter:
         if item_id in self.player_inventory:
             self.player_inventory.remove(item_id)
 
+    # DANO-SEM-CAUSA-1 (playtest 26/07): a engine aplicava [DANO] e o motivo era
+    # descartado por `strip_marcadores` antes do texto chegar ao jogador — sobrava
+    # o HP caindo. Ele tomou 8 de dano FORA de combate narrando só "sigo o
+    # caminho" e reportou "tomei dano do nada". Risco que não é LEGÍVEL não é
+    # risco sentido (Camada 2 do ADR-005): a engine sabia a causa e jogava fora.
+    # Cada item: {"tipo": "dano"|"cura", "valor": int, "motivo": str,
+    #             "hp": int, "hp_max": int}. Drenado 1×/turno pelo websocket.
+    eventos_vitais_turno: list[dict] = field(default_factory=list)
+
+    def registrar_evento_vital(
+        self, tipo: str, valor: int, motivo: str, hp: int, hp_max: int
+    ) -> None:
+        """Guarda a CAUSA de uma mudança de HP pra que ela alcance o jogador."""
+        self.eventos_vitais_turno.append({
+            "tipo": tipo, "valor": int(valor), "motivo": (motivo or "").strip()[:80],
+            "hp": int(hp), "hp_max": int(hp_max),
+        })
+
+    def drenar_eventos_vitais(self) -> list[dict]:
+        """Devolve e limpa os eventos do turno (mesmo idioma de eventos_relacao)."""
+        eventos = list(self.eventos_vitais_turno)
+        self.eventos_vitais_turno.clear()
+        return eventos
+
     def aplicar_dano(self, quantidade: int) -> int:
         """Aplica dano do marker [DANO] com clamps. Retorna HP resultante.
 

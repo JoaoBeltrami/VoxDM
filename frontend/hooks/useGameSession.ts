@@ -9,6 +9,7 @@ import {
   type PersonagemConfig,
   type SpellSlot,
   type TokenIniciativa,
+  type EventoVital,
 } from "@/lib/api";
 import { parseMensagemWS } from "@/lib/ws-schema";
 import { stripMarcadoresExibicao } from "@/lib/markers";
@@ -126,6 +127,8 @@ interface EstadoSessao {
   emCombate: boolean;
   /** Perícia que o JOGADOR pediu pra testar (vem da engine, não de regex). */
   checkPedido: string;
+  /** Por que o HP mudou neste turno — dano/cura COM a causa. */
+  eventosVitais: EventoVital[];
   inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodadaCombate: number;
   // Últimas consequências narrativas — surfaced fora de combate
@@ -253,6 +256,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   condicoesDetectadas: [],
   emCombate: false,
   checkPedido: "",
+  eventosVitais: [],
   inimigos: {},
   rodadaCombate: 0,
   consequencias: [],
@@ -653,6 +657,7 @@ export function useGameSession() {
           deathSavesStable: msg.death_saves_stable,
           emCombate: emCombateAtual,
           checkPedido: msg.check_pedido ?? "",
+          eventosVitais: msg.eventos_vitais ?? [],
           inimigos: (
             deveAtualizarInimigos
               ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)

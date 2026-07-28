@@ -626,6 +626,10 @@ class WorkingMemory:
     def atualizar_trust(self, npc_id: str, delta: int) -> None:
         self.scene.atualizar_trust(npc_id, delta)
 
+    def drenar_eventos_vitais(self) -> list[dict]:
+        """Causas das mudanças de HP deste turno — ver CharacterState."""
+        return self.character.drenar_eventos_vitais()
+
     def drenar_eventos_relacao(self) -> list:
         """Eventos de relação do turno (autoridade social) — one-shot."""
         return self.scene.drenar_eventos_relacao()

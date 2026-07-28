@@ -35,6 +35,14 @@ export interface SpellSlot {
   max: number;
 }
 
+export interface EventoVital {
+  tipo: "dano" | "cura";
+  valor: number;
+  motivo: string;
+  hp: number;
+  hp_max: number;
+}
+
 export interface MensagemWS {
   tipo: "token" | "fim" | "erro" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato" | "relacao";
   conteudo?: string;
@@ -74,6 +82,9 @@ export interface MensagemWS {
   /** CHECK-JOGADOR-ZERO: perícia que o JOGADOR pediu; a engine detectou no texto dele.
    *  Preferir a este campo em vez do regex sobre a prosa do Mestre. */
   check_pedido?: string;
+  /** DANO-SEM-CAUSA-1: por que o HP mudou. O motivo do `[DANO]` era descartado
+   *  junto com o marcador e o jogador só via o número cair. */
+  eventos_vitais?: EventoVital[];
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
   // Campo de consistência de rodada — permite detectar initiative drift no frontend.

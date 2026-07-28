@@ -364,6 +364,46 @@ function CascadeToast({ provider, onDismiss }: { provider: string; onDismiss: ()
  *  fica ~2.5s e avança (com agregação "X e mais N" quando 3+ na mesma direção);
  *  clicar pula pro próximo. O timeout interno de 5s é só fallback — o unmount
  *  entre toasts limpa o timer antes de disparar. */
+function VitalToast({
+  eventos, onDismiss,
+}: {
+  eventos: import("@/lib/api").EventoVital[];
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000);
+    return () => clearTimeout(t);
+  }, [onDismiss, eventos]);
+
+  if (eventos.length === 0) return null;
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 top-36 z-40 flex flex-col items-center gap-1.5 px-4">
+      {eventos.map((ev, i) => {
+        const dano = ev.tipo === "dano";
+        return (
+          <button
+            key={i}
+            onClick={onDismiss}
+            className={`animate-slide-down rounded-xl border px-4 py-2 text-center text-xs shadow-lg backdrop-blur-sm transition ${
+              dano
+                ? "border-red-800/60 bg-red-950/85 text-red-200/95 hover:bg-red-900/85"
+                : "border-emerald-800/60 bg-emerald-950/85 text-emerald-200/95 hover:bg-emerald-900/85"
+            }`}
+          >
+            <span className="font-semibold">
+              {dano ? "▼" : "▲"} {dano ? "−" : "+"}{ev.valor} PV
+            </span>
+            {/* A CAUSA é o ponto do componente: dano sem motivo legível vira
+                "tomei dano do nada", que foi o relato do playtest 26/07. */}
+            {ev.motivo ? <span className="opacity-90"> — {ev.motivo}</span> : null}
+            <span className="ml-2 opacity-60">({ev.hp}/{ev.hp_max})</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function RelacaoToast({
   relacao, onDismiss,
 }: {
@@ -422,9 +462,19 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     cascadeAtivo, limparCascade,
-    relacaoToast, limparRelacaoToast,
+    relacaoToast, limparRelacaoToast, eventosVitais,
     pacingNivel,
   } = useGameSession();
+
+  // DANO-SEM-CAUSA-1 (playtest 26/07): o toast vive aqui, não no hook, porque é
+  // apresentação — o hook só entrega o dado do turno. Espelha o estado em vez de
+  // ler direto pra que o clique possa dispensar sem esperar o próximo turno.
+  const [vitaisVisiveis, setVitaisVisiveis] = useState<
+    import("@/lib/api").EventoVital[]
+  >([]);
+  useEffect(() => {
+    if (eventosVitais.length > 0) setVitaisVisiveis(eventosVitais);
+  }, [eventosVitais]);
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
   const [syncAtivo, setSyncAtivo] = useState(true);
@@ -2155,6 +2205,11 @@ export default function Home() {
         {relacaoToast && (
           <RelacaoToast relacao={relacaoToast} onDismiss={limparRelacaoToast} />
         )}
+
+        {/* DANO-SEM-CAUSA-1: a CAUSA da mudança de HP. Independente do toast de
+            relação — dano acontece sem NPC envolvido (e no playtest aconteceu
+            fora de combate, o que gerou o "tomei dano do nada"). */}
+        <VitalToast eventos={vitaisVisiveis} onDismiss={() => setVitaisVisiveis([])} />
 
         {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}
         <button

@@ -306,6 +306,10 @@ class MensagemWS(BaseModel):
     # este campo ao regex: ele é determinístico e vem da mesma classificação que
     # calcula o bônus.
     check_pedido: str = ""
+    # DANO-SEM-CAUSA-1: causas das mudanças de HP do turno. Cada item:
+    # {tipo: "dano"|"cura", valor, motivo, hp, hp_max}. O motivo do `[DANO]`
+    # era descartado com o marcador e o jogador só via o HP cair.
+    eventos_vitais: list[dict[str, Any]] = Field(default_factory=list)
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"
