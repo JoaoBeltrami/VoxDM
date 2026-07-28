@@ -38,6 +38,16 @@ _PERICIAS_PT: tuple[str, ...] = (
     "intuicao", "discernimento", "medicina", "sobrevivencia", "atletismo",
     "acrobacia", "furtividade", "prestidigitacao", "arcanismo", "historia",
     "investigacao", "natureza", "religiao", "iniciativa",
+    # PLAYTEST 26/07: faltava. "quero rolar insight" — a forma que o Beltrami
+    # usou — devolvia None em TODAS as 6 variações testadas, então nenhum
+    # check_pendente era criado e o dado nunca abria. A tabela era PT-only, mas
+    # quem joga D&D em português diz os nomes em inglês o tempo todo: ninguém
+    # fala "Prestidigitação", fala "Sleight of Hand"; ninguém fala "Intuição",
+    # fala "insight". Aliases abaixo — mesmos nomes de exibição.
+    "insight", "perception", "stealth", "athletics", "acrobatics", "investigation",
+    "persuasion", "deception", "intimidation", "performance", "survival",
+    "medicine", "arcana", "history", "nature", "religion", "initiative",
+    "animal handling", "adestrar animais",
 )
 
 # Atributos de salvaguarda — só contam junto da palavra "salvaguarda" (mirror do
@@ -57,6 +67,18 @@ _NOME_EXIBICAO: dict[str, str] = {
     "natureza": "Natureza", "religiao": "Religião", "iniciativa": "Iniciativa",
     "forca": "Força", "destreza": "Destreza", "constituicao": "Constituição",
     "inteligencia": "Inteligência", "sabedoria": "Sabedoria", "carisma": "Carisma",
+    # Aliases EN → mesmo nome de exibição em PT. `bonus_de_check` resolve pelo
+    # nome de exibição, então "insight" e "Intuição" somam o MESMO modificador.
+    "insight": "Intuição", "perception": "Percepção", "stealth": "Furtividade",
+    "athletics": "Atletismo", "acrobatics": "Acrobacia",
+    "investigation": "Investigação", "persuasion": "Persuasão",
+    "deception": "Enganação", "intimidation": "Intimidação",
+    "performance": "Atuação", "survival": "Sobrevivência",
+    "medicine": "Medicina", "arcana": "Arcanismo", "history": "História",
+    "nature": "Natureza", "religion": "Religião", "initiative": "Iniciativa",
+    # Adestrar Animais faltava em AMBOS os idiomas — perícia SRD completa que
+    # simplesmente não existia na tabela.
+    "animal handling": "Adestrar Animais", "adestrar animais": "Adestrar Animais",
 }
 
 _RE_SALVAGUARDA = re.compile(r"\bsalvaguarda\b", re.IGNORECASE)

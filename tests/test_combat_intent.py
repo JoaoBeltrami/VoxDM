@@ -189,3 +189,56 @@ def test_magia_ofensiva_lista_vazia():
 
 def test_magia_ofensiva_texto_vazio():
     assert menciona_magia_ofensiva("", ["Explosão Eldritch"]) is None
+
+
+# ── Vocabulário bilíngue (playtest 26/07) ────────────────────────────────────
+
+
+def test_pericia_em_ingles_e_reconhecida():
+    """"quero rolar insight" tem que abrir o dado igual a "Intuição".
+
+    Playtest 26/07: o pedido funcionou na 1ª vez (Percepção) e NÃO na 2ª, quando
+    o Beltrami pediu "insight". A tabela era PT-only — e quem joga D&D em
+    português usa os nomes em inglês o tempo todo. Sem match não há
+    `check_pendente`, sem ele não há `check_pedido` no payload, e o dado nunca
+    abre. Todas as 6 variações com "insight" devolviam None.
+    """
+    from engine.combat.intent import eh_teste_pericia
+
+    for frase in ("quero rolar insight", "posso testar insight",
+                  "quero um teste de Insight", "deixa eu rolar insight nisso"):
+        assert eh_teste_pericia(frase) == "Intuição", frase
+    assert eh_teste_pericia("vou tentar stealth") == "Furtividade"
+    assert eh_teste_pericia("rolar perception") == "Percepção"
+
+
+def test_adestrar_animais_existe_nos_dois_idiomas():
+    """Perícia SRD que não existia na tabela em idioma nenhum."""
+    from engine.combat.intent import eh_teste_pericia
+
+    assert eh_teste_pericia("quero rolar animal handling") == "Adestrar Animais"
+    assert eh_teste_pericia("quero rolar adestrar animais") == "Adestrar Animais"
+
+
+def test_alias_ingles_nao_cria_falso_positivo():
+    """Fala comum e declaração de ataque continuam fora."""
+    from engine.combat.intent import eh_teste_pericia
+
+    assert eh_teste_pericia("ataco o goblin") is None
+    assert eh_teste_pericia("o que você acha disso?") is None
+    assert eh_teste_pericia("[Rolagem: d20 = 14]") is None
+
+
+def test_bonus_resolve_o_nome_vindo_do_alias():
+    """O alias EN precisa somar o MESMO modificador do nome PT — senão o
+    jogador que fala inglês rola sem bônus."""
+    from engine.authority.checks import bonus_de_check
+    from engine.combat.intent import eh_teste_pericia
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "s")
+    wm.player_level = 3
+    wm.wis_score = 14
+    pt = bonus_de_check(wm, eh_teste_pericia("quero rolar Intuição"))
+    en = bonus_de_check(wm, eh_teste_pericia("quero rolar insight"))
+    assert pt == en
