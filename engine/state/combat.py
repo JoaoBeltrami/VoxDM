@@ -32,6 +32,13 @@ _ESTADOS_INIMIGO = frozenset(
     {"intacto", "ferido", "gravemente ferido", "incapacitado", "morto"}
 )
 
+# Escala de GRAVIDADE dos mesmos estados. O frozenset acima valida pertinência,
+# mas não ordena — e ordenar é o que impede um `[INIMIGO: c1|carniçal]` repetido
+# (que chega com o default "intacto") de CURAR quem já estava ferido.
+_GRAVIDADE_ESTADO: dict[str, int] = {
+    "intacto": 0, "ferido": 1, "gravemente ferido": 2, "incapacitado": 3, "morto": 4,
+}
+
 # Máximo de fichas SRD injetadas no prompt de combate (dedup por tipo de monstro).
 # Teto de budget: cada ficha compacta ~55 palavras; 3 tipos cobrem a esmagadora
 # maioria dos encontros sem inflar o prompt além do teto de tokens do combate.
@@ -158,12 +165,41 @@ class CombatState:
         ficha mecânica. A ficha em si (campo "ficha") é preenchida depois, async,
         por engine.bestiary.enriquecer_fichas_inimigos.
         """
-        self.inimigos_combate[inimigo_id] = {
-            "nome": nome,
-            "estado": estado if estado in _ESTADOS_INIMIGO else "intacto",
-            "hp_rel": hp_rel,
-            "srd_index": srd_index,
-        }
+        novo = estado if estado in _ESTADOS_INIMIGO else "intacto"
+        existente = self.inimigos_combate.get(inimigo_id)
+        if existente is None:
+            self.inimigos_combate[inimigo_id] = {
+                "nome": nome,
+                "estado": novo,
+                "hp_rel": hp_rel,
+                "srd_index": srd_index,
+            }
+            return
+
+        # RESSURREICAO-1 (playtest 26/07): esta função dizia "adiciona ou
+        # ATUALIZA" e fazia substituição CEGA do dicionário — toda re-registração
+        # do mesmo id apagava `hp_atual`, `hp_max`, `ca`, a ficha SRD e o
+        # `estado: morto`. Relato do jogador: "um carniçal que morreu caindo
+        # voltou do nada" e, depois, "matei mais um e eles continuam". Estado ao
+        # vivo confirmando: rodada 9, os dois ghouls em `intacto` com hp_atual
+        # cheio (9/9) depois de terem morrido.
+        #
+        # Morte é ESTADO ABSORVENTE: nada re-registra um inimigo morto de volta
+        # pra vivo. Quem quiser ressuscitar de propósito usa
+        # `atualizar_estado_inimigo`, que é explícito.
+        if existente.get("estado") == "morto":
+            return
+        existente["nome"] = nome or existente.get("nome", "")
+        # Só PIORA ou mantém: um `[INIMIGO: c1|carniçal]` repetido chega com o
+        # default "intacto" e não pode curar quem já está ferido.
+        if _GRAVIDADE_ESTADO.get(novo, 0) > _GRAVIDADE_ESTADO.get(
+            str(existente.get("estado", "intacto")), 0
+        ):
+            existente["estado"] = novo
+        if hp_rel:
+            existente["hp_rel"] = hp_rel
+        if srd_index:
+            existente["srd_index"] = srd_index
 
     def atualizar_estado_inimigo(
         self, inimigo_id: str, estado: str, hp_rel: str = ""

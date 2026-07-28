@@ -139,3 +139,58 @@ def test_strip_marcadores_remove_posicao_e_mov():
     assert "MOV" not in limpo
     assert "ft]" not in limpo
     assert "orco se aproxima" in limpo
+
+
+# ── RESSURREICAO-1 (playtest 26/07) ──────────────────────────────────────────
+
+
+def test_re_registro_nao_ressuscita_inimigo_morto():
+    """Morte é estado ABSORVENTE — nada re-registra um morto de volta pra vivo.
+
+    `registrar_inimigo` dizia "adiciona ou ATUALIZA" e fazia substituição cega do
+    dicionário: toda re-emissão de `[INIMIGO: c1|carniçal]` apagava hp_atual,
+    hp_max, ca, a ficha SRD e o `estado: morto`. Relato do jogador: "um carniçal
+    que morreu caindo voltou do nada" e "matei mais um e eles continuam". Estado
+    ao vivo na rodada 9: os dois ghouls em `intacto` com HP cheio depois de terem
+    morrido.
+    """
+    from engine.state.combat import CombatState
+
+    c = CombatState()
+    c.entrar()
+    c.registrar_inimigo("c1", "carniçal", srd_index="ghoul")
+    c.aplicar_stats_inimigo("c1", 12, 9)
+    assert c.aplicar_dano_inimigo("c1", 9) == "morto"
+
+    c.registrar_inimigo("c1", "carniçal", srd_index="ghoul")  # re-emissão do LLM
+    d = c.inimigos_combate["c1"]
+    assert d["estado"] == "morto", "inimigo morto ressuscitou"
+    assert d["hp_atual"] == 0
+    assert d["ca"] == 12, "ficha SRD foi perdida no re-registro"
+
+
+def test_re_registro_nao_cura_inimigo_ferido():
+    """O default `estado="intacto"` do marcador não pode desfazer dano."""
+    from engine.state.combat import CombatState
+
+    c = CombatState()
+    c.entrar()
+    c.registrar_inimigo("x", "orc")
+    c.aplicar_stats_inimigo("x", 13, 15)
+    c.aplicar_dano_inimigo("x", 8)
+
+    c.registrar_inimigo("x", "orc")
+    d = c.inimigos_combate["x"]
+    assert d["estado"] == "ferido"
+    assert d["hp_atual"] == 7
+
+
+def test_re_registro_pode_PIORAR_o_estado():
+    """Atualização legítima continua passando — o guard é só contra melhora."""
+    from engine.state.combat import CombatState
+
+    c = CombatState()
+    c.entrar()
+    c.registrar_inimigo("x", "orc")
+    c.registrar_inimigo("x", "orc", estado="gravemente ferido")
+    assert c.inimigos_combate["x"]["estado"] == "gravemente ferido"
