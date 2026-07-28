@@ -444,7 +444,7 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Componente | Decisão |
 |---|---|
 | LLM de jogo (primário) | Groq — `llama-3.3-70b-versatile` |
-| LLM cascata interna | Groq 70B → Groq 8B → Gemini (multi-key/model) → Ollama — via `LLMRouter` em `engine/llm/router.py` |
+| LLM cascata interna | Groq 70B → **gpt-oss-120b** → **gpt-oss-20b** → Gemini (multi-key/model) → Ollama — via `LLMRouter` em `engine/llm/router.py`. O degrau do meio entrou em `dd4c0a2` (25/07) porque o 70B só tem 100K TPD ≈ 19-27 turnos/dia — menos que UMA sessão; o `20b` substituiu `llama-3.1-8b-instant`, que o Groq desliga em 16/08/26. O primário NÃO mudou de propósito: o gpt-oss produziu anacronismo em teste ("homem de terno" em taverna medieval). `NARRATIVE_GRIM` fica fora da migração — safety do gpt-oss não medido. |
 | Modelos Gemini válidos | `gemini-2.5-flash-lite`, `gemini-3.1-flash-lite` (sem thinking budget) |
 | LLM de conversão | Groq — `llama-3.3-70b-versatile` |
 | STT | RealtimeSTT + Faster-Whisper tiny (GPU) |

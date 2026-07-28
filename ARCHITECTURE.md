@@ -59,8 +59,8 @@ em `engine/state/` (`SceneState`, `CombatState`, `PlayerCharacter`, `PartyState`
 - **Providers** (`providers/`): `groq.py`, `gemini.py` (multi-key + multi-model), `ollama.py`.
   Cada provider lança `LLMRetriable` em 429/5xx/timeout/refusal → o router cascateia.
   Streaming só cascateia até o 1º token emitido (trocar mid-frase quebraria a narrativa).
-- **Cascatas:** `NARRATIVE` (70B→8B→Gemini→Ollama), `SUMMARIZATION` (Gemini-first),
-  `CLASSIFICATION` (8B-first), e variantes contextuais `NARRATIVE_LIGHT/CLIMAX/GRIM`.
+- **Cascatas:** `NARRATIVE` (70B→gpt-oss-120b→gpt-oss-20b→Gemini→Ollama), `SUMMARIZATION`
+  (Gemini-first), `CLASSIFICATION` (modelo pequeno primeiro), e variantes contextuais `NARRATIVE_LIGHT/CLIMAX/GRIM`.
 - **Rota grimdark** (`amarelada.py` + `NARRATIVE_GRIM`): cena sombria (keywords de
   atrocidade ou perfil "sombrio") roteia uma cascata que garante um modelo local
   uncensored (`ollama-grim`) no fim; detecção de "amarelada" (recusa/moralização)

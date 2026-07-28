@@ -18,6 +18,7 @@ Exemplo:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 import structlog
 from groq import (
@@ -101,6 +102,38 @@ def _e_quota_disfarcada(exc: BaseException) -> bool:
     return any(kw in corpo for kw in _PALAVRAS_QUOTA)
 
 
+
+def _extrair_usage(resp: Any) -> dict[str, int]:
+    """Tokens da resposta, incluindo os gastos em RACIOCÍNIO quando houver.
+
+    TOKENS-CEGOS (26/07): o projeto media latência e chars, nunca tokens — então
+    "quantos turnos cabem no TPD" era conta de guardanapo. E há um caso em que a
+    conta muda de figura: a família `openai/gpt-oss` gasta tokens num campo
+    `reasoning` ANTES do `content`. O TPD dela é 2× o do 70B (200K vs 100K), mas
+    isso só vale o dobro de sessão se ela não gastar o dobro por turno — e
+    ninguém sabia. Aqui é onde o número passa a existir.
+
+    Tolerante de propósito: a forma de `completion_tokens_details` varia entre
+    versões do SDK e entre modelos (o 70B não tem raciocínio nenhum). Campo
+    ausente vira 0, nunca exceção — telemetria não pode derrubar turno.
+    """
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return {}
+    def _i(obj: Any, campo: str) -> int:
+        try:
+            return int(getattr(obj, campo, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+    det = getattr(u, "completion_tokens_details", None)
+    return {
+        "prompt_tokens": _i(u, "prompt_tokens"),
+        "completion_tokens": _i(u, "completion_tokens"),
+        "total_tokens": _i(u, "total_tokens"),
+        "reasoning_tokens": _i(det, "reasoning_tokens") if det is not None else 0,
+    }
+
+
 class GroqProvider(BaseLLMProvider):
     """Provider Groq — uma instância por modelo (70B, 8B etc.)."""
 
@@ -124,6 +157,9 @@ class GroqProvider(BaseLLMProvider):
         self.nome = nome
         self._modelo = modelo
         self._client: AsyncGroq | None = None
+        # Usage da última chamada não-streaming (ver `_extrair_usage`). Vazio
+        # até a primeira chamada; o caminho de stream não expõe usage.
+        self.ultimo_usage: dict[str, int] = {}
         # Setado pelo router quando a cena ativa e_cena_sombria() ou
         # dm_profile="sombrio". Habilita detecção de amarelada no buffer.
         self._cena_sombria: bool = False
@@ -169,6 +205,13 @@ class GroqProvider(BaseLLMProvider):
                 **self._extras(),
             )
             texto = resp.choices[0].message.content or ""
+            # TOKENS-CEGOS (26/07): o projeto media latência e chars, nunca TOKENS
+            # — então "quantos turnos cabem no TPD" era conta de guardanapo, e o
+            # custo REAL dos modelos de raciocínio (gpt-oss gasta tokens em
+            # `reasoning` ANTES do `content`) nunca foi observado. Sem isto não dá
+            # pra decidir a ordem da cascata: o 200K TPD do gpt-oss vale o dobro do
+            # 70b só se ele não gastar o dobro por turno.
+            self.ultimo_usage = _extrair_usage(resp)
         except _ERROS_RECUPERAVEIS as e:
             raise LLMRetriable(
                 f"groq[{self._modelo}] erro recuperável: {e!s}"[:200],

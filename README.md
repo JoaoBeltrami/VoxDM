@@ -25,7 +25,7 @@ Você fala no microfone, o Mestre fala de volta — narração rica em pt-BR, re
           ↓
 📚  RAG 3 camadas (Qdrant lore + Qdrant regras SRD + Neo4j relações)
           ↓
-🧠  Multi-provider LLM (cascata: Groq 70B → 8B → Gemini → Ollama)
+🧠  Multi-provider LLM (cascata: Groq 70B → gpt-oss-120b → gpt-oss-20b → Gemini → Ollama)
           ↓
 🔊  Edge TTS Microsoft (voz natural pt-BR, perfil por NPC)
           ↓
@@ -100,7 +100,7 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 - **Recap dispensável**: bolha âmbar com botão × para fechar antes dos 30s
 - **Condições D&D detectadas**: 14 regex em pt-BR, chips aguardam confirmação (substituídos por turno, sem acumulação)
 - **Cinema mode**: Ctrl+Shift+C esconde UI técnica, deixa só narração
-- **Toggle LLM ao vivo**: menu Opções → Auto/Groq 70B/Groq 8B/Gemini/Ollama sem reiniciar
+- **Toggle LLM ao vivo**: menu Opções → Auto/Groq 70B/gpt-oss-120b/gpt-oss-20b/Gemini/Ollama sem reiniciar
 
 ---
 
@@ -109,7 +109,8 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 | Camada | Tecnologia |
 |---|---|
 | **LLM principal** | Groq — `llama-3.3-70b-versatile` |
-| **Fallback 1** | Groq — `llama-3.1-8b-instant` |
+| **Fallback 1** | Groq — `openai/gpt-oss-120b` (degrau de TPD) |
+| **Fallback 2** | Groq — `openai/gpt-oss-20b` (substituiu `llama-3.1-8b-instant`, desligado pelo Groq em 16/08/26) |
 | **Fallback 2** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
 | **Fallback 3** | Ollama local |
 | STT | RealtimeSTT + Faster-Whisper `small` (GPU CUDA) |
@@ -127,7 +128,7 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 ## Cascata de LLM
 
 ```
-NARRATIVE    : Groq 70B → Groq 8B → Gemini (6 combos) → Ollama
+NARRATIVE    : Groq 70B → gpt-oss-120b → gpt-oss-20b → Gemini (6 combos) → Ollama
 SUMMARIZATION: Gemini → Groq 70B → Groq 8B → Ollama
 CLASSIFICATION: Groq 8B → Gemini → Ollama
 ```

@@ -30,6 +30,7 @@ from engine.llm.tasks import (
     PROV_GEMINI,
     PROV_GROQ_8B,
     PROV_GROQ_70B,
+    PROV_GROQ_120B,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
@@ -43,6 +44,10 @@ log = structlog.get_logger(__name__)
 _BACKEND_PARA_PROVIDER: dict[str, str | None] = {
     "groq":    PROV_GROQ_70B,   # legado — equivale a "groq-70b"
     "groq-70b": PROV_GROQ_70B,
+    # 26/07: faltava. O 120b serve a MAIORIA dos turnos reais (é o degrau
+    # seguinte quando o TPD do 70b fecha, ~turno 14), mas não havia como
+    # forçá-lo — nem pelo toggle das Opções, nem por benchmark A/B.
+    "groq-120b": PROV_GROQ_120B,
     "groq-8b": PROV_GROQ_8B,
     "gemini":  PROV_GEMINI,
     "ollama":      PROV_OLLAMA,
