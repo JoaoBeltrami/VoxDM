@@ -2198,6 +2198,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             tts_enviado_ate: int = -1
             tts_buffer_audio: dict[int, bytes] = {}
             tts_lock: asyncio.Lock = asyncio.Lock()
+            # Instante em que o PRIMEIRO áudio saiu — a métrica que interessa pro
+            # jogador (quando a voz começa), não quando o turno inteiro fecha.
+            # Lista de 1 posição porque a closure abaixo só lê/escreve por índice
+            # (nonlocal exigiria declarar em cada função aninhada que a toca).
+            t_primeiro_audio: list[float] = []
             # `npc_em_foco` — npc_id que foi alvo de atribuição clara na sentença
             # anterior. Permite que pronome "ela diz" / "ele murmura" herde a voz
             # do NPC certo. Reseta naturalmente a cada turno (closure recriada).
@@ -2238,6 +2243,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         chunk = tts_buffer_audio.pop(prox)
                         tts_enviado_ate = prox
                         if chunk:
+                            if not t_primeiro_audio:
+                                t_primeiro_audio.append(time.perf_counter())
                             await _send_text_seguro(websocket,
                                 MensagemWS(
                                     tipo="audio_chunk",
@@ -2945,7 +2952,15 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 "resposta_mestre": resposta_completa,
                 "total_ms": latencia_ms,
                 "llm_ms": latencia_primeiro_token,   # proxy: tempo até 1º token ≈ tempo de LLM
-                "primeiro_audio_ms": latencia_ms,    # TTS ocorre após stream; usa total_ms como proxy
+                # Tempo real até a voz começar. Era `latencia_ms` (o turno INTEIRO)
+                # com o comentário "TTS ocorre após stream" — stale desde que o TTS
+                # virou concorrente ao stream. A métrica mentia pra cima e escondia
+                # o gargalo: no playtest 26/07 o TTS era 3937ms de um turno de
+                # 6540ms e ninguém tinha olhado, porque não havia número pra olhar.
+                # 0 = nenhum áudio saiu neste turno (TTS falhou ou resposta vazia).
+                "primeiro_audio_ms": (
+                    int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
+                ),
                 "status": "OK" if latencia_ms < 2000 else "ACIMA DO LIMITE",
                 "chunks_lore": chunks_lore,
                 "chunks_regras": chunks_regras,

@@ -166,6 +166,14 @@ async def _warmup_ollama_bg() -> None:
         async with httpx.AsyncClient(timeout=settings.OLLAMA_HEALTH_TIMEOUT) as client:
             r = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/version")
             if r.status_code != 200:
+                # WARMUP-PENDING-ETERNO-1 (auditoria 26/07): este `return` saía SEM
+                # tocar o status, deixando "pending" pra sempre. Como
+                # `warmup_pronto = len(pendentes) == 0` e o frontend faz
+                # `disabled={!warmupPronto}` nos CTAs do menu, o jogo ficava
+                # inacessível — o menu nunca destrava. Não morde quando o Ollama
+                # está ausente (a conexão falha limpo e cai no `except` → "failed");
+                # morde se ele responder com erro, ex. proxy nessa porta ou reinício.
+                _WARMUP_STATUS["ollama"] = "skipped"
                 log.info("ollama_warmup_pulado", motivo=f"version status={r.status_code}")
                 return
         # Mini-completion pra carregar modelo na VRAM (assíncrono, não bloqueia API)
