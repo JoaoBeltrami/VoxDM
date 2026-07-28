@@ -124,6 +124,8 @@ interface EstadoSessao {
   condicoesDetectadas: string[];
   // Estado de combate — sincronizado a cada fim de turno
   emCombate: boolean;
+  /** Perícia que o JOGADOR pediu pra testar (vem da engine, não de regex). */
+  checkPedido: string;
   inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodadaCombate: number;
   // Últimas consequências narrativas — surfaced fora de combate
@@ -250,6 +252,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   deathSavesStable: false,
   condicoesDetectadas: [],
   emCombate: false,
+  checkPedido: "",
   inimigos: {},
   rodadaCombate: 0,
   consequencias: [],
@@ -649,6 +652,7 @@ export function useGameSession() {
           deathSavesFailures: msg.death_saves_failures,
           deathSavesStable: msg.death_saves_stable,
           emCombate: emCombateAtual,
+          checkPedido: msg.check_pedido ?? "",
           inimigos: (
             deveAtualizarInimigos
               ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)

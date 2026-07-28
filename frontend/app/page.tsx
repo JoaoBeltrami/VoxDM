@@ -406,7 +406,7 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust, npcsMortos,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    condicoesDetectadas, emCombate, inimigos, rodadaCombate, consequencias,
+    condicoesDetectadas, emCombate, checkPedido, inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions, partyRestorada, dispensarPartyBanner,
     iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, arco, npcRetratos, classFeatures, sceneImageUrl,
@@ -444,17 +444,34 @@ export default function Home() {
     // "O que você fará agora?" e "O que ele vai dizer?" viravam pedido de
     // rolagem. Pergunta conversacional não é check: exige vocabulário de
     // rolagem OU perícia/atributo nomeado na fala.
+    // CHECK-JOGADOR-ZERO (playtest 26/07): o gate era função PURA da prosa do
+    // Mestre — se ele não repetisse a palavra certa, o pedido do jogador ("quero
+    // rolar Percepção") não abria dado nenhum. Agora a ENGINE também abre: ela
+    // classifica o texto do jogador e manda `check_pedido`. Determinístico vem
+    // primeiro; o regex sobre a fala do Mestre continua como caminho paralelo,
+    // pro caso normal em que é o Mestre quem propõe o teste.
     const esperando =
       !respostaAtual &&
       historico.length > 0 &&
       !pedidoEhIniciativa(ultimaFala) &&
-      (_RE_PEDE_ROLAGEM.test(ultimaFala) || _RE_ATRIBUTO_CHECK.test(ultimaFala));
+      (!!checkPedido ||
+        _RE_PEDE_ROLAGEM.test(ultimaFala) ||
+        _RE_ATRIBUTO_CHECK.test(ultimaFala));
     if (!esperando) {
       return { esperandoRolagem: false, motivoRolagem: "", atributoRolagem: "" };
     }
+    // Pedido do jogador tem o nome da perícia vindo da engine — não precisa
+    // reextrair da prosa (e não deve: a prosa pode nem citar a perícia).
+    if (checkPedido) {
+      return {
+        esperandoRolagem: true,
+        motivoRolagem: `Você pediu: teste de ${checkPedido}`,
+        atributoRolagem: checkPedido,
+      };
+    }
     const { motivo, atributo } = extrairMotivoRolagem(ultimaFala);
     return { esperandoRolagem: true, motivoRolagem: motivo, atributoRolagem: atributo };
-  }, [historico, respostaAtual]);
+  }, [historico, respostaAtual, checkPedido]);
 
   // Revela o texto do mestre em sincronia com o áudio (karaokê reverso).
   // textoSincronizado é usado onde antes exibiríamos respostaAtual diretamente.

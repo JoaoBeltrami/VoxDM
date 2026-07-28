@@ -179,6 +179,12 @@ BUDGET_REGRAS    =  225   # combate, saves, condições de status — top 3 chun
 # A alavanca real é o ORÇAMENTO, não a contagem de frases.
 _TETO_PALAVRAS: dict[str, int] = {"curto": 30, "medio": 80, "longo": 110}
 
+# Teto do system prompt no caminho de PRODUÇÃO (brief). É o número do roadmap —
+# o legado usa 20k, frouxo demais pra servir de alarme. O custo de estourar não é
+# latência (prefill é barato): é TPD. A 19KB/turno o groq-70b (100K TPD) morre em
+# ~14 turnos, que foi exatamente o que aconteceu no playtest 26/07.
+_BUDGET_SYSTEM_BRIEF = 15_000
+
 
 def _lembrete_saida(ritmo: str = "medio") -> str:
     """Lembrete final do prompt, com o orçamento de palavras DO TURNO.
@@ -620,7 +626,15 @@ def _montar_mensagens_brief(
     master_system = master_system_override or _carregar_master_system()
     secoes: list[str] = [master_system, ""]
 
-    markers = _carregar_markers_lista()
+    # 26/07: era incondicional aqui, mas condicional no caminho legado (:795) — e
+    # o próprio master_system.md PROMETE ao modelo que é condicional ("Lista
+    # completa é injetada em cena dramática; em cena calma bastam [FIO:]..."). Mais
+    # uma ocorrência da classe "prompt e código que o consome derivam em silêncio".
+    # Medido no prompt do playtest 26/07: 2255 dos 17700 chars (12,7%), presentes
+    # em 100% dos turnos; 21 dos 50 turnos tinham pacing<4 fora de combate, ou seja
+    # dariam False aqui. O custo não é latência (o prefill é barato) — é TPD: 19KB
+    # por turno é o que matou a cota do 70B no turno 14.
+    markers = _carregar_markers_lista() if _cena_dramatica(wm) else ""
     if markers:
         secoes.append(markers)
 
@@ -699,6 +713,21 @@ def _montar_mensagens_brief(
     # transforma toda resposta no mesmo tamanho, porque o modelo escreve ATÉ
     # encher o orçamento.
     system_content = "\n".join(secoes) + _lembrete_saida(_ritmo)
+
+    # Guard de budget. Existia SÓ no `montar_mensagens` legado (:1451), que é
+    # inalcançável com BRIEF_ATIVO=True (o default) — ou seja, nunca disparou.
+    # O playtest 26/07 rodou 50 turnos a 17 700 chars num cenário FORA de combate,
+    # 18% acima do teto do roadmap, sem um único warning. Teto aqui é o número do
+    # roadmap (15k), não os 20k frouxos do legado.
+    if len(system_content) > _BUDGET_SYSTEM_BRIEF:
+        log.warning(
+            "prompt_excede_budget",
+            chars=len(system_content),
+            teto=_BUDGET_SYSTEM_BRIEF,
+            em_combate=bool(getattr(wm, "em_combate", False)),
+            npcs=len(getattr(wm, "npcs_presentes", []) or []),
+        )
+
     turnos = wm.dialogo_recente
     historico = turnos[:-1] if turnos else []
     mensagens: list[dict[str, str]] = [{"role": "system", "content": system_content}]

@@ -57,9 +57,39 @@ def test_flag_on_troca_dump_pelo_brief(monkeypatch):
     system = montar_mensagens(_contexto(_wm()), master_system_override=_PERSONA_FAKE)[0]["content"]
     assert "=== BRIEFING DO TURNO ===" in system
     assert "=== CENA ATUAL ===" not in system
-    # Persona e contrato de markers acompanham o brief.
     assert _PERSONA_FAKE in system
-    assert "Marcadores de Mestre Veterano" in system
+
+
+def test_markers_lista_e_condicional_no_brief(monkeypatch):
+    """Cena calma não carrega a lista completa de marcadores; cena dramática sim.
+
+    O brief injetava a lista SEMPRE (2255 chars, 12,7% do prompt do playtest
+    26/07), enquanto o caminho legado a gateava e o master_system.md PROMETE ao
+    modelo que ela é condicional ("Lista completa é injetada em cena dramática").
+    Este teste amarra os dois lados — é a 6ª vez que prompt e código consumidor
+    derivam em silêncio neste projeto.
+    """
+    monkeypatch.setattr(settings, "BRIEF_ATIVO", True)
+    invalidar_cache()
+
+    calma = _wm()
+    calma.pacing_nivel = 1.0
+    calma.em_combate = False
+    calma.cliffhanger_pendente = ""
+    calma.fios_soltos = []
+    calma.agenda_npcs = {}
+    system_calmo = montar_mensagens(
+        _contexto(calma), master_system_override=_PERSONA_FAKE
+    )[0]["content"]
+    assert "Marcadores de Mestre Veterano" not in system_calmo
+
+    dramatica = _wm()
+    dramatica.pacing_nivel = 8.0
+    system_dramatico = montar_mensagens(
+        _contexto(dramatica), master_system_override=_PERSONA_FAKE
+    )[0]["content"]
+    assert "Marcadores de Mestre Veterano" in system_dramatico
+    assert len(system_dramatico) > len(system_calmo)
 
 
 def test_flag_on_rolling_summary_sempre_incluso(monkeypatch):

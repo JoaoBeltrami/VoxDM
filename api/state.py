@@ -88,6 +88,21 @@ class SessaoAtiva:
     # e a engine resolve. Inerte quando COMBATE_ENGINE_ATIVO=False.
     combate_pendente: dict | None = None
 
+    # CHECK-JOGADOR-ZERO (playtest 26/07): perícia que o JOGADOR pediu pra testar,
+    # aguardando o d20. {"pericia": "Percepção", "bonus": 5}.
+    #
+    # Existia só o caminho mestre-iniciado: a UI de rolagem é derivada por regex da
+    # prosa do Mestre, então "quero rolar Percepção" não abria nada — o pedido
+    # virava prosa e morria se o Mestre não repetisse a palavra. Queixa literal:
+    # "eu pedi checks, ele não abre pra eu rodar". A classificação já existia e
+    # funcionava (`engine.combat.intent.eh_teste_pericia`), só nunca era chamada
+    # com o texto do jogador.
+    #
+    # Consumido quando o [Rolagem:] chega — e serve de fallback pro bônus, que
+    # antes dependia do Mestre ter NOMEADO a perícia na fala anterior ("alguns não
+    # aplicaram o bônus").
+    check_pendente: dict | None = None
+
     # Dashboard admin: histórico de turnos para gráficos (max 50, rolling).
     # Cada entry: {turno, pacing, hp, hp_max, em_combate, provider, task_type,
     #              latencia_ms, erros}. Populado em websocket.py após cada fim.

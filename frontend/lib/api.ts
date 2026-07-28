@@ -71,6 +71,9 @@ export interface MensagemWS {
   death_saves_stable?: boolean;
   // Estado de combate
   em_combate?: boolean;
+  /** CHECK-JOGADOR-ZERO: perícia que o JOGADOR pediu; a engine detectou no texto dele.
+   *  Preferir a este campo em vez do regex sobre a prosa do Mestre. */
+  check_pedido?: string;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
   // Campo de consistência de rodada — permite detectar initiative drift no frontend.

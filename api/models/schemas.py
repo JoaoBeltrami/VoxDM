@@ -297,6 +297,15 @@ class MensagemWS(BaseModel):
     # Feature companions/party — aliados ativos com HP/CA/atq/dano.
     # Estrutura: id → {nome, tipo, hp, hp_max, ca, atq, dano}.
     companions: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # CHECK-JOGADOR-ZERO (playtest 26/07): perícia que o JOGADOR pediu pra testar,
+    # detectada pela engine no texto dele. Vazio quando não há pedido aberto.
+    #
+    # Existe porque a UI de rolagem era função PURA da prosa do Mestre (regex sobre
+    # a última fala dele), então "quero rolar Percepção" não abria nada — não havia
+    # estado no backend representando "o jogador pediu". O frontend deve preferir
+    # este campo ao regex: ele é determinístico e vem da mesma classificação que
+    # calcula o bônus.
+    check_pedido: str = ""
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

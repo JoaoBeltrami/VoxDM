@@ -88,6 +88,8 @@ Pare. Não resolva. O resultado volta de uma destas duas formas — em ambas, **
 
 **Não peça rolagem quando:** não há incerteza real pra esse personagem; a abordagem criativa eliminou o check — honre a criatividade; a situação já está resolvida.
 
+**Se o JOGADOR pedir o teste, a resposta padrão é SIM** — as recusas acima valem só pro que VOCÊ ia propor. Diga em uma frase o que está em jogo, **nomeie a perícia** (é o que abre o dado na tela dele) e PARE.
+
 **Em combate:** `combat.md` é a AUTORIDADE — siga o protocolo dele à risca, não este resumo. **Nunca peça rolagem de Iniciativa** (ela é da engine, não do jogador). Peça só a rolagem de ATAQUE, e só quando ainda não houver linha `ENGINE:` no contexto resolvendo o turno.
 
 ---

@@ -292,7 +292,7 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
-from engine.authority.checks import resolver_check
+from engine.authority.checks import bonus_de_check, resolver_check
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
@@ -1841,12 +1841,46 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # fala do Mestre pediu um teste NOMEADO (alta confiança); pedido de
             # ataque e fala ambígua não passam por `eh_teste_pericia`, e sem
             # perícia identificada não se inventa bônus.
+            # CHECK-JOGADOR-ZERO (playtest 26/07): o jogador também pode ABRIR um
+            # check. Sem isto, "quero rolar Percepção" era só prosa — a UI de
+            # rolagem é derivada da fala do MESTRE, então nada abria e o pedido
+            # morria se o Mestre não repetisse a palavra ("pedi checks, ele não
+            # abre pra eu rodar"). A classificação já existia e acerta os pedidos
+            # em PT-BR; faltava chamá-la com o texto do jogador.
+            _d20_no_texto = extrair_d20_jogador(texto_jogador)
+            if _d20_no_texto is None and not sessao.combate_pendente:
+                _pericia_do_jogador = eh_teste_pericia(texto_jogador)
+                if _pericia_do_jogador:
+                    sessao.check_pendente = {
+                        "pericia": _pericia_do_jogador,
+                        "bonus": bonus_de_check(sessao.working_mem, _pericia_do_jogador),
+                    }
+                    log.info("check_pedido_pelo_jogador", session_id=session_id,
+                             pericia=_pericia_do_jogador)
+                    # Diretiva determinística no mesmo estilo das linhas "ENGINE:"
+                    # do combate: a engine JÁ decidiu que há um teste: o Mestre só
+                    # enquadra a ficção. Sem isto a decisão fica com o LLM, e a
+                    # seção de rolagem do master_system lhe dá três licenças pra
+                    # recusar ("não há incerteza real") — o jogador pede e nada abre.
+                    texto_jogador = (
+                        f"{texto_jogador}\n"
+                        f"ENGINE: o jogador PEDIU um teste de {_pericia_do_jogador}. "
+                        f"Aceite — diga em uma frase o que está em jogo, nomeie "
+                        f"'{_pericia_do_jogador}' e PARE, esperando a rolagem. "
+                        f"Não role, não narre o resultado, não decida por ele."
+                    )
+
             if not sessao.combate_pendente:
-                _d20_check = extrair_d20_jogador(texto_jogador)
+                _d20_check = _d20_no_texto
                 if _d20_check is not None:
+                    # A perícia pode vir do pedido do MESTRE (caminho original) ou
+                    # do pedido do JOGADOR guardado no turno anterior. O segundo é
+                    # o que faz o bônus sair certo quando o Mestre aceitou o teste
+                    # sem nomear a perícia de volta.
                     _pericia_pedida = eh_teste_pericia(
                         _ultima_fala_do_mestre(sessao.working_mem)
-                    )
+                    ) or ((sessao.check_pendente or {}).get("pericia") or None)
+                    sessao.check_pendente = None
                     if _pericia_pedida:
                         _linha_check = resolver_check(
                             sessao.working_mem, _d20_check, _pericia_pedida
@@ -2866,6 +2900,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         for qid, sid in avanco_quests
                     ],
                     **_snapshot_estado(sessao.working_mem),
+                    # CHECK-JOGADOR-ZERO: a perícia que o JOGADOR pediu. O frontend
+                    # abre o dado por ISTO, sem depender de a prosa do Mestre casar
+                    # com um regex.
+                    check_pedido=((sessao.check_pendente or {}).get("pericia") or ""),
                 ).model_dump_json()
             )
 
