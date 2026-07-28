@@ -292,3 +292,38 @@ def test_todos_penalizados_ainda_devolve_cascata():
     for nome in antes:
         r._penalizar(nome, "rate_limit")
     assert [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)] == antes
+
+
+def test_cooldown_escala_e_nao_exila_por_15min_na_primeira_batida():
+    """COOLDOWN-EXAGERADO-1: TPM reseta a cada minuto; 900s fixo era apagão.
+
+    Em campo os TRÊS providers Groq saíram em 97s e tudo caiu no Gemini pelo
+    resto da sessão (p50 5,2s → 9,2s). A 1ª batida agora assume TPM.
+    """
+    import time as _t
+
+    r = LLMRouter()
+    todos = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)]
+    alvo = todos[0]
+
+    r._penalizar(alvo, "rate_limit")
+    espera1 = r._cooldowns()[alvo] - _t.monotonic()
+    assert 60 <= espera1 <= 120, f"1ª batida deveria ser ~TPM, veio {espera1:.0f}s"
+
+    r._penalizar(alvo, "rate_limit")
+    espera2 = r._cooldowns()[alvo] - _t.monotonic()
+    assert espera2 > espera1, "escada não subiu"
+
+
+def test_sucesso_zera_a_escada_de_cooldown():
+    """Sem reset, um TPM raspado de manhã custaria 15 min à noite."""
+    r = LLMRouter()
+    alvo = [p.nome for p in r._providers_disponiveis(TaskType.NARRATIVE)][0]
+    r._penalizar(alvo, "rate_limit")
+    r._penalizar(alvo, "rate_limit")
+    r._sucesso(alvo)
+    r._cooldowns().pop(alvo, None)
+
+    import time as _t
+    r._penalizar(alvo, "rate_limit")
+    assert (r._cooldowns()[alvo] - _t.monotonic()) <= 120, "escada não zerou"

@@ -46,10 +46,20 @@ from engine.telemetry import emit_llm_decisao
 
 log = structlog.get_logger(__name__)
 
-# Quanto tempo um provider fica fora da cascata após dizer que estourou cota.
-# 15 min: cobre a janela de TPM inteira e, no caso de TPD, apenas re-testa
-# 4×/hora em vez de 1×/turno.
-_COOLDOWN_COTA_S = 900.0
+# Escada de cooldown por rate_limit, em segundos.
+#
+# COOLDOWN-EXAGERADO-1 (playtest 26/07): a 1ª versão usava 900s FIXO, partindo da
+# premissa de que rate_limit = "a cota do dia acabou". Errado: o TPM do Groq
+# reseta a cada MINUTO, e com ~5k tokens/turno contra um TPM de 8-12K o limite é
+# raspado o tempo todo em jogo normal. Resultado medido em campo: os TRÊS
+# providers Groq saíram em 97 segundos (70b 22:30:29, 120b 22:31:38, 8b
+# 22:32:06), tudo caiu no Gemini pelo resto da sessão e o p50 do turno dobrou —
+# 5,2s → 9,2s. Um estrangulamento de 60s virou um apagão de 15 minutos.
+#
+# Agora escala: a 1ª batida assume TPM (janela de 1 min) e sai de campo por 75s;
+# batidas seguidas SEM sucesso no meio sobem a aposta até 15 min, que é o palpite
+# certo pra TPD. Qualquer sucesso zera a escada.
+_COOLDOWN_LADDER_S: tuple[float, ...] = (75.0, 240.0, 900.0)
 
 # GRIM-REATIVA-1: categorias de LLMRetriable que significam "o modelo filtrou
 # conteúdo" (não erro de infra) — em cena sombria, qualquer uma gruda a
@@ -186,6 +196,15 @@ class LLMRouter:
             self._penalizado_ate = atual
         return atual
 
+    def _falhas_rate_limit(self) -> dict[str, int]:
+        """Batidas de rate_limit seguidas por provider. Lazy pelo mesmo motivo
+        de `_cooldowns` (parte da suíte monta o router via `__new__`)."""
+        atual = getattr(self, "_falhas_rl", None)
+        if atual is None:
+            atual = {}
+            self._falhas_rl = atual
+        return atual
+
     def _penalizar(self, nome: str, categoria: str) -> None:
         """Tira da cascata, por um tempo, quem acabou de dizer que está sem cota.
 
@@ -202,8 +221,20 @@ class LLMRouter:
         """
         if categoria != "rate_limit":
             return
-        self._cooldowns()[nome] = time.monotonic() + _COOLDOWN_COTA_S
-        log.info("provider_em_cooldown", provider=nome, segundos=_COOLDOWN_COTA_S)
+        falhas = self._falhas_rate_limit()
+        n = falhas.get(nome, 0)
+        espera = _COOLDOWN_LADDER_S[min(n, len(_COOLDOWN_LADDER_S) - 1)]
+        falhas[nome] = n + 1
+        self._cooldowns()[nome] = time.monotonic() + espera
+        log.info("provider_em_cooldown", provider=nome, segundos=espera, batida=n + 1)
+
+    def _sucesso(self, nome: str) -> None:
+        """Provider respondeu — zera a escada de cooldown dele.
+
+        Sem isto a escada só sobe: um TPM raspado de manhã deixaria o provider
+        com 15 min de exílio à noite, mesmo tendo funcionado a tarde inteira.
+        """
+        self._falhas_rate_limit().pop(nome, None)
 
     def _providers_disponiveis(self, task: TaskType) -> list[BaseLLMProvider]:
         """Cascata filtrada por disponibilidade — pula sem chave/serviço ou em cooldown.
@@ -289,6 +320,7 @@ class LLMRouter:
                     status="cascade_used" if cascata_disparou else "ok",
                     categoria_erro=ultimo_erro.categoria if ultimo_erro else None,
                 )
+                self._sucesso(p.nome)
                 return texto
             except LLMRetriable as e:
                 self._penalizar(p.nome, e.categoria)
@@ -364,6 +396,11 @@ class LLMRouter:
                         self.ultimo_provider_stream = p.nome
                         latencia_primeiro_ms = int((time.monotonic() - t0) * 1000)
                         emitiu = True
+                        # Emitir token É sucesso — zera a escada de cooldown.
+                        # Este é o caminho do JOGO (o `completar` não-streaming
+                        # cobre só tarefas de bastidor), então sem isto a escada
+                        # só subiria em uso real.
+                        self._sucesso(p.nome)
                     chars_saida += len(token)
                     yield token
                 # Stream terminou sem exceção — provider venceu, sai do for.
