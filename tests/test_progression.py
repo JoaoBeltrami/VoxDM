@@ -368,3 +368,52 @@ def test_quest_concluida_paga_xp():
     # reprocessar a mesma conclusão não duplica (concluir é idempotente)
     aplicar_quests_extraidas(wm, {"novas": [], "concluidas": ["achar-a-chave"]})
     assert wm.xp == xp_antes + XP_QUEST_CONCLUIDA
+
+
+# ── LEVELUP-SEM-ESCOLHA-1 (playtest 26/07) ───────────────────────────────────
+
+
+def test_asi_segue_a_tabela_srd_por_classe():
+    """Todo mundo em 4/8/12/16/19; Guerreiro ganha 6 e 14; Ladino ganha 10."""
+    from engine.progression import niveis_de_asi
+
+    assert sorted(niveis_de_asi("Mago")) == [4, 8, 12, 16, 19]
+    assert sorted(niveis_de_asi("Guerreiro")) == [4, 6, 8, 12, 14, 16, 19]
+    assert sorted(niveis_de_asi("Ladino")) == [4, 8, 10, 12, 16, 19]
+    # Classe desconhecida cai na tabela comum em vez de quebrar.
+    assert sorted(niveis_de_asi("")) == [4, 8, 12, 16, 19]
+
+
+def test_nivel_sem_escolha_nao_oferece_nada():
+    """A maioria dos níveis é automática — só HP/slots/features."""
+    from engine.progression import escolhas_do_nivel
+
+    assert escolhas_do_nivel("Mago", 5) == []
+    assert escolhas_do_nivel("Mago", 4)[0]["tipo"] == "asi"
+
+
+def test_pulo_de_varios_niveis_acumula_as_escolhas():
+    """XP em bloco pode pular níveis; o jogador deve TODAS as escolhas do caminho."""
+    from engine.progression import escolhas_pendentes_ate
+
+    pend = escolhas_pendentes_ate("Guerreiro", 3, 8)
+    assert [e["nivel"] for e in pend] == [4, 6, 8]
+
+
+def test_level_up_expoe_escolhas_no_payload():
+    """O frontend precisa saber que há decisão pendente — senão volta ao
+    automático de antes, que foi a queixa do playtest."""
+    from engine.memory.working_memory import WorkingMemory
+    from engine.progression import aplicar_level_up
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-lvl")
+    wm.player_class = "Guerreiro"
+    wm.player_level = 3
+    resumo = aplicar_level_up(wm, 4)
+    assert resumo["escolhas_pendentes"], "nível 4 tem ASI e o payload não avisou"
+    assert resumo["escolhas_pendentes"][0]["tipo"] == "asi"
+
+    wm2 = WorkingMemory.nova_sessao("v", "V", "sess-lvl2")
+    wm2.player_class = "Mago"
+    wm2.player_level = 4
+    assert aplicar_level_up(wm2, 5)["escolhas_pendentes"] == []

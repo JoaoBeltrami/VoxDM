@@ -155,6 +155,70 @@ def _media_hit_die(tipo: int) -> int:
     return tipo // 2 + 1
 
 
+
+# ── Escolhas do jogador por nível (SRD 5.1) ──────────────────────────────────
+#
+# LEVELUP-SEM-ESCOLHA-1 (playtest 26/07): o primeiro level up da história do
+# projeto aconteceu e o Beltrami disse "ainda precisamos fazer isso condizer com
+# um lvl up de dnd". O motivo é estrutural: `aplicar_level_up` aplica TUDO
+# sozinho — HP, slots, features — e o jogador não escolhe nada. Em D&D o level up
+# É a escolha; o resto é consequência dela.
+#
+# Decisão do Beltrami: "escolher feature nos lvls de features e atributos no lvl
+# de atributos, como nas regras."
+#
+# Incremento de Atributo (ASI) — SRD 5.1: todo mundo em 4/8/12/16/19; Guerreiro
+# ganha 6 e 14 a mais; Ladino ganha 10. É a única tabela que varia por classe.
+_ASI_TODAS: frozenset[int] = frozenset({4, 8, 12, 16, 19})
+_ASI_EXTRA_POR_CLASSE: dict[str, frozenset[int]] = {
+    "guerreiro": frozenset({6, 14}),
+    "ladino": frozenset({10}),
+}
+
+
+def niveis_de_asi(player_class: str) -> frozenset[int]:
+    """Níveis em que ESTA classe ganha Incremento de Atributo."""
+    chave = (player_class or "").strip().lower()
+    return _ASI_TODAS | _ASI_EXTRA_POR_CLASSE.get(chave, frozenset())
+
+
+def escolhas_do_nivel(player_class: str, nivel: int) -> list[dict[str, object]]:
+    """O que o JOGADOR precisa decidir ao chegar neste nível.
+
+    PURA e testável — não toca a WorkingMemory. Devolve lista vazia quando o
+    nível não pede escolha nenhuma (a maioria), e nesse caso o level up segue
+    automático como hoje.
+
+    ASI segue a regra do SRD: +2 num atributo OU +1 em dois, teto 20. O teto não
+    é aplicado aqui (isto é só a OFERTA) — quem aplica valida contra o score.
+    """
+    escolhas: list[dict[str, object]] = []
+    if nivel in niveis_de_asi(player_class):
+        escolhas.append({
+            "tipo": "asi",
+            "titulo": "Incremento de Atributo",
+            "descricao": "+2 em um atributo, ou +1 em dois. Nenhum passa de 20.",
+            "pontos": 2,
+            "teto": 20,
+        })
+    return escolhas
+
+
+def escolhas_pendentes_ate(player_class: str, de_nivel: int, ate_nivel: int) -> list[dict[str, object]]:
+    """Escolhas acumuladas ao subir vários níveis de uma vez.
+
+    XP em bloco pode pular mais de um nível (`calcular_novo_nivel` já suporta), e
+    nesse caso o jogador deve TODAS as escolhas do caminho — não só a do nível
+    final. Cada entrada carrega o `nivel` que a originou pra que a UI apresente
+    em ordem.
+    """
+    pendentes: list[dict[str, object]] = []
+    for n in range(max(1, de_nivel + 1), ate_nivel + 1):
+        for e in escolhas_do_nivel(player_class, n):
+            pendentes.append({**e, "nivel": n})
+    return pendentes
+
+
 def aplicar_level_up(wm: WorkingMemory, novo_nivel: int) -> dict[str, int | list[str]]:
     """Aplica os efeitos mecânicos de subir de nível.
 
@@ -187,7 +251,7 @@ def aplicar_level_up(wm: WorkingMemory, novo_nivel: int) -> dict[str, int | list
         return {
             "nivel_antigo": nivel_antigo, "nivel_novo": nivel_antigo,
             "hp_ganho": 0, "hp_max_novo": wm.player_hp_max,
-            "slots_novos": [], "features_novas": [],
+            "slots_novos": [], "features_novas": [], "escolhas_pendentes": [],
         }
 
     niveis_ganhos = novo_nivel - nivel_antigo
@@ -247,4 +311,10 @@ def aplicar_level_up(wm: WorkingMemory, novo_nivel: int) -> dict[str, int | list
         "hp_max_novo": wm.player_hp_max,
         "slots_novos": slots_novos,
         "features_novas": features_novas,
+        # O que o JOGADOR ainda precisa decidir. Vazio na maioria dos níveis —
+        # aí o level up segue automático como antes. Acumula quando o XP em
+        # bloco pula mais de um nível: as escolhas do caminho não se perdem.
+        "escolhas_pendentes": escolhas_pendentes_ate(
+            wm.player_class, nivel_antigo, novo_nivel
+        ),
     }
