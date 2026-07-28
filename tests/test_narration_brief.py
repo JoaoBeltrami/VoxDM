@@ -14,6 +14,7 @@ Armadilha: montar_brief é PURO — qualquer teste que detectar mutação da WM
 import copy
 
 from engine.authority.brief import (
+    _INSTRUCAO_RITMO,
     MAX_CHARS_BRIEF,
     MAX_FATOS_CENA,
     NarrationBrief,
@@ -160,12 +161,24 @@ def test_evento_mundo_vazio_em_turno_normal():
 # ── Tier ──────────────────────────────────────────────────────────────────────
 
 
-def test_tier_epico_muda_a_instrucao_de_tom():
+def test_tier_epico_acrescenta_peso_sem_apagar_o_ritmo():
+    """Épico muda a DENSIDADE; quem manda no fôlego continua sendo o ritmo.
+
+    Antes o ramo épico SUBSTITUÍA a linha de ritmo. No playtest 26/07 o pacing
+    colou em 10 por 12 turnos e o Mestre recebeu o mesmo TOM o tempo todo — o
+    metrônomo que o TELL C (ADR-005) existe pra matar, de volta pela porta dos
+    fundos, e ainda contradizendo o teto de palavras que seguia rotacionando.
+    """
     wm = _wm()
-    seco = montar_brief(wm, "x", tier="seco").to_prompt()
-    epico = montar_brief(wm, "x", tier="epico").to_prompt()
-    assert "sem florear" in seco
-    assert "peso dramático" in epico
+    seco = montar_brief(wm, "x", tier="seco", ritmo="curto").to_prompt()
+    epico = montar_brief(wm, "x", tier="epico", ritmo="curto").to_prompt()
+    assert "densidade dramática" not in seco
+    assert "densidade dramática" in epico
+    # O invariante que faltava: a instrução de fôlego sobrevive ao épico — e é a
+    # do ritmo PEDIDO, não uma linha fixa que apaga a rotação curto/médio/longo.
+    linha_ritmo = _INSTRUCAO_RITMO["curto"]
+    assert linha_ritmo in seco and linha_ritmo in epico
+    assert _INSTRUCAO_RITMO["medio"] not in epico
 
 
 def test_tier_invalido_cai_pra_seco():

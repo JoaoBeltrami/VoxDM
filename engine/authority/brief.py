@@ -77,6 +77,8 @@ class NarrationBrief:
     ritmo: str = "medio"
     rolling_summary: str = ""
     batismo_pendente: str = ""
+    # Fios/agenda/cliffhanger em aberto — ver `_em_aberto`.
+    em_aberto: str = ""
 
     def to_prompt(self) -> str:
         """Bloco compacto pro system prompt. Caps aplicados na montagem
@@ -95,18 +97,66 @@ class NarrationBrief:
         if self.batismo_pendente:
             linhas.append(self.batismo_pendente[:MAX_CHARS_FATO * 2])
         tier = self.tier if self.tier in _TIERS_VALIDOS else "seco"
+        # TELL C (ADR-005): dizer "1-3 frases" TODO turno É a monotonia — o
+        # modelo converge no mesmo tamanho sempre, e a sessão inteira vira um
+        # metrônomo. Quem decide o fôlego é a ENGINE (autoridade-primeiro), e
+        # ela varia de propósito: um mestre humano às vezes corta com uma
+        # frase, às vezes deixa a cena respirar.
+        #
+        # 26/07: o ramo "epico" SUBSTITUÍA esta linha. Com o pacing colado em 10
+        # nos turnos 37-48 do playtest, o Mestre recebeu o MESMO TOM 12 turnos
+        # seguidos e a rotação curto/médio/longo foi descartada em silêncio — o
+        # metrônomo que o TELL C existe pra matar, reintroduzido pela porta dos
+        # fundos. Pior: o teto de palavras continuava rotacionando (30/80/110),
+        # então o prompt mandava "narre denso" e, logo abaixo, "máximo 30
+        # palavras". Épico agora ACRESCENTA peso; não apaga o fôlego.
+        linhas.append(_INSTRUCAO_RITMO.get(self.ritmo, _INSTRUCAO_RITMO["medio"]))
         if tier == "epico":
-            linhas.append("TOM: momento-chave — narre denso, com peso dramático.")
-        else:
-            # TELL C (ADR-005): dizer "1-3 frases" TODO turno É a monotonia — o
-            # modelo converge no mesmo tamanho sempre, e a sessão inteira vira um
-            # metrônomo. Quem decide o fôlego é a ENGINE (autoridade-primeiro), e
-            # ela varia de propósito: um mestre humano às vezes corta com uma
-            # frase, às vezes deixa a cena respirar.
-            linhas.append(_INSTRUCAO_RITMO.get(self.ritmo, _INSTRUCAO_RITMO["medio"]))
+            linhas.append("PESO: momento-chave — densidade dramática, sem alongar.")
+        if self.em_aberto:
+            linhas.append(self.em_aberto)
         if self.rolling_summary:
             linhas.append(f"O QUE JÁ ACONTECEU NA SESSÃO:\n{self.rolling_summary}")
         return "\n".join(linhas)
+
+
+# Teto do bloco de continuidade. O motivo do corte original era dump: agenda de 8
+# NPCs + 5 fios viram parágrafo e afogam o brief, que tem MAX_CHARS_BRIEF=2000.
+MAX_CHARS_ABERTO = 340
+
+
+def _em_aberto(wm: Any) -> str:
+    """O que o Mestre deixou pendente e pode puxar de volta.
+
+    BRIEF-SEM-FIOS (playtest 26/07): `[FIO:]`, `[AGENDA:]` e `[CLIFFHANGER:]` eram
+    ESCRITOS pelo pipeline mas lidos só pelo `montar_mensagens` legado — todos
+    depois do early-return que desvia pro brief. Com BRIEF_ATIVO=True (default),
+    nada disso jamais chegou ao prompt de produção. O código admitia: "Relógios/
+    fios/agendas entram aqui no wiring futuro".
+
+    Efeito sentido pelo jogador: "ele já tá improvisando demais na loucura sem ter
+    provavelmente nenhuma ideia de follow up". Não era falta de criatividade — era
+    amnésia: o Mestre criava o gancho e nunca mais o via.
+
+    Agenda é filtrada pelos NPCs EM CENA — é o que impede o dump que motivou o
+    corte: plano de NPC ausente não é gancho, é ruído.
+    """
+    linhas: list[str] = []
+    cliff = str(getattr(wm, "cliffhanger_pendente", "") or "").strip()
+    if cliff:
+        linhas.append(f"guardado: {cliff}")
+    for fio in list(getattr(wm, "fios_soltos", []) or [])[-3:]:
+        if str(fio).strip():
+            linhas.append(f"fio: {str(fio).strip()}")
+    presentes = {str(n) for n in (getattr(wm, "npcs_presentes", []) or [])}
+    agenda = getattr(wm, "agenda_npcs", {}) or {}
+    for npc_id, plano in agenda.items():
+        if str(npc_id) in presentes and str(plano).strip():
+            linhas.append(f"{_nome_legivel(wm, str(npc_id))} quer: {str(plano).strip()}")
+    if not linhas:
+        return ""
+    corpo = "; ".join(linhas)[:MAX_CHARS_ABERTO]
+    return f"EM ABERTO (puxe UM se couber, não liste): {corpo}"
 
 
 def _fato_local(wm: Any) -> str:
@@ -263,6 +313,7 @@ def montar_brief(
         ritmo=ritmo if ritmo in _RITMOS_VALIDOS else "medio",
         rolling_summary=str(getattr(wm, "resumo_rolling", "") or ""),
         batismo_pendente=_batismo_pendente(wm),
+        em_aberto=_em_aberto(wm),
     )
     log.debug(
         "narration_brief_montado",
