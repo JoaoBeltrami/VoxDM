@@ -328,3 +328,32 @@ def test_isolamento_delete_nao_deleta_sessao_alheia():
 
     app.dependency_overrides.clear()
     sessions.clear()
+
+
+# ── COMPANION-ORDEM-1 (auditoria 27/07) ──────────────────────────────────────
+
+
+def test_sqlite_e_restaurado_antes_do_episodico():
+    """A ordem no código É o mecanismo de prioridade — por isso vale travar.
+
+    O comentário do bloco episódico sempre disse "SQLite é primário", mas ele
+    rodava DEPOIS. Como os dois lados usam o guard "só preenche se estiver
+    vazio", a prioridade real era "primeira fonte não-vazia vence": com
+    episódico={brutus} e SQLite={lyssa} divergentes, brutus ganhava e o SQLite
+    nunca era aplicado.
+
+    Este teste falha se alguém reordenar de volta — a intenção não fica só no
+    comentário.
+    """
+    import inspect
+
+    from api.routes import session as rota
+
+    fonte = inspect.getsource(rota)
+    pos_sqlite = fonte.find("# Restaurar estado do personagem (spell slots, gold, XP, etc.) do SQLite")
+    pos_episodico = fonte.find("# Restaura companions do episódico como fallback")
+    assert pos_sqlite > 0 and pos_episodico > 0, "âncoras sumiram — reveja o teste"
+    assert pos_sqlite < pos_episodico, (
+        "o bloco do SQLite precisa vir ANTES do episódico, senão o fallback "
+        "vence a fonte primária (COMPANION-ORDEM-1)"
+    )

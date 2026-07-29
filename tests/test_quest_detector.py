@@ -901,3 +901,79 @@ def test_linear_autocompletar_leva_a_guerra_a_6_de_6():
     assert guerra["filled"] == 6             # 1 inicial + 1+2+2 dos 3 estágios
     v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
     assert v and v["id"] == "uma-vila-domina"
+
+
+# ── QUEST-RAPIDA-1 — piso NARRATIVO (26/07) ──────────────────────────────────
+
+
+def test_estagio_recem_iniciado_ganha_lembrete_de_ritmo_no_prompt():
+    """Convite de ritmo, não gate: o Mestre lê e decide.
+
+    Queixa: "o avanço das quests são muito rápidos e fáceis, até demais...
+    precisamos preparar pra uma campanha longa". Alvo do Beltrami: ~30-40 min
+    por quest, que a ~1-1,5 min/turno dá 6-10 turnos por estágio.
+
+    Uma tentativa anterior pôs o piso DENTRO de `detectar_e_aplicar_quests` e
+    quebrou 7 testes de alcançabilidade do arco — eles chamam o núcleo direto,
+    de propósito sem simular turnos, e 3 exercitam o QUEST-SKIP-1 (creditar
+    estágios pulados NA MESMA chamada), que é o oposto exato de adiar.
+    """
+    from config import settings
+    from engine.memory.quest_detector import (
+        _PISO_TURNOS_ESTAGIO,
+        carregar_catalog_modulo,
+        carregar_quests_legiveis,
+        catalog_para_texto,
+    )
+
+    catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    legiveis = carregar_quests_legiveis(settings.DEFAULT_MODULE_PATH)
+    multi = next(q for q in legiveis if len(q["stages"]) > 1 and q["id"] in catalog)
+    qid, primeiro = multi["id"], multi["stages"][0]["id"]
+
+    recem = catalog_para_texto(catalog, legiveis, {qid: primeiro},
+                               turnos_no_estagio={qid: 1})
+    maduro = catalog_para_texto(catalog, legiveis, {qid: primeiro},
+                                turnos_no_estagio={qid: _PISO_TURNOS_ESTAGIO + 3})
+    assert "recém-iniciado" in recem
+    assert "recém-iniciado" not in maduro
+
+
+def test_lembrete_de_ritmo_e_opcional_e_nao_muda_quest_nao_iniciada():
+    """Sem o kwarg o texto é idêntico ao de antes — a mudança é aditiva.
+
+    E quest NÃO INICIADA nunca leva o lembrete: o piso é pra segurar o AVANÇO,
+    não pra desencorajar o jogador a começar (isso deixaria o mundo surdo).
+    """
+    from config import settings
+    from engine.memory.quest_detector import (
+        carregar_catalog_modulo,
+        carregar_quests_legiveis,
+        catalog_para_texto,
+    )
+
+    catalog = carregar_catalog_modulo(settings.DEFAULT_MODULE_PATH)
+    legiveis = carregar_quests_legiveis(settings.DEFAULT_MODULE_PATH)
+    qid = next(q["id"] for q in legiveis if q["id"] in catalog)
+
+    sem_kwarg = catalog_para_texto(catalog, legiveis, {})
+    com_kwarg = catalog_para_texto(catalog, legiveis, {}, turnos_no_estagio={qid: 0})
+    assert sem_kwarg == com_kwarg
+    assert "recém-iniciado" not in com_kwarg
+
+
+def test_avanco_grava_a_idade_do_estagio_sem_bloquear():
+    """O marcador aplica NA HORA — o bookkeeping é só pro lembrete."""
+    from engine.memory.quest_detector import detectar_e_aplicar_quests
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-piso")
+    wm.narrative.turnos_total = 12
+    catalog = {"minha-quest": ["passo-1", "passo-2"]}
+
+    _, avancos = detectar_e_aplicar_quests(
+        "Feito. [Q: minha-quest:passo-1]", wm, catalog
+    )
+    assert avancos == [("minha-quest", "passo-1")], "o avanço tem que valer na hora"
+    assert wm.quest_stages["minha-quest"] == "passo-1"
+    assert wm.narrative.estagio_desde["minha-quest"] == 12

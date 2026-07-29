@@ -78,6 +78,17 @@ class NarrativeState:
     fecho_sugerido: bool = False
     turnos_total: int = 0
 
+    # QUEST-RAPIDA-1 (playtest 26/07): quest_id → valor de `turnos_total` quando o
+    # estágio ATUAL começou. É bookkeeping PURO: nada na engine consulta isto pra
+    # decidir se um `[Q:]` vale. O piso é NARRATIVO — vira um lembrete no prompt
+    # (ver catalog_para_texto). Uma tentativa anterior colocou o piso dentro de
+    # `detectar_e_aplicar_quests` e quebrou 7 testes de alcançabilidade do arco:
+    # eles chamam o núcleo direto, de propósito sem simular turnos, e 3 deles
+    # exercitam o QUEST-SKIP-1 (creditar estágios pulados NA MESMA chamada), que
+    # é o oposto exato de adiar. Mesma lição do PACING-INTEGRADOR-1: gate rígido
+    # no motor satura; empurrão suave no lugar certo funciona.
+    estagio_desde: dict[str, int] = field(default_factory=dict)
+
     # Quantos turnos narrativos seguidos foram roteados para o 8B (LIGHT).
     # Usado pelo cap anti-robô: o 8B encadeado repete estruturas ("X diz",
     # clichês), então um 70B periódico reseta o estilo. Ver

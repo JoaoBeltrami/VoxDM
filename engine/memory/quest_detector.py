@@ -193,6 +193,20 @@ def carregar_agendas_modulo(modulo_path: str) -> dict[str, str]:
         return {}
 
 
+# Quantos turnos um estágio deveria VIVER antes de ceder lugar ao próximo.
+# QUEST-RAPIDA-1 (playtest 26/07): "o avanço das quests são muito rápidos e
+# fáceis, até demais". Alvo do Beltrami: ~30-40 min por quest; a ~1-1,5 min por
+# turno isso dá 25-30 turnos por quest e 6-10 por estágio. Hoje fecha em 1-2.
+#
+# É CONSULTIVO: vira um lembrete no prompt, não um gate no motor. Um piso
+# mecânico dentro de `detectar_e_aplicar_quests` quebra 7 testes de
+# alcançabilidade do arco (eles chamam o núcleo direto, sem simular turnos) e
+# colide de frente com o QUEST-SKIP-1, que existe pra creditar estágios pulados
+# NA MESMA chamada. O Mestre pode ignorar o convite — e é isso que impede um
+# QUEST-DEADLOCK-1 novo.
+_PISO_TURNOS_ESTAGIO = 6
+
+
 # Teto por descrição de estágio. O módulo tem descrições de até ~180 chars;
 # 110 basta pra o Mestre reconhecer o beat sem virar um dump de roteiro.
 _MAX_DESC_STAGE = 110
@@ -202,6 +216,7 @@ def catalog_para_texto(
     catalog: dict[str, list[str]],
     quests_legiveis: list[dict[str, Any]] | None = None,
     stages_atuais: dict[str, str] | None = None,
+    turnos_no_estagio: dict[str, int] | None = None,
 ) -> str:
     """Serializa as quests pro prompt — o PRÓXIMO passo jogável de cada uma.
 
@@ -244,7 +259,16 @@ def catalog_para_texto(
         desc = proximo["descricao"][:_MAX_DESC_STAGE]
         nome = f" ({q['nome']})" if q.get("nome") else ""
         marca = "em curso" if atual else "não iniciada"
-        linhas.append(f"• {qid}{nome} [{marca}] → próximo `{proximo['id']}`: {desc}")
+        linha = f"• {qid}{nome} [{marca}] → próximo `{proximo['id']}`: {desc}"
+        # Lembrete de ritmo — só pra quest que acabou de andar. Consultivo: o
+        # Mestre decide. Ver _PISO_TURNOS_ESTAGIO.
+        idade = (turnos_no_estagio or {}).get(qid)
+        if atual and idade is not None and idade < _PISO_TURNOS_ESTAGIO:
+            linha += (
+                f" ⏳ (estágio recém-iniciado, {idade} turno(s) — dê obstáculos e "
+                f"cenas antes de aceitar o próximo avanço)"
+            )
+        linhas.append(linha)
 
     if not linhas:
         return ""
@@ -301,10 +325,13 @@ def renderizar_quests(working_mem: WorkingMemory, modulo_path: str | None = None
     caminho = modulo_path or settings.DEFAULT_MODULE_PATH
     if caminho not in _CACHE_LEGIVEIS:
         _CACHE_LEGIVEIS[caminho] = carregar_quests_legiveis(caminho)
+    agora = int(getattr(getattr(working_mem, "narrative", None), "turnos_total", 0) or 0)
+    desde = dict(getattr(getattr(working_mem, "narrative", None), "estagio_desde", {}) or {})
     texto = catalog_para_texto(
         carregar_catalog_modulo(caminho),
         quests_legiveis=_CACHE_LEGIVEIS[caminho],
         stages_atuais=dict(working_mem.quest_stages),
+        turnos_no_estagio={q: max(0, agora - t0) for q, t0 in desde.items()},
     )
     working_mem.quests_modulo = texto
     return texto
@@ -372,6 +399,12 @@ def detectar_e_aplicar_quests(
                 log.info("quest_estagio_pulado_autocompletado", quest_id=qid, stage_id=pulado)
 
         working_mem.atualizar_quest_stage(qid, sid)
+        # QUEST-RAPIDA-1: bookkeeping puro pro lembrete de ritmo do prompt. O
+        # avanço acontece AGORA, como sempre — nada aqui bloqueia ou adia.
+        try:
+            working_mem.narrative.estagio_desde[qid] = working_mem.narrative.turnos_total
+        except AttributeError:  # stub de teste sem narrative
+            pass
         avancos.append((qid, sid))
         log.info("quest_avancou", quest_id=qid, stage_id=sid,
                  era=atual or "novo")
