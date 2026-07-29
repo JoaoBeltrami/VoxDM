@@ -2153,3 +2153,39 @@ def test_drenar_eventos_vitais_e_idempotente():
     aplicar_pos_turno(wm, "Bebo a poção.", "O calor volta. [CURA: +5]")
     assert len(wm.drenar_eventos_vitais()) == 1
     assert wm.drenar_eventos_vitais() == []
+
+
+# ── CHECK-GRUDENTO-1 (probe headless 27/07) ──────────────────────────────────
+
+
+def test_check_pedido_so_e_anunciado_no_turno_em_que_nasce():
+    """Abrir o dado é EVENTO; resolver o bônus é MEMÓRIA. Prazos diferentes.
+
+    O payload emitia `check_pedido` enquanto a pendência existisse, e ela só era
+    limpa pela rolagem — então quem pedia um teste e depois fazia outra coisa
+    ficava com o dado aberto na perícia errada pra sempre. Probe headless: após
+    "vou tentar stealth", o turno "olho em volta com calma" ainda vinha com
+    check_pedido='Furtividade'.
+
+    A pendência continua viva pro bônus (o jogador pode conversar antes de
+    rolar); o que não pode é seguir ANUNCIANDO.
+    """
+    from api.websocket import _MAX_TURNOS_CHECK
+
+    # Contrato: o anúncio olha `turnos == 0`; a memória vive até _MAX_TURNOS_CHECK.
+    assert _MAX_TURNOS_CHECK >= 1, "bônus precisa sobreviver a pelo menos 1 turno de conversa"
+
+    def anuncio(pend: dict | None) -> str:
+        """Espelha a expressão do payload em api/websocket.py."""
+        return (
+            (pend or {}).get("pericia") or ""
+            if int((pend or {}).get("turnos", 1)) == 0
+            else ""
+        )
+
+    novo = {"pericia": "Furtividade", "bonus": (5, "DES +5"), "turnos": 0}
+    assert anuncio(novo) == "Furtividade", "pedido novo tem que abrir o dado"
+
+    envelhecido = dict(novo, turnos=1)
+    assert anuncio(envelhecido) == "", "pedido antigo não pode reabrir o dado"
+    assert anuncio(None) == ""

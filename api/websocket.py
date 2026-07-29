@@ -412,6 +412,15 @@ def _resolver_ataque_engine(
 # foi a restrição vinculante. Benchmark contra o Edge TTS real (ver comentário
 # em tts.py) mostrou 6 seguro e 2,8× mais rápido. Os dois precisam subir juntos.
 _TTS_MAX_CONCORRENTE: int = 6
+
+# Quantos turnos a pendência de check sobrevive sem rolagem.
+#
+# CHECK-GRUDENTO-1: são DOIS interesses com prazos diferentes, e confundi-los foi
+# o bug. Abrir o dado na tela é um evento — vale no turno em que ele pede, e só.
+# Resolver o BÔNUS quando a rolagem chega é memória — precisa durar, porque ele
+# pode conversar um pouco antes de rolar ("quero rolar insight" → "sobre o quê?"
+# → "sobre o guarda" → rola). Este teto é o da MEMÓRIA; a UI usa `turnos == 0`.
+_MAX_TURNOS_CHECK = 3
 # Semáforo por event loop — evita "bound to a different event loop" quando a
 # suíte de testes cria loops distintos. Criado preguiçosamente no 1º uso.
 _TTS_SEMAFOROS: dict[Any, asyncio.Semaphore] = {}
@@ -1850,10 +1859,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             _d20_no_texto = extrair_d20_jogador(texto_jogador)
             if _d20_no_texto is None and not sessao.combate_pendente:
                 _pericia_do_jogador = eh_teste_pericia(texto_jogador)
+                # CHECK-GRUDENTO-1 (probe headless 27/07): a pendência só era
+                # limpa quando o d20 chegava. Se o jogador pedia e depois fazia
+                # outra coisa, ela vivia pra sempre e TODO turno seguinte
+                # re-emitia `check_pedido` — o dado ficava aberto na perícia
+                # errada. Probe: após "vou tentar stealth", o turno "olho em
+                # volta com calma" ainda vinha com check_pedido='Furtividade'.
+                #
+                # O fluxo legítimo gasta exatamente um turno: ele pede, o Mestre
+                # enquadra e pede a rolagem, ele rola no turno SEGUINTE. Passado
+                # isso sem rolagem, o pedido foi abandonado. Mesmo formato do
+                # `combate_pendente` (ver _MAX_TURNOS_PENDENCIA).
+                if not _pericia_do_jogador and sessao.check_pendente:
+                    _idade = int(sessao.check_pendente.get("turnos", 0)) + 1
+                    if _idade > _MAX_TURNOS_CHECK:
+                        log.info("check_pendente_expirado", session_id=session_id,
+                                 pericia=sessao.check_pendente.get("pericia"))
+                        sessao.check_pendente = None
+                    else:
+                        sessao.check_pendente["turnos"] = _idade
                 if _pericia_do_jogador:
                     sessao.check_pendente = {
                         "pericia": _pericia_do_jogador,
                         "bonus": bonus_de_check(sessao.working_mem, _pericia_do_jogador),
+                        "turnos": 0,
                     }
                     log.info("check_pedido_pelo_jogador", session_id=session_id,
                              pericia=_pericia_do_jogador)
@@ -2910,7 +2939,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # CHECK-JOGADOR-ZERO: a perícia que o JOGADOR pediu. O frontend
                     # abre o dado por ISTO, sem depender de a prosa do Mestre casar
                     # com um regex.
-                    check_pedido=((sessao.check_pendente or {}).get("pericia") or ""),
+                    # Só anuncia o dado no turno em que o pedido NASCEU. Antes
+                    # emitia enquanto a pendência existisse, e como ela só era
+                    # limpa pela rolagem, o dado ficava aberto na perícia errada
+                    # indefinidamente (probe headless: depois de "vou tentar
+                    # stealth", o turno "olho em volta com calma" ainda vinha com
+                    # check_pedido='Furtividade'). A pendência continua viva pro
+                    # bônus — ver _MAX_TURNOS_CHECK.
+                    check_pedido=(
+                        (sessao.check_pendente or {}).get("pericia") or ""
+                        if int((sessao.check_pendente or {}).get("turnos", 1)) == 0
+                        else ""
+                    ),
                     eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
                 ).model_dump_json()
             )
