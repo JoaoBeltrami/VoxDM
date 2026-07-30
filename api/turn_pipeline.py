@@ -358,7 +358,8 @@ def dano_narrado_sem_marker(resposta: str, em_combate: bool) -> bool:
 # atributos/HP/slots/features — o jogador nunca fala de números.
 _RE_FICHA = re.compile(
     r"\[FICHA:\s*([^|\]]{1,40}?)\s*\|\s*([^|\]]{1,30}?)\s*\|\s*([^|\]]{1,20}?)\s*"
-    r"\|\s*([^|\]]{1,60}?)\s*(?:\|\s*([^|\]]{1,120}?)\s*)?\]",
+    r"\|\s*([^|\]]{1,60}?)\s*(?:\|\s*([^|\]]{1,120}?)\s*)?"
+    r"(?:\|\s*([^|\]]{1,30}?)\s*)?\]",
     re.IGNORECASE,
 )
 
@@ -983,6 +984,12 @@ def aplicar_pos_turno(
             ch.player_class = classe
             ch.player_background = m_ficha.group(4).strip()[:60]
             ch.player_description = (m_ficha.group(5) or "").strip()[:200]
+            # 6º campo, opcional: alinhamento colhido na entrevista por voz.
+            # Rótulo inválido (transcrição ruim) deixa Neutro em silêncio — o
+            # jogador não pode perder a criação inteira por causa de uma palavra.
+            _alin = (m_ficha.group(6) or "").strip()
+            if _alin:
+                ch.definir_alinhamento_inicial(_alin)
             for campo, valor in gerar_atributos(classe).items():
                 setattr(ch, campo, valor)
             ch.hp_max = hp_nivel(classe, ch.player_level, ch.mod_con)

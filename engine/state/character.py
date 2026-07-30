@@ -91,6 +91,13 @@ class PlayerCharacter:
     # nenhum jeito de resgatar.
     asi_pendente: list[dict[str, Any]] = field(default_factory=list)
 
+    # Alinhamento (decisão Beltrami 29-30/07). O rótulo é DECLARADO na criação —
+    # à mão no CharacterForm ou por voz na Sessão Zero — e vira a POSIÇÃO INICIAL
+    # dos eixos. Dali em diante são os atos do jogador que mandam: o declarado é
+    # quem você diz que é; os eixos são quem você provou ser.
+    alinhamento_declarado: str = ""
+    alinhamento_eixos: dict[str, Any] = field(default_factory=dict)
+
     # Cicatrizes narrativas — marcas permanentes de quase-morte (Pilar Perigo
     # 10/06). NPCs reagem a elas; persistem entre sessões via dm_state. Cap 5.
     cicatrizes: list[str] = field(default_factory=list)
@@ -175,6 +182,24 @@ class PlayerCharacter:
         "str_score", "dex_score", "con_score", "int_score", "wis_score", "cha_score",
     )
     _TETO_ATRIBUTO = 20
+
+    def definir_alinhamento_inicial(self, rotulo: str) -> bool:
+        """Fixa o alinhamento declarado e posiciona os eixos nele.
+
+        Meio caminho entre neutro e cravado (±50): longe o bastante pra o mundo
+        já te tratar como o que você disse ser, perto o bastante pra dois ou três
+        atos contrários te moverem. Declarar "Leal e Bom" e agir como monstro
+        DEVE te levar pro outro lado — senão a ficha vira álibi.
+        """
+        from engine.alinhamento import EixosAlinhamento, rotulo_para_eixos
+
+        eixos = rotulo_para_eixos(rotulo)
+        if eixos is None:
+            return False
+        ordem, moral = eixos
+        self.alinhamento_declarado = rotulo.strip()
+        self.alinhamento_eixos = EixosAlinhamento(moral=moral, ordem=ordem).to_dict()
+        return True
 
     def aplicar_asi(self, nivel: int, aumentos: dict[str, int]) -> bool:
         """Gasta um Incremento de Atributo da fila. Retorna False se inválido.

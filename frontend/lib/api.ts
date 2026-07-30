@@ -222,6 +222,9 @@ export interface PersonagemConfig {
   save_profs?: string[];
   // Subclasse D&D 5e escolhida no CharacterForm
   player_subclass?: string;
+  /** Alinhamento declarado na criação — vira a posição INICIAL dos eixos
+   *  morais. O declarado é quem você diz que é; os atos dizem quem você é. */
+  player_alignment?: string;
   // Magias selecionadas na criação — lista de nomes PT-BR (truques + magias)
   player_spells?: string[];
   // Visibilidade das rolagens do mestre (Fase 5.7)

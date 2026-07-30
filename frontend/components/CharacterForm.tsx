@@ -14,6 +14,21 @@ const CLASSES_DND = [
 ];
 
 // Subclasses disponíveis por classe (nível 3, SRD 5e)
+/** Os nove da tabela clássica, na ordem de leitura da grade 3×3.
+ *  Espelha `engine/alinhamento.alinhamentos()` — se um lado mudar, o outro
+ *  acompanha. A descrição existe pra quem nunca jogou D&D de mesa. */
+const ALINHAMENTOS: { rotulo: string; nota: string }[] = [
+  { rotulo: "Leal e Bom",     nota: "honra e compaixão — a palavra vale" },
+  { rotulo: "Neutro e Bom",   nota: "faz o bem sem se prender a regras" },
+  { rotulo: "Caótico e Bom",  nota: "coração certo, métodos próprios" },
+  { rotulo: "Leal e Neutro",  nota: "a ordem acima do certo e do errado" },
+  { rotulo: "Neutro",         nota: "equilíbrio — ou indiferença" },
+  { rotulo: "Caótico e Neutro", nota: "liberdade acima de tudo" },
+  { rotulo: "Leal e Mau",     nota: "cruel dentro das regras que escreve" },
+  { rotulo: "Neutro e Mau",   nota: "sem causa, só interesse" },
+  { rotulo: "Caótico e Mau",  nota: "destruição sem freio nem plano" },
+];
+
 const SUBCLASSES: Record<string, string[]> = {
   "Bárbaro":     ["Caminho do Berserker", "Caminho do Totem do Guerreiro"],
   "Bardo":       ["Colégio do Saber", "Colégio da Valentia"],
@@ -184,6 +199,7 @@ export function CharacterForm({ onChange }: Props) {
   const [raca, setRaca] = useState("");
   const [classe, setClasse] = useState("");
   const [subclasse, setSubclasse] = useState("");
+  const [alinhamento, setAlinhamento] = useState("Neutro");
   const [background, setBackground] = useState("");
   // Descrição livre do personagem — opcional. Quando preenchida, o Mestre
   // usa pra moldar a abertura narrativa (motivação, segredos, aparência).
@@ -324,6 +340,7 @@ export function CharacterForm({ onChange }: Props) {
       player_race:       raca,
       player_class:      classe,
       player_subclass:   subclasse,
+      player_alignment:  alinhamento,
       player_background: background,
       player_description: descricao.trim(),
       player_level:      nivel,
@@ -424,6 +441,28 @@ export function CharacterForm({ onChange }: Props) {
           </select>
         </div>
       )}
+
+      {/* Feitio (alinhamento) — a bússola moral declarada. Vira a POSIÇÃO
+          INICIAL dos eixos no backend; os atos do jogador movem dali. */}
+      <div>
+        <label className="mb-1 block text-xs text-vox-text-secondary">
+          Feitio
+          <span className="ml-1 text-[10px] text-vox-text-muted">
+            (como você costuma agir — o mundo julga pelos atos, não pela ficha)
+          </span>
+        </label>
+        <select
+          value={alinhamento}
+          onChange={e => setAlinhamento(e.target.value)}
+          className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1.5 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
+        >
+          {ALINHAMENTOS.map(a => (
+            <option key={a.rotulo} value={a.rotulo}>
+              {a.rotulo} — {a.nota}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Seleção de Magias — só para classes conjuradoras */}
       {(() => {

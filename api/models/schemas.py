@@ -90,6 +90,10 @@ class SessaoConfig(BaseModel):
     cha_score: int = Field(default=10, ge=3, le=20)
     # Subclasse D&D 5e — determina features especiais (Action Surge, Rage, Sneak Attack, etc.)
     player_subclass: str = Field(default="", max_length=80, description="Ex: 'Campeão', 'Ladrão', 'Escola da Evocação'")
+    # Alinhamento declarado na criação (à mão ou por voz). Vira a POSIÇÃO
+    # INICIAL dos eixos morais — o declarado é quem você diz que é, os eixos
+    # são quem você prova ser. Vazio = Neutro.
+    player_alignment: str = Field(default="", max_length=30)
     # Proficiências derivadas de classe + background — limites de itens previnem
     # listas gigantes que inflariam prompt e o blob persistido.
     skill_profs: list[str] = Field(default_factory=list, max_length=30)

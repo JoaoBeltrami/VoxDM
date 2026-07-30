@@ -313,6 +313,10 @@ async def iniciar_sessao(
                     if pc.get("player_race"):   working_mem.player_race        = pc["player_race"]
                     if pc.get("player_background"): working_mem.player_background = pc["player_background"]
                     if pc.get("player_subclass"):   working_mem.player_subclass   = pc["player_subclass"]
+                    if pc.get("player_alignment"):
+                        working_mem.character.alinhamento_declarado = pc["player_alignment"]
+                    if pc.get("alinhamento_eixos"):
+                        working_mem.character.alinhamento_eixos = dict(pc["alinhamento_eixos"])
                     if pc.get("player_description"): working_mem.player_description = pc["player_description"]
                     if pc.get("tts_voice"):     working_mem.tts_voice          = pc["tts_voice"]
                     if pc.get("dm_profile"):    working_mem.dm_profile         = pc["dm_profile"]
@@ -348,6 +352,10 @@ async def iniciar_sessao(
                     # re-aplica os usos_atual salvos. Sem isso, a WM tem class="" →
                     # inicializar_features_classe nunca populou nada → features vazias.
                     if pc.get("player_class"):
+                        # Alinhamento declarado — posiciona os eixos morais. Falha silenciosa:
+                        # rótulo inválido deixa o personagem Neutro, que é o default certo.
+                        if config.player_alignment:
+                            working_mem.character.definir_alinhamento_inicial(config.player_alignment)
                         working_mem.inicializar_features_classe(
                             pc["player_class"], pc.get("player_subclass", "")
                         )
@@ -889,6 +897,11 @@ def _wm_para_personagem_config(wm: WorkingMemory) -> dict:
         "player_race":        wm.player_race,
         "player_background":  wm.player_background,
         "player_subclass":    wm.player_subclass,
+        # Alinhamento: o rótulo declarado E a posição dos eixos. Os dois,
+        # porque o rótulo é o que o jogador disse e os eixos são onde ele
+        # está agora — perder os eixos apagaria tudo que ele PROVOU ser.
+        "player_alignment":   wm.character.alinhamento_declarado,
+        "alinhamento_eixos":  dict(wm.character.alinhamento_eixos or {}),
         "player_description": wm.player_description,
         "tts_voice":          wm.tts_voice,
         "dm_profile":         wm.dm_profile,

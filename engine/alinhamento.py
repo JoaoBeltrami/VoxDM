@@ -169,6 +169,47 @@ class EixosAlinhamento:
         )
 
 
+# Onde um alinhamento DECLARADO posiciona os eixos. ±50 é meio caminho entre a
+# faixa neutra (40) e o limiar de inércia (60): o mundo já te trata como o que
+# você disse ser, mas dois ou três atos contrários ainda te movem. Declarar
+# "Leal e Bom" não pode virar álibi pra agir como monstro.
+_POSICAO_DECLARADA = 50.0
+
+_ALINHAMENTOS_VALIDOS: tuple[str, ...] = (
+    "Leal e Bom", "Neutro e Bom", "Caótico e Bom",
+    "Leal e Neutro", "Neutro", "Caótico e Neutro",
+    "Leal e Mau", "Neutro e Mau", "Caótico e Mau",
+)
+
+
+def alinhamentos() -> list[str]:
+    """Os 9 da tabela clássica, na ordem de leitura da grade 3×3."""
+    return list(_ALINHAMENTOS_VALIDOS)
+
+
+def rotulo_para_eixos(rotulo: str) -> tuple[float, float] | None:
+    """(ordem, moral) para um rótulo declarado. None se não reconhecer.
+
+    Aceita as formas que o jogador realmente digita ou FALA: com e sem acento,
+    "neutro e neutro", "leal bom", maiúsculas soltas. Na Sessão Zero isso vem de
+    transcrição de voz — ser rígido aqui é jogar fora a resposta do jogador.
+    """
+    r = (rotulo or "").strip().lower()
+    if not r:
+        return None
+    r = r.replace("ó", "o").replace("á", "a").replace("ú", "u")
+    ordem = _POSICAO_DECLARADA if "leal" in r else (
+        -_POSICAO_DECLARADA if "caotico" in r else 0.0
+    )
+    moral = _POSICAO_DECLARADA if "bom" in r or "boa" in r else (
+        -_POSICAO_DECLARADA if "mau" in r or "ma " in r or r.endswith(" ma") else 0.0
+    )
+    # "neutro" sozinho é válido e legítimo; o resto precisa casar em algum eixo.
+    if ordem == 0.0 and moral == 0.0 and "neutro" not in r:
+        return None
+    return ordem, moral
+
+
 def compativel(a: str, b: str) -> int:
     """Distância entre dois alinhamentos: 0 = igual, 1 = vizinho, 2+ = oposto.
 

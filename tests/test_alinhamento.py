@@ -118,3 +118,75 @@ def test_vocabulario_exposto_para_o_prompt():
     atos = atos_conhecidos()
     assert "matar_rendido" in atos and "honrar_acordo" in atos
     assert atos == sorted(atos), "ordenado — vai pro prompt e diff estável importa"
+
+
+# ── Alinhamento na CRIAÇÃO — à mão e por voz (30/07) ─────────────────────────
+
+
+def test_declarado_vira_posicao_inicial_dos_eixos():
+    """O declarado é quem você diz que é; os eixos são quem você prova ser."""
+    from engine.state.character import PlayerCharacter
+
+    pc = PlayerCharacter()
+    assert pc.definir_alinhamento_inicial("Leal e Bom") is True
+    assert pc.alinhamento_declarado == "Leal e Bom"
+    eixos = EixosAlinhamento.from_dict(pc.alinhamento_eixos)
+    assert eixos.rotulo() == "Leal e Bom"
+    assert eixos.cravado() is False, (
+        "declarar não pode CRAVAR — senão o jogador nasce imune a mudar"
+    )
+
+
+def test_a_ficha_nao_vira_alibi():
+    """Declarar Bom e agir como monstro DEVE te mover. É o ponto do sistema."""
+    from engine.state.character import PlayerCharacter
+
+    pc = PlayerCharacter()
+    pc.definir_alinhamento_inicial("Caótico e Bom")
+    eixos = EixosAlinhamento.from_dict(pc.alinhamento_eixos)
+    eixos.aplicar("matar_rendido")
+    eixos.aplicar("matar_rendido")
+    assert "Bom" not in eixos.rotulo(), "declarou Bom, executou rendidos, e seguiu Bom"
+
+
+def test_rotulo_invalido_nao_quebra_a_criacao():
+    """Transcrição ruim na Sessão Zero não pode custar o personagem inteiro."""
+    from engine.state.character import PlayerCharacter
+
+    pc = PlayerCharacter()
+    assert pc.definir_alinhamento_inicial("banana") is False
+    assert pc.alinhamento_declarado == ""
+    assert EixosAlinhamento.from_dict(pc.alinhamento_eixos).rotulo() == "Neutro"
+
+
+def test_conversor_aceita_o_que_a_voz_produz():
+    """A Sessão Zero é por VOZ — sem acento, caixa solta, tudo tem que passar."""
+    from engine.alinhamento import rotulo_para_eixos
+
+    assert rotulo_para_eixos("caotico e mau") == (-50.0, -50.0)
+    assert rotulo_para_eixos("LEAL E BOM") == (50.0, 50.0)
+    assert rotulo_para_eixos("Neutro") == (0.0, 0.0)
+    assert rotulo_para_eixos("") is None
+    assert rotulo_para_eixos("qualquer coisa") is None
+
+
+def test_ficha_por_voz_aceita_alinhamento_e_sem_ele():
+    """O 6º campo do [FICHA] é opcional — ficha antiga continua válida."""
+    from api.turn_pipeline import _RE_FICHA
+
+    sem = _RE_FICHA.search("[FICHA: Vela|Draconato|Ladino|contrabandista]")
+    assert sem and sem.group(6) is None
+
+    com = _RE_FICHA.search(
+        "[FICHA: Kael|Meio-orc|Guerreiro|desertor|procura o irmão|Leal e Bom]"
+    )
+    assert com and com.group(6) == "Leal e Bom"
+
+
+def test_os_nove_da_tabela_classica():
+    from engine.alinhamento import alinhamentos, rotulo_para_eixos
+
+    nove = alinhamentos()
+    assert len(nove) == 9
+    for r in nove:
+        assert rotulo_para_eixos(r) is not None, f"{r} não converte"
