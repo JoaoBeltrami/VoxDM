@@ -8,16 +8,24 @@ Por que existe: o level up só oferecia +2 de atributo, e a decisão do Beltrami
     existe em TODO level up é a opção de pegar um nível em outra classe. É aí que
     o level up passa a parecer D&D de verdade.
 Dependências: apenas stdlib. Módulo PURO — não toca WorkingMemory.
-Armadilha: pré-requisito de multiclasse é DOS DOIS LADOS. Pra sair de Guerreiro
-    e pegar Mago, é preciso ter FOR ou DES 13 (a classe de origem) E INT 13 (a de
-    destino). Errar isso deixa o jogador pegar combinações ilegais.
+Armadilha: o MODO padrão é "livre" (BG3), não o SRD. A decisão do Beltrami
+    (29/07) foi "a regra de bg3 que é mais livre" — lá o pré-requisito de
+    atributo não existe. Os dados do SRD continuam aqui e continuam corretos,
+    mas viram INFORMAÇÃO ("o SRD pediria Inteligência 13"), não bloqueio. Quem
+    quiser o gate original põe MULTICLASSE_MODO="estrito" no .env.
+    No modo estrito, o requisito vale DOS DOIS LADOS — sair de Guerreiro e pegar
+    Mago exige FOR ou DES 13 (origem) E INT 13 (destino). Cobrar só o destino é
+    o erro clássico.
 
 Exemplo:
-    pode, faltando = pode_multiclassar("Guerreiro", "Mago", {"str_score": 16, "int_score": 11})
-    # → (False, ["Mago exige Inteligência 13 (tem 11)"])
+    pode, nota = pode_multiclassar("Guerreiro", "Mago", {"int_score": 11})
+    # modo livre   → (True,  ["o SRD pediria Inteligência 13 (tem 11)"])
+    # modo estrito → (False, ["Mago exige Inteligência 13 (tem 11)"])
 """
 
 from typing import Any
+
+from config import settings
 
 # Pré-requisito de atributo por classe (SRD 5.1, tabela de Multiclasse).
 # Lista de listas = OU dentro da lista interna, E entre as externas.
@@ -97,19 +105,31 @@ def _falta(chave: str, scores: dict[str, int], classe_exib: str) -> str | None:
     return "; ".join(pendencias) if pendencias else None
 
 
+def modo_livre() -> bool:
+    """True quando a regra em vigor é a do BG3 (sem pré-requisito de atributo)."""
+    return str(getattr(settings, "MULTICLASSE_MODO", "livre")).lower() != "estrito"
+
+
 def pode_multiclassar(
     classe_atual: str, classe_nova: str, scores: dict[str, int]
 ) -> tuple[bool, list[str]]:
-    """Checa o pré-requisito DOS DOIS LADOS (SRD 5.1).
+    """Pode pegar um nível nessa classe? E o que o SRD diria a respeito.
 
-    Pra pegar um nível numa classe nova é preciso cumprir o requisito da classe
-    que já se tem E o da nova. Esquecer o lado de origem é o erro clássico —
-    deixa um Guerreiro de FOR 10/DES 10 (que só chegou lá por sorte de rolagem)
-    virar Mago sem cumprir nada.
+    MODO LIVRE (default, regra do BG3 — decisão Beltrami 29/07): qualquer classe,
+    a qualquer momento. Os requisitos do SRD viram NOTA informativa, não gate:
+    "o SRD pediria Inteligência 13 (tem 11)". O jogador vê a regra clássica e
+    escolhe assim mesmo — que é exatamente o que o BG3 faz.
+
+    MODO ESTRITO: o gate do SRD 5.1, valendo DOS DOIS LADOS. Sair de Guerreiro e
+    pegar Mago exige FOR ou DES 13 (origem) E INT 13 (destino) — cobrar só o
+    destino é o erro clássico e deixaria um Guerreiro de FOR 10/DES 10 virar Mago.
+
+    O que NUNCA passa, nos dois modos: classe fora do SRD e a própria classe
+    atual. Isso não é dificuldade de regra, é entrada inválida.
 
     Returns:
-        (pode, motivos). `motivos` vazio quando pode; senão, uma frase por
-        requisito faltando, já pronta pra exibir.
+        (pode, notas). No modo livre `pode` só é False para entrada inválida, e
+        `notas` pode vir preenchida mesmo com pode=True — é informação, não erro.
     """
     origem = _normalizar(classe_atual)
     destino = _normalizar(classe_nova)
@@ -128,17 +148,23 @@ def pode_multiclassar(
     falta_destino = _falta(destino, scores, _EXIBICAO[destino])
     if falta_destino:
         motivos.append(falta_destino)
-    return (not motivos), motivos
+
+    if not motivos:
+        return True, []
+    if modo_livre():
+        # Mesma informação, outro verbo: "pediria" em vez de "exige".
+        return True, [m.replace(" exige ", " pediria ") for m in motivos]
+    return False, motivos
 
 
 def opcoes_de_multiclasse(
     classe_atual: str, scores: dict[str, int]
 ) -> list[dict[str, Any]]:
-    """Todas as classes do SRD com o veredito de elegibilidade de cada uma.
+    """Todas as classes do SRD, com elegibilidade e a nota do SRD em cada uma.
 
-    Devolve TODAS, inclusive as bloqueadas, com o motivo — a UI mostra o que
-    falta em vez de simplesmente esconder a opção. Saber que "Mago exige
-    Inteligência 13 (tem 11)" é informação de jogo; a opção sumir não é.
+    Devolve TODAS — a UI mostra o que o SRD pediria em vez de esconder a opção.
+    No modo livre (BG3, default) `elegivel` vem True em todas e a nota é sabor
+    de regra; no estrito, a nota é o motivo do bloqueio.
     """
     saida: list[dict[str, Any]] = []
     for chave in sorted(_EXIBICAO):

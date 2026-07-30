@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # True = dm_profile="sombrio" roteia para NARRATIVE_GRIM (groq-70b →
     # gemini → ollama-grim), e fragmento de contrato de ficção é injetado.
     GRIMDARK_ATIVO: bool = False
+    # Regra de multiclasse. "livre" = BG3 (decisão Beltrami 29/07): sem
+    # pré-requisito de atributo, qualquer classe a qualquer momento. "estrito" =
+    # SRD 5.1, exigindo 13 na classe de origem E na de destino.
+    # Os dados do SRD continuam existindo nos dois modos — no livre eles viram
+    # INFORMAÇÃO ("o SRD pediria Inteligência 13"), não bloqueio.
+    MULTICLASSE_MODO: str = "livre"
     # Modelo Ollama uncensored/abliterated — garantia de último recurso.
     # Precisa ser baixado manualmente: `ollama pull dolphin-mistral`
     # Candidatos testados no RTX 2060 6GB: dolphin-mistral (7B Q4, ~4.2GB)
