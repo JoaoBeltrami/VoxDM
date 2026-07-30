@@ -311,6 +311,11 @@ class MensagemWS(BaseModel):
     # este campo ao regex: ele é determinístico e vem da mesma classificação que
     # calcula o bônus.
     check_pedido: str = ""
+    # Tempo até o 1º audio_chunk sair (ms). 0 = nenhum áudio no turno. Exposto
+    # aqui (e não só na telemetria) pra que benchmark/probe_check.py possa medir
+    # o custo real da voz sem depender de dashboard — no playtest 26/07 o TTS era
+    # 60%% do turno e ninguém tinha olhado porque não havia número pra olhar.
+    primeiro_audio_ms: int = 0
     # DANO-SEM-CAUSA-1: causas das mudanças de HP do turno. Cada item:
     # {tipo: "dano"|"cura", valor, motivo, hp, hp_max}. O motivo do `[DANO]`
     # era descartado com o marcador e o jogador só via o HP cair.

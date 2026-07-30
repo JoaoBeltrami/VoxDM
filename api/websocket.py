@@ -2976,6 +2976,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         else ""
                     ),
                     eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
+                    primeiro_audio_ms=(
+                        int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
+                    ),
                 ).model_dump_json()
             )
 

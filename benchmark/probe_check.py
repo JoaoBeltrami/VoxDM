@@ -1,8 +1,14 @@
-"""Probe headless: o pedido de check do JOGADOR abre o dado?
+"""Probe headless: o pedido de check do JOGADOR abre o dado? E quanto custa o turno?
 
 Valida end-to-end o fix `05ffc7c` (aliases EN de perícia) + `4c1c9a3`
 (check_pedido no payload). O playtest 26/07 mostrou o pedido funcionando com
 "Percepção" e falhando com "insight" — o classificador era PT-only.
+
+Também imprime o breakdown de latência por turno. O playtest 26/07 mediu TTS em
+3937ms de um turno de 6540ms — 60% do tempo era a VOZ, não o LLM — e o semáforo
+foi de 2 pra 6 por causa disso (benchmark: 3644ms → 1324ms em bancada). Este
+probe é onde o ganho aparece em turno REAL, com `primeiro_audio_ms` medindo o
+timestamp do 1º audio_chunk em vez de usar o turno inteiro como proxy.
 
 Roda contra a API local; não precisa de browser nem do Beltrami.
 """
@@ -55,6 +61,7 @@ async def main() -> None:
             ("olho em volta com calma", ""),          # sem pedido: não pode abrir
         ]
         ok = True
+        lat: list[dict] = []
         for texto, esperado in casos:
             fim = await turno(ws, texto)
             got = fim.get("check_pedido", "")
@@ -62,6 +69,20 @@ async def main() -> None:
             if got != esperado:
                 ok = False
             print(f"  [{marca}] {texto!r:32} check_pedido={got!r} (esperado {esperado!r})",
+                  flush=True)
+            lat.append({
+                "total": int(fim.get("latencia_ms", 0) or 0),
+                "audio": int(fim.get("primeiro_audio_ms", 0) or 0),
+            })
+
+        print("\n  latência por turno (ms):", flush=True)
+        for i, m in enumerate(lat, 1):
+            frac = f"{100 * m['audio'] / m['total']:.0f}%" if m["total"] else "-"
+            print(f"    turno {i}: total={m['total']:>6}  1º áudio={m['audio']:>6} ({frac} do turno)",
+                  flush=True)
+        totais = sorted(m["total"] for m in lat if m["total"])
+        if totais:
+            print(f"    mediana total: {totais[len(totais) // 2]}ms  (alvo do projeto: <4000)",
                   flush=True)
 
     print("\nRESULTADO:", "todos passaram" if ok else "houve falha")
