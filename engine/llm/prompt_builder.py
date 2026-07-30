@@ -56,6 +56,7 @@ _DM_PROFILES_DIR    = Path(__file__).parent / "prompts" / "dm_profiles"
 # tok/turno em exploração calma (~50% das sessões reais).
 _FRAGMENTS_DIR      = Path(__file__).parent / "prompts" / "fragments"
 _FRAG_VOZ_DUPLA     = _FRAGMENTS_DIR / "voz_dupla.md"
+_FRAG_ABERTURA      = _FRAGMENTS_DIR / "abertura_personagem.md"
 _FRAG_MARKERS_LISTA = _FRAGMENTS_DIR / "markers_lista.md"
 # Canon do módulo ativo — guarda contra canon-break (teste #3: LLM improvisou o
 # próprio Valdrek vivo e ele virou companion). Hardcoded enquanto o módulo é
@@ -227,6 +228,19 @@ def _carregar_master_system() -> str:
 def _carregar_dice() -> str | None:
     """Guia de rolagem de dados — com hot reload. None se ausente."""
     return _ler_prompt(_DICE_PATH)
+
+
+def _carregar_abertura_personagem() -> str | None:
+    """Fragmento de abertura/identidade — só quando ele importa.
+
+    ORCAMENTO-BLOCO (30/07): `master_system.md` entra em 100% dos turnos e estava
+    com 5 chars de folga. Esta seção fala de "Personagem: desconhecido", de
+    incorporar nome/classe na hora e de Percepção Passiva ao entrar em local
+    novo — coisas do INÍCIO. Num turno 40 de combate ela é peso morto.
+    Comprimir a redação já rendeu 514 chars; tirar o que é condicional rende o
+    resto sem custar UMA regra.
+    """
+    return _ler_prompt(_FRAG_ABERTURA)
 
 
 def _carregar_voz_dupla() -> str | None:
@@ -634,6 +648,19 @@ def _montar_mensagens_brief(
     # em 100% dos turnos; 21 dos 50 turnos tinham pacing<4 fora de combate, ou seja
     # dariam False aqui. O custo não é latência (o prefill é barato) — é TPD: 19KB
     # por turno é o que matou a cota do 70B no turno 14.
+    # Abertura/identidade: só quando o personagem ainda não se apresentou ou a
+    # sessão está começando. Depois disso é peso morto em 100% dos turnos —
+    # ORCAMENTO-BLOCO (30/07). Ler `player_name` vazio cobre a Session Zero e o
+    # "Personagem: desconhecido"; as 2 primeiras iterações cobrem a abertura.
+    _precisa_abertura = (
+        not str(getattr(wm, "player_name", "") or "").strip()
+        or int(getattr(wm, "iteracoes", 0) or 0) <= 1
+    )
+    if _precisa_abertura:
+        _abertura = _carregar_abertura_personagem()
+        if _abertura:
+            secoes.append(_abertura)
+
     markers = _carregar_markers_lista() if _cena_dramatica(wm) else ""
     if markers:
         secoes.append(markers)
