@@ -7,6 +7,22 @@
     {
       "fact": "Após a morte de Valdrek, o reino partiu-se em três vilas rivais: Tharnvik, Kaelmund e Drevamor.",
       "immutable": true
+    },
+    {
+      "fact": "Valdrek não fundou um reino — fundou uma trégua. As três famílias já existiam e já se odiavam; ele as convenceu de que o inimigo era a terra (a cinza, o inverno, os gigantes) e não uma à outra. Governou trinta e um anos. A única lei que escreveu de próprio punho foi: nenhuma vila come sozinha.",
+      "immutable": true
+    },
+    {
+      "fact": "O Cajado e a Crônica não eram tesouros — eram ferramentas de administração. O Cajado protegia o celeiro comum; a Crônica registrava quem devia o quê a quem, para que a memória não virasse motivo de sangue.",
+      "immutable": true
+    },
+    {
+      "fact": "A tirania de Valdrek veio pela porta que ninguém vigia: nos últimos anos ele passou a usar a Crônica não para lembrar, mas para DECIDIR — apagando dívidas de quem lhe era leal, inventando dívidas de quem não era. Não virou cruel; virou certo demais. Passou a acreditar que a paz justificava qualquer mentira que a sustentasse.",
+      "immutable": true
+    },
+    {
+      "fact": "Kaëla era a arquivista — não esposa nem filha: a mulher que copiava a Crônica à mão e portanto a única que via as emendas. Envenenou Valdrek quando percebeu que ele havia reescrito a linhagem inteira de uma família para apagar um herdeiro inconveniente. Viveu mais oito anos, terminou de copiar o volume, escondeu a versão verdadeira, e tomou o mesmo veneno na noite em que acabou.",
+      "immutable": true
     }
   ],
   "fronts": [
@@ -561,6 +577,107 @@
       "combat": {
         "srd_analogo": "bandit-captain"
       }
+    },
+    {
+      "id": "halgrim-sem-marca",
+      "name": "Halgrim Sem-Marca",
+      "role": "contrabandista-tharnvik",
+      "personality": "Calmo de um jeito que incomoda numa vila que grita. Nunca ergue a voz porque nunca precisou — quem deve a ele já sabe. Trata guerra como estação do ano: chega, passa, e quem se preparou lucra. Não odeia ninguém, o que o torna pior que quem odeia: não há nada pessoal a ser resolvido. A ausência da marca de cinza no rosto é a primeira coisa que qualquer um de Tharnvik nota, e ele deixa que notem.",
+      "knowledge": [
+        "Sabe todas as rotas entre as três vilas que não constam em mapa nenhum",
+        "Sabe quanto aço Tharnvik encomendou de Torvin nos últimos dois anos, e que a maior parte não passou pela estrada oficial",
+        "Sabe o número dos Sem-Vila que já mandou para a linha de frente — conta cabeças, não gente",
+        "Sabe que Bjorn precisa dele e tem vergonha disso",
+        "Sabe por que voltou das gargantas sem a marca, e é a única coisa que não vende"
+      ],
+      "agenda": "Manter as três vilas na beira da guerra sem deixar nenhuma vencer — guerra longa vende mais que guerra curta. Vender aço a Tharnvik e avisar Brennan quando o comboio passa, porque emboscada aumenta o preço do próximo carregamento.",
+      "speech_style": "Frases curtas, tom de quem já fechou o negócio antes de você sentar. Nunca promete — informa preço. Exemplo: \"Marca de cinza não compra pão. Já testei.\" Responde pergunta com pergunta sobre valor: \"E isso vale quanto pra você?\"",
+      "honesty": 0.35,
+      "disposition": "neutral",
+      "political_allegiance": null,
+      "_ext": {
+        "race": "humano",
+        "age": 44,
+        "appearance": "Rosto limpo — sem a marca de cinza que todo homem de Tharnvik da idade dele carrega. Roupa boa demais pra vila, de tecido que não é daqui. Mãos sem calo de arma, com calo de corda e de contagem. Anel de ferro simples no polegar, que ele gira quando calcula.",
+        "motivation": "Nunca mais depender do orgulho de ninguém. Orgulho não alimentou a família dele; comércio alimentou.",
+        "gender": "male",
+        "alinhamento": "Neutro e Mau",
+        "vilao": true,
+        "como_aliar": "O mais fácil dos três: não tem causa, tem preço. Basta pagar mais que Bjorn — ouro, informação ou uma rota que ele ainda não conhece. Não exige que o jogador seja mau; exige que seja útil."
+      },
+      "combat": {
+        "srd_analogo": "bandit-captain"
+      }
+    },
+    {
+      "id": "ysolde-kaeldottir",
+      "name": "Ysolde Kaëldottir",
+      "role": "conselheira-de-contratos-kaelmund",
+      "personality": "Prima distante de Senna e a razão pela qual Kaëlmund nunca perdeu uma disputa por escrito. Educada até o osso, do jeito que corta mais fundo que grosseria. Não sente prazer em ferir — sente prazer em estar certa no papel, e aceita o que vier junto. Acredita sinceramente que salvou a vila mais vezes que qualquer guerreiro, e tem razão.",
+      "knowledge": [
+        "Redigiu todo acordo que Kaëlmund assinou nos últimos doze anos, incluindo o pacto com os Grothmar",
+        "Sabe que a cláusula de reajuste que estrangula a vila foi escrita por ela, de propósito — vila desesperada aceita o que vila confortável recusa",
+        "Sabe onde a Crônica de Valdrek é guardada em Drevamor e quantas pessoas têm acesso",
+        "Sabe que Senna jamais aprovaria os métodos dela, e por isso nunca pergunta",
+        "Sabe ler a caligrafia antiga da Crônica — uma das três pessoas vivas que sabem"
+      ],
+      "agenda": "Provar por documento que as terras de Drevamor sempre pertenceram a Kaëlmund. Para isso precisa de acesso à Crônica e de tempo a sós com ela. Enquanto isso, apertar o contrato dos Grothmar até que a vila aceite qualquer saída que ela ofereça.",
+      "speech_style": "Formal, pausada, escolhe cada palavra como quem assina. Nunca interrompe — espera você terminar e então reformula o que você disse de um jeito que serve a ela. Exemplo: \"Não menti. Escrevi de um jeito que a verdade não coubesse.\"",
+      "honesty": 0.4,
+      "disposition": "neutral",
+      "political_allegiance": "os-kael",
+      "_ext": {
+        "race": "humana",
+        "age": 51,
+        "appearance": "Magra, ereta, mãos manchadas de tinta permanente nos dedos da pena. Veste cinza escuro sem ornamento — a única de Kaëlmund que não usa nada de metal. Olhos que param em você um segundo a mais que o confortável.",
+        "motivation": "Autonomia de Kaëlmund, custe o que custar a quem não é de Kaëlmund. Nunca mais ver a vila pagando tributo a gigante nenhum.",
+        "gender": "female",
+        "alinhamento": "Leal e Mau",
+        "vilao": true,
+        "como_aliar": "O caminho lento. É Leal antes de ser Má: não trai por ouro e desconfia de quem trai. Exige CUMPRIR PALAVRA repetidamente — dois ou três acordos honrados à risca — até que ela inclua o jogador no contrato."
+      },
+      "combat": {
+        "srd_analogo": "noble",
+        "overrides": {
+          "cr": "2",
+          "xp": 450,
+          "ca": 15,
+          "hp": 45,
+          "atk": 3,
+          "dano_bonus": 1
+        }
+      }
+    },
+    {
+      "id": "ilvar-da-cerca",
+      "name": "Ilvar da Cerca",
+      "role": "lider-da-ronda-periferia-drevamor",
+      "personality": "Nasceu fora do globo do Cajado e organizou a primeira ronda da periferia aos dezessete anos, na semana em que o filho de uma vizinha morreu de frio a quarenta passos de uma luz que não o alcançava. Salvou vidas de verdade — tudo que dizem dele é verdade, e é por isso que funciona. Acredita em cada palavra na hora em que fala, inclusive nas que exagera. Não quer poder; quer que nunca mais alguém morra a quarenta passos da luz. E queimaria as três vilas pra garantir isso.",
+      "knowledge": [
+        "Conhece cada casa da periferia de Drevamor e quem dorme em cada uma",
+        "Sabe até onde o globo do Cajado alcança, medido em passos, porque mediu",
+        "Sabe que Aldric não vai decidir nada a tempo, e já parou de esperar",
+        "Sabe que metade do que relata sobre movimentos de Tharnvik é exagero — mas só percebe depois, nunca na hora",
+        "Sabe que Osmund seria melhor comandante que ele, e que a vila nunca vai aceitar um ex-Tharnvik"
+      ],
+      "agenda": "Fazer Drevamor atacar primeiro, por medo, antes que a decisão saia das mãos dele. Cada relato exagerado traz mais gente pra ronda e mais autoridade — e a autoridade é a única coisa que separa a periferia do frio.",
+      "speech_style": "Fala alto e rápido, com a urgência de quem viu algo agora mesmo. Repete a testemunha ocular como argumento final: \"Eu vi. Vocês não estavam lá — eu vi.\" Chama todo mundo da periferia pelo nome e ninguém do centro.",
+      "honesty": 0.55,
+      "disposition": "friendly",
+      "political_allegiance": "os-dreva",
+      "_ext": {
+        "race": "humano",
+        "age": 26,
+        "appearance": "Jovem, magro de fome antiga, com cicatriz de queimadura no antebraço de uma fogueira que apagou tarde demais. Veste o que a periferia veste, mas limpo — faz questão. Carrega uma lança de cabo lascado que consertou três vezes e não troca.",
+        "motivation": "Que ninguém mais morra fora da luz. Qualquer preço.",
+        "gender": "male",
+        "alinhamento": "Caótico e Mau",
+        "vilao": true,
+        "como_aliar": "O mais difícil e o mais perigoso. Não aceita ouro nem contrato — aceita CUMPLICIDADE NA MENTIRA: confirmar publicamente um exagero dele diante da vila. Um jogador BOM pode se aliar sem perceber que virou peça, porque tudo que ele diz soa como proteger inocentes."
+      },
+      "combat": {
+        "srd_analogo": "veteran"
+      }
     }
   ],
   "companions": [
@@ -640,12 +757,13 @@
       "id": "vyrmathax",
       "name": "Vyrmathax",
       "type": "criatura",
-      "description": "Dragoa vermelha adulta habitando o complexo de cavernas sob as Gargantas Vulcânicas. Não é aliada nem inimiga de Tharnvik — é uma força da natureza com memória. A 'dívida' pelo ovo salvo três gerações atrás nunca foi definida. Ninguém confirmou que o acordo funciona. CR 17 — muito acima do nível do jogador. Não aparece diretamente a menos que o conflito escale ao nível nuclear. Presença inferida: calor crescente nas profundezas, cheiro de enxofre intenso, sombra enorme no teto das gargantas.",
+      "description": "Dragoa vermelha adulta habitando o complexo de cavernas sob as Gargantas Vulcânicas. Não é aliada nem inimiga de Tharnvik — é uma força da natureza com memória. CR 17 — muito acima do nível do jogador. Não aparece diretamente a menos que o conflito escale ao nível nuclear. Presença inferida: calor crescente nas profundezas, cheiro de enxofre intenso, sombra enorme no teto das gargantas.\n\nA DÍVIDA (verdade que ninguém vivo conhece): três gerações atrás um caçador de Tharnvik ROUBOU um ovo das gargantas — a vila passava fome e a lenda dizia que casca de dragão fervida alimenta cem homens. O ovo chocou nas mãos dele no caminho de volta. Ele criou a cria por dois invernos e então a devolveu. Vyrmathax não deve gratidão por um resgate: deve por algo pior. Aquele humano viu a cria dela indefesa e escolheu não usar isso. Um dragão entende poder e entende troca; não entende renúncia. A dívida existe porque ela nunca soube o que aquilo significou — e um dragão não tolera não entender.\n\nO QUE ELA QUER: a Crônica, não o Cajado. É o único registro escrito daquela geração, e nela está o nome do caçador, que ela nunca soube. Três gerações esperando pra saber a quem, exatamente, ela deve. O relógio dela avança quando alguém se aproxima da Crônica.",
       "abilities": [
         "Adult Red Dragon — CR 17",
         "Memória de três gerações",
         "Controle total das gargantas vulcânicas",
-        "NÃO é para ser enfrentada — é para ser temida"
+        "NÃO é para ser enfrentada — é para ser temida",
+        "Procura um NOME, não um tesouro"
       ]
     }
   ],
@@ -1995,6 +2113,90 @@
       "to": "halvard-aprova-osmund",
       "type": "knows_secret",
       "weight": 1.0
+    },
+    {
+      "from": "halgrim-sem-marca",
+      "to": "bjorn-tharnsson",
+      "type": "ally",
+      "weight": 0.3
+    },
+    {
+      "from": "bjorn-tharnsson",
+      "to": "halgrim-sem-marca",
+      "type": "ally",
+      "weight": 0.2
+    },
+    {
+      "from": "halgrim-sem-marca",
+      "to": "brennan-sem-vila",
+      "type": "ally",
+      "weight": 0.4
+    },
+    {
+      "from": "halgrim-sem-marca",
+      "to": "torvin-kaelsson",
+      "type": "rival",
+      "weight": -0.5
+    },
+    {
+      "from": "halgrim-sem-marca",
+      "to": "osmund-o-exilado",
+      "type": "rival",
+      "weight": -0.4
+    },
+    {
+      "from": "ysolde-kaeldottir",
+      "to": "senna-kaeldottir",
+      "type": "ally",
+      "weight": 0.5
+    },
+    {
+      "from": "senna-kaeldottir",
+      "to": "ysolde-kaeldottir",
+      "type": "ally",
+      "weight": 0.4
+    },
+    {
+      "from": "ysolde-kaeldottir",
+      "to": "mundr",
+      "type": "rival",
+      "weight": -0.7
+    },
+    {
+      "from": "ysolde-kaeldottir",
+      "to": "torvin-kaelsson",
+      "type": "rival",
+      "weight": -0.3
+    },
+    {
+      "from": "ysolde-kaeldottir",
+      "to": "edda-a-velha",
+      "type": "rival",
+      "weight": -0.6
+    },
+    {
+      "from": "ilvar-da-cerca",
+      "to": "aldric-drevasson",
+      "type": "rival",
+      "weight": -0.5
+    },
+    {
+      "from": "ilvar-da-cerca",
+      "to": "osmund-o-exilado",
+      "type": "rival",
+      "weight": -0.7
+    },
+    {
+      "from": "ilvar-da-cerca",
+      "to": "maren-drevadottir",
+      "type": "ally",
+      "weight": 0.3
+    },
+    {
+      "from": "ilvar-da-cerca",
+      "to": "halgrim-sem-marca",
+      "type": "rival",
+      "weight": -0.2
     }
   ],
   "arc": {

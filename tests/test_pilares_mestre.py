@@ -1367,3 +1367,50 @@ def test_carregar_agendas_modulo_real():
 def test_carregar_agendas_modulo_ausente_vazio():
     from engine.memory.quest_detector import carregar_agendas_modulo
     assert carregar_agendas_modulo("/nao/existe.json") == {}
+
+
+# ── OVERRIDE-ANINHADO-1 (29/07) ──────────────────────────────────────────────
+
+
+def test_override_de_statblock_funciona_solto_E_aninhado():
+    """O CLAUDE.md documentava `combat{srd_analogo, overrides}` e o código lia os
+    campos no nível de cima. A divergência mordeu em SILÊNCIO ao escrever os
+    vilões: o override aninhado era ignorado sem warning e a ficha saía com o
+    análogo puro (Ysolde ficou CR 1/8 com PV 9 quando devia ser CR 2 com PV 45).
+    """
+    from engine.combat import npc_statblocks as sb
+
+    base = dict(sb.STATBLOCKS_SRD["noble"])
+
+    solto = {"srd_analogo": "noble", "hp": 45, "cr": "2"}
+    aninhado = {"srd_analogo": "noble", "overrides": {"hp": 45, "cr": "2"}}
+
+    def ficha(combat: dict) -> str | None:
+        sb.limpar_cache()
+        sb._combat_map_cache = {"x": combat}
+        try:
+            return sb.resolver_ficha_npc("x")
+        finally:
+            sb.limpar_cache()
+
+    for forma, combat in (("solto", solto), ("aninhado", aninhado)):
+        texto = ficha(combat)
+        assert texto is not None, forma
+        assert "45" in texto, f"{forma}: PV do override não aplicou"
+        assert "CR 2" in texto, f"{forma}: CR do override não aplicou"
+    assert base["hp"] == 9, "a tabela SRD não pode ter sido mutada"
+
+
+def test_os_tres_viloes_do_modulo_pesam_para_nivel_3():
+    """Vilão que morre num golpe não assusta ninguém.
+
+    Os três nasceram com peso de capanga (spy CR 1 / noble CR 1/8 / scout CR 1/2)
+    e o Beltrami pediu mais: "poderiam ser um pouco mais fortes já que o
+    personagem é lvl 3".
+    """
+    from engine.combat.npc_statblocks import e_npc_fixo, resolver_ficha_npc
+
+    for vid in ("halgrim-sem-marca", "ysolde-kaeldottir", "ilvar-da-cerca"):
+        assert e_npc_fixo(vid), f"{vid} sumiu do módulo"
+        ficha = resolver_ficha_npc(vid)
+        assert ficha and "CR 2" in ficha or "CR 3" in ficha, f"{vid}: {ficha}"

@@ -118,17 +118,28 @@ def resolver_ficha_npc(npc_id: str) -> str | None:
     """Ficha em texto do NPC fixo, ou None se o módulo não define `combat` pra ele.
 
     Resolução (decisão "híbrido", 02/07): base = análogo SRD (`srd_analogo`);
-    qualquer campo explícito no `combat` SOBRESCREVE o do análogo (Bjorn pode
-    ter CA única mantendo o resto do berserker). `combat` só com overrides e sem
-    análogo válido também funciona, desde que tenha o mínimo (ca+hp).
+    qualquer campo explícito SOBRESCREVE o do análogo (Bjorn pode ter CA única
+    mantendo o resto do berserker). `combat` só com overrides e sem análogo
+    válido também funciona, desde que tenha o mínimo (ca+hp).
+
+    O campo pode vir solto (`combat.ca`) ou aninhado (`combat.overrides.ca`) —
+    as duas formas circulam no projeto e ambas funcionam.
     """
     combat = _carregar_combat_map().get(str(npc_id or ""))
     if not combat:
         return None
     base = dict(STATBLOCKS_SRD.get(str(combat.get("srd_analogo", "")).strip().lower(), {}))
+    # Aceita as DUAS formas: campo solto no `combat` (como o código sempre leu) e
+    # aninhado em `combat.overrides` (como o CLAUDE.md sempre documentou). A
+    # divergência mordeu em silêncio ao escrever os vilões em 29/07 — o override
+    # aninhado era ignorado sem warning, e a ficha saía com o análogo puro.
+    # Aninhado vence: quem escreveu explicitamente `overrides` quis sobrescrever.
+    aninhados = combat.get("overrides") or {}
     for campo in _CAMPOS_OVERRIDE:
         if campo in combat:
             base[campo] = combat[campo]
+        if isinstance(aninhados, dict) and campo in aninhados:
+            base[campo] = aninhados[campo]
     # Mínimo pra ficha fazer sentido mecânico: CA e HP. Sem eles (análogo
     # inválido e override incompleto), o NPC cai no fallback genérico.
     if "ca" not in base or "hp" not in base:
