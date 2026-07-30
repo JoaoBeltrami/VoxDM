@@ -2189,3 +2189,47 @@ def test_check_pedido_so_e_anunciado_no_turno_em_que_nasce():
     envelhecido = dict(novo, turnos=1)
     assert anuncio(envelhecido) == "", "pedido antigo não pode reabrir o dado"
     assert anuncio(None) == ""
+
+
+# ── CHECK-INVISIVEL-1 (29/07) ────────────────────────────────────────────────
+
+
+def test_detalhar_check_expoe_a_conta_pro_jogador():
+    """A engine já somava; faltava o jogador VER.
+
+    `resolver_check` devolve uma linha "ENGINE:" que substitui o texto do
+    jogador e vai só pro LLM — quem rolou continua vendo apenas o
+    `[Rolagem: d20 = 14]` que ele mesmo mandou. Sem a conta na tela não dá pra
+    saber se o bônus entrou, que foi a queixa "alguns não aplicaram o bônus".
+    """
+    from engine.authority.checks import detalhar_check, resolver_check
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-chk")
+    wm.player_level = 3
+    wm.wis_score = 14
+    wm.skill_profs = ["Percepção"]
+
+    d = detalhar_check(wm, 14, "Percepção")
+    assert d is not None
+    assert d["d20"] == 14
+    assert d["total"] == 14 + d["bonus"], "o total tem que ser dado + bônus"
+    assert d["detalhe"], "sem o detalhe o jogador não sabe DE ONDE veio o bônus"
+    assert d["critico"] is False and d["falha_critica"] is False
+
+    # A conta exibida tem que bater com a que o Mestre recebe — se divergirem,
+    # a tela mente ou o Mestre narra outro resultado.
+    linha = resolver_check(wm, 14, "Percepção")
+    assert linha is not None and str(d["total"]) in linha
+
+
+def test_detalhar_check_marca_naturais_e_recusa_entrada_invalida():
+    from engine.authority.checks import detalhar_check
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-chk2")
+    wm.wis_score = 14
+    assert detalhar_check(wm, 20, "Intuição")["critico"] is True
+    assert detalhar_check(wm, 1, "Intuição")["falha_critica"] is True
+    assert detalhar_check(wm, 21, "Intuição") is None
+    assert detalhar_check(wm, 10, "perícia-que-não-existe") is None

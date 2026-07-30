@@ -311,6 +311,10 @@ class MensagemWS(BaseModel):
     # este campo ao regex: ele é determinístico e vem da mesma classificação que
     # calcula o bônus.
     check_pedido: str = ""
+    # CHECK-INVISIVEL-1: a conta do teste resolvido neste turno —
+    # {pericia, d20, bonus, detalhe, total, critico, falha_critica}. Vazio
+    # quando não houve teste. A engine já somava; faltava o jogador VER.
+    check_resolvido: dict[str, Any] = Field(default_factory=dict)
     # Tempo até o 1º audio_chunk sair (ms). 0 = nenhum áudio no turno. Exposto
     # aqui (e não só na telemetria) pra que benchmark/probe_check.py possa medir
     # o custo real da voz sem depender de dashboard — no playtest 26/07 o TTS era

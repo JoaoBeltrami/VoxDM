@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 import { AsiPicker } from "@/components/AsiPicker";
+import { CheckResultado } from "@/components/CheckResultado";
 import { AppShell } from "@/components/AppShell";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
@@ -108,6 +109,7 @@ export default function PreviewPage() {
   const [orbState, setOrbState] = useState<OrbState>("idle");
   // Picker de ASI (LEVELUP-SEM-ESCOLHA-1) — inspecionável sem sessão.
   const [asiAberto, setAsiAberto] = useState(false);
+  const [checkDemo, setCheckDemo] = useState<import('@/lib/api').CheckResolvido | null>(null);
   const [scoresMock, setScoresMock] = useState<Record<string, number>>({
     str_score: 16, dex_score: 14, con_score: 13,
     int_score: 10, wis_score: 12, cha_score: 20,   // CAR no teto: testa o disabled
@@ -147,6 +149,7 @@ export default function PreviewPage() {
 
   return (
     <>
+      {checkDemo && <CheckResultado key={checkDemo.d20} check={checkDemo} />}
       {asiAberto && (
         <AsiPicker
           escolha={{
@@ -296,6 +299,18 @@ export default function PreviewPage() {
           {/* O dock REAL — o composer é o caminho principal de quem joga por texto. */}
           <div className="border-t border-vox-border-subtle px-4 py-3">
             <VoiceButton sessionId="preview" onEnviar={() => {}} />
+            <button onClick={() => setCheckDemo({
+              pericia: 'Intuição', d20: 14, bonus: 5, detalhe: 'SAB +2, proficiência +3',
+              total: 19, critico: false, falha_critica: false })}
+              className="rounded border border-vox-accent-primary/50 px-3 py-1 text-xs text-vox-accent-glow">
+              ✦ demo check
+            </button>
+            <button onClick={() => setCheckDemo({
+              pericia: 'Percepção', d20: 20, bonus: 4, detalhe: 'SAB +2, proficiência +2',
+              total: 24, critico: true, falha_critica: false })}
+              className="rounded border border-vox-gold/50 px-3 py-1 text-xs text-vox-gold">
+              ✦ demo crítico
+            </button>
             <button onClick={() => setAsiAberto(true)}
               className="rounded border border-vox-gold/50 px-3 py-1 text-xs text-vox-gold">
               ✦ demo ASI (nível 4)

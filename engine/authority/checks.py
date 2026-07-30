@@ -103,3 +103,32 @@ def resolver_check(wm: Any, d20_bruto: int, pericia: str) -> str | None:
         f"= {total}{nota}. Este é o resultado FINAL; narre o desfecho sem "
         f"recalcular nem citar o número."
     )
+
+
+def detalhar_check(wm: Any, d20_bruto: int, pericia: str) -> dict[str, Any] | None:
+    """Os números do teste, pro JOGADOR ver. Mesma conta de `resolver_check`.
+
+    CHECK-INVISIVEL-1 (29/07): a engine já somava `14 no dado +5 (SAB +2, prof +3)
+    = 19`, mas isso ia SÓ pro LLM — `texto_jogador` é substituído pela linha
+    "ENGINE:" e o jogador continua vendo só o `[Rolagem: d20 = 14]` que ele mesmo
+    mandou. Daí a queixa do playtest 26/07, "alguns não aplicaram o bônus": ele
+    não tinha como saber se aplicou, porque a matemática era invisível.
+
+    Mesma classe do dano sem causa — a engine sabe, o jogador não. Aqui é pior,
+    porque é justamente a mecânica que ele elogiou ("boa lógica de checks").
+    """
+    if not isinstance(d20_bruto, int) or not 1 <= d20_bruto <= 20:
+        return None
+    calculado = bonus_de_check(wm, pericia)
+    if calculado is None:
+        return None
+    bonus, detalhe = calculado
+    return {
+        "pericia": pericia,
+        "d20": d20_bruto,
+        "bonus": bonus,
+        "detalhe": detalhe,
+        "total": d20_bruto + bonus,
+        "critico": d20_bruto == 20,
+        "falha_critica": d20_bruto == 1,
+    }

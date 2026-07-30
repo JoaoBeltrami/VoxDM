@@ -46,6 +46,18 @@ export interface AsiPendente {
   nivel: number;
 }
 
+/** A conta de um teste resolvido pela engine. O jogador via só o `[Rolagem:
+ *  d20 = 14]` que ele mesmo mandou — a soma ia direto pro LLM. */
+export interface CheckResolvido {
+  pericia: string;
+  d20: number;
+  bonus: number;
+  detalhe: string;
+  total: number;
+  critico: boolean;
+  falha_critica: boolean;
+}
+
 export interface EventoVital {
   tipo: "dano" | "cura";
   valor: number;
@@ -97,6 +109,7 @@ export interface MensagemWS {
    *  junto com o marcador e o jogador só via o número cair. */
   eventos_vitais?: EventoVital[];
   asi_pendente?: AsiPendente[];
+  check_resolvido?: CheckResolvido | Record<string, never>;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
   // Campo de consistência de rodada — permite detectar initiative drift no frontend.

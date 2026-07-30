@@ -292,7 +292,7 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
-from engine.authority.checks import bonus_de_check, resolver_check
+from engine.authority.checks import bonus_de_check, detalhar_check, resolver_check
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
@@ -1880,6 +1880,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # morria se o Mestre não repetisse a palavra ("pedi checks, ele não
             # abre pra eu rodar"). A classificação já existia e acerta os pedidos
             # em PT-BR; faltava chamá-la com o texto do jogador.
+            # Um turno começa sem resolução — o chip só vale pro turno em que
+            # a rolagem aconteceu, senão fica pendurado na tela igual o
+            # check_pedido ficava (CHECK-GRUDENTO-1).
+            sessao.check_resolvido = None
             _d20_no_texto = extrair_d20_jogador(texto_jogador)
             if _d20_no_texto is None and not sessao.combate_pendente:
                 _pericia_do_jogador = eh_teste_pericia(texto_jogador)
@@ -1940,6 +1944,10 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         )
                         if _linha_check:
                             texto_jogador = _linha_check
+                            # Os mesmos números, agora também pro jogador.
+                            sessao.check_resolvido = detalhar_check(
+                                sessao.working_mem, _d20_check, _pericia_pedida
+                            )
                             log.info("check_resolvido", session_id=session_id,
                                      pericia=_pericia_pedida, bruto=_d20_check)
 
@@ -2976,6 +2984,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         else ""
                     ),
                     eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
+                    check_resolvido=sessao.check_resolvido or {},
                     primeiro_audio_ms=(
                         int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
                     ),

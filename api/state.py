@@ -103,6 +103,14 @@ class SessaoAtiva:
     # aplicaram o bônus").
     check_pendente: dict | None = None
 
+    # CHECK-INVISIVEL-1 (29/07): os números do teste resolvido neste turno, pro
+    # JOGADOR ver — {pericia, d20, bonus, detalhe, total, critico, falha_critica}.
+    # A engine já somava e mandava só pro LLM (o `texto_jogador` vira a linha
+    # "ENGINE:"), então quem rolava via apenas o `[Rolagem: d20 = 14]` que ele
+    # mesmo mandou. Sem ver a conta não dá pra saber se o bônus entrou — foi a
+    # queixa "alguns não aplicaram o bônus" do playtest 26/07.
+    check_resolvido: dict | None = None
+
     # Dashboard admin: histórico de turnos para gráficos (max 50, rolling).
     # Cada entry: {turno, pacing, hp, hp_max, em_combate, provider, task_type,
     #              latencia_ms, erros}. Populado em websocket.py após cada fim.

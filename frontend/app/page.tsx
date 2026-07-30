@@ -7,6 +7,7 @@ import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useEventSounds } from "@/hooks/useEventSounds";
 import { useSceneMood } from "@/hooks/useSceneMood";
 import { AsiPicker } from "@/components/AsiPicker";
+import { CheckResultado } from "@/components/CheckResultado";
 import { DadoAnimado } from "@/components/DadoAnimado";
 import { ErrorBoundary } from "@/components/system/ErrorBoundary";
 import { MasterResponse } from "@/components/MasterResponse";
@@ -447,7 +448,8 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust, npcsMortos,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    condicoesDetectadas, emCombate, checkPedido, asiPendente, descartarAsiPendente,
+    condicoesDetectadas, emCombate, checkPedido, checkResolvido,
+    asiPendente, descartarAsiPendente,
     questsImprovisadas,
     inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
@@ -2218,6 +2220,15 @@ export default function Home() {
             relação — dano acontece sem NPC envolvido (e no playtest aconteceu
             fora de combate, o que gerou o "tomei dano do nada"). */}
         <VitalToast eventos={vitaisVisiveis} onDismiss={() => setVitaisVisiveis([])} />
+
+        {/* CHECK-INVISIVEL-1: a conta do teste. `key` remonta a cada rolagem
+            pra reiniciar o timer — duas rolagens seguidas mostram duas vezes. */}
+        {checkResolvido && (
+          <CheckResultado
+            key={`${checkResolvido.pericia}-${checkResolvido.d20}-${checkResolvido.total}`}
+            check={checkResolvido}
+          />
+        )}
 
         {/* LEVELUP-SEM-ESCOLHA-1: uma escolha por vez, na ordem dos níveis — um
             pulo de vários níveis (XP em bloco) deve mais de um Incremento. */}

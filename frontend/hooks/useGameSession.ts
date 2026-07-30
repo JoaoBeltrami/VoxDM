@@ -11,6 +11,7 @@ import {
   type TokenIniciativa,
   type EventoVital,
   type AsiPendente,
+  type CheckResolvido,
 } from "@/lib/api";
 import { parseMensagemWS } from "@/lib/ws-schema";
 import { stripMarcadoresExibicao } from "@/lib/markers";
@@ -133,6 +134,8 @@ interface EstadoSessao {
   /** Incrementos de Atributo que o jogador DEVE escolher (SRD: 4/8/12/16/19,
    *  +6/+14 Guerreiro, +10 Ladino). Persiste no backend. */
   asiPendente: AsiPendente[];
+  /** A conta do teste resolvido neste turno — null quando não houve. */
+  checkResolvido: CheckResolvido | null;
   inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodadaCombate: number;
   // Últimas consequências narrativas — surfaced fora de combate
@@ -262,6 +265,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   checkPedido: "",
   eventosVitais: [],
   asiPendente: [],
+  checkResolvido: null,
   inimigos: {},
   rodadaCombate: 0,
   consequencias: [],
@@ -664,6 +668,8 @@ export function useGameSession() {
           checkPedido: msg.check_pedido ?? "",
           eventosVitais: msg.eventos_vitais ?? [],
           asiPendente: msg.asi_pendente ?? [],
+          checkResolvido: (msg.check_resolvido && "total" in msg.check_resolvido)
+            ? (msg.check_resolvido as CheckResolvido) : null,
           inimigos: (
             deveAtualizarInimigos
               ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)
