@@ -38,6 +38,11 @@ interface Props {
   onComando: (texto: string) => void;
   cronica: string[];
   activeQuests: string[];
+  /** PLAY5-QUEST: missões que o Mestre INVENTOU fora do catálogo do módulo.
+   *  O backend rastreia e manda no snapshot desde 30/06, mas nenhum painel
+   *  lia — era dado morto: a quest existia na engine, viajava pelo WebSocket
+   *  e desaparecia. Achado pela auditoria de 27/07. */
+  questsImprovisadas?: { id: string; titulo: string; objetivo: string; status: string }[];
   questStages: Record<string, string>;
   fiosSoltos: string[];
   /** Relógios de Ameaça (Mundo Vivo) — migrados do dock pro painel Quests
@@ -204,6 +209,7 @@ export function PanelDrawer({
   onComando,
   cronica,
   activeQuests,
+  questsImprovisadas = [],
   questStages,
   fiosSoltos,
   relogios = {},
@@ -234,8 +240,10 @@ export function PanelDrawer({
       );
   } else if (painelId === "quests") {
     const temRelogios = Object.keys(relogios).length > 0;
+    const improvAtivas = questsImprovisadas.filter((q) => q.status !== "concluida");
     conteudo =
-      activeQuests.length === 0 && fiosSoltos.length === 0 && !temRelogios ? (
+      activeQuests.length === 0 && improvAtivas.length === 0
+      && fiosSoltos.length === 0 && !temRelogios ? (
         <Vazio>Nenhuma missão chama por você — por enquanto.</Vazio>
       ) : (
         <div className="space-y-4">
@@ -257,6 +265,28 @@ export function PanelDrawer({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+          {improvAtivas.length > 0 && (
+            <div>
+              {/* Separadas das do catálogo de propósito: são do Mestre, não do
+                  autor do módulo — e o jogador merece saber a diferença. */}
+              <Secao>Improvisadas pelo Mestre</Secao>
+              <div className="space-y-1.5">
+                {improvAtivas.map((q) => (
+                  <div
+                    key={q.id}
+                    className="rounded-lg border border-vox-gold-faint bg-vox-gold/5 px-2.5 py-1.5"
+                  >
+                    <p className="text-xs font-medium text-vox-gold-dim">{q.titulo}</p>
+                    {q.objetivo && (
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-vox-text-muted">
+                        {q.objetivo}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

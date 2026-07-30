@@ -448,6 +448,7 @@ export default function Home() {
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
     condicoesDetectadas, emCombate, checkPedido, asiPendente, descartarAsiPendente,
+    questsImprovisadas,
     inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions, partyRestorada, dispensarPartyBanner,
@@ -2038,6 +2039,7 @@ export default function Home() {
               onComando={enviarComando}
               cronica={cronica}
               activeQuests={activeQuests}
+              questsImprovisadas={questsImprovisadas}
               questStages={questStages}
               fiosSoltos={fiosSoltos}
               relogios={relogios}

@@ -431,6 +431,10 @@ export default function PreviewPage() {
           "O frio noturno corta o acampamento.",
         ]}
         activeQuests={["filhos-de-valdrek", "o-pacto-de-vyrmathax"]}
+        questsImprovisadas={[
+          { id: "achar-o-cao", titulo: "O cão de Maren desapareceu",
+            objetivo: "Procurar nas docas antes da maré subir", status: "ativa" },
+        ]}
         questStages={{ "filhos-de-valdrek": "investigando-o-porto" }}
         fiosSoltos={["Quem paga a taverna de Aldric?", "O anel de Maren brilhou ao falar do pacto."]}
         relogios={{
