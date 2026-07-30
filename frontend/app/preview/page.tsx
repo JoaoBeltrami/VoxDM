@@ -18,6 +18,7 @@
  */
 
 import { useState } from "react";
+import { AsiPicker } from "@/components/AsiPicker";
 import { AppShell } from "@/components/AppShell";
 import { MasterResponse } from "@/components/MasterResponse";
 import { VoiceButton } from "@/components/VoiceButton";
@@ -105,6 +106,12 @@ export default function PreviewPage() {
   const { mode, setMode } = useViewMode();
   const [esperandoRolagem, setEsperandoRolagem] = useState(true);
   const [orbState, setOrbState] = useState<OrbState>("idle");
+  // Picker de ASI (LEVELUP-SEM-ESCOLHA-1) — inspecionável sem sessão.
+  const [asiAberto, setAsiAberto] = useState(false);
+  const [scoresMock, setScoresMock] = useState<Record<string, number>>({
+    str_score: 16, dex_score: 14, con_score: 13,
+    int_score: 10, wis_score: 12, cha_score: 20,   // CAR no teto: testa o disabled
+  });
   // Verificação do launcher BG1 sem precisar de sessão in-game.
   const [painelPreview, setPainelPreview] = useState<string | null>("cronica");
   // Palco Vivo Ato 1 — clima do orb + demo do Encontro sem sessão.
@@ -139,6 +146,25 @@ export default function PreviewPage() {
   };
 
   return (
+    <>
+      {asiAberto && (
+        <AsiPicker
+          escolha={{
+            tipo: "asi", titulo: "Incremento de Atributo",
+            descricao: "+2 em um atributo, ou +1 em dois. Nenhum passa de 20.",
+            pontos: 2, teto: 20, nivel: 4,
+          }}
+          scores={scoresMock}
+          onConfirmar={(_n, attrs) => {
+            setScoresMock(s => {
+              const novo = { ...s };
+              for (const [k, d] of Object.entries(attrs)) novo[k] = Math.min(20, (novo[k] ?? 10) + d);
+              return novo;
+            });
+            setAsiAberto(false);
+          }}
+        />
+      )}
     <>
     {/* Seletor de modo SEMPRE visível (irmão do AppShell) — nunca prende em TV. */}
     <ViewModeSwitcher mode={mode} onChange={setMode} />
@@ -270,6 +296,10 @@ export default function PreviewPage() {
           {/* O dock REAL — o composer é o caminho principal de quem joga por texto. */}
           <div className="border-t border-vox-border-subtle px-4 py-3">
             <VoiceButton sessionId="preview" onEnviar={() => {}} />
+            <button onClick={() => setAsiAberto(true)}
+              className="rounded border border-vox-gold/50 px-3 py-1 text-xs text-vox-gold">
+              ✦ demo ASI (nível 4)
+            </button>
           </div>
         </div>
       }
@@ -430,6 +460,7 @@ export default function PreviewPage() {
         url={RETRATOS_MOCK["bjorn-valdrekson"]}
       />
     )}
+    </>
     </>
   );
 }

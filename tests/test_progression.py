@@ -417,3 +417,65 @@ def test_level_up_expoe_escolhas_no_payload():
     wm2.player_class = "Mago"
     wm2.player_level = 4
     assert aplicar_level_up(wm2, 5)["escolhas_pendentes"] == []
+
+
+# ── ASI: a regra do SRD vive no backend (LEVELUP-SEM-ESCOLHA-1) ───────────────
+
+
+def _pc_com_asi(nivel: int = 4):
+    from engine.state.character import PlayerCharacter
+
+    pc = PlayerCharacter()
+    pc.asi_pendente = [{"tipo": "asi", "nivel": nivel, "pontos": 2, "teto": 20}]
+    return pc
+
+
+def test_asi_aceita_mais_dois_em_um_atributo():
+    pc = _pc_com_asi()
+    assert pc.aplicar_asi(4, {"str_score": 2}) is True
+    assert pc.str_score == 12
+    assert pc.asi_pendente == [], "a escolha tem que sair da fila"
+
+
+def test_asi_aceita_mais_um_em_dois_atributos():
+    pc = _pc_com_asi()
+    assert pc.aplicar_asi(4, {"str_score": 1, "con_score": 1}) is True
+    assert (pc.str_score, pc.con_score) == (11, 11)
+
+
+def test_asi_recusa_gasto_parcial_ou_excessivo():
+    """Os 2 pontos são gastos por inteiro: nem 1 sozinho, nem 2+2."""
+    assert _pc_com_asi().aplicar_asi(4, {"str_score": 1}) is False
+    assert _pc_com_asi().aplicar_asi(4, {"str_score": 2, "con_score": 2}) is False
+    assert _pc_com_asi().aplicar_asi(4, {}) is False
+
+
+def test_asi_respeita_o_teto_de_20_e_nao_muta_em_caso_invalido():
+    """Tudo-ou-nada: um payload inválido não pode deixar o personagem meio-alterado."""
+    pc = _pc_com_asi()
+    pc.str_score = 19
+    assert pc.aplicar_asi(4, {"str_score": 2}) is False
+    assert pc.str_score == 19, "recusou mas mutou — quebra o tudo-ou-nada"
+    assert len(pc.asi_pendente) == 1, "a escolha não pode ser consumida numa recusa"
+    # 19 + 1, com o outro ponto em outro atributo, é legal e chega a 20.
+    assert pc.aplicar_asi(4, {"str_score": 1, "con_score": 1}) is True
+    assert pc.str_score == 20
+
+
+def test_asi_recusa_atributo_inexistente_e_nivel_sem_divida():
+    assert _pc_com_asi().aplicar_asi(4, {"sorte": 2}) is False
+    assert _pc_com_asi(nivel=4).aplicar_asi(8, {"str_score": 2}) is False
+
+
+def test_level_up_enfileira_asi_persistente_sem_duplicar():
+    """A fila é ESTADO (sobrevive ao browser); o resumo é transitório."""
+    from engine.memory.working_memory import WorkingMemory
+    from engine.progression import aplicar_level_up
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-asi")
+    wm.player_class = "Guerreiro"
+    wm.player_level = 3
+    aplicar_level_up(wm, 6)                      # cruza ASI de 4 e de 6
+    assert sorted(e["nivel"] for e in wm.asi_pendente) == [4, 6]
+    aplicar_level_up(wm, 6)                      # early-return: não duplica
+    assert sorted(e["nivel"] for e in wm.asi_pendente) == [4, 6]

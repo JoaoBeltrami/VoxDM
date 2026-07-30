@@ -10,6 +10,7 @@ import {
   type SpellSlot,
   type TokenIniciativa,
   type EventoVital,
+  type AsiPendente,
 } from "@/lib/api";
 import { parseMensagemWS } from "@/lib/ws-schema";
 import { stripMarcadoresExibicao } from "@/lib/markers";
@@ -129,6 +130,9 @@ interface EstadoSessao {
   checkPedido: string;
   /** Por que o HP mudou neste turno — dano/cura COM a causa. */
   eventosVitais: EventoVital[];
+  /** Incrementos de Atributo que o jogador DEVE escolher (SRD: 4/8/12/16/19,
+   *  +6/+14 Guerreiro, +10 Ladino). Persiste no backend. */
+  asiPendente: AsiPendente[];
   inimigos: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodadaCombate: number;
   // Últimas consequências narrativas — surfaced fora de combate
@@ -257,6 +261,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   emCombate: false,
   checkPedido: "",
   eventosVitais: [],
+  asiPendente: [],
   inimigos: {},
   rodadaCombate: 0,
   consequencias: [],
@@ -658,6 +663,7 @@ export function useGameSession() {
           emCombate: emCombateAtual,
           checkPedido: msg.check_pedido ?? "",
           eventosVitais: msg.eventos_vitais ?? [],
+          asiPendente: msg.asi_pendente ?? [],
           inimigos: (
             deveAtualizarInimigos
               ? (msg.inimigos_combate as Record<string, { nome: string; estado: string; hp_rel?: string }>)
@@ -1016,7 +1022,8 @@ export function useGameSession() {
   const sincronizarEstado = useCallback((
     tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
           "sync_spell_slots" | "sync_hit_dice" | "sync_death_saves" |
-          "sync_gold" | "sync_xp" | "sync_inspiration" | "sync_class_feature",
+          "sync_gold" | "sync_xp" | "sync_inspiration" | "sync_class_feature"
+        | "aplicar_asi",
     payload: Record<string, unknown>
   ) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -1123,6 +1130,19 @@ export function useGameSession() {
     setEstado(s => ({ ...s, levelUp: null }));
   }, []);
 
+  /** Remove um ASI já escolhido da fila local (otimista).
+   *
+   *  `aplicar_asi` não gera um payload `fim`, então sem isto o picker ficaria
+   *  aberto até o próximo turno — e o jogador escolheria de novo. A autoridade
+   *  continua sendo o backend: ele revalida a regra, tira da fila persistida e
+   *  o próximo `fim` reconcilia. */
+  const descartarAsiPendente = useCallback((nivel: number) => {
+    setEstado(s => ({
+      ...s,
+      asiPendente: s.asiPendente.filter(e => e.nivel !== nivel),
+    }));
+  }, []);
+
   const limparRecap = useCallback(() => {
     recapChunkRef.current = null;
     setEstado(s => ({ ...s, textoRecap: "" }));
@@ -1208,6 +1228,7 @@ export function useGameSession() {
     limparRecap,
     retocarRecap,
     dismissLevelUp,
+    descartarAsiPendente,
     // emCombate, inimigos, rodadaCombate já vêm via ...estado
     // personagemRestaurado já vem via ...estado
     // Fase 5.6 — estado de áudio para sync texto-voz (karaokê)

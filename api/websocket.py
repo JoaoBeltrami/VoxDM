@@ -1296,6 +1296,10 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "inimigos_combate": dict(wm.inimigos_combate),
         "rodada_combate": wm.rodada_combate,
         "class_features": dict(wm.class_features),
+        # LEVELUP-SEM-ESCOLHA-1: Incrementos de Atributo que o jogador DEVE.
+        # Entra aqui (e não nos 3 sítios à mão) porque esta função é a fonte
+        # única dos payloads `fim` — foi esquecer um sítio que gerou ROB-1/ROB-2.
+        "asi_pendente": [dict(e) for e in wm.asi_pendente],
         "fios_soltos": list(wm.fios_soltos),
         # PLAY5-QUEST — missões improvisadas pelo Mestre, rastreadas como estado
         "quests_improvisadas": [dict(q) for q in wm.quests_improvisadas],
@@ -1747,6 +1751,26 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # (ex: clicar "gastar Action Surge" fora de turno de LLM).
             # Payload: {feature_id: str, usos_atual: int}
             # Validação: feature deve existir, usos_atual clampado [0, usos_max].
+            if tipo_msg == "aplicar_asi":
+                # O jogador escolheu o Incremento de Atributo. A REGRA (+2 num ou
+                # +1 em dois, teto 20) vive em PlayerCharacter.aplicar_asi — aqui
+                # só transporta. Validar apenas no frontend deixaria um cliente
+                # adulterado furar o SRD.
+                _nivel = dados.get("nivel")
+                _aumentos = dados.get("atributos")
+                if isinstance(_nivel, int) and isinstance(_aumentos, dict):
+                    if sessao.working_mem.aplicar_asi(_nivel, _aumentos):
+                        log.info("asi_aplicado", session_id=session_id,
+                                 nivel=_nivel, atributos=_aumentos)
+                        # Persiste JÁ: isto não passa pelo loop de turno, então o
+                        # auto-checkpoint de 5-em-5 turnos não cobriria — e perder
+                        # um ASI escolhido é pior que perder um turno de narração.
+                        _criar_background_task(_auto_checkpoint(sessao))
+                    else:
+                        log.warning("asi_recusado", session_id=session_id,
+                                    nivel=_nivel, atributos=_aumentos)
+                continue
+
             if tipo_msg == "sync_class_feature":
                 fid = dados.get("feature_id")
                 usos = dados.get("usos_atual")

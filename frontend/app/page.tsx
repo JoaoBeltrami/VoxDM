@@ -6,6 +6,7 @@ import { useWarmupStatus } from "@/hooks/useWarmupStatus";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useEventSounds } from "@/hooks/useEventSounds";
 import { useSceneMood } from "@/hooks/useSceneMood";
+import { AsiPicker } from "@/components/AsiPicker";
 import { DadoAnimado } from "@/components/DadoAnimado";
 import { ErrorBoundary } from "@/components/system/ErrorBoundary";
 import { MasterResponse } from "@/components/MasterResponse";
@@ -446,7 +447,8 @@ export default function Home() {
     locationNome, timeOfDay, npcsTrust, npcsMortos,
     spellSlots, hitDiceCurrent, gold, xp, inspiration,
     deathSavesSuccesses, deathSavesFailures, deathSavesStable,
-    condicoesDetectadas, emCombate, checkPedido, inimigos, rodadaCombate, consequencias,
+    condicoesDetectadas, emCombate, checkPedido, asiPendente, descartarAsiPendente,
+    inimigos, rodadaCombate, consequencias,
     posicoesCombate, movimentoRestanteFt, movimentoTotalFt,
     emMercado, companions, partyRestorada, dispensarPartyBanner,
     iniciativaOrdem, fiosSoltos, fichaCriada, cicatrizes, relogios, cronica, arco, npcRetratos, classFeatures, sceneImageUrl,
@@ -1067,9 +1069,13 @@ export default function Home() {
     // R5-2: atualiza player_level no personagem para que CharacterSheet e CharacterForm
     // reflitam o nível correto imediatamente (sem precisar criar nova sessão).
     setPersonagem(p => ({ ...p, player_level: levelUp.nivel_novo }));
+    // LEVELUP-SEM-ESCOLHA-1: com escolha pendente NÃO auto-dispensa — o modal
+    // some em 12s e levaria o picker com ele. A escolha persiste no backend, mas
+    // o jogador ficaria sem saber que deve um Incremento.
+    if (asiPendente.length > 0) return;
     const t = setTimeout(dismissLevelUp, 12_000);
     return () => clearTimeout(t);
-  }, [levelUp, dismissLevelUp]);
+  }, [levelUp, dismissLevelUp, asiPendente.length]);
 
   // Parseia a última fala do mestre para extrair rolagens pedidas
   useEffect(() => {
@@ -2210,6 +2216,36 @@ export default function Home() {
             relação — dano acontece sem NPC envolvido (e no playtest aconteceu
             fora de combate, o que gerou o "tomei dano do nada"). */}
         <VitalToast eventos={vitaisVisiveis} onDismiss={() => setVitaisVisiveis([])} />
+
+        {/* LEVELUP-SEM-ESCOLHA-1: uma escolha por vez, na ordem dos níveis — um
+            pulo de vários níveis (XP em bloco) deve mais de um Incremento. */}
+        {asiPendente.length > 0 && (
+          <AsiPicker
+            escolha={[...asiPendente].sort((a, b) => a.nivel - b.nivel)[0]}
+            scores={{
+              str_score: personagem.str_score ?? 10,
+              dex_score: personagem.dex_score ?? 10,
+              con_score: personagem.con_score ?? 10,
+              int_score: personagem.int_score ?? 10,
+              wis_score: personagem.wis_score ?? 10,
+              cha_score: personagem.cha_score ?? 10,
+            }}
+            onConfirmar={(nivel, atributos) => {
+              // Otimista na ficha local pra resposta imediata; a autoridade é o
+              // backend, que revalida a regra e persiste no checkpoint.
+              setPersonagem(p => {
+                const novo = { ...p };
+                for (const [k, d] of Object.entries(atributos)) {
+                  const atual = (novo as Record<string, number>)[k] ?? 10;
+                  (novo as Record<string, number>)[k] = Math.min(20, atual + d);
+                }
+                return novo;
+              });
+              sincronizarEstado("aplicar_asi", { nivel, atributos });
+              descartarAsiPendente(nivel);
+            }}
+          />
+        )}
 
         {/* Cinema mode toggle — canto inferior direito. Atalho Ctrl+Shift+C. */}
         <button

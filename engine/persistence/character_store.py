@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS character_state (
     spells_conhecidas      TEXT    NOT NULL DEFAULT '[]',
     player_level           INTEGER NOT NULL DEFAULT 3,
     class_features         TEXT    NOT NULL DEFAULT '{}',
+    asi_pendente           TEXT    NOT NULL DEFAULT '[]',
     companions             TEXT    NOT NULL DEFAULT '{}',
     personagem_config      TEXT    NOT NULL DEFAULT '{}',
     dm_state               TEXT    NOT NULL DEFAULT '{}',
@@ -88,6 +89,10 @@ _MIGRATE_PLAYER_LEVEL = "ALTER TABLE character_state ADD COLUMN player_level INT
 
 # Migração idempotente — adiciona coluna class_features (Fase 6 + persistência).
 _MIGRATE_CLASS_FEATURES = "ALTER TABLE character_state ADD COLUMN class_features TEXT NOT NULL DEFAULT '{}'"
+# LEVELUP-SEM-ESCOLHA-1: fila de Incremento de Atributo devido. Sem esta coluna
+# a OFERTA se perdia ao fechar o browser (os scores já persistiam via
+# personagem_config) e o personagem ficava "devendo" um ASI sem jeito de resgatar.
+_MIGRATE_ASI_PENDENTE = "ALTER TABLE character_state ADD COLUMN asi_pendente TEXT NOT NULL DEFAULT '[]'"
 
 # Migração idempotente — adiciona coluna companions (Fase 5.2).
 # Bug narrativo grave: companion some entre sessões sem persistência.
@@ -142,6 +147,7 @@ class CharacterState:
     # Formato: {"action-surge": {"nome": "Action Surge", "disponivel": true,
     #            "usos_max": 1, "usos_atual": 1, "restaura": "curto"}}
     class_features: dict[str, dict] = field(default_factory=dict)
+    asi_pendente: list[dict] = field(default_factory=list)
     # Aliados ativos (hireling, familiar, animal, summon) com estado de HP.
     # Persistimos para que Lyssa e companhia sobrevivam entre sessões.
     # Formato: {"lyssa": {"nome": "Lyssa", "tipo": "hireling", "hp": 17,
@@ -178,6 +184,7 @@ class CharacterStore:
             await _aplicar_migracao_idempotente(conn, _MIGRATE_SPELLS, "spells_conhecidas")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_PLAYER_LEVEL, "player_level")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_CLASS_FEATURES, "class_features")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_ASI_PENDENTE, "asi_pendente")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_COMPANIONS, "companions")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_PERSONAGEM_CONFIG, "personagem_config")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_DM_STATE, "dm_state")
@@ -196,8 +203,8 @@ class CharacterStore:
                      hit_dice_type, death_saves_successes, death_saves_failures,
                      death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
                      inventory, conditions, spells_conhecidas, player_level,
-                     class_features, companions, personagem_config, dm_state, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                     class_features, asi_pendente, companions, personagem_config, dm_state, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
                     owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
@@ -217,6 +224,7 @@ class CharacterStore:
                     spells_conhecidas=excluded.spells_conhecidas,
                     player_level=excluded.player_level,
                     class_features=excluded.class_features,
+                    asi_pendente=excluded.asi_pendente,
                     companions=excluded.companions,
                     personagem_config=excluded.personagem_config,
                     dm_state=excluded.dm_state,
@@ -242,6 +250,7 @@ class CharacterStore:
                     json.dumps(state.spells_conhecidas),
                     state.player_level,
                     json.dumps(state.class_features),
+                    json.dumps(state.asi_pendente),
                     json.dumps(state.companions),
                     json.dumps(state.personagem_config),
                     json.dumps(state.dm_state),
@@ -285,6 +294,7 @@ class CharacterStore:
             spells_conhecidas=json.loads(row["spells_conhecidas"] or "[]"),
             player_level=int(row["player_level"] or 3),
             class_features=json.loads(row["class_features"] or "{}"),
+            asi_pendente=json.loads(row["asi_pendente"] or "[]"),
             companions=json.loads(row["companions"] or "{}"),
             personagem_config=json.loads(row["personagem_config"] or "{}"),
             dm_state=json.loads(row["dm_state"] or "{}"),

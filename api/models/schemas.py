@@ -281,6 +281,11 @@ class MensagemWS(BaseModel):
     # Class features — enviadas no "fim" para sincronizar os chips na ficha.
     # Mapa feature_id → {nome, disponivel, usos_max, usos_atual, restaura}.
     class_features: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # LEVELUP-SEM-ESCOLHA-1: Incrementos de Atributo que o jogador DEVE. Cada
+    # item vem de `progression.escolhas_do_nivel` + o campo `nivel`. O frontend
+    # abre o picker por este campo; ele persiste no SQLite, então sobrevive a
+    # fechar o browser antes de escolher.
+    asi_pendente: list[dict[str, Any]] = Field(default_factory=list)
     # Progressão: payload do tipo="level_up" carrega o resumo do level up
     # ({nivel_antigo, nivel_novo, hp_ganho, hp_max_novo, slots_novos, features_novas}).
     level_up: dict[str, Any] | None = None

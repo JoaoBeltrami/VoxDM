@@ -82,6 +82,15 @@ class PlayerCharacter:
     # Features de classe — feature_id → {nome, disponivel, usos_max, usos_atual, restaura}
     class_features: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    # LEVELUP-SEM-ESCOLHA-1 (playtest 26/07): fila de escolhas que o JOGADOR deve
+    # ao subir de nível, no formato de `progression.escolhas_do_nivel` mais o
+    # campo `nivel`. Precisa ser ESTADO (e não só o retorno de `aplicar_level_up`)
+    # porque a oferta tem que sobreviver a fechar o browser: os scores já
+    # persistem via personagem_config, mas a OFERTA não persistia em lugar nenhum
+    # — quem fechasse antes de escolher ficava "devendo" um ASI pra sempre, sem
+    # nenhum jeito de resgatar.
+    asi_pendente: list[dict[str, Any]] = field(default_factory=list)
+
     # Cicatrizes narrativas — marcas permanentes de quase-morte (Pilar Perigo
     # 10/06). NPCs reagem a elas; persistem entre sessões via dm_state. Cap 5.
     cicatrizes: list[str] = field(default_factory=list)
@@ -160,6 +169,58 @@ class PlayerCharacter:
         eventos = list(self.eventos_vitais_turno)
         self.eventos_vitais_turno.clear()
         return eventos
+
+    # Os 6 atributos, na ordem do SRD. Fonte única pra validação do ASI.
+    ATRIBUTOS_ASI: tuple[str, ...] = (
+        "str_score", "dex_score", "con_score", "int_score", "wis_score", "cha_score",
+    )
+    _TETO_ATRIBUTO = 20
+
+    def aplicar_asi(self, nivel: int, aumentos: dict[str, int]) -> bool:
+        """Gasta um Incremento de Atributo da fila. Retorna False se inválido.
+
+        A REGRA vive aqui, no backend, de propósito: +2 num atributo OU +1 em
+        dois, nenhum passando de 20. Validar só no frontend deixaria um cliente
+        adulterado subir +2 num atributo que já está em 19 e furar o SRD.
+
+        Tudo-ou-nada: se qualquer parte não valida, nada é mutado e a fila fica
+        intacta — o jogador não perde a escolha por causa de um payload torto.
+        """
+        entrada = next(
+            (e for e in self.asi_pendente if int(e.get("nivel", -1)) == int(nivel)),
+            None,
+        )
+        if entrada is None:
+            return False  # não há ASI devido nesse nível
+
+        limpos: dict[str, int] = {}
+        for attr, delta in (aumentos or {}).items():
+            if attr not in self.ATRIBUTOS_ASI:
+                return False
+            try:
+                d = int(delta)
+            except (TypeError, ValueError):
+                return False
+            if d not in (1, 2):
+                return False
+            limpos[attr] = d
+
+        # +2 num só OU +1 em dois: a soma é sempre 2, e um +2 não pode vir
+        # acompanhado. Escrito como duas condições porque {"a":1} soma 1 e
+        # {"a":2,"b":2} soma 4 — ambos precisam cair fora.
+        if sum(limpos.values()) != 2:
+            return False
+        if 2 in limpos.values() and len(limpos) != 1:
+            return False
+
+        for attr, d in limpos.items():
+            if int(getattr(self, attr, 10)) + d > self._TETO_ATRIBUTO:
+                return False
+
+        for attr, d in limpos.items():
+            setattr(self, attr, int(getattr(self, attr, 10)) + d)
+        self.asi_pendente.remove(entrada)
+        return True
 
     def aplicar_dano(self, quantidade: int) -> int:
         """Aplica dano do marker [DANO] com clamps. Retorna HP resultante.

@@ -304,6 +304,16 @@ def aplicar_level_up(wm: WorkingMemory, novo_nivel: int) -> dict[str, int | list
         features_novas=features_novas,
     )
 
+    # A fila PERSISTENTE nasce junto com o resumo transitório. O resumo serve pro
+    # modal do turno; a fila é o que sobrevive a fechar o browser. Dedup por nível
+    # porque um segundo level up no mesmo nível (caminho defensivo) não pode
+    # duplicar a dívida.
+    _pendentes = escolhas_pendentes_ate(wm.player_class, nivel_antigo, novo_nivel)
+    _niveis_na_fila = {int(e.get("nivel", -1)) for e in wm.asi_pendente}
+    for _e in _pendentes:
+        if int(_e.get("nivel", -1)) not in _niveis_na_fila:
+            wm.asi_pendente.append(dict(_e))
+
     return {
         "nivel_antigo": nivel_antigo,
         "nivel_novo": novo_nivel,

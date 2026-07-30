@@ -35,6 +35,17 @@ export interface SpellSlot {
   max: number;
 }
 
+/** Incremento de Atributo devido ao jogador (SRD 5.1). Vem da engine e persiste
+ *  no SQLite — sobrevive a fechar o browser antes de escolher. */
+export interface AsiPendente {
+  tipo: string;
+  titulo: string;
+  descricao: string;
+  pontos: number;
+  teto: number;
+  nivel: number;
+}
+
 export interface EventoVital {
   tipo: "dano" | "cura";
   valor: number;
@@ -85,6 +96,7 @@ export interface MensagemWS {
   /** DANO-SEM-CAUSA-1: por que o HP mudou. O motivo do `[DANO]` era descartado
    *  junto com o marcador e o jogador só via o número cair. */
   eventos_vitais?: EventoVital[];
+  asi_pendente?: AsiPendente[];
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;
   rodada_combate?: number;
   // Campo de consistência de rodada — permite detectar initiative drift no frontend.

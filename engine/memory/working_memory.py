@@ -419,6 +419,15 @@ class WorkingMemory:
     def class_features(self, v: dict) -> None: self.character.class_features = v
 
     @property
+    def asi_pendente(self) -> list: return self.character.asi_pendente
+    @asi_pendente.setter
+    def asi_pendente(self, v: list) -> None: self.character.asi_pendente = v
+
+    def aplicar_asi(self, nivel: int, aumentos: dict[str, int]) -> bool:
+        """Gasta um Incremento de Atributo da fila — a regra vive no substate."""
+        return self.character.aplicar_asi(nivel, aumentos)
+
+    @property
     def cicatrizes(self) -> list[str]: return self.character.cicatrizes
     @cicatrizes.setter
     def cicatrizes(self, v: list[str]) -> None: self.character.cicatrizes = v
@@ -883,6 +892,12 @@ class WorkingMemory:
         persisted_companions: dict[str, dict] = getattr(state, "companions", {})
         if persisted_companions and not self.party.companions:
             self.party.companions = {k: dict(v) for k, v in persisted_companions.items()}
+        # Fila de ASI devido — merge só-se-vazio, mesmo padrão dos companions.
+        # Sem isto, fechar o browser antes de escolher perdia a OFERTA pra sempre:
+        # os scores persistem, mas o "você deve um incremento do nível 4" não.
+        persisted_asi: list[dict] = getattr(state, "asi_pendente", []) or []
+        if persisted_asi and not self.character.asi_pendente:
+            self.character.asi_pendente = [dict(e) for e in persisted_asi]
         # DM state — restaura narrativo do mestre persistido em SQLite
         dm_state: dict = getattr(state, "dm_state", {})
         if dm_state:

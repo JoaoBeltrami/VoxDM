@@ -419,3 +419,42 @@ async def test_listar_por_owner_isolamento(store: CharacterStore) -> None:
     assert result_a[0]["player_name"] == "Arindal"
     assert len(result_b) == 1
     assert result_b[0]["player_name"] == "Outro"
+
+
+def test_asi_pendente_sobrevive_ao_roundtrip():
+    """A OFERTA de ASI tem que persistir — não só os scores.
+
+    Os atributos já sobreviviam via personagem_config; a fila de escolhas não
+    existia em coluna nenhuma. Quem fechasse o browser antes de escolher ficava
+    "devendo" um Incremento sem nenhum jeito de resgatar.
+    """
+    import asyncio
+
+    from engine.persistence.character_store import CharacterState, CharacterStore
+
+    async def corpo() -> None:
+        store = CharacterStore()
+        fila = [{"tipo": "asi", "nivel": 4, "pontos": 2, "teto": 20}]
+        await store.salvar(CharacterState(session_id="sess-asi-rt", asi_pendente=fila))
+        lido = await store.carregar("sess-asi-rt")
+        assert lido is not None
+        assert lido.asi_pendente == fila
+        await store.deletar("sess-asi-rt")
+
+    asyncio.run(corpo())
+
+
+def test_asi_pendente_vazio_por_default_em_registro_antigo():
+    """Banco sem a coluna (ou registro salvo antes dela) carrega como lista vazia."""
+    import asyncio
+
+    from engine.persistence.character_store import CharacterState, CharacterStore
+
+    async def corpo() -> None:
+        store = CharacterStore()
+        await store.salvar(CharacterState(session_id="sess-asi-vazio", gold=10))
+        lido = await store.carregar("sess-asi-vazio")
+        assert lido is not None and lido.asi_pendente == []
+        await store.deletar("sess-asi-vazio")
+
+    asyncio.run(corpo())
