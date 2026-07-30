@@ -607,7 +607,13 @@ def test_social_md_dentro_do_budget():
 
 
 def test_markers_lista_dentro_do_budget():
-    """markers_lista.md comprimido: máx 2 300 chars (~657 tokens).
+    """markers_lista.md comprimido: máx 2 550 chars (~730 tokens).
+
+    Teto subiu de 2 300 pra 2 550 em 30/07 para caber o vocabulário de
+    `[ALINHAMENTO]`. A lista fechada de atos É o contrato — sem ela o LLM chuta
+    um verbo, a engine ignora (vocabulário fechado, de propósito) e o caráter do
+    jogador nunca se move. Custo real menor do que parece: desde 26/07 este
+    fragmento é CONDICIONAL (`_cena_dramatica`), então entra em ~40% dos turnos.
 
     É injetado TODO turno (fragmento incondicional do prompt_builder) — no
     playtest 10/07 era o 3º maior bloco fixo (2 530 chars) atrás de master e
@@ -618,7 +624,7 @@ def test_markers_lista_dentro_do_budget():
     """
     markers_path = _COMBAT_PATH.parent / "fragments" / "markers_lista.md"
     conteudo = markers_path.read_text(encoding="utf-8")
-    assert len(conteudo) <= 2_300, (
+    assert len(conteudo) <= 2_550, (
         f"markers_lista.md com {len(conteudo)} chars excede teto de 2 300 — "
         "é custo fixo de TODO turno; comprimir sem derrubar nenhum [MARKER"
     )

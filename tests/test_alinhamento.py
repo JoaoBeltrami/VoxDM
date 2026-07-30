@@ -190,3 +190,62 @@ def test_os_nove_da_tabela_classica():
     assert len(nove) == 9
     for r in nove:
         assert rotulo_para_eixos(r) is not None, f"{r} não converte"
+
+
+# ── Detector em jogo (30/07) ─────────────────────────────────────────────────
+
+
+def test_marcador_move_o_eixo_no_pipeline():
+    """O laço completo: o Mestre narra, emite o ato, o caráter anda."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-alin")
+    wm.character.definir_alinhamento_inicial("Leal e Bom")
+    aplicar_pos_turno(wm, "Baixo a lâmina.",
+                      "Você recua um passo. [ALINHAMENTO: poupar_inimigo]")
+    eixos = EixosAlinhamento.from_dict(wm.character.alinhamento_eixos)
+    assert "poupar_inimigo" in eixos.historico
+
+
+def test_ato_fora_do_vocabulario_e_ignorado_em_silencio():
+    """Alinhamento é autoridade da ENGINE — o LLM não inventa regra nova."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-alin2")
+    antes = dict(wm.character.alinhamento_eixos)
+    aplicar_pos_turno(wm, "Ando.", "Nada. [ALINHAMENTO: foi_muito_legal]")
+    assert wm.character.alinhamento_eixos == antes
+
+
+def test_marcador_nunca_chega_ao_TTS():
+    """A armadilha clássica deste projeto: marcador lido em voz alta.
+
+    Se `ALINHAMENTO` sair da tabela canônica de engine/markers.py, o jogador
+    ouve "colchete alinhamento dois pontos poupar inimigo" no meio da narração.
+    """
+    from engine.markers import RE_STRIP_MARCADORES
+
+    bruto = "Ele baixa a lâmina. [ALINHAMENTO: poupar_inimigo] O orc respira."
+    limpo = RE_STRIP_MARCADORES.sub("", bruto)
+    assert "ALINHAMENTO" not in limpo and "poupar_inimigo" not in limpo
+    assert "Ele baixa a lâmina." in limpo and "O orc respira." in limpo
+
+
+def test_declarar_bom_e_agir_mal_move_o_eixo_ate_virar():
+    """O sistema inteiro num teste: a ficha diz uma coisa, os atos dizem outra,
+    e quem ganha são os atos."""
+    from api.turn_pipeline import aplicar_pos_turno
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("v", "V", "sess-alin3")
+    wm.character.definir_alinhamento_inicial("Leal e Bom")
+    for _ in range(5):
+        aplicar_pos_turno(wm, "Executo o prisioneiro.",
+                          "A lâmina desce. [ALINHAMENTO: matar_rendido]")
+    eixos = EixosAlinhamento.from_dict(wm.character.alinhamento_eixos)
+    assert "Mau" in eixos.rotulo(), f"declarou Leal e Bom e continua {eixos.rotulo()}"
+    assert wm.character.alinhamento_declarado == "Leal e Bom", (
+        "o DECLARADO não muda — ele é o que o jogador disse, não o que provou"
+    )

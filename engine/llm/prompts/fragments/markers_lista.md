@@ -35,3 +35,5 @@ Extraídos antes da voz — o jogador nunca ouve. Opcionais; máx 1 por tipo por
 - `[VOZ: npc-id|pitch|rate]` — assinatura TTS na 1ª fala. Ex: `[VOZ: lyssa|+5Hz|-10%]`.
 - `[AFETO: npc-id|campo|delta]` — afeto|medo|respeito|rancor.
 - `[LAMPEJO: texto]` — visão dramática (nat 20/1). 1-3 frases, tom etéreo.
+
+**Caráter:** `[ALINHAMENTO: ato]` na escolha moral deliberada (máx 1/turno; combate declarado não conta). Atos: matar_rendido·torturar·roubar·poupar_inimigo·salvar_vida·honrar_acordo·quebrar_acordo·trair_aliado.

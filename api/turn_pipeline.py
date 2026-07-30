@@ -356,6 +356,12 @@ def dano_narrado_sem_marker(resposta: str, em_combate: bool) -> bool:
 # Session Zero (Ritual P3) — o mestre fecha a entrevista de criação com
 # [FICHA: Nome|Raça|Classe|background|traço] (traço opcional). A engine gera
 # atributos/HP/slots/features — o jogador nunca fala de números.
+# [ALINHAMENTO: ato] — ato moral que só a NARRATIVA sabe (poupar um inimigo
+# rendido, honrar um acordo, trair um aliado). O que a ENGINE já sabe — atacar
+# NPC pacífico, causar dano, matar — não usa marcador: é derivado do estado, no
+# padrão autoridade-primeiro. Vocabulário fechado: `engine.alinhamento`.
+_RE_ALINHAMENTO = re.compile(r"\[ALINHAMENTO:\s*([a-z_]{3,30})\s*\]", re.IGNORECASE)
+
 _RE_FICHA = re.compile(
     r"\[FICHA:\s*([^|\]]{1,40}?)\s*\|\s*([^|\]]{1,30}?)\s*\|\s*([^|\]]{1,20}?)\s*"
     r"\|\s*([^|\]]{1,60}?)\s*(?:\|\s*([^|\]]{1,120}?)\s*)?"
@@ -1808,6 +1814,53 @@ def aplicar_pos_turno(
 
     # N2/F3: garante voz TTS determinística pra cada NPC presente (gênero-safe).
     garantir_vozes_npcs(working_mem)
+
+    # 17c-bis. ALINHAMENTO — o caráter do jogador se move pelo que ele faz.
+    #
+    # HÍBRIDO, no padrão do [INIMIGO_MORTO]: a ENGINE decide o que ela sabe de
+    # estado (atacar quem não é inimigo é detectado pela autoridade social, que
+    # já derruba o trust), e o MARCADOR cobre o que só a narrativa sabe (poupar
+    # um rendido, honrar um acordo, trair um aliado). Confiar só no marcador
+    # deixaria o caráter refém do LLM lembrar de emiti-lo; confiar só em regex
+    # sobre a prosa é a armadilha que este projeto já pagou várias vezes.
+    if texto_jogador.strip():
+        try:
+            from engine.alinhamento import EixosAlinhamento
+
+            _ch = working_mem.character
+            _eixos = EixosAlinhamento.from_dict(_ch.alinhamento_eixos)
+            _mudou = False
+
+            # (a) Marcador — vocabulário FECHADO. Ato inventado pelo LLM é
+            # ignorado em silêncio: alinhamento é autoridade da engine, e um
+            # "[ALINHAMENTO: foi_legal]" não pode virar regra nova.
+            for _m in _RE_ALINHAMENTO.finditer(resposta_completa):
+                _ato = _m.group(1).strip().lower()
+                if _eixos.aplicar(_ato):
+                    _mudou = True
+                    log.info("alinhamento_ato", ato=_ato, fonte="marcador")
+                else:
+                    log.info("alinhamento_ato_desconhecido", ato=_ato)
+
+            # (b) Derivado do ESTADO: atacar quem não estava em combate com você.
+            # A autoridade social já marcou isso ao derrubar o trust — aqui só
+            # lemos a consequência, sem segundo parser sobre a prosa.
+            if getattr(working_mem.scene, "relacao_abalada", False):
+                if _eixos.aplicar("atacar_sem_provocacao"):
+                    _mudou = True
+                    log.info("alinhamento_ato", ato="atacar_sem_provocacao",
+                             fonte="engine")
+
+            if _mudou:
+                _antes = str(_ch.alinhamento_eixos.get("rotulo", "Neutro"))
+                _ch.alinhamento_eixos = _eixos.to_dict()
+                _depois = _eixos.rotulo()
+                if _antes != _depois:
+                    log.info("alinhamento_mudou", de=_antes, para=_depois,
+                             declarado=_ch.alinhamento_declarado or None)
+        except Exception as _e_alin:
+            # Nunca derruba o turno — caráter é importante, narração é essencial.
+            log.warning("alinhamento_falhou", erro=str(_e_alin)[:120])
 
     # 17d. DIRETOR DE ARCO (passo 4): avalia se um final de campanha disparou e
     # conduz normal → clímax → epílogo → concluída. A transição é aqui (pós-turno)
