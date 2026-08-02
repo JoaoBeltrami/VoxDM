@@ -385,7 +385,6 @@ def test_idor_retomada_sessao_alheia_nao_restaura():
     cross-tenant do personagem e do resumo falado. O guard deve descartar o
     char_state alheio: a identidade do Bob NÃO pode aparecer na sessão da Alice.
     """
-    from api.auth import get_owner
     from api.main import app
     from api.state import sessions
     from engine.auth.identity import Owner
