@@ -290,6 +290,21 @@ async def iniciar_sessao(
         try:
             store = CharacterStore()
             char_state = await store.carregar(config.session_anterior_id)
+            # IDOR guard: só restaura a sessão anterior se o solicitante é dono
+            # dela (ou admin). Sem isto, um usuário autenticado poderia passar o
+            # session_anterior_id de OUTRO usuário e carregar a ficha + narrativa
+            # alheia numa sessão própria — mesma semântica de _get_sessao().
+            # owner_email vazio (legado pré-auth) = admin-only via pode_ver().
+            if char_state and not owner.pode_ver(char_state.owner_email):
+                log.warning(
+                    "session_anterior_negada",
+                    fonte="sqlite",
+                    session_id=config.session_id,
+                    session_anterior_id=config.session_anterior_id,
+                    owner_req=owner.email,
+                    owner_dono=char_state.owner_email or "(vazio)",
+                )
+                char_state = None
             if char_state:
                 working_mem.aplicar_character_state(char_state)
                 # Restaura magias conhecidas — persistem entre sessões
@@ -398,6 +413,18 @@ async def iniciar_sessao(
         try:
             mem_episodica = EpisodicMemory()
             entrada = await mem_episodica.buscar_por_session_id(config.session_anterior_id)
+            # IDOR guard (ver bloco SQLite acima): não vaza memória episódica
+            # (trust, quests, resumo falado, dm_state) de outro dono. O
+            # owner_email vem no payload Qdrant gravado por session_writer.
+            if entrada and not owner.pode_ver(str(entrada.get("owner_email", ""))):
+                log.warning(
+                    "session_anterior_negada",
+                    fonte="episodica",
+                    session_id=config.session_id,
+                    session_anterior_id=config.session_anterior_id,
+                    owner_req=owner.email,
+                )
+                entrada = None
             if entrada:
                 working_mem.trust_levels = {
                     k: int(v) for k, v in entrada.get("trust_levels", {}).items()
