@@ -102,6 +102,31 @@ def _e_quota_disfarcada(exc: BaseException) -> bool:
     return any(kw in corpo for kw in _PALAVRAS_QUOTA)
 
 
+# TOOL-FANTASMA-1 (playtest 01/08): o `openai/gpt-oss-20b` chamou uma ferramenta
+# que ninguém ofereceu, e o Groq devolveu 400 "Tool choice is none, but model
+# called a tool". O 400 caía no `raise` do `except APIError` — não é quota, não é
+# rede — subia inteiro e MATAVA o turno. Gemini e 70B, que rodam o MESMO prompt
+# sem problema, nunca eram tentados.
+#
+# É falha DO MODELO, não do nosso pedido: fallback-able por definição. Categoria
+# própria ("modelo") por dois motivos — aparece separada na telemetria, e o
+# cooldown só penaliza `rate_limit`, então um surto estocástico não tira o
+# provider de circulação por 75s.
+#
+# Não reproduzido em 12 chamadas com o mesmo prompt (6 no 20b, 6 no 120b) — é
+# intermitente. Frequência baixa não muda o desenho: turno morto é turno morto.
+_PALAVRAS_FALHA_MODELO = (
+    "tool choice is none",
+    "model called a tool",
+)
+
+
+def _e_falha_do_modelo(exc: BaseException) -> bool:
+    """True quando o 400 é comportamento errático do modelo, não pedido inválido."""
+    corpo = str(exc).lower()
+    return any(kw in corpo for kw in _PALAVRAS_FALHA_MODELO)
+
+
 
 def _extrair_usage(resp: Any) -> dict[str, int]:
     """Tokens da resposta, incluindo os gastos em RACIOCÍNIO quando houver.
@@ -265,6 +290,12 @@ class GroqProvider(BaseLLMProvider):
                     categoria="rate_limit",
                     causa=e,
                 ) from e
+            if _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
+                    causa=e,
+                ) from e
             raise
 
         if _e_recusa(texto):
@@ -312,6 +343,12 @@ class GroqProvider(BaseLLMProvider):
                 raise LLMRetriable(
                     f"groq[{self._modelo}] stream quota disfarçada: {e!s}"[:200],
                     categoria="rate_limit",
+                    causa=e,
+                ) from e
+            if _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
                     causa=e,
                 ) from e
             raise
@@ -374,6 +411,14 @@ class GroqProvider(BaseLLMProvider):
                 raise LLMRetriable(
                     f"groq[{self._modelo}] stream quota disfarçada: {e!s}"[:200],
                     categoria="rate_limit",
+                    causa=e,
+                ) from e
+            # TOOL-FANTASMA-1: foi AQUI que o turno morreu no playtest de 01/08 —
+            # o 400 chega depois do 200 OK da abertura, já dentro do stream.
+            if not liberado and _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
                     causa=e,
                 ) from e
             raise
