@@ -8,6 +8,8 @@ Cobre:
 - LLMRouter.completar emite status="fallback_all_failed" quando todos falham
 - LLMRouter.completar_stream emite com latência do primeiro token + chars somados
 - falha de telemetria NÃO quebra a chamada LLM (best-effort)
+- prompt cache do Groq: cached_tokens no usage, taxa logada, e o chunk final
+  com choices=[] que o include_usage traz (CACHE-CEGO, 31/07)
 
 Por que existe: a telemetria é a base do dashboard de decisões LLM. Estes
     testes travam o contrato dos campos emitidos e a invariante de que
@@ -18,12 +20,15 @@ Armadilha: o router instancia providers reais no __init__ (Groq/Gemini/Ollama),
     _providers_disponiveis por mocks, então nenhuma rede é tocada.
 """
 
+import inspect
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from engine import telemetry
 from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
+from engine.llm.providers.groq import GroqProvider, _extrair_usage, _logar_cache
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import TaskType
 
@@ -182,3 +187,177 @@ async def test_stream_emite_cascade_quando_primario_falha():
     assert cap[0]["status"] == "cascade_used"
     assert cap[0]["cascata_disparou"] is True
     assert cap[0]["provider_efetivo"] == "gemini-flash"
+
+
+# ── Prompt cache do Groq (CACHE-CEGO, 31/07) ─────────────────────────────────
+#
+# A reorganização de prefixo de 25/07 foi feita sem nunca ler `cached_tokens`.
+# Estes testes travam as duas metades da instrumentação: ler o campo com
+# tolerância a ausência, e sobreviver ao chunk final que o include_usage traz.
+
+def _usage_fake(*, prompt: int, completion: int = 0, cached: int | None = None,
+                detalhe_nulo: bool = False):
+    """Objeto `usage` no formato do SDK.
+
+    Três formas reais, todas medidas contra a API em 31/07:
+      cached=int          → prompt_tokens_details com cached_tokens
+      detalhe_nulo=True   → prompt_tokens_details EXISTE e vale None (é o que o
+                            Groq devolve hoje, tanto no 70B quanto no gpt-oss)
+      nenhum dos dois     → atributo ausente do schema
+    """
+    campos: dict = {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
+    if cached is not None:
+        campos["prompt_tokens_details"] = SimpleNamespace(cached_tokens=cached)
+    elif detalhe_nulo:
+        campos["prompt_tokens_details"] = None
+    return SimpleNamespace(**campos)
+
+
+class _ChunkFake:
+    """Chunk de stream. `texto=None` = o chunk final de usage (choices vazio)."""
+
+    def __init__(self, texto: str | None = None, usage=None):
+        self.choices = (
+            [] if texto is None
+            else [SimpleNamespace(delta=SimpleNamespace(content=texto))]
+        )
+        self.usage = usage
+
+
+class _CompletionsFake:
+    def __init__(self, chunks: list[_ChunkFake]):
+        self._chunks = chunks
+        self.kwargs: dict = {}
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+
+        async def _gen():
+            for c in self._chunks:
+                yield c
+
+        return _gen()
+
+
+class _ClientFake:
+    def __init__(self, chunks: list[_ChunkFake]):
+        self.completions = _CompletionsFake(chunks)
+        self.chat = SimpleNamespace(completions=self.completions)
+
+
+def _provider_com(chunks: list[_ChunkFake]) -> tuple[GroqProvider, _ClientFake]:
+    p = GroqProvider(nome="teste", modelo="openai/gpt-oss-20b")
+    cliente = _ClientFake(chunks)
+    p._get_client = lambda: cliente  # type: ignore[method-assign]
+    return p, cliente
+
+
+def test_extrair_usage_sem_prompt_tokens_details_devolve_zero():
+    """Campo ausente vira 0 — o 70B não tem cache e não pode virar exceção."""
+    usage = _extrair_usage(SimpleNamespace(usage=_usage_fake(prompt=5000, completion=300)))
+    assert usage["cached_tokens"] == 0
+    assert usage["prompt_tokens"] == 5000  # o resto continua íntegro
+
+
+def test_extrair_usage_com_prompt_tokens_details_nulo():
+    """A forma REAL de hoje: o campo existe no schema e vem None.
+
+    Medido em 31/07 contra a API, tanto em llama-3.3-70b-versatile quanto em
+    openai/gpt-oss-20b: `prompt_tokens_details: None`. Se alguém trocar o
+    `is not None` por um `hasattr`, isto quebra com AttributeError.
+    """
+    usage = _extrair_usage(
+        SimpleNamespace(usage=_usage_fake(prompt=1283, completion=40, detalhe_nulo=True))
+    )
+    assert usage["cached_tokens"] == 0
+    assert usage["prompt_tokens"] == 1283
+
+
+def test_extrair_usage_le_cached_tokens_quando_existe():
+    usage = _extrair_usage(
+        SimpleNamespace(usage=_usage_fake(prompt=5000, completion=300, cached=4096))
+    )
+    assert usage["cached_tokens"] == 4096
+
+
+def test_logar_cache_nao_levanta_com_usage_vazio():
+    """Usage ausente (chamada de teste, provider sem usage) é silêncio, não erro."""
+    _logar_cache("llama-3.3-70b-versatile", {})
+    _logar_cache("llama-3.3-70b-versatile", {"prompt_tokens": 0, "cached_tokens": 0})
+
+
+def test_logar_cache_calcula_taxa():
+    cap: list[dict] = []
+    with patch("engine.llm.providers.groq.log.info", lambda ev, **kw: cap.append({"ev": ev, **kw})):
+        _logar_cache("openai/gpt-oss-20b", {"prompt_tokens": 4000, "cached_tokens": 3000})
+    assert len(cap) == 1
+    assert cap[0]["ev"] == "groq_cache"
+    assert cap[0]["taxa_cache"] == 75.0
+    assert cap[0]["modelo"] == "openai/gpt-oss-20b"
+
+
+@pytest.mark.asyncio
+async def test_stream_sobrevive_ao_chunk_final_sem_choices():
+    """O chunk de usage tem choices=[] — tocar em choices[0] derrubaria o turno."""
+    p, cliente = _provider_com([
+        _ChunkFake("A taverna "),
+        _ChunkFake("está vazia."),
+        _ChunkFake(usage=_usage_fake(prompt=4000, completion=12, cached=3000)),
+    ])
+    out = [t async for t in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100)]
+    assert "".join(out) == "A taverna está vazia."
+    assert p.ultimo_usage["prompt_tokens"] == 4000
+    assert p.ultimo_usage["cached_tokens"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_stream_pede_include_usage_via_extra_body():
+    """Sem include_usage o caminho de produção não devolve usage nenhum.
+
+    Vai por `extra_body` e não por kwarg: o SDK pinado não conhece
+    `stream_options` (ver o teste de compatibilidade logo abaixo).
+    """
+    p, cliente = _provider_com([_ChunkFake("texto")])
+    _ = [t async for t in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100)]
+    assert cliente.completions.kwargs["extra_body"] == {
+        "stream_options": {"include_usage": True}
+    }
+
+
+@pytest.mark.asyncio
+async def test_kwargs_do_stream_existem_no_sdk_instalado():
+    """Todo kwarg enviado tem que existir na assinatura real do SDK.
+
+    ARMADILHA QUE JÁ MORDEU (31/07): a 1ª versão desta feature passou
+    `stream_options=` como kwarg direto. Os testes com cliente fake passaram —
+    um fake com `**kwargs` aceita qualquer coisa — e só a chamada REAL revelou
+    `TypeError: AsyncCompletions.create() got an unexpected keyword argument`.
+    Isso derrubaria TODO turno de stream, que é o caminho do jogo.
+
+    Este teste fecha o buraco sem tocar a rede: compara o que o provider manda
+    com a assinatura do `groq` instalado.
+    """
+    from groq.resources.chat.completions import AsyncCompletions
+
+    p, cliente = _provider_com([_ChunkFake("texto")])
+    _ = [t async for t in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100)]
+
+    aceitos = set(inspect.signature(AsyncCompletions.create).parameters)
+    enviados = set(cliente.completions.kwargs)
+    assert enviados <= aceitos, (
+        f"kwargs não suportados pelo groq instalado: {sorted(enviados - aceitos)}. "
+        "Use extra_body para campos que o SDK ainda não conhece."
+    )
+
+
+@pytest.mark.asyncio
+async def test_stream_sem_chunk_de_usage_nao_quebra():
+    """Provider/versão que ignora include_usage: stream normal, usage vazio."""
+    p, _ = _provider_com([_ChunkFake("só "), _ChunkFake("texto")])
+    out = [t async for t in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100)]
+    assert "".join(out) == "só texto"
+    assert p.ultimo_usage == {}

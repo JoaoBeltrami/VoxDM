@@ -13,6 +13,8 @@ Armadilha: é a MESMA classe do gemini-2.5-flash "full" já documentada no
     CLAUDE.md. Todo modelo novo de raciocínio precisa entrar em _RACIOCINIO_LOW.
 """
 
+from types import SimpleNamespace
+
 from config import settings
 from engine.llm.providers.groq import GroqProvider
 
@@ -146,3 +148,107 @@ def test_filler_com_npc_de_fundo_escolhe_light():
         npc_na_cena=False,           # agora que o sinal é preciso
     )
     assert task is TaskType.NARRATIVE_LIGHT
+
+
+# ── TOOL-FANTASMA-1 (playtest 01/08) ─────────────────────────────────────────
+#
+# Turno 1 da sessão morreu assim:
+#
+#   llm_provider_tentando_stream provider=groq-8b task=narrative_light
+#   HTTP Request: POST .../chat/completions "HTTP/1.1 200 OK"
+#   error ws_groq_falhou erro='Tool choice is none, but model called a tool'
+#
+# O `openai/gpt-oss-20b` chamou uma ferramenta que ninguém ofereceu. O 400 não é
+# quota nem rede, então caía no `raise` do except APIError, subia inteiro e
+# MATAVA o turno — Gemini e 70B, que rodam o mesmo prompt sem problema, nunca
+# eram tentados. É falha DO MODELO: fallback-able por definição.
+#
+# Não reproduzido em 12 chamadas com o mesmo prompt (6 no 20b, 6 no 120b): é
+# intermitente. Frequência baixa não muda o desenho — turno morto é turno morto.
+
+import httpx
+import pytest
+from groq import APIError
+
+from engine.llm.providers.base import LLMRetriable
+from engine.llm.providers.groq import _e_falha_do_modelo
+
+_MSG_REAL = "Tool choice is none, but model called a tool"
+
+
+def _api_error(msg: str) -> APIError:
+    return APIError(msg, httpx.Request("POST", "https://api.groq.com"), body=None)
+
+
+def test_detecta_a_mensagem_exata_do_playtest():
+    assert _e_falha_do_modelo(_api_error(_MSG_REAL)) is True
+
+
+def test_nao_captura_400_legitimo():
+    """Classificação larga demais mascararia bug NOSSO como falha do provider."""
+    for msg in (
+        "Invalid value for 'messages': expected an array",
+        "model `foo` does not exist",
+        "maximum context length exceeded",
+    ):
+        assert _e_falha_do_modelo(_api_error(msg)) is False
+
+
+class _StreamQueQuebra:
+    """Stream que emite N tokens e então levanta APIError — como o Groq faz."""
+
+    def __init__(self, tokens: list[str], erro: APIError):
+        self._tokens, self._erro = tokens, erro
+
+    def __aiter__(self):
+        async def _gen():
+            for t in self._tokens:
+                yield SimpleNamespace(
+                    choices=[SimpleNamespace(delta=SimpleNamespace(content=t))]
+                )
+            raise self._erro
+        return _gen()
+
+
+def _provider_que_quebra(tokens: list[str]) -> GroqProvider:
+    p = GroqProvider(nome="teste", modelo="openai/gpt-oss-20b")
+
+    class _Completions:
+        async def create(self, **_):
+            return _StreamQueQuebra(tokens, _api_error(_MSG_REAL))
+
+    p._get_client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Completions())
+    )
+    return p
+
+
+@pytest.mark.asyncio
+async def test_stream_vira_retriable_antes_de_emitir():
+    """Pré-emissão: tem que virar LLMRetriable pro router cascatear."""
+    p = _provider_que_quebra([])  # quebra sem emitir nada, como no playtest
+    with pytest.raises(LLMRetriable) as exc:
+        async for _ in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100):
+            pass
+    assert exc.value.categoria == "modelo"
+
+
+@pytest.mark.asyncio
+async def test_stream_pos_emissao_propaga_sem_cascatear():
+    """Depois do 1º token, trocar de modelo quebraria a frase no meio."""
+    tokens = ["A taverna está cheia. " * 10]  # passa do _BUFFER_RECUSA
+    p = _provider_que_quebra(tokens)
+    with pytest.raises(APIError):
+        async for _ in p.completar_stream([{"role": "user", "content": "oi"}], 0.7, 100):
+            pass
+
+
+def test_categoria_modelo_nao_e_amarelada_nem_cooldown():
+    """Não é filtro de conteúdo (não escala grimdark) nem quota (não penaliza).
+
+    Surto estocástico não pode tirar o provider de circulação por 75s — isso
+    empurraria o turno seguinte pro 70B e queimaria o recurso mais escasso.
+    """
+    from engine.llm.router import _CATEGORIAS_AMARELADA
+
+    assert "modelo" not in _CATEGORIAS_AMARELADA
