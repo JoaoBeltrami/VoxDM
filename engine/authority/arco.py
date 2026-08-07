@@ -272,9 +272,25 @@ def diretiva_de_arco(wm: Any, modulo: dict[str, Any] | None = None) -> str:
         )
 
     if fase == "concluida":
+        # ARCO-CONCLUIDO-SEM-SAIDA-1 (playtest 01/08): esta diretiva dizia
+        # "A história terminou. Não reabra o arco; responda como epílogo/OOC" —
+        # e era injetada em TODO turno, para sempre. O Beltrami jogou ~11 minutos
+        # depois da conclusão e sentiu exatamente isso: "A DESGRAÇA DA CENA NÃO
+        # PROSSEGUE SEM EU PEDIR". A engine estava mandando o Mestre não mover
+        # o mundo, e ele obedecia.
+        #
+        # O arco fechado continua CANON (não reabre, não desfaz o desfecho) — o
+        # que muda é que a CENA volta a correr. Fim de campanha é epílogo do
+        # ARCO, não fim do mundo: o jogador ainda está lá dentro.
+        nome_fim = ending.get("name", "") if ending else ""
+        selo = f' em "{nome_fim}"' if nome_fim else ""
         return (
-            "\n=== CAMPANHA CONCLUÍDA ===\n"
-            "A história terminou. Não reabra o arco; responda como epílogo/OOC."
+            "\n=== DEPOIS DO FIM (arco encerrado) ===\n"
+            f"A campanha já se resolveu{selo} — isso é CANON: não reabra o arco, "
+            "não desfaça o desfecho e não anuncie de novo que acabou.\n"
+            "Mas o mundo NÃO parou, e o jogador continua dentro dele. Conduza a "
+            "cena normalmente — com iniciativa própria, consequências e o peso do "
+            "que aquele fim deixou para trás."
         )
 
     # normal — só a pressão de escalada quando a espinha está armada

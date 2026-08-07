@@ -343,7 +343,7 @@ def test_diretiva_climax_epilogo_e_concluida():
     d2 = diretiva_de_arco(wm, _MOD_ARCO)
     assert "EPÍLOGO" in d2 and "Uma bandeira só sobre três vilas." in d2
     conduzir_arco(wm, _MOD_ARCO)                       # → concluida
-    assert "CAMPANHA CONCLUÍDA" in diretiva_de_arco(wm, _MOD_ARCO)
+    assert "DEPOIS DO FIM" in diretiva_de_arco(wm, _MOD_ARCO)
 
 
 def test_pressao_de_escalada_quando_espinha_arma():
@@ -555,7 +555,7 @@ def test_campanha_inteira_chega_ao_fim_pelo_caminho_real():
     # Terminal: mais turnos não reabrem a campanha.
     _turno(wm, catalog, efeitos, "Sigo vivendo.", "O mundo segue.")
     assert wm.arc_fase == "concluida"
-    assert "CAMPANHA CONCLUÍDA" in diretiva_de_arco(wm, modulo)
+    assert "DEPOIS DO FIM" in diretiva_de_arco(wm, modulo)
 
 
 def test_campanha_inteira_e_visivel_na_tela_do_jogador():
@@ -691,3 +691,75 @@ def test_pular_pro_ultimo_stage_de_quest_LINEAR_autocompleta_e_dispara():
     assert wm.narrative.fronts_latentes["guerra-das-vilas"]["filled"] == 6
     v = escolher_ending(mod["endings"], snapshot_de_wm(wm, mod))
     assert v and v["id"] == "uma-vila-domina"
+
+
+# ── ARCO-CONCLUIDO-SEM-SAIDA-1 (playtest 01/08) ──────────────────────────────
+#
+# A campanha do playtest concluiu no turno ~31 de 58. A partir dali a diretiva
+# de `concluida` era injetada em TODO turno dizendo "A história terminou. Não
+# reabra o arco; responda como epílogo/OOC" — e o Beltrami jogou ~11 minutos num
+# mundo que não andava, o que ele relatou como "A DESGRAÇA DA CENA NÃO PROSSEGUE
+# SEM EU PEDIR". Fim de campanha é epílogo do ARCO, não fim do mundo.
+
+def _wm_concluida():
+    """WM com a campanha já encerrada em `uma-vila-domina`."""
+    wm = _wm()
+    wm.arc_fase = "concluida"
+    wm.arc_ending_id = "uma-vila-domina"
+    return wm
+
+
+def test_pos_campanha_nao_congela_a_cena():
+    """O vocabulário que PARA o Mestre não pode estar na diretiva.
+
+    Teste que amarra os dois lados: se alguém reescrever o fragmento e trouxer
+    de volta "responda como epílogo" ou "a história terminou", o mundo volta a
+    morrer depois do fim e ninguém percebe até o próximo playtest.
+    """
+    from engine.authority.arco import diretiva_de_arco
+
+    d = diretiva_de_arco(_wm_concluida(), _MOD_ARCO).lower()
+    for proibido in (
+        "a história terminou",
+        "responda como epílogo",
+        "depois pare",
+        "a campanha acabou",
+    ):
+        assert proibido not in d, f"diretiva pós-campanha voltou a congelar a cena: {proibido!r}"
+
+
+def test_pos_campanha_manda_conduzir_a_cena():
+    """O contrato novo: o mundo continua e o Mestre tem iniciativa."""
+    from engine.authority.arco import diretiva_de_arco
+
+    d = diretiva_de_arco(_wm_concluida(), _MOD_ARCO).lower()
+    assert "não parou" in d
+    assert "iniciativa" in d
+
+
+def test_pos_campanha_preserva_o_canon_do_desfecho():
+    """Continuar a cena NÃO é reabrir o arco — o fim segue valendo."""
+    from engine.authority.arco import diretiva_de_arco
+
+    d = diretiva_de_arco(_wm_concluida(), _MOD_ARCO).lower()
+    assert "não reabra o arco" in d
+    assert "canon" in d
+
+
+def test_pos_campanha_nomeia_o_final_alcancado():
+    """O Mestre precisa saber EM QUE fim o mundo ficou pra narrar o peso certo."""
+    from engine.authority.arco import diretiva_de_arco
+
+    nome = next(e["name"] for e in _MOD_ARCO["endings"] if e["id"] == "uma-vila-domina")
+    assert nome in diretiva_de_arco(_wm_concluida(), _MOD_ARCO)
+
+
+def test_pos_campanha_sem_ending_conhecido_nao_quebra():
+    """Sessão restaurada com arc_ending_id perdido: degrada, não estoura."""
+    from engine.authority.arco import diretiva_de_arco
+
+    wm = _wm()
+    wm.arc_fase = "concluida"
+    wm.arc_ending_id = ""
+    d = diretiva_de_arco(wm, _MOD_ARCO)
+    assert "DEPOIS DO FIM" in d and '""' not in d
