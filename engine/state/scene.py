@@ -196,18 +196,33 @@ class SceneState:
         'ana'), poluindo o HUD com NPCs nunca apresentados. O 1º nome só conta se
         tiver ≥3 letras (evita casar artigo/fragmento curto tipo 'o', 'a').
         """
-        texto_lower = texto.lower()
         for npc_id in self.npcs_presentes:
             if npc_id in self.npcs_apresentados:
                 continue
-            primeiro_nome = npc_id.split("-")[0]
-            nome_completo = npc_id.replace("-", " ")
-            por_primeiro = len(primeiro_nome) >= 3 and re.search(
-                rf"\b{re.escape(primeiro_nome)}\b", texto_lower
-            )
-            por_completo = re.search(rf"\b{re.escape(nome_completo)}\b", texto_lower)
-            if por_primeiro or por_completo:
+            if self._texto_cita(texto, npc_id):
                 self.npcs_apresentados.add(npc_id)
+
+    @staticmethod
+    def _texto_cita(texto: str, npc_id: str) -> bool:
+        """O texto nomeia este NPC? Match por PALAVRA INTEIRA (ver docstring acima)."""
+        texto_lower = texto.lower()
+        primeiro_nome = npc_id.split("-")[0]
+        nome_completo = npc_id.replace("-", " ")
+        por_primeiro = len(primeiro_nome) >= 3 and re.search(
+            rf"\b{re.escape(primeiro_nome)}\b", texto_lower
+        )
+        return bool(por_primeiro or re.search(rf"\b{re.escape(nome_completo)}\b", texto_lower))
+
+    def cita_npc_presente(self, texto: str) -> bool:
+        """Algum NPC PRESENTE é nomeado neste texto? (não muda estado)
+
+        LIGHT-MORTO-2: separa "a conversa está viva AGORA" de "já houve conversa
+        nesta sessão". `npcs_apresentados` é cumulativo e nunca esvazia — usar
+        só ele fazia toda a sessão contar como social depois do primeiro diálogo.
+        """
+        if not texto:
+            return False
+        return any(self._texto_cita(texto, npc_id) for npc_id in self.npcs_presentes)
 
     def atualizar_estado_emocional(self, npc_id: str, estado: str) -> None:
         """Atualiza estado emocional com cap de 15 (eviction oldest)."""

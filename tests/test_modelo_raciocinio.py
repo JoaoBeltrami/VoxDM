@@ -115,11 +115,51 @@ def test_npc_so_de_fundo_nao_e_cena_social():
 
 
 def test_npc_apresentado_e_cena_social():
-    """A regra 2 continua valendo onde ela nasceu: diálogo vai pro 70B."""
+    """A regra 2 continua valendo onde ela nasceu: diálogo vai pro 70B.
+
+    LIGHT-MORTO-2 mudou o contrato: não basta o NPC ter sido apresentado ALGUM
+    dia — a conversa precisa estar viva no turno. Aqui o jogador nomeia quem
+    está falando, então é diálogo.
+    """
     from api.websocket import _cena_social
 
     wm = _wm_com_npcs(["taverneiro", "ferreiro"], apresentados=["taverneiro"])
-    assert _cena_social(wm) is True
+    assert _cena_social(wm, "pergunto ao taverneiro sobre o pacto") is True
+
+
+# ── LIGHT-MORTO-2 (playtest 01/08) ───────────────────────────────────────────
+#
+# A mitigação de 22/07 (trocar `bool(npcs_presentes)` por `npcs_apresentados`)
+# não bastou: `light` disparou 3× em 58 turnos e o 70B queimou o TPD no turno
+# 19. `npcs_apresentados` é CUMULATIVO da sessão e nunca esvazia — depois da
+# primeira conversa com o taverneiro, TODO turno em que ele seguia presente
+# contava como social, inclusive travessia.
+
+def test_apresentado_mas_conversa_morta_libera_o_light():
+    """O bug medido: NPC apresentado 30 turnos atrás não faz do turno de hoje
+    um diálogo. Se ninguém é nomeado, o jogador está andando."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs(["taverneiro"], apresentados=["taverneiro"])
+    assert _cena_social(wm, "sigo pela estrada rumo ao norte") is False
+
+
+def test_meio_de_dialogo_sem_nomear_continua_social():
+    """"e o que mais?" no meio da conversa NÃO pode cair pro modelo pequeno —
+    a última fala do Mestre nomeia quem está respondendo."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs(["taverneiro"], apresentados=["taverneiro"])
+    wm.registrar_fala("mestre", "O taverneiro seca o copo e encara a porta.")
+    assert _cena_social(wm, "e o que mais?") is True
+
+
+def test_npc_presente_mas_nunca_apresentado_segue_fora():
+    """A regra do LIGHT-MORTO-1 continua de pé: citar figurante não abre diálogo."""
+    from api.websocket import _cena_social
+
+    wm = _wm_com_npcs(["ferreiro"])          # ninguém apresentado
+    assert _cena_social(wm, "olho para o ferreiro") is False
 
 
 def test_cena_vazia_nao_e_social():
