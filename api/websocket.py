@@ -1622,6 +1622,13 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             try:
                 dados: dict[str, Any] = json.loads(dados_raw)
                 texto_jogador: str = str(dados.get("texto", "")).strip()
+                # ENGINE-COMO-PERSONAGEM-1 (playtest 07/08): fatos resolvidos
+                # pela engine NESTE turno. Antes eram enfiados no texto do
+                # jogador — chegavam como `role: user` e o Mestre passava a
+                # narrar "a engine" como se ela fosse quem falava. Agora têm
+                # canal próprio (ContextoMontado.fatos_engine) e o texto do
+                # jogador volta a ser só o que ele falou (inclusive pro RAG).
+                _fatos_engine: list[str] = []
                 tipo_msg: str = str(dados.get("tipo", "")).strip()
             except (json.JSONDecodeError, TypeError):
                 await _send_text_seguro(websocket,
@@ -1942,9 +1949,8 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # enquadra a ficção. Sem isto a decisão fica com o LLM, e a
                     # seção de rolagem do master_system lhe dá três licenças pra
                     # recusar ("não há incerteza real") — o jogador pede e nada abre.
-                    texto_jogador = (
-                        f"{texto_jogador}\n"
-                        f"ENGINE: o jogador PEDIU um teste de {_pericia_do_jogador}. "
+                    _fatos_engine.append(
+                        f"O jogador PEDIU um teste de {_pericia_do_jogador}. "
                         f"Aceite — diga em uma frase o que está em jogo, nomeie "
                         f"'{_pericia_do_jogador}' e PARE, esperando a rolagem. "
                         f"Não role, não narre o resultado, não decida por ele."
@@ -1966,7 +1972,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             sessao.working_mem, _d20_check, _pericia_pedida
                         )
                         if _linha_check:
-                            texto_jogador = _linha_check
+                            _fatos_engine.append(_linha_check)
                             # Os mesmos números, agora também pro jogador.
                             sessao.check_resolvido = detalhar_check(
                                 sessao.working_mem, _d20_check, _pericia_pedida
@@ -1987,7 +1993,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     log.warning("consumo_item_falhou", erro=str(e)[:120])
                     _linha_item = None
                 if _linha_item:
-                    texto_jogador = f"{texto_jogador}\n{_linha_item}"
+                    _fatos_engine.append(_linha_item)
 
             # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
             # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
@@ -2030,7 +2036,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 # A engine é a autoridade do dano do PJ neste turno —
                                 # o extractor de prosa abaixo NÃO deve re-aplicar.
                                 _engine_resolveu_turno = True
-                                texto_jogador = _texto_engine
+                                _fatos_engine.append(_texto_engine)
                             # resolve inválido (alvo morto/inexistente) → segue com o
                             # texto cru da rolagem no fluxo antigo (fallback seguro).
                     else:
@@ -2176,7 +2182,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             )
                             if _texto_engine is not None:
                                 _engine_resolveu_turno = True
-                                texto_jogador = _texto_engine
+                                _fatos_engine.append(_texto_engine)
                                 log.info(
                                     "combate_d20_solto_resolvido",
                                     session_id=session_id, alvo=_alvo,
@@ -2269,6 +2275,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
                 # Injeta magias conhecidas no contexto antes de montar o prompt
                 contexto.spells_conhecidas = sessao.spells_conhecidas
+                contexto.fatos_engine = _fatos_engine
                 mensagens = montar_mensagens(contexto)
             except Exception as e:
                 log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))

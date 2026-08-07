@@ -193,3 +193,72 @@ def test_warning_de_budget_carrega_a_composicao():
     assert "composicao=" in fonte[i : i + 600], (
         "o warning de budget voltou a reportar só o total"
     )
+
+
+# ── ENGINE-COMO-PERSONAGEM-1 (playtest 07/08) ────────────────────────────────
+#
+# Três queixas do Beltrami na MESMA sessão: "a LLM começou a narrar a engine",
+# "ele começou a usar engine como termo quando deveria ser uma mecânica", "ele
+# continua narrando a engine como se eu fosse ela".
+#
+# Causa-raiz: a linha "ENGINE: ..." era injetada no `texto_jogador` — chegava ao
+# modelo com `role: user`. Do ponto de vista dele, o JOGADOR dizia "ENGINE:
+# teste de Furtividade = 15 vs CD 15: SUCESSO". Virou até query de RAG.
+
+def _system_com_fatos(fatos: list[str]) -> str:
+    from engine.llm.types import ContextoMontado
+
+    ctx = ContextoMontado(
+        working_memory=_wm(pacing=1.0, iteracoes=10),
+        chunks_semanticos=[], chunks_episodicos=[], chunks_regras=[],
+        relacoes_grafo=[], secrets_visiveis=[],
+        transcricao_atual="ataco o carniçal",
+        fatos_engine=fatos,
+    )
+    return _montar_mensagens_brief(ctx)[0]["content"]
+
+
+def test_fato_da_engine_entra_no_system_nao_na_fala_do_jogador():
+    from engine.llm.types import ContextoMontado
+
+    fato = "ENGINE: teste de Furtividade — 13 no dado +2 (DES +2) = 15 vs CD 15: SUCESSO na trave."
+    ctx = ContextoMontado(
+        working_memory=_wm(pacing=1.0, iteracoes=10),
+        chunks_semanticos=[], chunks_episodicos=[], chunks_regras=[],
+        relacoes_grafo=[], secrets_visiveis=[],
+        transcricao_atual="me escondo atrás da carroça",
+        fatos_engine=[fato],
+    )
+    msgs = _montar_mensagens_brief(ctx)
+
+    assert "Furtividade" in msgs[0]["content"], "o fato não chegou ao system"
+    assert msgs[-1]["role"] == "user"
+    assert msgs[-1]["content"] == "me escondo atrás da carroça", (
+        "a fala do jogador foi contaminada pelo fato da engine — o bug de 07/08"
+    )
+
+
+def test_palavra_ENGINE_nao_chega_ao_modelo():
+    """"começou a usar engine como termo quando deveria ser uma mecânica"."""
+    sistema = _system_com_fatos(["ENGINE: seu ataque ACERTOU o carniçal (19 vs CA 12)."])
+    corpo = sistema.split("JÁ RESOLVIDO PELA ENGINE")[1]
+    assert "ENGINE:" not in corpo, "o prefixo voltou a vazar pro modelo"
+    assert "ACERTOU o carniçal" in corpo, "o fato em si sumiu junto com o prefixo"
+
+
+def test_bloco_proibe_citar_numero_e_falar_com_a_engine():
+    sistema = _system_com_fatos(["ENGINE: dano 9."])
+    bloco = sistema.split("JÁ RESOLVIDO PELA ENGINE")[1]
+    assert "NÃO é fala do jogador" in bloco
+    assert "nunca se dirija à engine" in bloco
+
+
+def test_sem_fatos_o_bloco_nao_aparece():
+    """Turno comum não paga o custo do bloco."""
+    assert "JÁ RESOLVIDO PELA ENGINE" not in _system_com_fatos([])
+
+
+def test_fatos_entram_na_zona_dinamica_nao_no_prefixo_cacheavel():
+    """Eles mudam a cada turno — no prefixo, derrubariam o cache inteiro."""
+    sistema = _system_com_fatos(["ENGINE: dano 9."])
+    assert sistema.index("MISSÕES DO MÓDULO") < sistema.index("JÁ RESOLVIDO PELA ENGINE")
