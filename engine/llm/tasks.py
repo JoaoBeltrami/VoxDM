@@ -2,7 +2,7 @@
 Tipos de tarefa LLM e cascatas de fallback default.
 
 Por que existe: o router precisa saber qual cascata aplicar para cada tipo de
-    chamada. Narrativa quer 70B → 8B → Gemini → Cerebras → Ollama. Resumo quer
+    chamada. Narrativa quer 70B → 120B → leve → Gemini → Ollama. Resumo quer
     Gemini (cota grande, qualidade alta em síntese) → 70B → Ollama.
 Dependências: nenhuma — só enum + constantes.
 Armadilha: as cascatas referenciam NOMES de provider que devem existir em
@@ -12,7 +12,7 @@ Armadilha: as cascatas referenciam NOMES de provider que devem existir em
 Exemplo:
     from engine.llm.tasks import TaskType, CASCATA_DEFAULT
     cascata = CASCATA_DEFAULT[TaskType.NARRATIVE]
-    # → ["groq-70b", "groq-8b", "gemini-flash", "cerebras-70b", "ollama-local"]
+    # → ["groq-70b", "groq-120b", "groq-leve", "gemini-flash", "ollama-local"]
 """
 
 from enum import Enum
@@ -42,7 +42,18 @@ class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda s
 # Nomes canônicos de provider — devem casar com LLMRouter._providers.
 # Mantemos como constantes pra evitar typos espalhados.
 PROV_GROQ_70B:    Final[str] = "groq-70b"
-PROV_GROQ_8B:     Final[str] = "groq-8b"
+# SLOT-MENTE-1 (pedido do Beltrami, 01/08): este slot se chamava "groq-8b" e
+# rodava `openai/gpt-oss-20b` desde 25/07 — o nome mentia. Custou tempo de
+# diagnóstico AO VIVO no TOOL-FANTASMA-1: o log dizia `provider=groq-8b` e foi
+# preciso grepar tasks.py → router.py → config.py pra descobrir quem falhou.
+#
+# A correção NÃO é rebatizar de "groq-20b": no próximo swap o nome mente de
+# novo, e o pedido dele foi "refletindo sempre o modelo real, ATÉ QUANDO
+# TROCARMOS". Nome de slot que cita tamanho de modelo é uma dívida com juros.
+# Este passa a nomear o PAPEL — papel não envelhece — e quem responde "qual
+# modelo?" é `MODELO_DO_SLOT` (derivado do settings) + o log, que agora carrega
+# `modelo=` junto de `provider=`. O teste em test_slot_honesto.py fecha a porta.
+PROV_GROQ_LEVE:   Final[str] = "groq-leve"
 # FREE-TIER-TPD (auditoria 24/07): degrau novo entre o 70B e o 8B. No free tier
 # o limite que MORDE não é o TPM — é o TPD. O 70B tem 100K tokens/dia, o que dá
 # ~19-27 turnos (medido: 3,6k tok/turno em exploração, 5,2k em combate/social) —
@@ -54,11 +65,36 @@ PROV_GEMINI:      Final[str] = "gemini-flash"
 PROV_OLLAMA:      Final[str] = "ollama-local"
 PROV_OLLAMA_GRIM: Final[str] = "ollama-grim"   # modelo uncensored para ficção sombria
 
+# Valores de wire ACEITOS que não são o nome canônico — vêm de toggle salvo no
+# localStorage de quem já usou o menu Opções antes de 01/08. Renomear slot sem
+# isto deixa preferência gravada apontando pra provider inexistente.
+ALIASES_SLOT: Final[dict[str, str]] = {
+    "groq-8b": PROV_GROQ_LEVE,   # legado — o slot nunca rodou um 8B desde 25/07
+    "groq":    PROV_GROQ_70B,    # legado anterior
+}
+
+
+def modelo_do_slot(slot: str) -> str:
+    """Qual modelo REAL este slot roda, lido do settings (nunca de literal).
+
+    SLOT-MENTE-1: existe pra que "qual modelo é esse?" tenha UMA resposta, e ela
+    venha da configuração — não de um nome de constante que envelhece. Devolve
+    "" para slot desconhecido ou provider sem modelo fixo (Ollama/Gemini variam
+    por chave/host).
+    """
+    from config import settings
+
+    return {
+        PROV_GROQ_70B:  settings.GROQ_MODEL,
+        PROV_GROQ_120B: settings.GROQ_MODEL_MEIO,
+        PROV_GROQ_LEVE: settings.GROQ_MODEL_FALLBACK,
+    }.get(ALIASES_SLOT.get(slot, slot), "")
+
 
 # Cascata aplicada quando o TaskType não tem entrada explícita aqui.
 _DEFAULT: Final[list[str]] = [
     PROV_GROQ_70B,
-    PROV_GROQ_8B,
+    PROV_GROQ_LEVE,
     PROV_GEMINI,
     PROV_OLLAMA,
 ]
@@ -71,7 +107,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     TaskType.NARRATIVE: [
         PROV_GROQ_70B,
         PROV_GROQ_120B,     # amortecedor de TPD — ver FREE-TIER-TPD acima
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_GEMINI,
         PROV_OLLAMA,
     ],
@@ -81,13 +117,13 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
         PROV_GROQ_70B,
         PROV_GROQ_120B,     # no clímax, o degrau grande vem antes do Gemini
         PROV_GEMINI,        # pular 8B em climax: queremos qualidade
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_OLLAMA,
     ],
     # Light: exploração filler, transição rápida — 8B é suficiente e barato.
     # Economiza TPM do 70B para os momentos que importam.
     TaskType.NARRATIVE_LIGHT: [
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_GEMINI,
         PROV_GROQ_70B,      # 70B só como último recurso aqui
         PROV_OLLAMA,
@@ -109,18 +145,18 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     TaskType.SUMMARIZATION: [
         PROV_GEMINI,
         PROV_GROQ_70B,
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_OLLAMA,
     ],
     # Classificação: 8B é suficiente e mais barato em quota.
     TaskType.CLASSIFICATION: [
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_GEMINI,
         PROV_OLLAMA,
     ],
     # Extração de entidades: 8B + Gemini.
     TaskType.ENTITY_EXTRACTION: [
-        PROV_GROQ_8B,
+        PROV_GROQ_LEVE,
         PROV_GEMINI,
         PROV_OLLAMA,
     ],

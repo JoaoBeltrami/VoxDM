@@ -165,15 +165,22 @@ class TestIdleNudgeForcaLight:
 
 
 class TestCascataPara:
-    def test_narrative_light_prefere_8b(self):
-        cascata = cascata_para(TaskType.NARRATIVE_LIGHT)
-        assert cascata[0] == "groq-8b"
+    # SLOT-MENTE-1 (01/08): os literais aqui eram "groq-8b" — o slot que rodava
+    # gpt-oss-20b. Passam a usar a CONSTANTE, que é o que o rename existe pra
+    # garantir: nome de slot em teste também derivava em silêncio.
+    def test_narrative_light_prefere_o_modelo_leve(self):
+        from engine.llm.tasks import PROV_GROQ_LEVE
 
-    def test_narrative_climax_pula_8b(self):
+        cascata = cascata_para(TaskType.NARRATIVE_LIGHT)
+        assert cascata[0] == PROV_GROQ_LEVE
+
+    def test_narrative_climax_pula_o_leve(self):
+        from engine.llm.tasks import PROV_GEMINI, PROV_GROQ_70B, PROV_GROQ_LEVE
+
         cascata = cascata_para(TaskType.NARRATIVE_CLIMAX)
-        # 70B primeiro, Gemini segundo, 8B só depois
-        assert cascata[0] == "groq-70b"
-        assert cascata.index("gemini-flash") < cascata.index("groq-8b")
+        # 70B primeiro, Gemini antes do leve — no clímax queremos qualidade
+        assert cascata[0] == PROV_GROQ_70B
+        assert cascata.index(PROV_GEMINI) < cascata.index(PROV_GROQ_LEVE)
 
     def test_task_desconhecida_cai_em_default(self):
         # Garantia: tipo sem entrada explícita não quebra (cai no _DEFAULT)

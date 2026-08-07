@@ -20,8 +20,8 @@ from engine.llm.providers.base import BaseLLMProvider, LLMRetriable
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_8B,
     PROV_GROQ_70B,
+    PROV_GROQ_LEVE,
     PROV_OLLAMA,
     TaskType,
 )
@@ -78,7 +78,7 @@ def _router(**fakes: FakeProvider) -> LLMRouter:
     r = LLMRouter()
     base = {
         PROV_GROQ_70B: FakeProvider(PROV_GROQ_70B),
-        PROV_GROQ_8B: FakeProvider(PROV_GROQ_8B),
+        PROV_GROQ_LEVE: FakeProvider(PROV_GROQ_LEVE),
         PROV_GEMINI: FakeProvider(PROV_GEMINI),
         PROV_OLLAMA: FakeProvider(PROV_OLLAMA),
     }
@@ -93,8 +93,8 @@ def _router(**fakes: FakeProvider) -> LLMRouter:
 @pytest.mark.asyncio
 async def test_primario_ok_nao_cascateia():
     p70 = FakeProvider(PROV_GROQ_70B, texto="resp-70b")
-    p8 = FakeProvider(PROV_GROQ_8B)
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE)
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = await r.completar(_MSG, task=TaskType.NARRATIVE)
     assert out == "resp-70b"
     assert p70.chamado == 1
@@ -104,8 +104,8 @@ async def test_primario_ok_nao_cascateia():
 @pytest.mark.asyncio
 async def test_retriable_no_primario_cascateia_pro_segundo():
     p70 = FakeProvider(PROV_GROQ_70B, falha=LLMRetriable("429 TPM", categoria="rate_limit"))
-    p8 = FakeProvider(PROV_GROQ_8B, texto="resp-8b")
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, texto="resp-8b")
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = await r.completar(_MSG, task=TaskType.NARRATIVE)
     assert out == "resp-8b"
     assert p70.chamado == 1 and p8.chamado == 1
@@ -114,9 +114,9 @@ async def test_retriable_no_primario_cascateia_pro_segundo():
 @pytest.mark.asyncio
 async def test_cascateia_dois_degraus_ate_gemini():
     p70 = FakeProvider(PROV_GROQ_70B, falha=LLMRetriable("429", categoria="rate_limit"))
-    p8 = FakeProvider(PROV_GROQ_8B, falha=LLMRetriable("timeout", categoria="timeout"))
+    p8 = FakeProvider(PROV_GROQ_LEVE, falha=LLMRetriable("timeout", categoria="timeout"))
     pg = FakeProvider(PROV_GEMINI, texto="resp-gemini")
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8, PROV_GEMINI: pg})
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8, PROV_GEMINI: pg})
     out = await r.completar(_MSG, task=TaskType.NARRATIVE)
     assert out == "resp-gemini"
     assert p70.chamado == p8.chamado == pg.chamado == 1
@@ -126,7 +126,7 @@ async def test_cascateia_dois_degraus_ate_gemini():
 async def test_todos_retriable_levanta_runtimeerror():
     fakes = {
         n: FakeProvider(n, falha=LLMRetriable("down", categoria="rede"))
-        for n in (PROV_GROQ_70B, PROV_GROQ_8B, PROV_GEMINI, PROV_OLLAMA)
+        for n in (PROV_GROQ_70B, PROV_GROQ_LEVE, PROV_GEMINI, PROV_OLLAMA)
     }
     r = _router(**fakes)
     with pytest.raises(RuntimeError):
@@ -137,8 +137,8 @@ async def test_todos_retriable_levanta_runtimeerror():
 async def test_erro_nao_retriable_propaga_sem_cascatear():
     # Bug no nosso código (ex: prompt 400 / TypeError) NÃO deve mascarar-se como fallback.
     p70 = FakeProvider(PROV_GROQ_70B, falha=ValueError("prompt malformado"))
-    p8 = FakeProvider(PROV_GROQ_8B, texto="nao-deveria")
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, texto="nao-deveria")
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     with pytest.raises(ValueError):
         await r.completar(_MSG, task=TaskType.NARRATIVE)
     assert p8.chamado == 0  # cascata NÃO foi acionada por erro não-recuperável
@@ -147,8 +147,8 @@ async def test_erro_nao_retriable_propaga_sem_cascatear():
 @pytest.mark.asyncio
 async def test_provider_indisponivel_e_pulado():
     p70 = FakeProvider(PROV_GROQ_70B, disponivel=False)
-    p8 = FakeProvider(PROV_GROQ_8B, texto="resp-8b")
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, texto="resp-8b")
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = await r.completar(_MSG, task=TaskType.NARRATIVE)
     assert out == "resp-8b"
     assert p70.chamado == 0  # nem foi tentado
@@ -158,7 +158,7 @@ async def test_provider_indisponivel_e_pulado():
 async def test_nenhum_provider_disponivel_levanta():
     fakes = {
         n: FakeProvider(n, disponivel=False)
-        for n in (PROV_GROQ_70B, PROV_GROQ_8B, PROV_GEMINI, PROV_OLLAMA)
+        for n in (PROV_GROQ_70B, PROV_GROQ_LEVE, PROV_GEMINI, PROV_OLLAMA)
     }
     r = _router(**fakes)
     with pytest.raises(RuntimeError):
@@ -171,8 +171,8 @@ async def test_nenhum_provider_disponivel_levanta():
 @pytest.mark.asyncio
 async def test_stream_primario_ok_registra_provider():
     p70 = FakeProvider(PROV_GROQ_70B, tokens=["A", "B", "C"])
-    p8 = FakeProvider(PROV_GROQ_8B)
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE)
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = [t async for t in r.completar_stream(_MSG, task=TaskType.NARRATIVE)]
     assert out == ["A", "B", "C"]
     assert r.ultimo_provider_stream == PROV_GROQ_70B
@@ -182,22 +182,22 @@ async def test_stream_primario_ok_registra_provider():
 @pytest.mark.asyncio
 async def test_stream_falha_antes_do_primeiro_token_cascateia():
     p70 = FakeProvider(PROV_GROQ_70B, falha=LLMRetriable("429", categoria="rate_limit"))
-    p8 = FakeProvider(PROV_GROQ_8B, tokens=["X", "Y"])
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, tokens=["X", "Y"])
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = [t async for t in r.completar_stream(_MSG, task=TaskType.NARRATIVE)]
     assert out == ["X", "Y"]
-    assert r.ultimo_provider_stream == PROV_GROQ_8B
+    assert r.ultimo_provider_stream == PROV_GROQ_LEVE
 
 
 @pytest.mark.asyncio
 async def test_stream_vazio_sem_erro_e_tratado_como_retriable():
     # Provider esvazia sem emitir nem lançar → router trata como retriable e cascateia.
     p70 = FakeProvider(PROV_GROQ_70B, tokens=[])
-    p8 = FakeProvider(PROV_GROQ_8B, tokens=["Z"])
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, tokens=["Z"])
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
     out = [t async for t in r.completar_stream(_MSG, task=TaskType.NARRATIVE)]
     assert out == ["Z"]
-    assert r.ultimo_provider_stream == PROV_GROQ_8B
+    assert r.ultimo_provider_stream == PROV_GROQ_LEVE
 
 
 @pytest.mark.asyncio
@@ -212,8 +212,8 @@ async def test_stream_nao_reinicia_apos_primeiro_token():
         PROV_GROQ_70B, tokens=["A", "B", "C"],
         falha=LLMRetriable("conn caiu", categoria="rede"), falha_apos=2,
     )
-    p8 = FakeProvider(PROV_GROQ_8B, tokens=["X", "Y"])
-    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_8B: p8})
+    p8 = FakeProvider(PROV_GROQ_LEVE, tokens=["X", "Y"])
+    r = _router(**{PROV_GROQ_70B: p70, PROV_GROQ_LEVE: p8})
 
     out: list[str] = []
     with pytest.raises(Exception):  # noqa: B017 — qualquer erro; o ponto é NÃO ter cascateado
