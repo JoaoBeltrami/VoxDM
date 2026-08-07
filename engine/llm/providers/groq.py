@@ -102,6 +102,31 @@ def _e_quota_disfarcada(exc: BaseException) -> bool:
     return any(kw in corpo for kw in _PALAVRAS_QUOTA)
 
 
+# TOOL-FANTASMA-1 (playtest 01/08): o `openai/gpt-oss-20b` chamou uma ferramenta
+# que ninguém ofereceu, e o Groq devolveu 400 "Tool choice is none, but model
+# called a tool". O 400 caía no `raise` do `except APIError` — não é quota, não é
+# rede — subia inteiro e MATAVA o turno. Gemini e 70B, que rodam o MESMO prompt
+# sem problema, nunca eram tentados.
+#
+# É falha DO MODELO, não do nosso pedido: fallback-able por definição. Categoria
+# própria ("modelo") por dois motivos — aparece separada na telemetria, e o
+# cooldown só penaliza `rate_limit`, então um surto estocástico não tira o
+# provider de circulação por 75s.
+#
+# Não reproduzido em 12 chamadas com o mesmo prompt (6 no 20b, 6 no 120b) — é
+# intermitente. Frequência baixa não muda o desenho: turno morto é turno morto.
+_PALAVRAS_FALHA_MODELO = (
+    "tool choice is none",
+    "model called a tool",
+)
+
+
+def _e_falha_do_modelo(exc: BaseException) -> bool:
+    """True quando o 400 é comportamento errático do modelo, não pedido inválido."""
+    corpo = str(exc).lower()
+    return any(kw in corpo for kw in _PALAVRAS_FALHA_MODELO)
+
+
 
 def _extrair_usage(resp: Any) -> dict[str, int]:
     """Tokens da resposta, incluindo os gastos em RACIOCÍNIO quando houver.
@@ -115,7 +140,8 @@ def _extrair_usage(resp: Any) -> dict[str, int]:
 
     Tolerante de propósito: a forma de `completion_tokens_details` varia entre
     versões do SDK e entre modelos (o 70B não tem raciocínio nenhum). Campo
-    ausente vira 0, nunca exceção — telemetria não pode derrubar turno.
+    ausente vira 0, nunca exceção — telemetria não pode derrubar turno. O mesmo
+    vale pro `prompt_tokens_details`, que só existe onde há prompt cache.
     """
     u = getattr(resp, "usage", None)
     if u is None:
@@ -126,12 +152,45 @@ def _extrair_usage(resp: Any) -> dict[str, int]:
         except (TypeError, ValueError):
             return 0
     det = getattr(u, "completion_tokens_details", None)
+    det_prompt = getattr(u, "prompt_tokens_details", None)
     return {
         "prompt_tokens": _i(u, "prompt_tokens"),
         "completion_tokens": _i(u, "completion_tokens"),
         "total_tokens": _i(u, "total_tokens"),
         "reasoning_tokens": _i(det, "reasoning_tokens") if det is not None else 0,
+        "cached_tokens": _i(det_prompt, "cached_tokens") if det_prompt is not None else 0,
     }
+
+
+def _logar_cache(modelo: str, usage: dict[str, int]) -> None:
+    """Registra a taxa de acerto do prompt cache do Groq.
+
+    CACHE-CEGO (31/07): a reorganização de prefixo de 25/07 foi feita às cegas —
+    o projeto nunca leu `cached_tokens`, então nenhuma afirmação sobre cache era
+    verificável. Hoje o cache do Groq só existe para a família `openai/gpt-oss`
+    (20b / 120b / safeguard-20b); em `llama-3.3-70b-versatile` a taxa é sempre 0.
+    Este log serve para PROVAR isso com número, não para alarmar.
+
+    MEDIDO na primeira corrida (31/07, prefixo idêntico repetido com 1s de
+    intervalo, ~1,3-2k tokens): `prompt_tokens_details` voltou **None** nos TRÊS
+    degraus — inclusive no gpt-oss. Ou seja: 0% de cache em toda a cascata, e o
+    campo vem nulo, não zero. Antes de otimizar prefixo, olhe este log numa
+    sessão real: prefixo de produção é maior e pode cruzar o piso do cache.
+
+    Silencioso quando não há prompt_tokens: chamada de teste ou usage ausente não
+    polui o log nem levanta exceção — telemetria nunca derruba turno.
+    """
+    prompt_tok = usage.get("prompt_tokens", 0)
+    if prompt_tok <= 0:
+        return
+    cached = usage.get("cached_tokens", 0)
+    log.info(
+        "groq_cache",
+        modelo=modelo,
+        prompt_tokens=prompt_tok,
+        cached_tokens=cached,
+        taxa_cache=round(cached / prompt_tok * 100, 1),
+    )
 
 
 class GroqProvider(BaseLLMProvider):
@@ -157,8 +216,10 @@ class GroqProvider(BaseLLMProvider):
         self.nome = nome
         self._modelo = modelo
         self._client: AsyncGroq | None = None
-        # Usage da última chamada não-streaming (ver `_extrair_usage`). Vazio
-        # até a primeira chamada; o caminho de stream não expõe usage.
+        # Usage da última chamada (ver `_extrair_usage`). Vazio até a primeira.
+        # Desde 31/07 o caminho de STREAM também popula isto: o chunk final com
+        # `choices=[]` (habilitado por stream_options.include_usage) carrega o
+        # usage do stream inteiro.
         self.ultimo_usage: dict[str, int] = {}
         # Setado pelo router quando a cena ativa e_cena_sombria() ou
         # dm_profile="sombrio". Habilita detecção de amarelada no buffer.
@@ -212,6 +273,7 @@ class GroqProvider(BaseLLMProvider):
             # pra decidir a ordem da cascata: o 200K TPD do gpt-oss vale o dobro do
             # 70b só se ele não gastar o dobro por turno.
             self.ultimo_usage = _extrair_usage(resp)
+            _logar_cache(self._modelo, self.ultimo_usage)
         except _ERROS_RECUPERAVEIS as e:
             raise LLMRetriable(
                 f"groq[{self._modelo}] erro recuperável: {e!s}"[:200],
@@ -226,6 +288,12 @@ class GroqProvider(BaseLLMProvider):
                 raise LLMRetriable(
                     f"groq[{self._modelo}] quota disfarçada: {e!s}"[:200],
                     categoria="rate_limit",
+                    causa=e,
+                ) from e
+            if _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
                     causa=e,
                 ) from e
             raise
@@ -250,6 +318,18 @@ class GroqProvider(BaseLLMProvider):
                 temperature=temperatura,
                 max_tokens=max_tokens,
                 stream=True,
+                # Sem isto o caminho de PRODUÇÃO (stream) não devolve usage
+                # nenhum — e produção é justamente onde o cache importa. O preço
+                # é um chunk final com choices=[] (ver o guard no loop abaixo).
+                #
+                # ARMADILHA (medida em 31/07 contra a API real): o SDK pinado
+                # (groq==1.1.2) NÃO tem o kwarg `stream_options` — passá-lo
+                # direto levanta TypeError e derruba TODO turno de stream, que é
+                # o caminho do jogo. `extra_body` é a escotilha do SDK: o campo
+                # entra no JSON da requisição sem o cliente precisar conhecê-lo.
+                # Se um dia o SDK subir e ganhar o kwarg nativo, isto continua
+                # válido — não trocar sem rodar contra a API de verdade.
+                extra_body={"stream_options": {"include_usage": True}},
                 **self._extras(),
             )
         except _ERROS_RECUPERAVEIS as e:
@@ -265,6 +345,12 @@ class GroqProvider(BaseLLMProvider):
                     categoria="rate_limit",
                     causa=e,
                 ) from e
+            if _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
+                    causa=e,
+                ) from e
             raise
 
         # Buffer pra detectar refusal antes de emitir qualquer token. Quebra
@@ -275,6 +361,15 @@ class GroqProvider(BaseLLMProvider):
 
         try:
             async for chunk in stream:
+                # Com include_usage=True o Groq manda um chunk FINAL sem choices,
+                # carregando o usage do stream inteiro. Tocar em choices[0] aqui
+                # é IndexError — e IndexError no meio do stream derruba o turno.
+                # Este guard é a PRIMEIRA coisa do loop de propósito.
+                if not chunk.choices:
+                    self.ultimo_usage = _extrair_usage(chunk)
+                    _logar_cache(self._modelo, self.ultimo_usage)
+                    continue
+
                 delta = chunk.choices[0].delta.content
                 if not delta:
                     continue
@@ -316,6 +411,14 @@ class GroqProvider(BaseLLMProvider):
                 raise LLMRetriable(
                     f"groq[{self._modelo}] stream quota disfarçada: {e!s}"[:200],
                     categoria="rate_limit",
+                    causa=e,
+                ) from e
+            # TOOL-FANTASMA-1: foi AQUI que o turno morreu no playtest de 01/08 —
+            # o 400 chega depois do 200 OK da abertura, já dentro do stream.
+            if not liberado and _e_falha_do_modelo(e):
+                raise LLMRetriable(
+                    f"groq[{self._modelo}] stream falha do modelo: {e!s}"[:200],
+                    categoria="modelo",
                     causa=e,
                 ) from e
             raise
