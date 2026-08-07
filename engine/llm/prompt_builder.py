@@ -775,6 +775,30 @@ def _montar_mensagens_brief(
         if regras.strip():
             secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
     _marco("regras_srd")
+
+    # ENGINE-COMO-PERSONAGEM-1 (playtest 07/08): os fatos que a engine resolveu
+    # entram AQUI, como fato do sistema — não mais embutidos na fala do jogador.
+    # O sintoma que isso cura, nas palavras dele: "ele continua narrando a engine
+    # como se eu fosse ela". Era literal: a linha "ENGINE: ..." chegava com
+    # `role: user`, então o modelo tratava a engine como quem estava falando.
+    if contexto.fatos_engine:
+        # Tira o prefixo "ENGINE:" de cada linha: o cabeçalho do bloco já diz de
+        # quem é o fato, e repetir a palavra em toda linha foi o que a fez virar
+        # vocabulário do Mestre ("começou a usar engine como termo quando deveria
+        # ser uma mecânica"). O prefixo segue existindo nos módulos que produzem
+        # as linhas — é contrato interno e tem teste; só não chega ao modelo.
+        _fatos = "\n".join(
+            f"• {f.removeprefix('ENGINE:').strip()}" for f in contexto.fatos_engine
+        )
+        secoes.append(
+            "\n=== JÁ RESOLVIDO PELA ENGINE (fatos deste turno) ===\n"
+            f"{_fatos}\n"
+            "Isto NÃO é fala do jogador e NÃO é sugestão: é o que aconteceu. "
+            "Narre o que esses fatos significam na ficção, com corpo e "
+            "consequência. Nunca cite 'engine', 'CD', 'd20', 'modificador' nem "
+            "número nenhum, e nunca se dirija à engine — o jogador ouve só a cena."
+        )
+    _marco("fatos_engine")
     secoes.extend(_cena_dinamica)
     _marco("cena_dinamica")
 

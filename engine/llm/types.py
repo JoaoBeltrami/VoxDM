@@ -205,3 +205,12 @@ class ContextoMontado:
     # (ex: "Valdrek está morto há gerações"). Injetados no prompt junto da regra
     # genérica de canon — data-driven, não hardcoded. Populado pelo context_builder.
     canon_modulo: list[str] = field(default_factory=list)
+    # ENGINE-COMO-PERSONAGEM-1 (playtest 07/08): fatos que a ENGINE resolveu
+    # neste turno (check com veredito, dano de ataque, poção consumida). Antes
+    # eles eram enfiados no `texto_jogador` — ou seja, chegavam ao modelo como
+    # `role: user`, como se o JOGADOR tivesse dito "ENGINE: teste de Furtividade
+    # = 15 vs CD 15: SUCESSO". O Mestre então narrava "a engine" como se ela
+    # fosse o interlocutor, e o Beltrami reclamou três vezes na mesma sessão.
+    # Aqui eles têm canal próprio: entram como FATO do sistema, e o texto do
+    # jogador volta a ser só o que ele falou (inclusive pra query do RAG).
+    fatos_engine: list[str] = field(default_factory=list)
