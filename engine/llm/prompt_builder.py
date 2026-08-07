@@ -640,14 +640,47 @@ def _montar_mensagens_brief(
     master_system = master_system_override or _carregar_master_system()
     secoes: list[str] = [master_system, ""]
 
-    # 26/07: era incondicional aqui, mas condicional no caminho legado (:795) — e
-    # o próprio master_system.md PROMETE ao modelo que é condicional ("Lista
-    # completa é injetada em cena dramática; em cena calma bastam [FIO:]..."). Mais
-    # uma ocorrência da classe "prompt e código que o consome derivam em silêncio".
-    # Medido no prompt do playtest 26/07: 2255 dos 17700 chars (12,7%), presentes
-    # em 100% dos turnos; 21 dos 50 turnos tinham pacing<4 fora de combate, ou seja
-    # dariam False aqui. O custo não é latência (o prefill é barato) — é TPD: 19KB
-    # por turno é o que matou a cota do 70B no turno 14.
+    # ── PREFIXO INVARIANTE — entra igual em 100% dos turnos ─────────────────
+    #
+    # CACHE-PREFIXO-ORDEM (P2, 01/08). A regra desta zona, que NÃO é óbvia e por
+    # isso alguém vai desfazer: **condicional que OSCILA vem DEPOIS de tudo que
+    # é invariante.** O cache de prefixo do Groq exige match exato do começo do
+    # prompt — na primeira divergência, tudo daí pra frente cai fora, mesmo
+    # sendo byte-idêntico. Até 01/08 `abertura_personagem` e `markers_lista`
+    # entravam AQUI, antes do catálogo de quests e da cena estática; como o
+    # markers alterna em ~40% dos turnos, ele derrubava do cache os ~800 chars
+    # de quests + a cena estática inteira toda vez que ligava ou desligava.
+    #
+    # Medido em produção no playtest de 01/08 (a linha de base que o P1 criou):
+    # o cache do gpt-oss EXISTE, tem piso de tamanho de prefixo, e oscilava
+    # entre 0% e 80% com prompt do mesmo tamanho — ~2 800 tokens já cacheados
+    # caindo fora em metade dos turnos. O conteúdo aqui não mudou; só a ordem.
+    #
+    # Catálogo de quests + como sinalizar avanço. QUEST-DEADLOCK-1 (playtest
+    # 21/07): este bloco não existia no caminho do brief, então o Mestre nunca
+    # via um único id de quest — e sem id não há `[Q: ...]`, sem `[Q: ...]` não
+    # há avanço, sem avanço a espinha da guerra não anda e a campanha não chega
+    # a final nenhum. ~800 chars estáveis por sessão (prefixo cacheável).
+    _quests_catalogo = getattr(wm, "quests_modulo", "")
+    if _quests_catalogo:
+        _quests_instrucao = _carregar_quests()
+        secoes.append(
+            f"\n{_quests_catalogo}"
+            + (f"\n{_quests_instrucao}" if _quests_instrucao else "")
+        )
+
+    # Estado de combate, protocolo, voz de NPC e nudges — tudo que o rolling
+    # summary não codifica (COMBATE-CEGO / MESMICE / NUDGES-MORTOS, auditoria
+    # 22/07). Reusa os carregadores do caminho legado; gate espelhado.
+    # ORDEM IMPORTA (CACHE-PREFIXO 25/07): só os ESTÁTICOS entram aqui, no fim do
+    # prefixo cacheável. Os dinâmicos vão depois das regras SRD, lá embaixo.
+    _cena_estatica, _cena_dinamica = _blocos_de_cena(contexto)
+    secoes.extend(_cena_estatica)
+
+    # ── FRAGMENTOS CONDICIONAIS — oscilam entre turnos ──────────────────────
+    # Depois de TUDO que é invariante, de propósito (ver a regra acima). Os
+    # gates são exatamente os de antes; só a posição mudou.
+    #
     # Abertura/identidade: só quando o personagem ainda não se apresentou ou a
     # sessão está começando. Depois disso é peso morto em 100% dos turnos —
     # ORCAMENTO-BLOCO (30/07). Ler `player_name` vazio cobre a Session Zero e o
@@ -661,6 +694,16 @@ def _montar_mensagens_brief(
         if _abertura:
             secoes.append(_abertura)
 
+    # 26/07: era incondicional aqui, mas condicional no caminho legado (:795) — e
+    # o próprio master_system.md PROMETE ao modelo que é condicional ("Lista
+    # completa é injetada em cena dramática; em cena calma bastam [FIO:]..."). Mais
+    # uma ocorrência da classe "prompt e código que o consome derivam em silêncio".
+    # Medido no prompt do playtest 26/07: 2255 dos 17700 chars (12,7%), presentes
+    # em 100% dos turnos; 21 dos 50 turnos tinham pacing<4 fora de combate, ou seja
+    # dariam False aqui. O custo não é latência (o prefill é barato) — é TPD: 19KB
+    # por turno é o que matou a cota do 70B no turno 14.
+    # É ESTE o fragmento que mais justifica a ordem nova: alternando em ~40% dos
+    # turnos, era ele quem derrubava o resto do prefixo do cache.
     markers = _carregar_markers_lista() if _cena_dramatica(wm) else ""
     if markers:
         secoes.append(markers)
@@ -683,27 +726,6 @@ def _montar_mensagens_brief(
             if grimdark_frag and len(grimdark_frag) >= _PROMPT_MIN_CHARS:
                 secoes.append(grimdark_frag)
                 log.info("grimdark_fragmento_injetado", dm_profile=dm_profile_attr)
-
-    # Catálogo de quests + como sinalizar avanço. QUEST-DEADLOCK-1 (playtest
-    # 21/07): este bloco não existia no caminho do brief, então o Mestre nunca
-    # via um único id de quest — e sem id não há `[Q: ...]`, sem `[Q: ...]` não
-    # há avanço, sem avanço a espinha da guerra não anda e a campanha não chega
-    # a final nenhum. ~800 chars estáveis por sessão (prefixo cacheável).
-    _quests_catalogo = getattr(wm, "quests_modulo", "")
-    if _quests_catalogo:
-        _quests_instrucao = _carregar_quests()
-        secoes.append(
-            f"\n{_quests_catalogo}"
-            + (f"\n{_quests_instrucao}" if _quests_instrucao else "")
-        )
-
-    # Estado de combate, protocolo, voz de NPC e nudges — tudo que o rolling
-    # summary não codifica (COMBATE-CEGO / MESMICE / NUDGES-MORTOS, auditoria
-    # 22/07). Reusa os carregadores do caminho legado; gate espelhado.
-    # ORDEM IMPORTA (CACHE-PREFIXO 25/07): só os ESTÁTICOS entram aqui, no fim do
-    # prefixo cacheável. Os dinâmicos vão depois das regras SRD, lá embaixo.
-    _cena_estatica, _cena_dinamica = _blocos_de_cena(contexto)
-    secoes.extend(_cena_estatica)
 
     # ── ZONA DINÂMICA — daqui pra baixo o conteúdo muda a cada turno ─────────
     # Tudo acima é prefixo cacheável (e token cacheado não conta pro rate limit
