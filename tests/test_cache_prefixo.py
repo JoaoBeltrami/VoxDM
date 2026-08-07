@@ -262,3 +262,45 @@ def test_fatos_entram_na_zona_dinamica_nao_no_prefixo_cacheavel():
     """Eles mudam a cada turno — no prefixo, derrubariam o cache inteiro."""
     sistema = _system_com_fatos(["ENGINE: dano 9."])
     assert sistema.index("MISSÕES DO MÓDULO") < sistema.index("JÁ RESOLVIDO PELA ENGINE")
+# ── ABERTURA-SEMPRE-LIGADA-1 (achado pela telemetria de composição, 07/08) ────
+#
+# O gate lia `wm.iteracoes`, que NÃO existe na WorkingMemory (o contador vive em
+# SessaoAtiva). `getattr` devolvia sempre 0, a condição era sempre True, e o
+# fragmento entrou em 100% dos turnos desde 30/07 — inclusive no turno 36, onde
+# a composição do warning finalmente mostrou `abertura_personagem: 464`.
+
+def test_abertura_some_depois_do_comeco_da_sessao():
+    """O gate agora lê um contador que EXISTE."""
+    inicio = _system(_wm(pacing=1.0, iteracoes=0))
+    depois = _system(_wm(pacing=1.0, iteracoes=10))
+    from engine.llm.prompt_builder import _carregar_abertura_personagem
+
+    abertura = _carregar_abertura_personagem()
+    assert abertura, "fixture quebrou: abertura_personagem.md deveria existir"
+    assert abertura in inicio, "a abertura tem que entrar no começo da sessão"
+    assert abertura not in depois, (
+        "a abertura voltou a entrar em turno avançado — o gate está lendo "
+        "um campo que não existe de novo"
+    )
+
+
+def test_gate_da_abertura_le_campo_que_existe_de_verdade():
+    """Teste que amarra os dois lados: se alguém trocar o contador por um nome
+    que a WorkingMemory não tem, o getattr silencia e o bug volta."""
+    from engine.memory.working_memory import WorkingMemory
+
+    wm = WorkingMemory.nova_sessao("drevamor", "Drevamor", "gate-01")
+    assert hasattr(wm.narrative, "turnos_total"), (
+        "o contador que o gate usa sumiu da WorkingMemory"
+    )
+    assert not hasattr(wm, "iteracoes"), (
+        "se `iteracoes` passou a existir na WM, revisar o gate — foi a ausência "
+        "dela que fez a condição ser sempre verdadeira"
+    )
+
+
+def test_personagem_sem_nome_recebe_abertura_mesmo_em_turno_avancado():
+    """Session Zero: o outro gatilho continua valendo independente do contador."""
+    from engine.llm.prompt_builder import _carregar_abertura_personagem
+
+    assert _carregar_abertura_personagem() in _system(_wm(pacing=1.0, iteracoes=30, nome=""))

@@ -720,9 +720,18 @@ def _montar_mensagens_brief(
     # sessão está começando. Depois disso é peso morto em 100% dos turnos —
     # ORCAMENTO-BLOCO (30/07). Ler `player_name` vazio cobre a Session Zero e o
     # "Personagem: desconhecido"; as 2 primeiras iterações cobrem a abertura.
+    # ABERTURA-SEMPRE-LIGADA-1 (07/08): o gate lia `wm.iteracoes`, que NÃO existe
+    # na WorkingMemory — o contador de turnos vive em `SessaoAtiva` (api/state.py).
+    # `getattr(wm, "iteracoes", 0)` devolvia SEMPRE 0, a condição era sempre True,
+    # e este fragmento entrou em 100% dos turnos desde 30/07 — inclusive no turno
+    # 36 do playtest de 07/08, onde a telemetria de composição finalmente o flagrou
+    # (`abertura_personagem: 464`). Foi tornado condicional justamente pra poupar
+    # orçamento e nunca poupou nada. O contador certo é `narrative.turnos_total`,
+    # que a própria WorkingMemory incrementa.
+    _turnos = int(getattr(getattr(wm, "narrative", None), "turnos_total", 0) or 0)
     _precisa_abertura = (
         not str(getattr(wm, "player_name", "") or "").strip()
-        or int(getattr(wm, "iteracoes", 0) or 0) <= 1
+        or _turnos <= 1
     )
     if _precisa_abertura:
         _abertura = _carregar_abertura_personagem()

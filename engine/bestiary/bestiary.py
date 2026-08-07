@@ -130,11 +130,24 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
         #    (ou override) definida no campo `combat` do JSON do módulo — antes
         #    caíam no fallback CR genérico e o líder da vila lutava como capanga.
         if not dados.get("ficha"):
-            from engine.combat.npc_statblocks import resolver_ficha_npc
+            from engine.combat.npc_statblocks import resolver_ficha_npc, sem_ficha_autoral
             ficha_modulo = resolver_ficha_npc(iid)
             if ficha_modulo:
                 dados["ficha"] = ficha_modulo
                 log.info("statblock_modulo_aplicado", id=iid)
+            elif sem_ficha_autoral(iid):
+                # BESTIARIO-CR-ERRADO-1 (playtest 07/08): o módulo CONHECE esta
+                # criatura e não deu ficha a ela — daqui pra baixo ela vira um
+                # genérico. Foi assim que Vyrmathax recebeu ficha de warlock e o
+                # Beltrami matou "uma lenda" com 9 de dano, achando o combate
+                # fácil. O fallback continua (o jogo não pode travar), mas agora
+                # é ALTO: dá pra ver no log qual criatura precisa de statblock.
+                log.warning(
+                    "npc_do_modulo_sem_ficha_autoral",
+                    id=iid,
+                    nome=dados.get("nome", ""),
+                    acao="escreva o bloco `combat` deste id no JSON do módulo",
+                )
         # 1. Ficha SRD em texto (lookup Qdrant, com cap por turno).
         if not dados.get("ficha") and carregadas < _MAX_LOOKUPS_POR_TURNO:
             ficha = await buscar_ficha_monstro(
