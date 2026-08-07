@@ -61,6 +61,11 @@ _CAMPOS_OVERRIDE: tuple[str, ...] = ("nome", "cr", "xp", "ca", "hp", "atk", "dan
 # o JSON do módulo não muda mid-sessão (uvicorn --reload recarrega em dev).
 _combat_map_cache: dict[str, dict[str, Any]] | None = None
 
+# Ids que o módulo DECLARA mas para os quais não há bloco `combat` — Vyrmathax é
+# o caso que deu nome ao bug. Preenchido no mesmo passe do mapa, e usado por
+# `sem_ficha_autoral` pra avisar ALTO antes do fallback genérico entrar.
+_SEM_FICHA: set[str] = set()
+
 
 def _ficha_texto(campos: dict[str, Any]) -> str:
     """Formata os campos num texto parseável por parse_ficha + xp_do_inimigo."""
@@ -86,10 +91,23 @@ def _carregar_combat_map() -> dict[str, dict[str, Any]]:
     try:
         with caminho.open(encoding="utf-8") as f:
             dados = json.load(f)
-        for npc in dados.get("npcs", []):
-            combat = npc.get("combat")
-            if isinstance(combat, dict) and npc.get("id"):
-                mapa[str(npc["id"])] = combat
+        # BESTIARIO-CR-ERRADO-1 (playtest 07/08): varria SÓ `npcs`. As `entities`
+        # — que no schema v1.2 são justamente as criaturas não-humanoides com
+        # papel narrativo, ou seja, os inimigos que MAIS importam — ficavam de
+        # fora do mapa inteiro. Vyrmathax caiu no fallback genérico e recebeu
+        # ficha de warlock; o Beltrami matou "uma lenda" com 9 de dano e achou
+        # o combate fácil. Companions entram pelo mesmo motivo (aliado com
+        # ficha errada erra na direção oposta).
+        for secao in ("npcs", "entities", "companions"):
+            for ent in dados.get(secao, []):
+                combat = ent.get("combat")
+                if isinstance(combat, dict) and ent.get("id"):
+                    mapa[str(ent["id"])] = combat
+                # O módulo CONHECE esta criatura mas não deu ficha de combate a
+                # ela. Registrar aqui é o que permite avisar alto quando ela
+                # entra em combate — ver `sem_ficha_autoral`.
+                elif ent.get("id"):
+                    _SEM_FICHA.add(str(ent["id"]))
     except Exception as e:
         # Módulo ausente/corrompido → NPCs caem no fallback CR genérico, jogo segue.
         log.warning("npc_statblocks_schema_falhou", erro=str(e)[:120])
@@ -101,6 +119,30 @@ def limpar_cache() -> None:
     """Descarta o cache do mapa `combat` (uso em testes)."""
     global _combat_map_cache
     _combat_map_cache = None
+    _SEM_FICHA.clear()
+
+
+def _id_canonico(npc_id: str) -> str:
+    """Tira o sufixo de instância: `vyrmathax-1` → `vyrmathax`.
+
+    BESTIARIO-CR-ERRADO-1: o combate numera instâncias (`goblin-1`, `goblin-2`)
+    e o log do playtest mostrou `combate_inimigo_declarado id=vyrmathax-1`. O
+    mapa é chaveado pelo id do MÓDULO, sem sufixo — então nenhum inimigo
+    numerado achava a própria ficha autoral, nem os 17 NPCs que têm uma.
+    """
+    base = str(npc_id or "").strip()
+    partes = base.rsplit("-", 1)
+    return partes[0] if len(partes) == 2 and partes[1].isdigit() else base
+
+
+def sem_ficha_autoral(npc_id: str) -> bool:
+    """True quando o módulo conhece esta criatura mas NÃO deu ficha de combate.
+
+    É o sinal de "a lenda vai virar capanga": quem chama deve avisar ALTO antes
+    de cair no fallback genérico, em vez de deixar o CR errado passar calado.
+    """
+    _carregar_combat_map()
+    return _id_canonico(npc_id) in _SEM_FICHA
 
 
 def e_npc_fixo(npc_id: str) -> bool:
@@ -111,7 +153,7 @@ def e_npc_fixo(npc_id: str) -> bool:
     a entrada canônica de um NPC do módulo, e pelo extractor pra não batizar
     um falante com o nome de um NPC fixo apenas MENCIONADO em fala.
     """
-    return str(npc_id or "") in _carregar_combat_map()
+    return _id_canonico(npc_id) in _carregar_combat_map()
 
 
 def resolver_ficha_npc(npc_id: str) -> str | None:
@@ -125,7 +167,7 @@ def resolver_ficha_npc(npc_id: str) -> str | None:
     O campo pode vir solto (`combat.ca`) ou aninhado (`combat.overrides.ca`) —
     as duas formas circulam no projeto e ambas funcionam.
     """
-    combat = _carregar_combat_map().get(str(npc_id or ""))
+    combat = _carregar_combat_map().get(_id_canonico(npc_id))
     if not combat:
         return None
     base = dict(STATBLOCKS_SRD.get(str(combat.get("srd_analogo", "")).strip().lower(), {}))

@@ -148,3 +148,61 @@ async def test_abate_de_npc_fixo_paga_xp_do_analogo():
     )
     assert res["estado_alvo"] == "morto"
     assert wm.xp == xp_antes + 450, "abate do Berserker (CR 2) paga 450 XP"
+
+
+# ── BESTIARIO-CR-ERRADO-1 (playtest 07/08) ───────────────────────────────────
+#
+# `combate_inimigo_declarado id=vyrmathax-1 srd=warlock`. Vyrmathax é a entidade
+# lendária do módulo e recebeu ficha de WARLOCK; `dano_inimigos=0` na luta
+# inteira e o Beltrami matou "uma lenda" com 9 de dano, achando fácil.
+# Duas causas independentes, ambas silenciosas.
+
+def test_id_com_sufixo_de_instancia_acha_a_ficha():
+    """Causa 1: o combate numera instâncias (`bjorn-tharnsson-1`) e o mapa é
+    chaveado pelo id do MÓDULO. Sem normalizar, NENHUM inimigo numerado achava
+    a própria ficha — nem os 17 NPCs que têm uma."""
+    from engine.combat.npc_statblocks import limpar_cache, resolver_ficha_npc
+
+    limpar_cache()
+    direto = resolver_ficha_npc("bjorn-tharnsson")
+    com_sufixo = resolver_ficha_npc("bjorn-tharnsson-1")
+    assert direto, "fixture quebrou: bjorn deveria ter ficha autoral"
+    assert com_sufixo == direto
+
+
+def test_sufixo_nao_numerico_nao_e_cortado():
+    """`halgrim-sem-marca` não pode virar `halgrim` — só dígito é instância."""
+    from engine.combat.npc_statblocks import _id_canonico
+
+    assert _id_canonico("halgrim-sem-marca") == "halgrim-sem-marca"
+    assert _id_canonico("goblin-2") == "goblin"
+    assert _id_canonico("") == ""
+
+
+def test_entities_entram_no_mapa_de_combate():
+    """Causa 2: o loader varria só `npcs`. As `entities` do schema v1.2 são
+    exatamente as criaturas não-humanoides com papel narrativo — os inimigos
+    que mais importam — e ficavam fora do mapa inteiro."""
+    from engine.combat.npc_statblocks import _carregar_combat_map, limpar_cache
+
+    limpar_cache()
+    _carregar_combat_map()  # não deve estourar com seções ausentes
+    from engine.combat.npc_statblocks import _SEM_FICHA
+
+    assert "vyrmathax" in _SEM_FICHA, (
+        "vyrmathax é uma `entity` do módulo — se não aparece nem como "
+        "'conhecido sem ficha', o loader voltou a ignorar a seção"
+    )
+
+
+def test_criatura_conhecida_sem_ficha_e_sinalizada():
+    """O aviso que impede 'a lenda virou capanga' de passar calado."""
+    from engine.combat.npc_statblocks import limpar_cache, sem_ficha_autoral
+
+    limpar_cache()
+    assert sem_ficha_autoral("vyrmathax") is True
+    assert sem_ficha_autoral("vyrmathax-1") is True, "o sufixo tem que normalizar aqui também"
+    assert sem_ficha_autoral("bjorn-tharnsson") is False, "quem TEM ficha não é sinalizado"
+    assert sem_ficha_autoral("monstro-inventado-pelo-llm") is False, (
+        "criatura que o módulo não conhece não é problema autoral — é improviso"
+    )
