@@ -10,10 +10,11 @@ Preserve com prioridade:
 - o estado emocional dos personagens e viradas dramáticas
 
 Regras de saída, sem exceção:
-- Escreva PROSA corrida. Nada de listas, tópicos, JSON, cabeçalhos ou rótulos entre colchetes.
-- Seja factual e narrativo, sem opiniões nem meta-comentários ("neste resumo...", "o jogador então...").
-- Não invente eventos que não aparecem no diálogo. Na dúvida, omita.
-- Mantenha curto: 4 a 6 frases densas, não um capítulo.
+- **SEGUNDA PESSOA para o jogador: "você entregou o aço"** — nunca pelo nome nem pela classe. TERCEIRA só para NPCs e o mundo. O Mestre narra no registro em que você escreve.
+- PROSA corrida. Nada de listas, tópicos, JSON, cabeçalhos ou colchetes.
+- Factual e narrativo, sem opiniões nem meta-comentários ("neste resumo...").
+- Não invente o que não aparece no diálogo. Na dúvida, omita.
+- Curto: 4 a 6 frases densas, não um capítulo.
 
 Resumo até agora:
 {resumo_atual}
