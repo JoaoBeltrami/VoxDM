@@ -7,8 +7,47 @@ projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/) (0.x = ea
 
 ## [Não lançado]
 
-- Validação ao vivo do pacote 0.1.0 em andamento (bestiário, marcador `[INIMIGO]`,
-  fichas de monstro, karaokê de abertura, prompt cache-friendly, RAG re-rank).
+Validação ao vivo do pacote 0.1.0 em andamento. As mudanças abaixo saíram de dois
+playtests (58 e 36 turnos, 01/08 e 07/08) e seguem a mesma tese: **tirar decisão de
+consequência das mãos do modelo**.
+
+### Adicionado
+- **CD nos testes de perícia** — tabela do SRD 5.1 (5/10/15/20/25/30, padrão Médio 15).
+  A engine compara e entrega o veredito (`19 vs CD 15: SUCESSO por 4`); antes mandava só
+  o total e quem decidia se passou era o LLM.
+- **Consumo de item pela engine** — beber uma poção rola a fórmula do SRD, aplica a cura
+  respeitando o teto de HP e remove o frasco do inventário. Conceder item continua com o
+  Mestre (rule-of-cool).
+- **Telemetria de prompt cache do Groq** — evento `groq_cache` com `cached_tokens` e
+  taxa, inclusive no caminho de stream.
+- **Breakdown por bloco no warning de orçamento de prompt** — total sem composição não
+  diz o que cortar.
+- **Canal próprio para fatos da engine** (`ContextoMontado.fatos_engine`).
+
+### Alterado
+- **Ordem do system prompt** — condicionais que oscilam foram para depois do conteúdo
+  invariante; prefixo comum entre turnos subiu de 83,5% para 93,3%.
+- **Fim de campanha virou epílogo do arco, não fim do mundo** — o desfecho continua
+  canon, mas a cena volta a correr e o Mestre volta a ter iniciativa.
+- **Rolling summary escrito em 2ª pessoa** — o Mestre parou de narrar o jogador em
+  terceira pessoa.
+- **Slots de LLM nomeiam papel, não tamanho de modelo** (`groq-leve`), com teste que
+  impede o nome de divergir do modelo configurado.
+- **Roteamento de cena social por recência**, não por histórico cumulativo da sessão.
+
+### Corrigido
+- Fato da engine chegava ao modelo como fala do jogador (`role: user`) — e virava a
+  query do RAG do turno.
+- Erro 400 de modelo (`gpt-oss` chamando ferramenta inexistente) matava o turno em vez
+  de cascatear.
+- Gate do fragmento de abertura lia campo inexistente e o incluía em 100% dos turnos.
+- Statblocks autorais ignoravam `entities` e `companions` do módulo, e ids de instância
+  numerados (`vyrmathax-1`) não achavam a própria ficha.
+- Extractor criava NPC a partir da classe do próprio jogador.
+- `stream_options` como kwarg direto quebrava o SDK `groq==1.1.2` no caminho de stream.
+
+### Infra
+- 2395 testes automatizados (eram 919 na 0.1.0).
 
 ## [0.1.0] - 2026-06-05
 

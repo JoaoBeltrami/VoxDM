@@ -25,13 +25,28 @@ marcadores, aplica efeitos, avança relógios e conduz o arco da campanha.
 
 A engine é o jogo — resolve deterministicamente tudo que tem regra (rolagem vs
 CA, dano, HP, morte, ouro, trust) — e o LLM é um **narrador contratado** que
-recebe os fatos já resolvidos (linhas `ENGINE: ...`) e só dá corpo em prosa.
+recebe os fatos já resolvidos e só dá corpo em prosa.
+
+Esses fatos têm **canal próprio** (`ContextoMontado.fatos_engine`), e isso é
+arquitetura, não detalhe: até 07/08 eles eram concatenados ao `texto_jogador`,
+chegando ao modelo com `role: user`. Do ponto de vista dele, era o **jogador**
+quem dizia "teste de Furtividade = 15 vs CD 15: SUCESSO" — então ele passou a
+tratar a engine como interlocutor e a narrá-la de volta. Pior: a linha virava a
+query do RAG do turno. Hoje os fatos são acumulados numa lista e injetados pelo
+`prompt_builder` como bloco "JÁ RESOLVIDO PELA ENGINE" na zona **dinâmica** (não
+no prefixo — mudam todo turno e derrubariam o cache). O texto do jogador volta a
+ser só o que ele falou, inclusive para o RAG. **Regra geral: fato de engine nunca
+entra por canal de fala.**
 
 - **Combate** (`engine/combat/orchestrator.py`) foi a 1ª instância completa: ataque →
   dano → turno dos inimigos → rodada → XP de abate, tudo antes do LLM falar.
 - **Testes de perícia** (`engine/authority/checks.py` + `engine/checks.py`): o jogador
-  rola o d20 na UI, a **engine soma o modificador** e mostra a conta (`14+4=18`).
-  Aritmética feita por LLM é aritmética probabilística.
+  rola o d20 na UI, a **engine soma o modificador**, compara contra a **CD** (tabela do
+  SRD 5.1 — 5/10/15/20/25/30, padrão Médio 15) e entrega o **veredito** pronto
+  (`14+5 = 19 vs CD 15: SUCESSO por 4`). Até 06/08 a engine mandava só o total e quem
+  decidia se passou era o modelo, por vibe. Aritmética *e* veredito feitos por LLM são
+  probabilísticos. O vocabulário de dificuldade é FECHADO: rótulo desconhecido cai no
+  padrão em silêncio, nunca inventa número.
 - **Economia** (`engine/authority/economia.py`): transação sem fundos é REJEITADA inteira.
 - **Social** (`engine/authority/social.py`): atacar derruba o trust do alvo e o dos
   aliados presentes, via grafo.
@@ -74,13 +89,26 @@ Entre a janela curta de diálogo (`MAX_DIALOGOS=6`) e a memória episódica há 
 janela num parágrafo injetado no system prompt — é o que impede o Mestre de "esquecer"
 o que aconteceu há dez minutos dentro da mesma sessão.
 
-`item_authority.py` fecha o outro lado: quando o jogador cita usar um consumível que
-não está no inventário, a engine **avisa** o Mestre por nota no prompt — informa, não
-proíbe (rule-of-cool é decisão de produto).
+`item_authority.py` fecha o outro lado, com um corte deliberado entre **conceder** e
+**consumir**: conceder item continua com o Mestre (rule-of-cool é decisão de produto —
+quando o jogador cita usar um consumível que não tem, a engine **avisa** por nota no
+prompt, informa e não proíbe); **consumir é mecânica, e mecânica é da engine**. Desde
+06/08, `resolver_consumo` acha o item de cura que o jogador tem e citou, exige verbo de
+uso, rola a fórmula do SRD conforme o grau (2d4+2 · maior 4d4+4 · superior 8d4+8 ·
+suprema 10d4+20), aplica respeitando o teto de HP, remove o frasco do inventário e
+entrega o fato como linha `ENGINE:`. Só o que tem regra no SRD entra — pergaminho de
+Bola de Fogo segue narrado, porque silêncio é melhor que número inventado com cara de
+autoridade.
 
 ### 3. LLM (`engine/llm/`)
 - **Router** (`router.py`): cascata automática por `TaskType` (`tasks.py`), com cooldown
   em escada por rate-limit (75s → 240s → 900s, reset em qualquer sucesso).
+  **Slot nomeia PAPEL, não tamanho de modelo** (`groq-leve`, não `groq-8b`): o slot leve
+  rodou `gpt-oss-20b` sob o nome `groq-8b` por semanas e o log mentia sobre qual modelo
+  falhara. Papel não envelhece na troca. `modelo_do_slot()` responde "qual modelo é esse?"
+  lendo o settings — uma fonte, nunca um literal — e o router loga `modelo=` junto de
+  `provider=`. `tests/test_slot_honesto.py` fecha a porta: nome que promete tamanho tem
+  que bater com o modelo configurado. Disciplina não escala; teste sim.
 - **Providers** (`providers/`): `groq.py`, `gemini.py` (multi-key + multi-model), `ollama.py`.
   Cada provider lança `LLMRetriable` em 429/5xx/timeout/refusal → o router cascateia.
   Streaming só cascateia até o 1º token emitido (trocar mid-frase quebraria a narrativa).
@@ -95,10 +123,21 @@ proíbe (rule-of-cool é decisão de produto).
 - **Prompt** (`prompt_builder.py` + `prompts/*.md`): o system prompt é montado como um
   **prefixo invariante** (persona + catálogo de quests + cena estática), seguido dos
   **fragmentos condicionais** (`fragments/`, overlay de `dm_profiles/`) e da **zona
-  dinâmica** (regras SRD do turno + brief). Ordenado assim para ser *cache-friendly*
-  e manter o estado na posição de recência. `tests/test_orcamento_prompt.py` mantém um
-  teto **por bloco** — soma de fragmentos é ficção, porque `dice`/`combat`/`social` não
-  coexistem no mesmo turno.
+  dinâmica** (regras SRD do turno + fatos da engine + brief). Ordenado assim para ser
+  *cache-friendly* e manter o estado na posição de recência. `tests/test_orcamento_prompt.py`
+  mantém um teto **por bloco** — soma de fragmentos é ficção, porque `dice`/`combat`/`social`
+  não coexistem no mesmo turno.
+  **Cache de prefixo é a alavanca, e ela é frágil por natureza:** o Groq exige match
+  EXATO do começo do prompt — na primeira divergência tudo daí pra frente cai fora,
+  mesmo sendo byte-idêntico. Por isso os condicionais que *oscilam* (abertura, lista de
+  markers, perfil, grimdark) foram empurrados para DEPOIS do catálogo de quests e da
+  cena estática em 07/08: o prefixo comum entre turnos com e sem markers foi de 83,5%
+  para 93,3%. Um bloco que entra em 40% dos turnos, se vier antes, leva junto tudo o
+  que estava atrás dele.
+  A medição não é opinião: `providers/groq.py` lê `prompt_tokens_details.cached_tokens`
+  e emite o evento `groq_cache` (inclusive no caminho de **stream**, que é o de
+  produção). O warning de orçamento carrega o **breakdown por bloco** — total sem
+  composição não diz o que cortar.
 
 ### 4. Pipeline de turno + Marcadores (`api/turn_pipeline.py`, `engine/markers.py`)
 A engine dá **autoridade explícita** ao LLM via marcadores que ele emite no fim da
@@ -142,6 +181,14 @@ narrado — sempre com a engine como autoridade final.
   multiclasse livre; o SRD entra como nota, decisão de produto de 29/07),
   **`magic/`** (lista de magias, slots, detector de casting), **`combat/`** (statblocks
   de NPC fixo do módulo, resolver, turno do inimigo, controle de rodada).
+  O mapa de statblocks autorais varre `npcs`, **`entities` e `companions`** do schema —
+  as `entities` são justamente as criaturas não-humanoides com papel narrativo, ou seja,
+  os inimigos que mais importam, e ficaram fora do mapa até 07/08. O lookup **normaliza o
+  sufixo de instância** (`vyrmathax-1` → `vyrmathax`), porque o combate numera instâncias
+  e o mapa é chaveado pelo id do módulo. Entidade do módulo sem bloco `combat` autoral
+  agora **avisa alto** (`npc_do_modulo_sem_ficha_autoral`) em vez de cair calada no
+  fallback genérico por CR — foi assim que uma entidade lendária recebeu ficha de warlock
+  e morreu com 9 de dano.
 - **`alinhamento.py`**: caráter **acumulado** em dois eixos, derivado do que o jogador faz
   (≠ pacing — não volta pra base). Híbrido: a engine deriva o que já sabe (atacar NPC
   pacífico), o marcador `[ALINHAMENTO:]` cobre o resto, com vocabulário FECHADO.
@@ -153,6 +200,15 @@ estado `normal → climax → epilogo → concluida` conduzida a cada turno por 
 O avaliador de condições reusa o DSL de `trigger_condition` dos secrets.
 Armadilha registrada: **flag ausente conta como `false`** — condições do tipo
 `paz-morta == false` dependem disso.
+
+**`concluida` não é fim do mundo, é fim do ARCO.** A diretiva da fase concluída mandava
+"a história terminou, responda como epílogo" em TODO turno, para sempre — e o mundo
+morria: o Mestre parava de ter iniciativa e a cena só andava se o jogador empurrasse.
+O arco fechado continua canon (não reabre, não desfaz o desfecho, não reanuncia que
+acabou), mas a **cena volta a correr**: o jogador ainda está dentro do mundo que aquele
+final deixou. A diretiva nomeia o final alcançado — o Mestre precisa saber em que mundo
+está narrando — e degrada sem quebrar quando `arc_ending_id` se perde numa sessão
+restaurada. Um teste lista o vocabulário que CONGELA a cena e falha se ele voltar.
 
 ### 8. Persistência (`engine/persistence/`)
 - **SQLite** (`character_store.py`, via aiosqlite): HP, spell slots, ouro, XP, death saves,

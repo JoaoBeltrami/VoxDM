@@ -1,6 +1,6 @@
 # VoxDM — Instruções para Claude Code
 
-> Atualizado: 31 de julho de 2026 (consolidação de documentação, P0 da fila).
+> Atualizado: 7 de agosto de 2026 (passada de `/docs` após dois playtests e 11 merges).
 > Este arquivo responde UMA pergunta: **como se escreve código aqui.**
 > Onde estamos agora → `.internal/ESTADO.md`. O que vem pela frente e em que ordem
 > → `.internal/VOXDM_FILA.md`. Como o sistema é desenhado → `ARCHITECTURE.md`.
@@ -26,7 +26,7 @@ teste verde quando a mudança é de qualidade narrativa — precisa de sessão j
 e é ordem de DEPENDÊNCIA (cada camada segura a de cima), não de preferência:**
 
 1. **Mente responsiva** — "há uma inteligência reagindo a MIM". ✅ declarada PASSADA no playtest de 26/07.
-2. **Agência consequente** — "minhas escolhas mudam o mundo e podem dar errado" (risco SENTIDO, não mecânica correta). ← **GATE ATUAL**
+2. **Agência consequente** — "minhas escolhas mudam o mundo e podem dar errado" (risco SENTIDO, não mecânica correta). ← **GATE ATUAL — testado e REPROVADO em 01/08 e 07/08**
 3. **Estado compreensível** — inventário/itens/checks legíveis no momento certo
 4. **Canal sensorial** — a voz
 5. **Moldura** — UI/design
@@ -38,6 +38,23 @@ auth-multiplayer** — não confundir.
 
 A pergunta que fecha a Camada 2: *você parou de arriscar em algum momento porque
 calculou que ia doer?* Enquanto a resposta for não, o resto é secundário.
+
+**Dois playtests já responderam "não".** Em 01/08 (58 turnos): *"não sinto muito
+perigo"* — 1 combate, HP 21→17, dano só de armadilha. Em 07/08 (36 turnos) houve
+combate de verdade e a resposta foi *"matei uma lenda, foi bem fácil"* — mas ali a
+causa era mecânica, não de design (a entidade lendária recebeu ficha genérica de
+warlock). A Camada 2 **continua aberta**.
+
+### Engine-first em TUDO (ADR-006, declarado pelo Beltrami em 01/08)
+
+> *"o jogo deve ser engine first em TUDO, até nas decisões de história. O player tem
+> que parar de poder inventar coisa fora do perfil rule of cool."*
+
+Isto endurece a tese autoridade-primeiro para além da mecânica: o LLM não decide
+**quanto** nem **se** — só narra. A prova que originou a declaração: uma tag `[Q:]`
+emitida pelo modelo encerrou a campanha inteira sozinha no turno ~31 de 58.
+Corolário prático já aplicado — veredito de check é da engine (não do modelo),
+consumo de item é da engine (conceder continua com o Mestre, por rule-of-cool).
 
 **A ordem de EXECUÇÃO é `.internal/VOXDM_FILA.md`** — um prompt por sessão, com
 gates de sessão jogada marcados no texto. Não inventar trabalho fora dela.
@@ -125,6 +142,11 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Cooldown por rate_limit | escada 75s → 240s → 900s, reset em qualquer sucesso. Cooldown fixo de 900s derrubou os 3 providers em 97s (26/07) |
 | Modelos Gemini válidos | `gemini-2.5-flash-lite`, `gemini-3.1-flash-lite` (sem thinking budget) |
 | LLM de conversão | Groq — `llama-3.3-70b-versatile` |
+| Nome de slot de LLM | Nomeia **papel**, não tamanho (`groq-leve`). `modelo_do_slot()` lê o settings; `tests/test_slot_honesto.py` impede o nome de mentir. Pedido explícito do Beltrami (01/08): *"refletindo sempre o modelo real, ATÉ QUANDO TROCARMOS"* |
+| Autoridade sobre o resultado de check | Da **engine**: CD por tabela do SRD 5.1 (padrão Médio 15), engine compara e entrega veredito. O modelo narra o desfecho, não decide se passou |
+| Conceder × consumir item | **Conceder** continua com o Mestre (rule-of-cool é gosto do Beltrami; item ausente só gera aviso, não proibição). **Consumir** é da engine — fórmula do SRD, teto de HP, frasco sai do inventário |
+| Fato de engine tem canal próprio | `ContextoMontado.fatos_engine` → bloco na zona dinâmica. Nunca no `texto_jogador` (ver armadilha) |
+| Fim de campanha | É epílogo do **arco**, não fim do mundo: não reabre e não desfaz o desfecho, mas a cena volta a correr e o Mestre volta a ter iniciativa |
 | STT | Faster-Whisper `large-v3-turbo` em GPU (`settings.STT_MODEL`). Medido 21/07: WER 3,67% e 0,58s/fala — mais rápido **e** mais correto que o `small` |
 | TTS principal | Edge TTS Microsoft. Nuance por **pontuação** — SSML foi tentado e é impossível no endpoint gratuito |
 | TTS fallback | Kokoro-82M local (`pip install kokoro` — NÃO kokoro-tts) |
@@ -182,6 +204,99 @@ NÃO reescrever texto de prompt sem grepar quem o consome → já mordeu em:
                             realce do frontend (aspas duplas); texto do TOM vs o
                             parser do benchmark. Teste que amarra os dois lados
                             vale mais que o fix.
+
+# Canal do fato de engine (07/08 — três queixas na MESMA sessão)
+NÃO concatenar linha "ENGINE:" no texto_jogador → chega com role:user e o modelo passa
+                            a tratar a engine como INTERLOCUTOR e a narrá-la de volta.
+                            Pior: a linha vira a query do RAG do turno. Canal próprio é
+                            `ContextoMontado.fatos_engine`, injetado como bloco na zona
+                            DINÂMICA (não no prefixo — muda todo turno e mataria o cache).
+                            Teste que amarra: a última mensagem `user` é EXATAMENTE a
+                            fala do jogador.
+NÃO repetir o prefixo "ENGINE:" em cada linha entregue ao modelo → o cabeçalho do bloco
+                            já diz de quem é o fato; repetir foi o que fez a palavra
+                            virar vocabulário do Mestre. O prefixo continua existindo
+                            nos módulos que PRODUZEM as linhas (contrato interno).
+
+# Cache de prefixo do Groq — frágil por natureza
+NÃO pôr condicional que OSCILA antes de conteúdo estático → o match precisa ser EXATO
+                            desde o começo; na 1ª divergência tudo daí pra frente cai
+                            fora, mesmo byte-idêntico. `markers_lista` alterna em ~40%
+                            dos turnos e levava junto o catálogo de quests inteiro.
+                            Ordem correta: master → quests → cena │ abertura? → markers?
+                            → perfil? → grimdark?. Medido: 83,5% → 93,3% de prefixo comum.
+NÃO afirmar nada sobre cache sem ler `cached_tokens` → a reorganização de 25/07 foi
+                            feita às cegas. `prompt_tokens_details.cached_tokens` no
+                            evento `groq_cache`, inclusive no caminho de STREAM (o de
+                            produção, que antes não devolvia usage nenhum).
+NÃO passar `stream_options` como kwarg direto → o SDK pinado (`groq==1.1.2`) não tem o
+                            parâmetro: `TypeError` derruba TODO turno de stream. Vai por
+                            `extra_body`. Testes com cliente fake PASSAM (fake com
+                            **kwargs aceita qualquer coisa) — só a chamada real acusa.
+
+# Gates e lookups que falham em SILÊNCIO
+NÃO ler campo de estado com getattr sem default explícito auditado → o gate da abertura
+                            lia `wm.iteracoes`, campo que NÃO existe na WorkingMemory (o
+                            contador vive em `SessaoAtiva`). Devolvia 0 sempre, a condição
+                            era sempre verdadeira, e `abertura_personagem.md` entrou em
+                            100% dos turnos por uma semana. Achado só pela telemetria de
+                            composição do prompt.
+NÃO varrer só `npcs` ao montar mapa de statblock → `entities` (criaturas não-humanoides
+                            com papel narrativo — os inimigos que MAIS importam) e
+                            `companions` ficavam de fora, e a entidade lendária caía no
+                            fallback genérico por CR.
+NÃO casar id de combate com id de módulo sem normalizar sufixo → o combate numera
+                            instâncias (`vyrmathax-1`); o mapa é chaveado por `vyrmathax`.
+                            Sem normalizar, NENHUM inimigo numerado acha a própria ficha.
+NÃO deixar peça do módulo cair calada no fallback → avisar alto
+                            (`npc_do_modulo_sem_ficha_autoral`). Errar calado custou um
+                            playtest inteiro.
+
+# Sinais cumulativos mentem sobre o AGORA
+NÃO usar acumulador de sessão como sinal de "está acontecendo" → `npcs_apresentados`
+                            nunca esvazia: depois da 1ª conversa com o taverneiro, TODO
+                            turno em que ele seguia presente contava como diálogo, e a
+                            `narrative_light` (a rota que existe pra POUPAR cota) morreu
+                            — 3 disparos em 58 turnos, e o 70B queimou o TPD no turno 19.
+                            O sinal certo é de RECÊNCIA: o texto do jogador OU a última
+                            fala do Mestre nomeia um NPC presente.
+
+# Nome de slot / de modelo
+NÃO nomear slot pelo TAMANHO do modelo → `groq-8b` rodou `gpt-oss-20b` por semanas e o
+                            log mentia sobre qual modelo falhou. Slot nomeia PAPEL
+                            (`groq-leve`); `modelo_do_slot()` lê o settings, nunca um
+                            literal; o router loga `modelo=` junto de `provider=`.
+
+# Autoridade: quem decide o quê
+NÃO mandar total de check sem CD → "N" sozinho não diz nada contra o quê, e quem decidia
+                            se passou era o modelo, por vibe. A engine COMPARA e entrega
+                            veredito. Vocabulário de dificuldade FECHADO: rótulo
+                            desconhecido cai no padrão (Médio 15), nunca inventa número.
+NÃO aplicar efeito de item sem regra no SRD → pergaminho de Bola de Fogo não vira cura
+                            silenciosa. Silêncio é melhor que número inventado com cara
+                            de autoridade. E exigir VERBO de uso: "tem uma poção na
+                            mochila" não pode fazer o inventário evaporar.
+NÃO deixar diretiva de fase terminal congelar a cena → `arc_fase="concluida"` injetava
+                            "a história terminou, responda como epílogo" em TODO turno,
+                            pra sempre; o mundo morria e o jogador tinha que empurrar
+                            cada beat. Arco fechado é canon, mas a CENA volta a correr.
+NÃO escrever resumo/rolling summary em 3ª pessoa → o modelo narra no tom em que é
+                            alimentado, e passa a falar do jogador em 3ª pessoa. Regra
+                            vale nos DOIS templates (o .md e o `_PROMPT_FALLBACK`), com
+                            teste que amarra — senão um erro de leitura do arquivo
+                            reintroduz o bug em silêncio.
+NÃO deixar o extractor criar NPC a partir do papel do jogador → o jogador citou a própria
+                            classe e nasceu um NPC "monge", com retrato e dossiê.
+
+# Cascata: falha DO MODELO é fallback-able
+NÃO deixar 400 de modelo subir e matar o turno → o `gpt-oss` chamou uma ferramenta que
+                            ninguém ofereceu ("Tool choice is none, but model called a
+                            tool"). Não é quota nem rede, então caía no `raise` e o 70B/
+                            Gemini nunca eram tentados. Vira `LLMRetriable(categoria=
+                            "modelo")` nos TRÊS handlers de APIError (sync, abertura de
+                            stream, e DENTRO do stream — o 400 chega depois do 200 OK).
+                            Categoria própria: não escala a rota grimdark e não penaliza
+                            o provider com cooldown de quota.
 
 # Orçamento de prompt
 NÃO medir prompt por SOMA de fragmentos → dice/quests/social/combat NÃO coexistem
@@ -296,7 +411,8 @@ da pergunta ganha.
 | `.internal/VOXDM_PONTE.md` | **O que disso vira conteúdo** — ponte com o Project Beltrami |
 
 Complementares (não são fonte de estado):
-`.internal/ADR/` (decisões arquiteturais numeradas — ADR-005 é o norte),
+`.internal/ADR/` (decisões arquiteturais numeradas — **ADR-005** é o norte de produto,
+**ADR-006** estende a autoridade da engine à narrativa),
 `docs/VOXDM_SCHEMA_v1.2.md` e `docs/VOXDM_SCHEMA_v2.md` (especificação do formato de módulo),
 `docs/GUIA_USO.md`, `QUICKSTART.md`, `README.md`, `CONTRIBUTING.md`.
 
@@ -314,3 +430,7 @@ Complementares (não são fonte de estado):
   **GATE de sessão jogada**, teste verde não basta
 - Ao identificar gancho de conteúdo → sinalizar: "Gancho de conteúdo: [descrição]"
 - Ao fechar o dia → `/estado`
+- Depois de um lote de merges, de um playtest que mudou direção, ou quando uma
+  decisão travada mudar → `/docs` (audita todos os docs vivos e roda o `/estado`
+  no fim). `/estado` responde "onde estamos"; `/docs` responde "os documentos
+  ainda dizem a verdade?"

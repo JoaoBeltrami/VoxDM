@@ -21,7 +21,7 @@ Você fala no microfone, o Mestre fala de volta — narração rica em pt-BR, re
 ```
 🎙  fala → MediaRecorder (browser)
           ↓
-🌐  POST /transcribe → Faster-Whisper small (GPU, ~300ms)
+🌐  POST /transcribe → Faster-Whisper large-v3-turbo (GPU, ~0,58s/fala)
           ↓
 📚  RAG 3 camadas (Qdrant lore + Qdrant regras SRD + Neo4j relações)
           ↓
@@ -111,9 +111,9 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 | **LLM principal** | Groq — `llama-3.3-70b-versatile` |
 | **Fallback 1** | Groq — `openai/gpt-oss-120b` (degrau de TPD) |
 | **Fallback 2** | Groq — `openai/gpt-oss-20b` (substituiu `llama-3.1-8b-instant`, desligado pelo Groq em 16/08/26) |
-| **Fallback 2** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
-| **Fallback 3** | Ollama local |
-| STT | RealtimeSTT + Faster-Whisper `small` (GPU CUDA) |
+| **Fallback 3** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
+| **Fallback 4** | Ollama local |
+| STT | Faster-Whisper `large-v3-turbo` (GPU CUDA) |
 | TTS | Edge TTS Microsoft (voz por NPC) + Kokoro-82M fallback |
 | Memória vetorial | Qdrant Cloud free tier |
 | Grafo de relações | Neo4j AuraDB free tier |
@@ -163,7 +163,7 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | — | Frontend "BG1 híbrido" (launcher de painéis, FichaViva, retratos, dock slim) | ✅ |
 | 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
 
-**Cobertura de testes:** 2005/2005 passam.
+**Cobertura de testes:** 2395/2395 passam.
 
 ---
 
@@ -285,7 +285,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  2005 testes (pytest)
+└── tests/                  2395 testes (pytest)
 ```
 
 ---
@@ -293,7 +293,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 2005 testes
+uv run pytest tests/ -q   # 2395 testes
 make ingest
 make run-api
 make debug
@@ -305,7 +305,7 @@ cd frontend && npx tsc --noEmit  # type check
 ## Decisões travadas
 
 - **LLM primário:** Groq `llama-3.3-70b-versatile`
-- **STT:** Faster-Whisper `small` GPU (WER ~8% pt-BR, ~300ms)
+- **STT:** Faster-Whisper `large-v3-turbo` GPU (medido 21/07: WER 3,67% e 0,58s/fala — mais rápido *e* mais correto que o `small`)
 - **TTS:** Edge TTS Microsoft (`pt-BR-FranciscaNeural` default)
 - **Schema:** VoxDM v1.2 — companions/entities separados de npcs, top-level edges[]
 - **Módulo:** "Os Filhos de Valdrek" (original, sem copyright) até engine validada
