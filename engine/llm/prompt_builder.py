@@ -620,6 +620,25 @@ def _formatar_secrets(secrets: list[SecretVisivel]) -> str:
     return "\n".join(partes)
 
 
+def composicao_do_prompt(marcos: list[tuple[str, int]]) -> dict[str, int]:
+    """Chars por bloco, a partir dos marcos cumulativos do montador.
+
+    PROMPT-ACIMA-DO-TETO (playtest 01/08): `chars_system` chegou a 18 442 num
+    turno FORA de combate — 23% acima do teto de 15k — e o warning existente
+    dizia só o total. Total sem composição não decide nada: não dá pra saber o
+    que cortar sem saber quem ocupa o quê.
+
+    Blocos que não entraram no turno aparecem com 0 (o gate deles deu False),
+    o que também é informação — é assim que se vê um fragmento que nunca sai.
+    """
+    composicao: dict[str, int] = {}
+    anterior = 0
+    for rotulo, acumulado in marcos:
+        composicao[rotulo] = acumulado - anterior
+        anterior = acumulado
+    return composicao
+
+
 def _montar_mensagens_brief(
     contexto: ContextoMontado,
     master_system_override: str | None = None,
@@ -639,6 +658,20 @@ def _montar_mensagens_brief(
     wm = contexto.working_memory
     master_system = master_system_override or _carregar_master_system()
     secoes: list[str] = [master_system, ""]
+
+    # PROMPT-ACIMA-DO-TETO (playtest 01/08): o guard de budget já existia e
+    # dispararia — `chars_system` chegou a 18 442 num turno FORA de combate,
+    # 23% acima do teto de 15k. Mas ele dizia só o TOTAL, e total sem composição
+    # não é acionável: não dá pra decidir o que sai sem saber quem ocupa o quê.
+    # Estes marcos são puramente observacionais (nada é apendado aqui) e viram
+    # o breakdown por bloco no warning. Medir antes de cortar — o que cortar é
+    # decisão do Beltrami, não do autopilot.
+    _marcos: list[tuple[str, int]] = []
+
+    def _marco(rotulo: str) -> None:
+        _marcos.append((rotulo, sum(len(s) for s in secoes)))
+
+    _marco("master_system")
 
     # ── PREFIXO INVARIANTE — entra igual em 100% dos turnos ─────────────────
     #
@@ -668,6 +701,7 @@ def _montar_mensagens_brief(
             f"\n{_quests_catalogo}"
             + (f"\n{_quests_instrucao}" if _quests_instrucao else "")
         )
+    _marco("quests_catalogo")
 
     # Estado de combate, protocolo, voz de NPC e nudges — tudo que o rolling
     # summary não codifica (COMBATE-CEGO / MESMICE / NUDGES-MORTOS, auditoria
@@ -676,6 +710,7 @@ def _montar_mensagens_brief(
     # prefixo cacheável. Os dinâmicos vão depois das regras SRD, lá embaixo.
     _cena_estatica, _cena_dinamica = _blocos_de_cena(contexto)
     secoes.extend(_cena_estatica)
+    _marco("cena_estatica")
 
     # ── FRAGMENTOS CONDICIONAIS — oscilam entre turnos ──────────────────────
     # Depois de TUDO que é invariante, de propósito (ver a regra acima). Os
@@ -693,6 +728,7 @@ def _montar_mensagens_brief(
         _abertura = _carregar_abertura_personagem()
         if _abertura:
             secoes.append(_abertura)
+    _marco("abertura_personagem")
 
     # 26/07: era incondicional aqui, mas condicional no caminho legado (:795) — e
     # o próprio master_system.md PROMETE ao modelo que é condicional ("Lista
@@ -707,6 +743,7 @@ def _montar_mensagens_brief(
     markers = _carregar_markers_lista() if _cena_dramatica(wm) else ""
     if markers:
         secoes.append(markers)
+    _marco("markers_lista")
 
     dm_profile_attr = getattr(wm, "dm_profile", "equilibrado")
     if dm_profile_attr not in ("equilibrado", "sombrio"):
@@ -726,6 +763,7 @@ def _montar_mensagens_brief(
             if grimdark_frag and len(grimdark_frag) >= _PROMPT_MIN_CHARS:
                 secoes.append(grimdark_frag)
                 log.info("grimdark_fragmento_injetado", dm_profile=dm_profile_attr)
+    _marco("perfil_e_grimdark")
 
     # ── ZONA DINÂMICA — daqui pra baixo o conteúdo muda a cada turno ─────────
     # Tudo acima é prefixo cacheável (e token cacheado não conta pro rate limit
@@ -736,7 +774,9 @@ def _montar_mensagens_brief(
         regras = "\n".join(str(c.get("text", c)) for c in contexto.chunks_regras[:3])
         if regras.strip():
             secoes.append(f"\n=== MECÂNICA DO TURNO (SRD) ===\n{regras}")
+    _marco("regras_srd")
     secoes.extend(_cena_dinamica)
+    _marco("cena_dinamica")
 
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
     _tier = _tier_do_turno(wm, contexto.transcricao_atual or "")
@@ -745,6 +785,7 @@ def _montar_mensagens_brief(
         wm, contexto.transcricao_atual or "", tier=_tier, ritmo=_ritmo
     )
     secoes.append("\n" + brief.to_prompt())
+    _marco("brief")
 
     # DIRETOR DE ARCO (passo 4): a voz da engine dirigindo o desfecho — pressão
     # de escalada quando a espinha arma, diretiva de CLÍMAX quando um final
@@ -775,6 +816,10 @@ def _montar_mensagens_brief(
             teto=_BUDGET_SYSTEM_BRIEF,
             em_combate=bool(getattr(wm, "em_combate", False)),
             npcs=len(getattr(wm, "npcs_presentes", []) or []),
+            # PROMPT-ACIMA-DO-TETO: o total sozinho não é acionável. Com a
+            # composição, a próxima sessão decide o que sai olhando número, não
+            # palpite — foi assim que o P1 destravou a decisão do cache.
+            composicao=composicao_do_prompt(_marcos),
         )
 
     turnos = wm.dialogo_recente

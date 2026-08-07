@@ -149,3 +149,47 @@ def test_prefixo_comum_cobre_o_master_system_inteiro():
     from engine.llm.prompt_builder import _carregar_master_system
 
     assert len(_prefixo_comum(com, sem)) >= len(_carregar_master_system())
+
+
+# ── PROMPT-ACIMA-DO-TETO (playtest 01/08) ────────────────────────────────────
+#
+# `chars_system` chegou a 18 442 num turno FORA de combate — 23% acima do teto
+# de 15k. O guard de budget já existia e dispararia, mas dizia só o TOTAL, e
+# total sem composição não decide nada: não dá pra saber o que cortar sem saber
+# quem ocupa o quê. O que cortar é decisão do Beltrami; medir é da engine.
+
+def test_composicao_soma_exatamente_o_prompt():
+    """Aritmética da decomposição: os blocos somados dão o acumulado final."""
+    from engine.llm.prompt_builder import composicao_do_prompt
+
+    marcos = [("a", 100), ("b", 250), ("c", 250), ("d", 900)]
+    comp = composicao_do_prompt(marcos)
+    assert comp == {"a": 100, "b": 150, "c": 0, "d": 650}
+    assert sum(comp.values()) == marcos[-1][1]
+
+
+def test_bloco_que_nao_entrou_aparece_com_zero():
+    """Gate False vira 0, não some da tabela — é assim que se vê o fragmento
+    que nunca sai (ou o que nunca entra)."""
+    from engine.llm.prompt_builder import composicao_do_prompt
+
+    assert composicao_do_prompt([("x", 500), ("y", 500)])["y"] == 0
+
+
+def test_composicao_vazia_nao_quebra():
+    from engine.llm.prompt_builder import composicao_do_prompt
+
+    assert composicao_do_prompt([]) == {}
+
+
+def test_warning_de_budget_carrega_a_composicao():
+    """Teste que amarra os dois lados: se alguém tirar o campo do warning, o
+    total volta a ser inacionável e ninguém percebe até o próximo playtest."""
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent
+    fonte = (raiz / "engine/llm/prompt_builder.py").read_text(encoding="utf-8")
+    i = fonte.index('"prompt_excede_budget"')
+    assert "composicao=" in fonte[i : i + 600], (
+        "o warning de budget voltou a reportar só o total"
+    )
