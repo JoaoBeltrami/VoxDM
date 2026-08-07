@@ -299,15 +299,27 @@ export default function PreviewPage() {
           {/* O dock REAL — o composer é o caminho principal de quem joga por texto. */}
           <div className="border-t border-vox-border-subtle px-4 py-3">
             <VoiceButton sessionId="preview" onEnviar={() => {}} />
+            {/* Mocks espelham o payload REAL de detalhar_check — inclusive a CD
+                (CHECK-SEM-DC-1, 01/08). Preview sem os campos novos deixa de
+                exercitar justamente o que mudou. */}
             <button onClick={() => setCheckDemo({
               pericia: 'Intuição', d20: 14, bonus: 5, detalhe: 'SAB +2, proficiência +3',
-              total: 19, critico: false, falha_critica: false })}
+              total: 19, critico: false, falha_critica: false,
+              cd: 15, sucesso: true, margem: 4 })}
               className="rounded border border-vox-accent-primary/50 px-3 py-1 text-xs text-vox-accent-glow">
               ✦ demo check
             </button>
             <button onClick={() => setCheckDemo({
+              pericia: 'Furtividade', d20: 4, bonus: 3, detalhe: 'DES +3',
+              total: 7, critico: false, falha_critica: false,
+              cd: 15, sucesso: false, margem: -8 })}
+              className="rounded border border-red-800/50 px-3 py-1 text-xs text-red-300">
+              ✦ demo falha
+            </button>
+            <button onClick={() => setCheckDemo({
               pericia: 'Percepção', d20: 20, bonus: 4, detalhe: 'SAB +2, proficiência +2',
-              total: 24, critico: true, falha_critica: false })}
+              total: 24, critico: true, falha_critica: false,
+              cd: 20, sucesso: true, margem: 4 })}
               className="rounded border border-vox-gold/50 px-3 py-1 text-xs text-vox-gold">
               ✦ demo crítico
             </button>
