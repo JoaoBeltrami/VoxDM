@@ -62,3 +62,81 @@ def test_nota_menciona_pocao_legivel():
     nota = nota_item_ausente("bebo a potion", [])
     assert nota is not None
     assert "poção" in nota
+
+
+# ── ITEM-SEM-AUTORIDADE-1 (playtest 01/08) ───────────────────────────────────
+#
+# "Não fui curado pela minha poção." O jogador TINHA o item, bebeu, e o HP não
+# mexeu — beber era pura narração e o Mestre esquecia o efeito. `item_authority`
+# não disparou NENHUMA vez na sessão (zero logs), porque ele só avisava sobre
+# item AUSENTE. Conceder item segue com o Mestre (rule-of-cool, decisão de
+# produto); CONSUMIR é mecânica, e mecânica é da engine.
+
+import random
+
+from engine.memory.item_authority import resolver_consumo
+from engine.memory.working_memory import WorkingMemory
+
+
+def _wm_ferido(inventario, hp=10, hp_max=30):
+    wm = WorkingMemory.nova_sessao("drevamor", "Drevamor", "item-01")
+    wm.character.hp_max = hp_max
+    wm.character.hp_current = hp
+    wm.character.player_inventory = list(inventario)
+    return wm
+
+
+def test_pocao_de_cura_cura_de_verdade():
+    wm = _wm_ferido(["Poção de Cura", "Corda"])
+    linha = resolver_consumo(wm, "bebo minha poção de cura", random.Random(7))
+
+    assert linha and linha.startswith("ENGINE:")
+    assert wm.player_hp > 10                       # curou
+    assert "Poção de Cura" not in wm.player_inventory   # frasco saiu
+    assert "Corda" in wm.player_inventory              # o resto fica
+
+
+def test_cura_respeita_o_teto_de_hp_e_avisa_o_excedente():
+    wm = _wm_ferido(["Poção de Cura"], hp=29, hp_max=30)
+    linha = resolver_consumo(wm, "tomo a poção", random.Random(1))
+    assert wm.player_hp == 30
+    assert "excedente" in linha
+
+
+def test_grau_maior_usa_a_formula_do_srd():
+    wm = _wm_ferido(["Poção de Cura Maior"], hp=1, hp_max=90)
+    linha = resolver_consumo(wm, "bebo a poção", random.Random(3))
+    assert "4d4+4" in linha
+
+
+def test_sem_verbo_de_uso_nao_consome():
+    """"tem uma poção na mochila" não é beber — o inventário não pode evaporar."""
+    wm = _wm_ferido(["Poção de Cura"])
+    assert resolver_consumo(wm, "tem uma poção de cura na mochila", random.Random(1)) is None
+    assert "Poção de Cura" in wm.player_inventory
+
+
+def test_sem_o_item_no_inventario_nao_inventa_cura():
+    """Quem não tem, não cura — e isso NÃO proíbe o Mestre de improvisar; o
+    aviso de item ausente continua sendo o canal disso."""
+    wm = _wm_ferido([])
+    assert resolver_consumo(wm, "bebo minha poção de cura", random.Random(1)) is None
+    assert wm.player_hp == 10
+
+
+def test_consumivel_sem_regra_conhecida_segue_com_o_mestre():
+    """Só o que tem regra no SRD entra. Pergaminho não vira cura silenciosa."""
+    wm = _wm_ferido(["Pergaminho de Bola de Fogo"])
+    assert resolver_consumo(wm, "uso o pergaminho", random.Random(1)) is None
+    assert "Pergaminho de Bola de Fogo" in wm.player_inventory
+
+
+def test_evento_vital_leva_a_causa_junto_com_o_numero():
+    """DANO-SEM-CAUSA-1 vale pra cura também: o jogador vê o número E o porquê."""
+    wm = _wm_ferido(["Poção de Cura"])
+    resolver_consumo(wm, "bebo minha poção de cura", random.Random(5))
+    eventos = wm.character.drenar_eventos_vitais()
+    assert len(eventos) == 1
+    assert eventos[0]["tipo"] == "cura"
+    assert "Poção de Cura" in eventos[0]["motivo"]
+    assert eventos[0]["valor"] > 0

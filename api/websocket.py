@@ -295,6 +295,7 @@ from api.turn_pipeline import (
 from engine.authority.checks import bonus_de_check, detalhar_check, resolver_check
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
+from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
@@ -1972,6 +1973,21 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             )
                             log.info("check_resolvido", session_id=session_id,
                                      pericia=_pericia_pedida, bruto=_d20_check)
+
+            # ── Consumo de item pela ENGINE (ITEM-SEM-AUTORIDADE-1, 01/08) ─────
+            # "Não fui curado pela minha poção": o jogador TINHA o item, bebeu, e
+            # o HP não mexeu — beber era pura narração. Conceder item segue com o
+            # Mestre (rule-of-cool); CONSUMIR é mecânica. A linha é ANEXADA, não
+            # substitui o texto: a fala do jogador quase sempre traz intenção
+            # além do gole ("bebo a poção e avanço pro portão").
+            if not sessao.working_mem.session_zero_ativa:
+                try:
+                    _linha_item = resolver_consumo(sessao.working_mem, texto_jogador)
+                except Exception as e:  # noqa: BLE001 — item nunca derruba turno
+                    log.warning("consumo_item_falhou", erro=str(e)[:120])
+                    _linha_item = None
+                if _linha_item:
+                    texto_jogador = f"{texto_jogador}\n{_linha_item}"
 
             # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
             # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
