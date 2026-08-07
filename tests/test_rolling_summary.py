@@ -218,3 +218,54 @@ async def test_sessao_longa_retem_conteudo_de_turnos_antigos():
         "fato antigo (turno 7) deveria persistir no resumo rolling ao fim da sessão"
     )
     assert wm.narrative.turnos_desde_resumo < intervalo
+
+
+# ── SUMARIO-3A-PESSOA-1 (playtest 01/08) ─────────────────────────────────────
+#
+# O resumo rolling entra no system prompt em TODO turno, sob "O QUE JÁ ACONTECEU
+# NA SESSÃO". Ele saía em terceira pessoa — "Klaus abandonou qualquer resquício
+# de humanidade... o monge agora se volta para o desconhecido" — e o Mestre
+# devolvia narração em terceira pessoa sobre o próprio jogador. Beltrami: "Ele
+# tá narrando meu personagem na terceira pessoa, já ficou chato."
+#
+# O registro do resumo CONTAMINA o registro da narração: o modelo escreve no
+# tom em que é alimentado.
+
+def test_prompt_manda_escrever_em_segunda_pessoa():
+    from pathlib import Path
+
+    raiz = Path(__file__).resolve().parent.parent
+    md = (raiz / "engine/llm/prompts/rolling_summary.md").read_text(encoding="utf-8")
+
+    assert "SEGUNDA PESSOA" in md
+    assert "você" in md.lower()
+    assert "terceira" in md.lower(), "a regra precisa dizer o que NÃO fazer, não só o que fazer"
+
+
+def test_fallback_carrega_a_MESMA_regra_de_pessoa_do_md():
+    """Teste que amarra os dois lados.
+
+    `atualizar_resumo_rolling` usa `_PROMPT_FALLBACK` quando a leitura do .md
+    falha. Se a regra de pessoa vive só no arquivo, um erro de I/O reintroduz o
+    bug em silêncio — e ninguém descobre até o próximo playtest.
+    """
+    from engine.memory.rolling_summary import _PROMPT_FALLBACK
+
+    baixo = _PROMPT_FALLBACK.lower()
+    assert "segunda pessoa" in baixo
+    assert "terceira" in baixo
+
+
+def test_placeholders_do_fallback_batem_com_os_do_md():
+    """Os dois templates são formatados com o MESMO dict — divergir estoura
+    KeyError no meio de um turno."""
+    import re
+    from pathlib import Path
+
+    from engine.memory.rolling_summary import _PROMPT_FALLBACK
+
+    raiz = Path(__file__).resolve().parent.parent
+    md = (raiz / "engine/llm/prompts/rolling_summary.md").read_text(encoding="utf-8")
+
+    campos = lambda t: set(re.findall(r"\{(\w+)\}", t))  # noqa: E731
+    assert campos(_PROMPT_FALLBACK) == campos(md)

@@ -631,6 +631,27 @@ def _npc_fixo_apenas_citado_em_fala(nid: str, nome: str, narracao: str) -> bool:
     return achou_alguma
 
 
+def _espelhos_do_jogador(wm: Any) -> set[str]:
+    """Termos que descrevem o PRÓPRIO jogador — não podem virar NPC.
+
+    NPC-ESPELHO-1 (playtest 01/08): o jogador se referiu à própria classe e o
+    extractor registrou `monge` como NPC — com retrato gerado e uma chamada de
+    LLM gasta num dossiê de personalidade ("mãos fechadas em punhos firmes").
+    A engine reificou o reflexo do jogador num personagem completo.
+
+    Compara pelo canônico INTEIRO de propósito, não pela chave de dedup: a chave
+    colapsa multi-token no primeiro nome (`monge-do-templo-vermelho` → `monge`)
+    e bloquearia um NPC legítimo. Aqui só cai o id NU — que é exatamente a forma
+    do eco de classe. Um monge com nome próprio passa.
+    """
+    espelhos: set[str] = set()
+    for attr in ("player_class", "player_race", "player_name"):
+        canon = _canonico(str(getattr(wm, attr, "") or ""))
+        if canon:
+            espelhos.add(canon)
+    return espelhos
+
+
 def aplicar_npcs_extraidos(
     wm: Any, npcs: list[dict[str, str]], narracao: str = "", texto_jogador: str = ""
 ) -> list[str]:
@@ -664,6 +685,7 @@ def aplicar_npcs_extraidos(
 
     garantir_registro(wm)
     jogador_canon = _chave_dedup(str(getattr(wm, "player_name", "")))
+    espelhos = _espelhos_do_jogador(wm)
     # NPC-DEDUP-CANONICO-1 (playtest 06/07): o universo de dedup NÃO pode ser
     # só npcs_presentes ATUAL — quando a re-inferência de cena (Neo4j) substitui
     # a lista, um NPC já conhecido (ex: o taverneiro) some de presentes mas
@@ -692,6 +714,10 @@ def aplicar_npcs_extraidos(
         nid = npc.get("id", "")
         canon = _chave_dedup(nid)
         if not nid or not canon or canon == jogador_canon or canon in presentes_canon:
+            continue
+        # NPC-ESPELHO-1: o jogador citou a própria classe e virou NPC.
+        if _canonico(nid) in espelhos:
+            log.info("npc_espelho_do_jogador_descartado", id=nid)
             continue
         conjunto = _chave_conjunto(nid)
         if conjunto and conjunto in presentes_conjunto:

@@ -44,6 +44,10 @@ _PROMPT_FALLBACK = (
     "Atualize (não recomece) o resumo contínuo desta sessão de RPG, fundindo o "
     "resumo existente com o diálogo novo numa prosa de 4 a 6 frases em português, "
     "preservando tensão, fios em aberto, mudanças de relação e escolhas do jogador. "
+    # SUMARIO-3A-PESSOA-1: o fallback precisa carregar a MESMA regra de pessoa
+    # que o .md — senão um erro de leitura do arquivo reintroduz o bug calado.
+    "Escreva em SEGUNDA PESSOA ('você entregou o aço'), nunca em terceira "
+    "('Klaus entregou o aço'); terceira pessoa só para NPCs e o mundo. "
     "Sem listas, sem JSON, sem cabeçalhos, sem colchetes.\n\n"
     "Resumo até agora:\n{resumo_atual}\n\n"
     "Fios em aberto: {fios_soltos}\n\n"

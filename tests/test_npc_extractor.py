@@ -571,3 +571,55 @@ def test_vocativo_final_nome_que_age_preserva():
         _e_apelido_do_jogador("aldric", '"Cuidado, Aldric." Aldric saca a espada e recua.')
         is False
     )
+
+
+# ── NPC-ESPELHO-1 (playtest 01/08) ───────────────────────────────────────────
+#
+# O jogador (um Monge) citou a própria classe e o log registrou:
+#     npc_extractor_aplicado  ids=['monge']
+#     npc_retratos_enviados   total=1
+#     dossie_aplicado         npc_id=monge  tracos=['mãos fechadas em punhos…']
+# A engine reificou o reflexo do jogador num personagem completo — com rosto e
+# personalidade, e gastando uma chamada de LLM nisso. Beltrami: "ele inventou um
+# npc com o nome monge pq eu me referi a minha classe".
+
+def _wm_monge() -> WorkingMemory:
+    wm = _wm()
+    wm.player_name = "Klaus"
+    wm.player_class = "Monge"
+    wm.player_race = "Humano"
+    return wm
+
+
+def test_classe_do_jogador_nua_nao_vira_npc():
+    wm = _wm_monge()
+    add = aplicar_npcs_extraidos(wm, [{"id": "monge", "nome": "Monge"}])
+    assert add == []
+    assert "monge" not in wm.npcs_presentes
+
+
+def test_raca_e_nome_do_jogador_tambem_nao_viram_npc():
+    wm = _wm_monge()
+    assert aplicar_npcs_extraidos(wm, [{"id": "humano", "nome": "Humano"}]) == []
+    assert aplicar_npcs_extraidos(wm, [{"id": "klaus", "nome": "Klaus"}]) == []
+
+
+def test_npc_com_nome_proprio_da_mesma_classe_PASSA():
+    """O guard é contra o ECO da classe, não contra monges.
+
+    A chave de dedup colapsa multi-token no primeiro nome
+    (`monge-do-templo-vermelho` → `monge`); por isso o espelho compara pelo
+    canônico INTEIRO. Sem esse cuidado, o fix bloquearia NPC legítimo.
+    """
+    wm = _wm_monge()
+    add = aplicar_npcs_extraidos(
+        wm, [{"id": "irmao-taldo", "nome": "Irmão Taldo"}]
+    )
+    assert add == ["irmao-taldo"]
+
+
+def test_guard_nao_afeta_jogador_sem_classe_definida():
+    """Session Zero antes da ficha: sem classe, nada a espelhar — e nada quebra."""
+    wm = _wm()
+    add = aplicar_npcs_extraidos(wm, [{"id": "monge", "nome": "Monge"}])
+    assert add == ["monge"]
