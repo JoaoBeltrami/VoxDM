@@ -18,7 +18,13 @@ Exemplo:
     # → None
 """
 
+import random
 import re
+from typing import Any
+
+import structlog
+
+log = structlog.get_logger()
 
 # Radicais de itens CONSUMÍVEIS — whitelist ESTREITA de propósito: só coisas que
 # o jogador "usa/bebe/aplica" e que têm provisão limitada. Inclui o inglês que o
@@ -66,3 +72,109 @@ def nota_item_ausente(texto_jogador: str, inventario: list[str]) -> str | None:
             "ordem para proibir."
         )
     return None
+
+
+# ── Consumo como autoridade da ENGINE (ITEM-SEM-AUTORIDADE-1, playtest 01/08) ─
+#
+# "Não fui curado pela minha poção." O jogador TINHA a poção, bebeu, e nada
+# aconteceu com o HP — porque beber era pura narração: o Mestre decidia (ou
+# esquecia) o efeito, e a única coisa que a engine fazia era AVISAR quando o item
+# faltava. Conceder item continua sendo do Mestre (rule-of-cool, decisão de
+# produto). CONSUMIR é mecânica, e mecânica é da engine.
+#
+# Tabela do SRD 5.1. Só o que tem regra entra aqui — consumível sem efeito
+# conhecido cai fora e segue narrado pelo Mestre, como antes. Silêncio é melhor
+# que número inventado com cara de autoridade (mesma regra do resolver_check).
+_CURA_POR_GRAU: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("suprema", "supreme"), "10d4+20"),
+    (("superior",), "8d4+8"),
+    (("maior", "greater"), "4d4+4"),
+)
+_CURA_BASE = "2d4+2"
+
+# Radicais que identificam uma poção de CURA — o item precisa dizer a que veio.
+_MARCAS_CURA: tuple[str, ...] = ("cura", "curas", "healing", "vida", "saúde", "saude")
+
+_RE_DADO_CURA = re.compile(r"(\d+)d(\d+)(?:\+(\d+))?")
+
+
+def _formula_de_cura(nome_item: str) -> str:
+    """Fórmula SRD conforme o grau declarado no nome do item."""
+    baixo = nome_item.lower()
+    for marcas, formula in _CURA_POR_GRAU:
+        if any(m in baixo for m in marcas):
+            return formula
+    return _CURA_BASE
+
+
+def _rolar(formula: str, rng: random.Random) -> int:
+    """Rola 'NdM+K'. Zero se a fórmula não casar — nunca levanta."""
+    m = _RE_DADO_CURA.search(formula or "")
+    if not m:
+        return 0
+    n, faces = int(m.group(1)), int(m.group(2))
+    fixo = int(m.group(3) or 0)
+    if n <= 0 or faces <= 0:
+        return 0
+    return sum(rng.randint(1, faces) for _ in range(n)) + fixo
+
+
+def _item_de_cura_no_inventario(texto: str, inventario: list[str]) -> str | None:
+    """O item de cura que o jogador tem E citou nesta fala (nome como está no
+    inventário), ou None."""
+    baixo = texto.lower()
+    for item in inventario:
+        nome = str(item)
+        n_baixo = nome.lower()
+        if not any(marca in n_baixo for marca in _MARCAS_CURA):
+            continue
+        # O jogador citou este item? Basta o radical do consumível aparecer na
+        # fala E o item ser de cura — a whitelist já garante que é consumível.
+        if any(rad in baixo and rad in n_baixo for rad in _ITENS_CONSUMIVEIS):
+            return nome
+    return None
+
+
+def resolver_consumo(
+    wm: Any, texto_jogador: str, rng: random.Random | None = None
+) -> str | None:
+    """Consome o item de cura que o jogador declarou usar e aplica o efeito.
+
+    Devolve a linha "ENGINE:" com o fato pronto, ou None quando não há nada a
+    resolver (sem verbo de uso, sem item de cura no inventário, ou consumível de
+    efeito desconhecido — esses seguem narrados pelo Mestre).
+
+    Muta a WorkingMemory: aplica a cura, remove o item do inventário e registra
+    o evento vital pra que a CAUSA chegue ao jogador junto com o número.
+    """
+    if not texto_jogador or not texto_jogador.strip():
+        return None
+    if not _RE_USO_CONSUMIVEL.search(texto_jogador.lower()):
+        return None
+
+    inventario = list(getattr(wm, "player_inventory", []) or [])
+    item = _item_de_cura_no_inventario(texto_jogador, inventario)
+    if not item:
+        return None
+
+    formula = _formula_de_cura(item)
+    curado = _rolar(formula, rng or random.Random())
+    if curado <= 0:
+        return None
+
+    antes = int(getattr(wm, "player_hp", 0) or 0)
+    depois = wm.character.aplicar_cura(curado)
+    ganho = depois - antes
+    wm.character.remover_item(item)
+    wm.character.registrar_evento_vital(
+        "cura", ganho, item, depois, int(getattr(wm, "player_hp_max", 0) or 0)
+    )
+    log.info("item_consumido_pela_engine", item=item, formula=formula,
+             rolado=curado, hp=f"{antes}->{depois}")
+
+    sobra = "" if ganho == curado else " (o excedente se perde — HP já no máximo)"
+    return (
+        f"ENGINE: {item} consumida — {formula} = {curado} PV curados{sobra}. "
+        f"HP agora {depois}/{getattr(wm, 'player_hp_max', 0)}. O frasco vazio saiu "
+        f"do inventário. Narre o alívio no corpo; não recalcule nem cite números."
+    )
