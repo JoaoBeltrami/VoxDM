@@ -80,6 +80,15 @@ class CombatState:
     acao_usada: bool = False
     bonus_usada: bool = False
 
+    # DANO-INIMIGO-INVISIVEL-1 (playtest 07/08): "dano no inimigo nunca é
+    # mostrado ou contado". A engine calculava (`combate_engine_resolveu dano=9`)
+    # e o número morria no log — o prompt PROÍBE o Mestre de citar número
+    # (`combat.md`), então não sobrava fonte nenhuma pro jogador. É o espelho
+    # exato do DANO-SEM-CAUSA-1 do lado do PJ, e a solução é a mesma que já foi
+    # aceita lá: buffer por turno, drenado 1×, entregue no payload `fim`.
+    # Cada item: {"alvo", "nome", "dano", "estado", "hp", "hp_max", "morreu"}.
+    golpes_turno: list[dict[str, Any]] = field(default_factory=list)
+
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     def entrar(self) -> None:
@@ -117,6 +126,7 @@ class CombatState:
         self.posicoes_combate.clear()
         self.movimento_restante_ft = self.movimento_total_ft
         self.saiu_combate_recentemente = True
+        self.golpes_turno.clear()
         self.reset_economia()
 
     def avancar_rodada(self) -> None:
@@ -254,9 +264,29 @@ class CombatState:
         else:
             estado = "intacto"
         d["estado"] = estado
+        # DANO-INIMIGO-INVISIVEL-1: registra AQUI, no ponto em que o dano é
+        # aplicado — mesmo lugar do análogo no PJ (`registrar_evento_vital`).
+        # Registrar no websocket deixaria de fora qualquer caminho que não passe
+        # por lá; aqui passa todo dano que a engine aplica, por definição.
+        if dano > 0:
+            self.golpes_turno.append({
+                "alvo": inimigo_id,
+                "nome": str(d.get("nome") or inimigo_id),
+                "dano": int(dano),
+                "estado": estado,
+                "hp": hp,
+                "hp_max": hp_max,
+                "morreu": estado == "morto",
+            })
         if estado == "morto":
             self.posicoes_combate.pop(inimigo_id, None)
         return estado
+
+    def drenar_golpes(self) -> list[dict[str, Any]]:
+        """Devolve e limpa os golpes do turno (mesmo idioma de `eventos_vitais`)."""
+        golpes = list(self.golpes_turno)
+        self.golpes_turno.clear()
+        return golpes
 
     def remover_inimigo(self, inimigo_id: str) -> None:
         """Remove inimigo (morte definitiva ou fuga)."""

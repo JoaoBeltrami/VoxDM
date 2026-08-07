@@ -10,6 +10,7 @@ import {
   type SpellSlot,
   type TokenIniciativa,
   type EventoVital,
+  type GolpeInimigo,
   type AsiPendente,
   type CheckResolvido,
 } from "@/lib/api";
@@ -131,6 +132,8 @@ interface EstadoSessao {
   checkPedido: string;
   /** Por que o HP mudou neste turno — dano/cura COM a causa. */
   eventosVitais: EventoVital[];
+  /** DANO-INIMIGO-INVISIVEL-1: o dano que o JOGADOR causou neste turno. */
+  golpesInimigos: GolpeInimigo[];
   /** Incrementos de Atributo que o jogador DEVE escolher (SRD: 4/8/12/16/19,
    *  +6/+14 Guerreiro, +10 Ladino). Persiste no backend. */
   asiPendente: AsiPendente[];
@@ -264,6 +267,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   emCombate: false,
   checkPedido: "",
   eventosVitais: [],
+  golpesInimigos: [],
   asiPendente: [],
   checkResolvido: null,
   inimigos: {},
@@ -667,6 +671,7 @@ export function useGameSession() {
           emCombate: emCombateAtual,
           checkPedido: msg.check_pedido ?? "",
           eventosVitais: msg.eventos_vitais ?? [],
+          golpesInimigos: msg.golpes_inimigos ?? [],
           asiPendente: msg.asi_pendente ?? [],
           checkResolvido: (msg.check_resolvido && "total" in msg.check_resolvido)
             ? (msg.check_resolvido as CheckResolvido) : null,

@@ -416,6 +416,49 @@ function VitalToast({
   );
 }
 
+/** DANO-INIMIGO-INVISIVEL-1 (playtest 07/08): "dano no inimigo nunca é mostrado
+ *  ou contado". A engine calculava e o número morria no log — o Mestre é
+ *  proibido de citar número, então não havia fonte nenhuma. Espelho do
+ *  VitalToast, do outro lado do combate: âmbar (golpe DADO, não sofrido) e
+ *  ancorado embaixo, pra não brigar com o toast de dano recebido no topo. */
+function GolpeToast({
+  golpes, onDismiss,
+}: {
+  golpes: import("@/lib/api").GolpeInimigo[];
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000);
+    return () => clearTimeout(t);
+  }, [onDismiss, golpes]);
+
+  if (golpes.length === 0) return null;
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 bottom-40 z-40 flex flex-col items-center gap-1.5 px-4">
+      {golpes.map((g, i) => (
+        <button
+          key={i}
+          onClick={onDismiss}
+          className={`animate-slide-down rounded-xl border px-4 py-2 text-center text-xs shadow-lg backdrop-blur-sm transition ${
+            g.morreu
+              ? "border-zinc-600/60 bg-zinc-900/90 text-zinc-200/95 hover:bg-zinc-800/90"
+              : "border-amber-800/60 bg-amber-950/85 text-amber-200/95 hover:bg-amber-900/85"
+          }`}
+        >
+          <span className="font-semibold">
+            {g.morreu ? "✕" : "▲"} −{g.dano} em {g.nome}
+          </span>
+          {/* Contabilidade é o ponto: sem o total restante, "acertei" não vira
+              "estou ganhando" nem "não estou". */}
+          <span className="ml-2 opacity-60">
+            {g.morreu ? "abatido" : `(${g.hp}/${g.hp_max})`}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function RelacaoToast({
   relacao, onDismiss,
 }: {
@@ -477,7 +520,7 @@ export default function Home() {
     personagemRestaurado,
     serverHp, serverHpMax,
     cascadeAtivo, limparCascade,
-    relacaoToast, limparRelacaoToast, eventosVitais,
+    relacaoToast, limparRelacaoToast, eventosVitais, golpesInimigos,
     pacingNivel,
   } = useGameSession();
 
@@ -490,6 +533,14 @@ export default function Home() {
   useEffect(() => {
     if (eventosVitais.length > 0) setVitaisVisiveis(eventosVitais);
   }, [eventosVitais]);
+
+  // DANO-INIMIGO-INVISIVEL-1: mesmo padrão, do outro lado do combate.
+  const [golpesVisiveis, setGolpesVisiveis] = useState<
+    import("@/lib/api").GolpeInimigo[]
+  >([]);
+  useEffect(() => {
+    if (golpesInimigos.length > 0) setGolpesVisiveis(golpesInimigos);
+  }, [golpesInimigos]);
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
   const [syncAtivo, setSyncAtivo] = useState(true);
@@ -2230,6 +2281,11 @@ export default function Home() {
             relação — dano acontece sem NPC envolvido (e no playtest aconteceu
             fora de combate, o que gerou o "tomei dano do nada"). */}
         <VitalToast eventos={vitaisVisiveis} onDismiss={() => setVitaisVisiveis([])} />
+
+        {/* DANO-INIMIGO-INVISIVEL-1: o golpe que o jogador DEU. Sem isto o
+            combate não tem contabilidade — "matei uma lenda, foi bem fácil"
+            veio de uma luta em que ele nunca viu um número seu. */}
+        <GolpeToast golpes={golpesVisiveis} onDismiss={() => setGolpesVisiveis([])} />
 
         {/* CHECK-INVISIVEL-1: a conta do teste. `key` remonta a cada rolagem
             pra reiniciar o timer — duas rolagens seguidas mostram duas vezes. */}

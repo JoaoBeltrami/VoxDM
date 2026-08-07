@@ -741,6 +741,10 @@ class WorkingMemory:
             self._marcar_npc_morto(inimigo_id)
         return estado
 
+    def drenar_golpes(self) -> list[dict[str, Any]]:
+        """DANO-INIMIGO-INVISIVEL-1: golpes do turno, pra o payload `fim`."""
+        return self.combat.drenar_golpes()
+
     def _marcar_npc_morto(self, inimigo_id: str) -> None:
         """CANON-MORTOS (decisão 12/07): morte de combatente que É um NPC da
         cena marca a flag no registro canônico — o corpo fica na cena (prompt
