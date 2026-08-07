@@ -37,7 +37,7 @@ from api.rate_limit import limiter
 from api.state import MAX_SESSOES, SessaoAtiva, sessions
 from api.turn_pipeline import aplicar_pos_turno, reinferir_npcs_se_mudou_cena
 from engine.auth.identity import Owner
-from engine.llm.groq_client import GroqClient
+from engine.llm.groq_client import _BACKEND_PARA_PROVIDER, GroqClient
 from engine.llm.prompt_builder import montar_mensagens
 from engine.llm.types import RE_COMBATE as _RE_COMBATE
 from engine.memory.context_builder import ContextBuilder
@@ -640,7 +640,11 @@ async def trocar_llm_backend(
     if backend in ("", "auto", "default"):
         sessao.groq.set_backend(None)
         return
-    valores_aceitos = {"groq", "groq-70b", "groq-8b", "gemini", "ollama"}
+    # SLOT-MENTE-1 (01/08): a lista vivia AQUI, duplicada do mapa canônico em
+    # groq_client — e por isso ficou pra trás quando o 120b entrou na cascata
+    # (26/07) e de novo no rename do slot leve. Ler do mapa elimina a terceira
+    # cópia: quem aceita o valor é quem sabe traduzi-lo.
+    valores_aceitos = {b for b in _BACKEND_PARA_PROVIDER if b not in ("", "auto", "default")}
     if backend not in valores_aceitos:
         raise HTTPException(
             status_code=400,

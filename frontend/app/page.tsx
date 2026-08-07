@@ -83,18 +83,28 @@ function lerDmProfileStorage(): DmProfile {
 // Toggle aparece no menu Opções e pode ser trocado em sessão ativa via API.
 // O backend escolhido é "primeiro da cascata"; se ele falhar com erro
 // recuperável (429/timeout), a cascata continua nos próximos providers.
-type LlmBackendPref = "auto" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
+// SLOT-MENTE-1 (01/08): o slot "groq-8b" rodava gpt-oss-20b desde 25/07 — o
+// rótulo mentia junto com o backend. Os nomes agora dizem o PAPEL, não o
+// tamanho do modelo: papel não envelhece quando a gente troca de modelo.
+type LlmBackendPref = "auto" | "groq-70b" | "groq-leve" | "gemini" | "ollama";
 const LS_LLM_BACKEND_KEY = "voxdm_llm_backend";
+// Preferências gravadas antes do rename — sem isto, quem já mexeu no menu volta
+// a "auto" em silêncio na primeira carga.
+const LLM_BACKEND_LEGADO: Record<string, LlmBackendPref> = {
+  "groq-8b": "groq-leve",
+  "groq": "groq-70b",
+};
 const LLM_BACKENDS: { id: LlmBackendPref; label: string; descricao: string }[] = [
-  { id: "auto",     label: "🤖 Auto",        descricao: "Cascata default: 70B → 8B → Gemini → Ollama." },
-  { id: "groq-70b", label: "🌩 Groq 70B",    descricao: "Qualidade máxima. Tem limite diário (TPD)." },
-  { id: "groq-8b",  label: "⚡ Groq 8B",     descricao: "Mais rápido, quota separada do 70B. Qualidade ~70%." },
-  { id: "gemini",   label: "🌟 Gemini",      descricao: "Cota fresca, 4M tokens/dia. Excelente PT-BR." },
-  { id: "ollama",   label: "🏠 Ollama",      descricao: "Local, ilimitado. Precisa de 'ollama serve' rodando." },
+  { id: "auto",      label: "🤖 Auto",        descricao: "Cascata default: 70B → 120B → leve → Gemini → Ollama." },
+  { id: "groq-70b",  label: "🌩 Groq grande", descricao: "Qualidade máxima. Tem limite diário (TPD) apertado." },
+  { id: "groq-leve", label: "⚡ Groq leve",   descricao: "Mais rápido, quota separada da grande. Qualidade menor." },
+  { id: "gemini",    label: "🌟 Gemini",      descricao: "Cota fresca, 4M tokens/dia. Excelente PT-BR." },
+  { id: "ollama",    label: "🏠 Ollama",      descricao: "Local, ilimitado. Precisa de 'ollama serve' rodando." },
 ];
 function lerLlmBackendStorage(): LlmBackendPref {
   if (typeof window === "undefined") return "auto";
-  const v = localStorage.getItem(LS_LLM_BACKEND_KEY);
+  const bruto = localStorage.getItem(LS_LLM_BACKEND_KEY);
+  const v = (bruto && LLM_BACKEND_LEGADO[bruto]) ?? bruto;
   return LLM_BACKENDS.find(b => b.id === v)?.id ?? "auto";
 }
 

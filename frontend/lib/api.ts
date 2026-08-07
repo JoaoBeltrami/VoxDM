@@ -339,7 +339,13 @@ export function wsUrl(session_id: string): string {
 // "auto" deixa a cascata default rolar. Os outros valores põem aquele provider
 // como primeiro da cascata; se ele falhar com erro recuperável, a cascata
 // continua normalmente (não trava em "USE APENAS X").
-export type LlmBackend = "auto" | "groq" | "groq-70b" | "groq-8b" | "gemini" | "ollama";
+/** SLOT-MENTE-1 (01/08): `groq-leve` substituiu `groq-8b` — o slot rodava
+ *  gpt-oss-20b, não um 8B. Nome de PAPEL não envelhece na próxima troca de
+ *  modelo. Os valores legados seguem aceitos pelo backend porque estão
+ *  gravados no localStorage de quem já usou o menu Opções. */
+export type LlmBackend =
+  | "auto" | "groq-70b" | "groq-120b" | "groq-leve" | "gemini" | "ollama"
+  | "groq" | "groq-8b";   // legado — aceito, não oferecido
 
 export async function trocarLlmBackend(session_id: string, backend: LlmBackend): Promise<boolean> {
   try {

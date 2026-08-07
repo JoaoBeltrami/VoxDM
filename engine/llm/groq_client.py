@@ -28,9 +28,9 @@ import structlog
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_8B,
     PROV_GROQ_70B,
     PROV_GROQ_120B,
+    PROV_GROQ_LEVE,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
@@ -48,7 +48,12 @@ _BACKEND_PARA_PROVIDER: dict[str, str | None] = {
     # seguinte quando o TPD do 70b fecha, ~turno 14), mas não havia como
     # forçá-lo — nem pelo toggle das Opções, nem por benchmark A/B.
     "groq-120b": PROV_GROQ_120B,
-    "groq-8b": PROV_GROQ_8B,
+    # SLOT-MENTE-1 (01/08): o slot virou "groq-leve" (nome de PAPEL, que não
+    # envelhece a cada troca de modelo). "groq-8b" fica aceito porque está
+    # gravado no localStorage de quem já mexeu no menu Opções — tirar agora
+    # deixaria a preferência salva apontando pra provider inexistente.
+    "groq-leve": PROV_GROQ_LEVE,
+    "groq-8b": PROV_GROQ_LEVE,
     "gemini":  PROV_GEMINI,
     "ollama":      PROV_OLLAMA,
     "ollama-grim": PROV_OLLAMA_GRIM,

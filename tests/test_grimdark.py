@@ -161,9 +161,9 @@ def test_narrative_grim_existe():
 
 
 def test_cascata_grim_exclui_8b():
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_8B, TaskType
+    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_LEVE, TaskType
     cascata = CASCATA_DEFAULT[TaskType.NARRATIVE_GRIM]
-    assert PROV_GROQ_8B not in cascata
+    assert PROV_GROQ_LEVE not in cascata
 
 
 def test_cascata_grim_tem_ollama_grim():

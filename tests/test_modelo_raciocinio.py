@@ -58,10 +58,10 @@ def test_fallback_de_raciocinio_tem_tratamento():
 # qualidade sem ninguém perceber.
 
 def test_cascata_narrativa_tem_amortecedor_entre_70b_e_8b():
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_8B, PROV_GROQ_70B, PROV_GROQ_120B, TaskType
+    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_70B, PROV_GROQ_120B, PROV_GROQ_LEVE, TaskType
 
     casc = CASCATA_DEFAULT[TaskType.NARRATIVE]
-    assert casc.index(PROV_GROQ_70B) < casc.index(PROV_GROQ_120B) < casc.index(PROV_GROQ_8B), (
+    assert casc.index(PROV_GROQ_70B) < casc.index(PROV_GROQ_120B) < casc.index(PROV_GROQ_LEVE), (
         f"o degrau de TPD tem que ficar ENTRE o 70B e o 8B: {casc}"
     )
 
