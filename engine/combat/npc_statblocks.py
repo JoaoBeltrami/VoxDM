@@ -23,6 +23,8 @@ Exemplo:
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +135,43 @@ def _id_canonico(npc_id: str) -> str:
     base = str(npc_id or "").strip()
     partes = base.rsplit("-", 1)
     return partes[0] if len(partes) == 2 and partes[1].isdigit() else base
+
+
+def _normalizar(texto: str) -> str:
+    """kebab-case sem acento — 'Capitão Bandido' → 'capitao-bandido'."""
+    nfd = unicodedata.normalize("NFD", str(texto or "").strip().lower())
+    sem_acento = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]+", "-", sem_acento).strip("-")
+
+
+# Índice reverso PT-BR → chave SRD, montado uma vez a partir da própria tabela.
+# Existe porque o Mestre narra em português: o inimigo chega como "Capanga",
+# não como "thug".
+_POR_NOME_PT: dict[str, str] = {
+    _normalizar(campos["nome"]): chave for chave, campos in STATBLOCKS_SRD.items()
+}
+
+
+def ancorar_no_srd(srd_index: str = "", nome: str = "") -> str | None:
+    """Ficha de um statblock SRD ESTÁTICO por índice ou nome. None se não bater.
+
+    É o último elo antes do genérico (FICHA-MECANICA, 07/08): sem isto, todo
+    inimigo cuja ficha não veio do módulo nem do Qdrant virava o MESMO lacaio
+    CR ~1/8 — um berserker e um capitão bandido davam 1d6+1 iguais. Aqui pelo
+    menos o chute é um monstro real e o log diz qual foi.
+
+    Exemplo:
+        ancorar_no_srd(nome="Capanga")
+        # → "Capanga — CR 1/2 (100 XP). CA 11 | PV 32. Ataques: golpe +4 (1d6+2)"
+    """
+    for candidato in (srd_index, nome):
+        chave = _normalizar(candidato)
+        if not chave:
+            continue
+        alvo = chave if chave in STATBLOCKS_SRD else _POR_NOME_PT.get(chave)
+        if alvo:
+            return _ficha_texto(STATBLOCKS_SRD[alvo])
+    return None
 
 
 def sem_ficha_autoral(npc_id: str) -> bool:

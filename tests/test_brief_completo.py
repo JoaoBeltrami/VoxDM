@@ -49,13 +49,23 @@ def test_combate_injeta_estado_do_inimigo_no_brief():
     assert "COMBATE ATIVO" in s          # rodada + inimigos
 
 
-def test_combate_injeta_ficha_srd_quando_existe():
+def test_combate_injeta_porte_e_nao_os_numeros_da_ficha():
+    """FICHA-MECANICA (07/08): número é da engine, porte é do Mestre.
+
+    A ficha SRD inteira saiu do prompt (era até 3 delas por turno, e o
+    master_system proíbe o Mestre de citar número mesmo). O que entra é como a
+    criatura se porta — aqui, um PV 59 tem que ler como resistente.
+    """
     wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "s")
     wm.entrar_combate()
     wm.registrar_inimigo("ogro-1", "Ogro", "intacto")
-    wm.inimigos_combate["ogro-1"]["ficha"] = "Ogro — CR 2, CA 11, PV 59, clava 2d8+4"
+    wm.inimigos_combate["ogro-1"]["ficha"] = (
+        "Ogro — CR 2. CA 11 | PV 59. Ataques: clava +6 (2d8+4)"
+    )
     s = _system(wm, "Ataco o ogro")
-    assert "CA 11" in s and "2d8+4" in s
+    assert "CA 11" not in s and "2d8+4" not in s
+    assert "Porte: Ogro —" in s
+    assert "coriáceo" in s          # PV 59 → aguenta pancada
 
 
 def test_combate_injeta_protocolo_combat_md():
