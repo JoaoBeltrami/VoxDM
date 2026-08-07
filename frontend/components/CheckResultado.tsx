@@ -27,11 +27,18 @@ export function CheckResultado({ check }: { check: CheckResolvido }) {
 
   if (!visivel) return null;
 
+  // CHECK-SEM-DC-1 (playtest 01/08): "bom pedido de check, mas sem DC", 3x na
+  // mesma sessão. A conta aparecia; o ALVO não. Quando a engine manda `cd`, o
+  // chip passa a ser vereditista — a cor vem do resultado, não só do natural.
+  const temVeredito = typeof check.cd === "number" && typeof check.sucesso === "boolean";
+
   const cor = check.critico
     ? "border-vox-gold/70 bg-vox-gold/15 text-vox-gold"
     : check.falha_critica
       ? "border-red-800/60 bg-red-950/80 text-red-300"
-      : "border-vox-accent-primary/40 bg-vox-accent-primary/10 text-vox-accent-glow";
+      : temVeredito && !check.sucesso
+        ? "border-red-800/50 bg-red-950/60 text-red-300"
+        : "border-vox-accent-primary/40 bg-vox-accent-primary/10 text-vox-accent-glow";
 
   return (
     <div className="pointer-events-auto fixed inset-x-0 top-28 z-40 flex justify-center px-4">
@@ -46,11 +53,21 @@ export function CheckResultado({ check }: { check: CheckResolvido }) {
         </span>
         <span className="mt-0.5 block font-mono text-sm">
           {/* A conta inteira, não só o resultado: é ela que responde "o bônus
-              entrou?" sem o jogador ter que confiar na narração. */}
+              entrou?" sem o jogador ter que confiar na narração. E, desde
+              01/08, contra QUÊ ela vale — sem a CD, o número não quer dizer nada. */}
           {check.d20} {check.bonus >= 0 ? "+" : "−"} {Math.abs(check.bonus)}
           <span className="mx-1.5 opacity-50">=</span>
           <span className="text-base font-semibold">{check.total}</span>
+          {temVeredito && (
+            <span className="ml-1.5 opacity-60">{" "}vs CD {check.cd}</span>
+          )}
         </span>
+        {temVeredito && (
+          <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.16em]">
+            {check.sucesso ? "sucesso" : "falha"}
+            {check.margem === 0 ? " na trave" : ` por ${Math.abs(check.margem ?? 0)}`}
+          </span>
+        )}
         {check.detalhe && (
           <span className="mt-0.5 block text-[10px] opacity-70">{check.detalhe}</span>
         )}

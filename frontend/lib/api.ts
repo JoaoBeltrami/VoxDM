@@ -56,6 +56,11 @@ export interface CheckResolvido {
   total: number;
   critico: boolean;
   falha_critica: boolean;
+  /** CHECK-SEM-DC-1: o alvo contra o qual o total é comparado. Opcional porque
+   *  sessão antiga (payload gravado antes de 01/08) não tem o campo. */
+  cd?: number;
+  sucesso?: boolean;
+  margem?: number;
 }
 
 export interface EventoVital {

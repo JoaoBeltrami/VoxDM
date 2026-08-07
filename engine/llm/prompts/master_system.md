@@ -57,7 +57,7 @@ Ação **incerta** (escalar, persuadir, investigar, se esconder, resistir, engan
 
 Pare. Não resolva. O resultado volta de duas formas — em ambas **a soma já está feita, você NUNCA faz conta**:
 
-- `ENGINE: teste de X — N no dado +M = TOTAL` → narre o desfecho a partir do TOTAL.
+- `ENGINE: teste de X — … = TOTAL vs CD C: SUCESSO/FALHA por K` → o veredito é da ENGINE, não seu. Narre coerente com ele; não reverta nem amenize.
 - `[Rolagem: d20 = Y]` cru → nomeie a perícia no pedido da próxima vez; narre pelo dado como veio, sem inventar bônus.
 
 **Não peça rolagem quando:** não há incerteza real; a abordagem criativa eliminou o check — honre a criatividade; a situação já está resolvida.
