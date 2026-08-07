@@ -1159,7 +1159,7 @@ async def _beat_turno_inimigo(
         log.warning("beat_turno_inimigo_falhou", erro=str(e)[:120])
 
 
-def _cena_social(wm: Any) -> bool:
+def _cena_social(wm: Any, texto_jogador: str = "") -> bool:
     """A cena é SOCIAL de verdade — ou só tem gente ao fundo?
 
     LIGHT-MORTO-1: a regra 2 do roteador (NPC em cena → 70B, nunca 8B) nasceu
@@ -1176,12 +1176,34 @@ def _cena_social(wm: Any) -> bool:
 
     Sinal novo: NPC APRESENTADO (o jogador engajou com ele nesta cena), não
     apenas presente. Cena social de verdade continua indo pro 70B.
+
+    LIGHT-MORTO-2 (playtest 01/08): a mitigação acima NÃO bastou — `light`
+    disparou 3× em 58 turnos e o 70B queimou o TPD no turno 19. Causa:
+    `npcs_apresentados` é CUMULATIVO da sessão e nunca esvazia. Depois da
+    primeira conversa com o taverneiro, todo turno em que ele seguia presente
+    contava como social — inclusive travessia, inclusive o jogador sozinho
+    pensando alto.
+
+    O sinal que faltava é de RECÊNCIA, não de histórico: a conversa está viva
+    AGORA? Vale quando o texto do jogador OU a última fala do Mestre nomeia um
+    NPC presente. Isso cobre o meio de diálogo ("e o que mais?" — o Mestre
+    acabou de nomear quem responde) e solta o freio assim que o jogador vira as
+    costas e anda. Sem estado novo, sem carimbo pra dessincronizar.
     """
     presentes = set(getattr(wm, "npcs_presentes", []) or [])
     if not presentes:
         return False
     apresentados = getattr(getattr(wm, "scene", None), "npcs_apresentados", set()) or set()
-    return bool(presentes & set(apresentados))
+    if not (presentes & set(apresentados)):
+        return False
+
+    scene = getattr(wm, "scene", None)
+    if scene is None or not hasattr(scene, "cita_npc_presente"):
+        return True  # stub de teste sem o helper: preserva o comportamento antigo
+    return bool(
+        scene.cita_npc_presente(texto_jogador)
+        or scene.cita_npc_presente(_ultima_fala_do_mestre(wm))
+    )
 
 
 def _snapshot_arco(wm: Any) -> dict[str, Any]:
@@ -2342,7 +2364,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 pacing_nivel=sessao.working_mem.pacing_nivel,
                 cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
                 turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
-                npc_na_cena=_cena_social(sessao.working_mem),
+                npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
                 light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
                 dm_profile=_dm_prof,
                 grimdark_ativo=_grim,
@@ -2361,7 +2383,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             log.info("task_type_escolhido", task=_task_turno.value,
                      em_combate=sessao.working_mem.em_combate,
                      pacing=round(sessao.working_mem.pacing_nivel, 1),
-                     npc_na_cena=_cena_social(sessao.working_mem),
+                     npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
                      light_seguidos=sessao.working_mem.turnos_light_consecutivos,
                      session_id=session_id)
 
