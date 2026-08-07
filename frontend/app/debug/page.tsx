@@ -27,7 +27,8 @@ const C = {
 
 const PROVIDER_COLOR: Record<string, string> = {
   "groq-70b":  "#7c3aed",
-  "groq-8b":   "#3b82f6",
+  "groq-leve": "#3b82f6",
+  "groq-8b":   "#3b82f6",   // legado — sessão arquivada antes de 01/08
   "gemini":    "#f59e0b",
   "ollama":    "#10b981",
 };
@@ -361,10 +362,12 @@ function CompanionCard({ data }: { data: CompanionData }) {
 
 function ProviderBadge({ provider }: { provider: string }) {
   const color = PROVIDER_COLOR[provider] ?? "#a1a1aa";
-  const label = provider === "groq-70b" ? "Groq 70B" :
-                provider === "groq-8b"  ? "Groq 8B"  :
-                provider === "gemini"   ? "Gemini"   :
-                provider === "ollama"   ? "Ollama"   : provider;
+  const label = provider === "groq-70b"  ? "Groq grande" :
+                provider === "groq-120b" ? "Groq médio"  :
+                provider === "groq-leve" ? "Groq leve"   :
+                provider === "groq-8b"   ? "Groq leve"   :  // legado pré-01/08
+                provider === "gemini"    ? "Gemini"      :
+                provider === "ollama"    ? "Ollama"      : provider;
   return (
     <span
       className="rounded border px-2 py-0.5 text-[11px] font-semibold"

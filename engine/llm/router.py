@@ -34,13 +34,14 @@ from engine.llm.providers.ollama import OllamaProvider
 from engine.llm.providers.ollama_grim import OllamaGrimProvider
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_8B,
     PROV_GROQ_70B,
     PROV_GROQ_120B,
+    PROV_GROQ_LEVE,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
     cascata_para,
+    modelo_do_slot,
 )
 from engine.telemetry import emit_llm_decisao
 
@@ -83,7 +84,7 @@ class LLMRouter:
         self._providers: dict[str, BaseLLMProvider] = {
             PROV_GROQ_70B:    GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
             PROV_GROQ_120B:   GroqProvider(nome=PROV_GROQ_120B, modelo=settings.GROQ_MODEL_MEIO),
-            PROV_GROQ_8B:     GroqProvider(nome=PROV_GROQ_8B,  modelo=settings.GROQ_MODEL_FALLBACK),
+            PROV_GROQ_LEVE:     GroqProvider(nome=PROV_GROQ_LEVE,  modelo=settings.GROQ_MODEL_FALLBACK),
             PROV_GEMINI:      GeminiProvider(),
             PROV_OLLAMA:      OllamaProvider(),
             PROV_OLLAMA_GRIM: OllamaGrimProvider(),
@@ -294,7 +295,7 @@ class LLMRouter:
         while fila:
             p, msgs = fila.pop(0)
             try:
-                log.info("llm_provider_tentando", provider=p.nome, task=task.value)
+                log.info("llm_provider_tentando", provider=p.nome, modelo=modelo_do_slot(p.nome), task=task.value)
                 texto = await p.completar(msgs, temperatura, max_tokens)
                 # Detecção de amarelada em cena sombria: se o provider filtrou
                 # suavemente (fade-to-black, moralização), cascateia pro próximo.
@@ -311,7 +312,7 @@ class LLMRouter:
                     )
                     _tentar_reframe(p)  # GRIM-REFRAME-1
                     continue
-                log.info("llm_provider_ok", provider=p.nome, task=task.value, chars=len(texto))
+                log.info("llm_provider_ok", provider=p.nome, modelo=modelo_do_slot(p.nome), task=task.value, chars=len(texto))
                 cascata_disparou = p.nome != provider_primario
                 self._emitir_decisao(
                     task=task, provider_primario=provider_primario,
@@ -386,13 +387,13 @@ class LLMRouter:
         while fila:
             p, msgs = fila.pop(0)
             try:
-                log.info("llm_provider_tentando_stream", provider=p.nome, task=task.value)
+                log.info("llm_provider_tentando_stream", provider=p.nome, modelo=modelo_do_slot(p.nome), task=task.value)
                 emitiu = False
                 chars_saida = 0
                 latencia_primeiro_ms = 0
                 async for token in p.completar_stream(msgs, temperatura, max_tokens):
                     if not emitiu:
-                        log.info("llm_provider_stream_ok", provider=p.nome, task=task.value)
+                        log.info("llm_provider_stream_ok", provider=p.nome, modelo=modelo_do_slot(p.nome), task=task.value)
                         self.ultimo_provider_stream = p.nome
                         latencia_primeiro_ms = int((time.monotonic() - t0) * 1000)
                         emitiu = True
@@ -419,7 +420,7 @@ class LLMRouter:
                     return
                 # Provider esvaziou sem emitir nada nem lançar erro — trata como retriable
                 ultimo_erro = LLMRetriable(f"{p.nome} stream vazio sem erro", categoria="vazio")
-                log.warning("llm_provider_stream_vazio", provider=p.nome)
+                log.warning("llm_provider_stream_vazio", provider=p.nome, modelo=modelo_do_slot(p.nome))
                 continue
             except LLMRetriable as e:
                 # Defesa de contrato (CASCATA-1): se ESTE provider já emitiu tokens,
