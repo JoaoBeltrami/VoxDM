@@ -211,8 +211,12 @@ def test_enriquecer_aplica_default_sem_ficha():
 
 # ── Fase 2 — injeção no prompt de combate ─────────────────────────────────────
 
-def test_to_prompt_injeta_fichas_dedup_e_cap():
-    """Fichas dedup por tipo (5 goblins = 1 ficha) e cap em 3 tipos."""
+def test_to_prompt_injeta_porte_dedup_e_cap():
+    """Porte dedup por tipo (3 goblins = 1 entrada) e cap em 3 tipos.
+
+    FICHA-MECANICA (07/08): antes disto a linha era a ficha SRD INTEIRA. Hoje é
+    o descritor sem número — o dedup e o cap continuam valendo igual.
+    """
     wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
     wm.entrar_combate()
     # 3 goblins (mesmo srd) + 1 ogro + 1 troll + 1 orc = 4 tipos distintos
@@ -224,20 +228,22 @@ def test_to_prompt_injeta_fichas_dedup_e_cap():
         wm.inimigos_combate[srd]["ficha"] = f"FICHA_{srd.upper()}"
 
     bloco = wm.combat.to_prompt()
+    portes = [ln for ln in bloco.splitlines() if ln.startswith("Porte:")]
+    assert len(portes) == 1
     # Goblin aparece UMA vez (dedup), apesar de 3 instâncias
-    assert bloco.count("FICHA_GOBLIN") == 1
-    # Cap em 3 tipos → no máximo 3 linhas "Ficha:"
-    assert bloco.count("Ficha:") == 3
+    assert portes[0].count("Goblin") == 1
+    # Cap em 3 tipos → 3 descritores separados por " | "
+    assert portes[0].count("—") == 3
 
 
-def test_to_prompt_ficha_pula_mortos():
+def test_to_prompt_porte_pula_mortos():
     wm = WorkingMemory.nova_sessao(session_id="t", location_id="x", location_nome="X")
     wm.entrar_combate()
     wm.registrar_inimigo("g1", "Goblin", srd_index="goblin")
     wm.inimigos_combate["g1"]["ficha"] = "FICHA_GOBLIN"
     wm.atualizar_estado_inimigo("g1", "morto")
     bloco = wm.combat.to_prompt()
-    assert "FICHA_GOBLIN" not in bloco
+    assert "Porte:" not in bloco
 
 
 def test_to_prompt_sem_ficha_nao_quebra():

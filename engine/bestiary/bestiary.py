@@ -134,6 +134,7 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
             ficha_modulo = resolver_ficha_npc(iid)
             if ficha_modulo:
                 dados["ficha"] = ficha_modulo
+                dados["ficha_fonte"] = "modulo"
                 log.info("statblock_modulo_aplicado", id=iid)
             elif sem_ficha_autoral(iid):
                 # BESTIARIO-CR-ERRADO-1 (playtest 07/08): o módulo CONHECE esta
@@ -156,7 +157,22 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
             )
             if ficha:
                 dados["ficha"] = ficha
+                dados["ficha_fonte"] = "bestiario"
                 carregadas += 1
+        # 1.5 Âncora no SRD estático — último elo antes do genérico. Grátis (sem
+        #     I/O): casa o índice OU o nome PT-BR contra a tabela de 15 statblocks.
+        #     Sem isto, um "Capanga" e um "Cavaleiro" tinham a MESMA ficha de
+        #     lacaio CR 1/8, e o combate não conseguia doer nem quando devia.
+        if not dados.get("ficha"):
+            from engine.combat.npc_statblocks import ancorar_no_srd
+            ficha_ancora = ancorar_no_srd(
+                srd_index=str(dados.get("srd_index", "")),
+                nome=str(dados.get("nome", "")),
+            )
+            if ficha_ancora:
+                dados["ficha"] = ficha_ancora
+                dados["ficha_fonte"] = "srd-ancora"
+                log.info("statblock_srd_ancorado", id=iid, ficha=ficha_ancora[:60])
         # 2. Stats numéricos (CA/HP) — todo inimigo vivo sem CA recebe, da ficha
         #    SRD parseada ou do default por CR. Grátis (sem I/O), não conta no cap.
         #    Sem isto, o combate autoritativo (resolver/turno inimigo) não tem CA/HP
@@ -166,6 +182,17 @@ async def enriquecer_fichas_inimigos(working_mem: Any) -> int:
                 ficha=str(dados.get("ficha", "")),
                 nome=str(dados.get("nome", iid)),
             )
+            if not dados.get("ficha"):
+                # Nenhum dos elos pegou: números inventados. Visível no estado
+                # (o /debug e o CombatTracker leem daqui) e no log.
+                dados["ficha_fonte"] = "generico"
+                log.warning(
+                    "statblock_generico_aplicado",
+                    id=iid,
+                    nome=dados.get("nome", ""),
+                    ca=stats.ca,
+                    hp=stats.hp_max,
+                )
             working_mem.aplicar_stats_inimigo(iid, stats.ca, stats.hp_max)
     if carregadas:
         log.info("bestiario_fichas_carregadas", quantidade=carregadas)

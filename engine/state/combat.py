@@ -23,6 +23,8 @@ Exemplo:
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from engine.combat.stats import descritor_de_inimigo, stats_inimigo
+
 if TYPE_CHECKING:
     pass
 
@@ -365,11 +367,14 @@ class CombatState:
             if partes_ini:
                 linhas.append(f"Inimigos: {', '.join(partes_ini)}")
 
-            # Fichas SRD dos inimigos vivos — dados mecânicos reais (CA/PV/ataques)
-            # pro Mestre narrar com consistência. Dedup por tipo (5 goblins = 1
-            # ficha) e cap em _MAX_FICHAS pra não estourar o budget de combate.
-            fichas_vistas: set[str] = set()
-            blocos: list[str] = []
+            # Porte dos inimigos vivos — COMO a criatura se porta, sem número.
+            #
+            # Até 07/08 isto era a ficha SRD INTEIRA (~55 palavras cada, até 3 por
+            # turno de combate). Os números saíram: quem calcula é a engine, que já
+            # guarda CA/PV parseados em `inimigos_combate`, e o master_system proíbe
+            # o Mestre de citar número mesmo. Dedup por tipo (5 goblins = 1 linha).
+            vistos: set[str] = set()
+            portes: list[str] = []
             for npc_id, dados in self.inimigos_combate.items():
                 if dados.get("estado") == "morto":
                     continue
@@ -377,14 +382,16 @@ class CombatState:
                 if not ficha:
                     continue
                 chave = dados.get("srd_index") or dados.get("nome", npc_id)
-                if chave in fichas_vistas:
+                if chave in vistos:
                     continue
-                fichas_vistas.add(chave)
-                blocos.append(ficha)
-                if len(blocos) >= _MAX_FICHAS_PROMPT:
+                vistos.add(chave)
+                portes.append(
+                    descritor_de_inimigo(dados.get("nome", npc_id), stats_inimigo(ficha))
+                )
+                if len(portes) >= _MAX_FICHAS_PROMPT:
                     break
-            for bloco in blocos:
-                linhas.append(f"Ficha: {bloco}")
+            if portes:
+                linhas.append(f"Porte: {' | '.join(portes)}")
 
         if self.movimento_restante_ft < self.movimento_total_ft:
             linhas.append(
