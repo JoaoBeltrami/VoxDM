@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useGameSession } from "@/hooks/useGameSession";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useWarmupStatus } from "@/hooks/useWarmupStatus";
 import { useAmbientAudio } from "@/hooks/useAmbientAudio";
 import { useEventSounds } from "@/hooks/useEventSounds";
@@ -1079,7 +1080,12 @@ export default function Home() {
 
   // Fase 5.7 — dado do jogador em animação (mostra antes de enviar o comando)
   // Apenas quando roll_visibility != "narrated" (para simetria visual)
-  const [dadoJogadorAtivo, setDadoJogadorAtivo] = useState<{ tipo: string; resultado: number; id: number } | null>(null);
+  // VANTAGEM-UM-DADO-SO-1: `par`/`descartado` só existem em vantagem/desvantagem
+  // — o dado normal continua com o shape antigo (campos opcionais).
+  const [dadoJogadorAtivo, setDadoJogadorAtivo] = useState<{
+    tipo: string; resultado: number; id: number;
+    par?: [number, number]; descartado?: number; modo?: "vantagem" | "desvantagem";
+  } | null>(null);
 
   // Toggle de som de crítico — hydrate do localStorage
   const [somCritico, setSomCritico] = useState(true);
@@ -1190,6 +1196,59 @@ export default function Home() {
     enviarComando(`[Rolagem: ${label}d20${modStr} = ${total}${vsCD}${critico}]`);
     setRolamentosPendentes(prev => prev.filter(p => p.id !== roll.id));
   }, [enviarComando, dispararCritFlash, registrarRolagem]);
+
+  // VANTAGEM-UM-DADO-SO-1 + atalho de teclado (playtest 07/08).
+  //
+  // Vivia como `const` dentro do IIFE da toolbar de dados, que só existe quando
+  // `turnoJogador && toolbarUtil` — inalcançável de fora, e por isso não dava
+  // pra ligar num atalho. Subiu pra cá, ao lado do `handleRolagemContextual`.
+  //
+  // ⚠️ Mudança de comportamento consciente: aqui ela captura o `esperandoRolagem`
+  // do memo (que inclui `!!checkPedido`), um SUPERSET do shadow que existia
+  // dentro do IIFE (só a prosa do Mestre). O comando passa a ser enviado em MAIS
+  // turnos — que é o certo: quando a ENGINE pediu o check, o d20 tem que chegar.
+  //
+  // Os dois dados agora VIAJAM. Antes o `Math.max` acontecia aqui e só o
+  // vencedor era enviado — o cliente decidindo o resultado, exatamente o lado
+  // errado da linha pela tese engine-first. Agora a engine reescolhe do par.
+  const rolarD20Global = useCallback(
+    (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
+      const r1 = Math.floor(Math.random() * 20) + 1;
+      const r2 = Math.floor(Math.random() * 20) + 1;
+      const dupla: "vantagem" | "desvantagem" | null =
+        modo === "normal" ? null : modo;
+      const val = modo === "vantagem" ? Math.max(r1, r2)
+                : modo === "desvantagem" ? Math.min(r1, r2)
+                : r1;
+      const tipoLog = modo === "vantagem" ? "d20▲" : modo === "desvantagem" ? "d20▼" : "d20";
+      const sufixo = modo === "vantagem" ? " — VANTAGEM"
+                   : modo === "desvantagem" ? " — DESVANTAGEM" : "";
+      const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
+      if (val === 20) dispararCritFlash("crit");
+      else if (val === 1) dispararCritFlash("falha");
+      registrarRolagem(tipoLog, val);
+      setDadoJogadorAtivo({
+        tipo: "d20", resultado: val, id: Date.now(),
+        // O par só existe quando há dois dados — o dado normal segue igual.
+        // Empate (15 vs 15) não permite inferir o modo comparando com max/min
+        // — por isso ele viaja explícito em vez de ser deduzido na renderização.
+        ...(dupla ? { par: [r1, r2] as [number, number], descartado: val === r1 ? r2 : r1, modo: dupla } : {}),
+      });
+      if (esperandoRolagem || emCombate) {
+        // Formato ADITIVO: o `= <vencedor>` continua sendo o primeiro `=` do
+        // colchete e não há `[`/`]` internos — as 5 regexes que leem rolagem
+        // seguem casando sem mudar uma linha.
+        const par = dupla ? ` (${r1} vs ${r2})` : "";
+        enviarComando(`[Rolagem: d20 = ${val}${par}${sufixo}${critico}]`);
+      }
+    },
+    [enviarComando, dispararCritFlash, registrarRolagem, esperandoRolagem, emCombate],
+  );
+
+  // Pedido explícito do Beltrami (07/08): "um botão no teclado pra rolar o d20
+  // seria bom, tipo o right ctrl". O hook estava escrito e MORTO no repo desde
+  // sempre — ninguém o importava. Ligado aqui, com o Ctrl direito.
+  useKeyboardShortcuts({ onRolarD20: () => rolarD20Global("normal") });
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -1527,6 +1586,8 @@ export default function Home() {
               resultado={dadoJogadorAtivo.resultado}
               visivel
               onTerminou={() => setDadoJogadorAtivo(null)}
+              descartado={dadoJogadorAtivo.descartado}
+              modo={dadoJogadorAtivo.modo}
             />
           </div>
         )}
@@ -1799,24 +1860,7 @@ export default function Home() {
           const dadoPedidoMatch = esperandoRolagem ? ultimaFala.match(/d(4|6|8|10|12|100)/i) : null;
           const dadoPedido = dadoPedidoMatch ? Number(dadoPedidoMatch[1]) : null;
 
-          const rolarD20 = (modo: "normal" | "vantagem" | "desvantagem" = "normal") => {
-            const r1 = Math.floor(Math.random() * 20) + 1;
-            const r2 = Math.floor(Math.random() * 20) + 1;
-            let val: number;
-            let sufixo = "";
-            let tipoLog = "d20";
-            if (modo === "vantagem") { val = Math.max(r1, r2); sufixo = " — VANTAGEM"; tipoLog = "d20▲"; }
-            else if (modo === "desvantagem") { val = Math.min(r1, r2); sufixo = " — DESVANTAGEM"; tipoLog = "d20▼"; }
-            else { val = r1; }
-            const critico = val === 20 ? " — CRÍTICO!" : val === 1 ? " — FALHA CRÍTICA!" : "";
-            if (val === 20) dispararCritFlash("crit");
-            else if (val === 1) dispararCritFlash("falha");
-            registrarRolagem(tipoLog, val);
-            setDadoJogadorAtivo({ tipo: "d20", resultado: val, id: Date.now() });
-            if (esperandoRolagem || emCombate) {
-              enviarComando(`[Rolagem: d20 = ${val}${sufixo}${critico}]`);
-            }
-          };
+          const rolarD20 = rolarD20Global;
 
           const rolarDano = (faces: number) => {
             const val = Math.floor(Math.random() * faces) + 1;

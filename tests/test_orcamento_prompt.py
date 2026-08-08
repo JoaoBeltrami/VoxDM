@@ -35,7 +35,12 @@ TETOS_POR_TURNO: dict[str, tuple[int, str]] = {
     "social.md":                   (3_300, "cena com NPC fora de combate"),
     "combat.md":                   (3_100, "turno de combate"),
     "fragments/markers_lista.md":  (2_550, "cena dramática (~40% dos turnos)"),
-    "dice.md":                     (1_700, "turno com rolagem"),
+    # 07/08: subiu de 1 700 → 1 780. O contrato da rolagem ficou mais rico —
+    # vantagem/desvantagem passou a transportar os DOIS dados (`18 (18 vs 7)`) e
+    # o prompt precisa dizer que a engine já escolheu e que a conta não se narra.
+    # Espremer a prosa pra caber deixava 1 char de folga, o que é uma armadilha
+    # pro próximo: o teto existe pra flagrar gordura, não pra premiar abreviação.
+    "dice.md":                     (1_780, "turno com rolagem"),
     "saves.md":                    (1_400, "combate"),
     "fragments/voz_dupla.md":      (1_000, "cena com NPC"),
     "quests.md":                   (700,   "sempre que há catálogo de quests"),

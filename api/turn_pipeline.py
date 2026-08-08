@@ -764,19 +764,49 @@ _RE_D20_JOGADOR = re.compile(
     re.IGNORECASE,
 )
 
+# VANTAGEM-UM-DADO-SO-1 (playtest 07/08): "vantagem não rola 2 dados visíveis".
+# O frontend rolava DOIS d20, aplicava `Math.max` e mandava só o vencedor — a
+# palavra "VANTAGEM" ia junto mas NENHUM código de api/ ou engine/ a lia. Ou
+# seja: quem decidia o resultado com vantagem era o cliente, exatamente o lado
+# errado da linha pela tese engine-first (ADR-006).
+# O par agora viaja num parêntese ADITIVO — `d20 = 18 (18 vs 7) — VANTAGEM` —
+# desenhado pra não quebrar nada: o `= <vencedor>` continua sendo o primeiro
+# `=` do colchete (as 5 regexes que leem rolagem seguem casando), e não há `[`
+# nem `]` internos (o que truncaria `_RE_QUALQUER_ROLAGEM.sub` e ligaria o
+# gating de RAG por engano).
+_RE_PAR_DADOS = re.compile(r"\(\s*(\d+)\s+vs\s+(\d+)\s*\)", re.IGNORECASE)
+_MODO_DESVANTAGEM = "desvantagem"
+
+
+def extrair_par_d20(texto_jogador: str) -> tuple[int, int] | None:
+    """Os DOIS dados de uma rolagem com vantagem/desvantagem. None no formato simples."""
+    m = _RE_PAR_DADOS.search(texto_jogador)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
 
 def extrair_d20_jogador(texto_jogador: str) -> int | None:
     """Extrai o valor BRUTO (1-20) de uma rolagem de d20 enviada pelo jogador.
 
-    Aceita o formato simples (já bruto) e o formato rico do chip contextual
-    (subtrai o modificador do total pra recuperar o bruto). Retorna None se o
-    texto não contiver `[Rolagem: ...]` ou se a face não for d20.
+    Aceita o formato simples (já bruto), o formato rico do chip contextual
+    (subtrai o modificador do total pra recuperar o bruto) e o par de
+    vantagem/desvantagem. Retorna None se o texto não contiver `[Rolagem: ...]`
+    ou se a face não for d20.
+
+    Quando o par existe, é a ENGINE que escolhe o vencedor — o número que o
+    cliente mandou vira só sugestão de exibição e é sobrescrito. É o ponto do
+    fix: com vantagem, quem decidia era o frontend.
     """
     m = _RE_D20_JOGADOR.search(texto_jogador)
     if not m or m.group(1) != "20":
         return None
     modificador = int(m.group(2)) if m.group(2) else 0
     total = int(m.group(3))
+    par = extrair_par_d20(texto_jogador)
+    if par is not None:
+        escolher = min if _MODO_DESVANTAGEM in texto_jogador.lower() else max
+        return escolher(par)
     return total - modificador
 
 

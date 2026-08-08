@@ -14,7 +14,7 @@ Contexto manda: 17 forçando porta velha ≠ 17 intimidando veterano.
 
 **Dano (d4–d12):** intensidade. Min=raspou. Médio=sentiu. Max=algo cedeu.
 
-**Vantagem/Desvantagem:** mundo cooperou / resistiu. Número já chega corrigido.
+**Vantagem/Desvantagem:** mundo cooperou / resistiu. O `(A vs B)` são os dois dados e a engine já escolheu — narre o que valeu, nunca a conta.
 
 **d100:** 1–20 pior extremo; 81–100 melhor; meio ordinário.
 

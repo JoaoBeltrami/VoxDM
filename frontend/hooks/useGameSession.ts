@@ -71,7 +71,9 @@ export interface TurnoHistorico {
 export interface RolagemLog {
   id: number;
   timestamp: number;
-  tipo: string;       // "d20", "4d6", "d100", "d20+v" (vantagem), etc.
+  // "d20", "4d6", "d100", "d20▲" (vantagem), "d20▼" (desvantagem).
+  // O comentário antigo dizia "d20+v", valor que nenhum código jamais produziu.
+  tipo: string;
   resultado: number;
   motivo?: string;    // "FOR", "Ataque", "Iniciativa" — extraído do contexto
 }

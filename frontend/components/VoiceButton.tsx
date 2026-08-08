@@ -298,9 +298,14 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           if (temMediaRec) iniciarMediaRec();
           else if (temWebSpeech) iniciarWebSpeech();
         }
-      } else if (e.key === "Control" && ouvindo) {
+      } else if (e.code === "ControlLeft" && ouvindo) {
         // U7: Ctrl durante a fala = cancela (para o STT, não envia). Guard em
         // `ouvindo` deixa combos Ctrl+X normais funcionarem fora da gravação.
+        //
+        // 07/08: era `e.key === "Control"`, que é o MESMO valor pros dois lados
+        // do teclado — o Ctrl DIREITO virou o atalho de rolar d20 (pedido do
+        // Beltrami) e teria cancelado a gravação junto. `e.code` distingue, e
+        // este arquivo já usa `e.code` nos outros dois ramos.
         e.preventDefault();
         cancelarGravacao();
       } else if (e.key === "Enter" && !ehInterativo(e.target)) {

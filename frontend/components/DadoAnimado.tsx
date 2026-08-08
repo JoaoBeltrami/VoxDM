@@ -18,9 +18,18 @@ interface Props {
   resultado: number;
   visivel: boolean;
   onTerminou?: () => void;
+  /** VANTAGEM-UM-DADO-SO-1 (07/08): "vantagem não rola 2 dados visíveis". Os
+   *  dois d20 sempre foram rolados; o `Math.max` acontecia e o perdedor era
+   *  descartado sem nunca existir na tela. `descartado` é o dado que perdeu —
+   *  ausente em rolagem normal. O CONTRATO DE DADOS é o que entra aqui; o
+   *  desenho ("deixar o dado muito mais bonito") é do Beltrami, quando ele
+   *  voltar pra UI. */
+  descartado?: number;
+  /** "vantagem" | "desvantagem" — só pra rotular qual regra valeu. */
+  modo?: string;
 }
 
-export function DadoAnimado({ tipo, resultado, visivel, onTerminou }: Props) {
+export function DadoAnimado({ tipo, resultado, visivel, onTerminou, descartado, modo }: Props) {
   const [exibido, setExibido] = useState<number | null>(null);
   const [animando, setAnimando] = useState(false);
 
@@ -87,6 +96,15 @@ export function DadoAnimado({ tipo, resultado, visivel, onTerminou }: Props) {
       >
         {exibido ?? "?"}
       </div>
+
+      {/* O dado descartado, discreto e riscado — a prova de que dois dados
+          existiram. Some durante a animação pra não competir com o principal. */}
+      {!animando && descartado !== undefined && (
+        <span className="font-display text-[10px] tracking-widest text-vox-text-muted">
+          <span className="line-through opacity-70">{descartado}</span>
+          {modo ? <span className="ml-1 uppercase opacity-90">{modo}</span> : null}
+        </span>
+      )}
 
       {!animando && isCrit && (
         <span className="font-display text-[10px] font-bold tracking-widest text-vox-accent-glow">
