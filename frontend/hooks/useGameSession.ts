@@ -10,6 +10,7 @@ import {
   type SpellSlot,
   type TokenIniciativa,
   type EventoVital,
+  type GolpeInimigo,
   type AsiPendente,
   type CheckResolvido,
 } from "@/lib/api";
@@ -70,7 +71,9 @@ export interface TurnoHistorico {
 export interface RolagemLog {
   id: number;
   timestamp: number;
-  tipo: string;       // "d20", "4d6", "d100", "d20+v" (vantagem), etc.
+  // "d20", "4d6", "d100", "d20▲" (vantagem), "d20▼" (desvantagem).
+  // O comentário antigo dizia "d20+v", valor que nenhum código jamais produziu.
+  tipo: string;
   resultado: number;
   motivo?: string;    // "FOR", "Ataque", "Iniciativa" — extraído do contexto
 }
@@ -131,6 +134,8 @@ interface EstadoSessao {
   checkPedido: string;
   /** Por que o HP mudou neste turno — dano/cura COM a causa. */
   eventosVitais: EventoVital[];
+  /** DANO-INIMIGO-INVISIVEL-1: o dano que o JOGADOR causou neste turno. */
+  golpesInimigos: GolpeInimigo[];
   /** Incrementos de Atributo que o jogador DEVE escolher (SRD: 4/8/12/16/19,
    *  +6/+14 Guerreiro, +10 Ladino). Persiste no backend. */
   asiPendente: AsiPendente[];
@@ -264,6 +269,7 @@ const ESTADO_INICIAL: EstadoSessao = {
   emCombate: false,
   checkPedido: "",
   eventosVitais: [],
+  golpesInimigos: [],
   asiPendente: [],
   checkResolvido: null,
   inimigos: {},
@@ -667,6 +673,7 @@ export function useGameSession() {
           emCombate: emCombateAtual,
           checkPedido: msg.check_pedido ?? "",
           eventosVitais: msg.eventos_vitais ?? [],
+          golpesInimigos: msg.golpes_inimigos ?? [],
           asiPendente: msg.asi_pendente ?? [],
           checkResolvido: (msg.check_resolvido && "total" in msg.check_resolvido)
             ? (msg.check_resolvido as CheckResolvido) : null,

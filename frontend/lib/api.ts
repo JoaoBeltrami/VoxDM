@@ -71,6 +71,19 @@ export interface EventoVital {
   hp_max: number;
 }
 
+/** DANO-INIMIGO-INVISIVEL-1: o golpe do jogador do OUTRO lado do combate.
+ *  A engine já calculava o dano; o número morria no log do servidor porque o
+ *  Mestre é PROIBIDO de citar número. Espelho do EventoVital. */
+export interface GolpeInimigo {
+  alvo: string;
+  nome: string;
+  dano: number;
+  estado: string;
+  hp: number;
+  hp_max: number;
+  morreu: boolean;
+}
+
 export interface MensagemWS {
   tipo: "token" | "fim" | "erro" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato" | "relacao";
   conteudo?: string;
@@ -113,6 +126,10 @@ export interface MensagemWS {
   /** DANO-SEM-CAUSA-1: por que o HP mudou. O motivo do `[DANO]` era descartado
    *  junto com o marcador e o jogador só via o número cair. */
   eventos_vitais?: EventoVital[];
+  /** DANO-INIMIGO-INVISIVEL-1: "dano no inimigo nunca é mostrado ou contado"
+   *  (playtest 07/08). Só vem no payload `fim` de turno — nunca no snapshot,
+   *  que alimenta também abertura e reconexão. */
+  golpes_inimigos?: GolpeInimigo[];
   asi_pendente?: AsiPendente[];
   check_resolvido?: CheckResolvido | Record<string, never>;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;

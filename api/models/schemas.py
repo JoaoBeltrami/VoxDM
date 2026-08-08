@@ -328,6 +328,11 @@ class MensagemWS(BaseModel):
     # {tipo: "dano"|"cura", valor, motivo, hp, hp_max}. O motivo do `[DANO]`
     # era descartado com o marcador e o jogador só via o HP cair.
     eventos_vitais: list[dict[str, Any]] = Field(default_factory=list)
+    # DANO-INIMIGO-INVISIVEL-1: o mesmo, do OUTRO lado do combate. Cada item:
+    # {alvo, nome, dano, estado, hp, hp_max, morreu}. Vai como kwarg deste
+    # payload e NUNCA em `_snapshot_estado` — o snapshot alimenta também a
+    # abertura e a reconexão, e o golpe vazaria nesses dois.
+    golpes_inimigos: list[dict[str, Any]] = Field(default_factory=list)
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

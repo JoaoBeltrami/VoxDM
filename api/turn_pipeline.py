@@ -764,19 +764,49 @@ _RE_D20_JOGADOR = re.compile(
     re.IGNORECASE,
 )
 
+# VANTAGEM-UM-DADO-SO-1 (playtest 07/08): "vantagem não rola 2 dados visíveis".
+# O frontend rolava DOIS d20, aplicava `Math.max` e mandava só o vencedor — a
+# palavra "VANTAGEM" ia junto mas NENHUM código de api/ ou engine/ a lia. Ou
+# seja: quem decidia o resultado com vantagem era o cliente, exatamente o lado
+# errado da linha pela tese engine-first (ADR-006).
+# O par agora viaja num parêntese ADITIVO — `d20 = 18 (18 vs 7) — VANTAGEM` —
+# desenhado pra não quebrar nada: o `= <vencedor>` continua sendo o primeiro
+# `=` do colchete (as 5 regexes que leem rolagem seguem casando), e não há `[`
+# nem `]` internos (o que truncaria `_RE_QUALQUER_ROLAGEM.sub` e ligaria o
+# gating de RAG por engano).
+_RE_PAR_DADOS = re.compile(r"\(\s*(\d+)\s+vs\s+(\d+)\s*\)", re.IGNORECASE)
+_MODO_DESVANTAGEM = "desvantagem"
+
+
+def extrair_par_d20(texto_jogador: str) -> tuple[int, int] | None:
+    """Os DOIS dados de uma rolagem com vantagem/desvantagem. None no formato simples."""
+    m = _RE_PAR_DADOS.search(texto_jogador)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
 
 def extrair_d20_jogador(texto_jogador: str) -> int | None:
     """Extrai o valor BRUTO (1-20) de uma rolagem de d20 enviada pelo jogador.
 
-    Aceita o formato simples (já bruto) e o formato rico do chip contextual
-    (subtrai o modificador do total pra recuperar o bruto). Retorna None se o
-    texto não contiver `[Rolagem: ...]` ou se a face não for d20.
+    Aceita o formato simples (já bruto), o formato rico do chip contextual
+    (subtrai o modificador do total pra recuperar o bruto) e o par de
+    vantagem/desvantagem. Retorna None se o texto não contiver `[Rolagem: ...]`
+    ou se a face não for d20.
+
+    Quando o par existe, é a ENGINE que escolhe o vencedor — o número que o
+    cliente mandou vira só sugestão de exibição e é sobrescrito. É o ponto do
+    fix: com vantagem, quem decidia era o frontend.
     """
     m = _RE_D20_JOGADOR.search(texto_jogador)
     if not m or m.group(1) != "20":
         return None
     modificador = int(m.group(2)) if m.group(2) else 0
     total = int(m.group(3))
+    par = extrair_par_d20(texto_jogador)
+    if par is not None:
+        escolher = min if _MODO_DESVANTAGEM in texto_jogador.lower() else max
+        return escolher(par)
     return total - modificador
 
 
@@ -1126,17 +1156,13 @@ def aplicar_pos_turno(
             # de log a cada turno de combate sem indicar problema algum.
             log.debug("iniciativa_fallback", inimigos=inimigos_sem_ini)
         working_mem.popular_iniciativa()
-        # Volta o cursor visual pro JOGADOR — é a próxima vez que ele vai agir.
-        # Bug R4-1: turno_atual_idx=0 sempre apontava para a posição 0 da lista,
-        # que é o inimigo de MAIOR iniciativa (fallback 20,19,18...), não o jogador.
-        # Jogador começa com 10+mod_des ≈ 12 — fica após os inimigos. Solução:
-        # encontrar o índice real do token "jogador" entre os vivos.
-        _ordem_ini = working_mem.calcular_ordem_iniciativa()
-        _vivos = [t for t in _ordem_ini if not t.morto]
-        _idx_jogador = next(
-            (i for i, t in enumerate(_vivos) if t.id == "jogador"), 0
-        )
-        working_mem.turno_atual_idx = _idx_jogador
+        # COMBATE-SEM-RODADA-1 (07/08): aqui ficava um reset que forçava o cursor
+        # de volta pro índice do jogador em TODO turno — o que tornava
+        # `avancar_turno_iniciativa` código morto e a barra de iniciativa, um
+        # enfeite. Ele existia por um motivo honesto (Bug R4-1): com o fallback
+        # decrescente o jogador era SEMPRE o último, e o cursor em 0 apontava pro
+        # inimigo errado. Agora que todo mundo rola d20 de verdade, a causa
+        # sumiu — e quem move o cursor é o wrap da ordem, no orchestrator.
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
     # detectar_tipo_descanso encapsula a prioridade engine-authority:
