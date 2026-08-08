@@ -14,8 +14,10 @@ Exemplo:
     sessao = sessions.get("sess-01")
 """
 
+import asyncio
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 
@@ -81,6 +83,33 @@ class SessaoAtiva:
     # do jogador. O decremento ACONTECE só após o LLM narrar o cast com sucesso
     # (no fim do pipeline). Se o turno falhar, o slot não é perdido.
     spell_pending: tuple[str, int] | None = None
+
+    # P3 — conexão dupla no mesmo session_id (mordeu no playtest #6: o cliente
+    # reconectou no meio de um turno e o pipeline em voo continuou escrevendo).
+    # `_send_text_seguro` resolveu o SINTOMA (crash ao enviar em socket morto),
+    # não a causa: dois pipelines vivos mutando a mesma `working_mem`.
+    #
+    # ⚠️ A chave da regra é o par (sessão, DONO) — nunca a sessão sozinha. Hoje
+    # duas conexões na mesma sessão só podem ser a mesma pessoa reconectando,
+    # mas o Bloco 3.5 tem campanha com N jogadores: chaveado só por session_id,
+    # o segundo jogador CHUTARIA o primeiro, e o conserto seria em cima de
+    # código já em produção. Dono diferente segue recusado pelo ownership.
+    ws_ativo: Any = None
+    ws_ativo_owner: str = ""
+
+    # Lock de turno — serializa o processamento pra que um turno em voo termine
+    # de escrever antes do próximo começar. ⚠️ NÃO pode nascer num
+    # `field(default_factory=asyncio.Lock)`: a dataclass é instanciada fora de
+    # loop rodando (POST /session/start em thread de teste, por exemplo) e o
+    # Lock ficaria preso ao loop errado. Por isso é lazy, na property abaixo.
+    _lock_turno: Any = None
+
+    @property
+    def lock_turno(self) -> "asyncio.Lock":
+        """Lock de turno, criado na primeira vez que alguém precisa dele."""
+        if self._lock_turno is None:
+            self._lock_turno = asyncio.Lock()
+        return self._lock_turno
 
     # Task 7 (combate engine-autoritativo): alvo do ataque declarado, aguardando
     # a rolagem d20 do jogador. {"tipo": "ataque", "alvo": npc_id}. Setado quando
