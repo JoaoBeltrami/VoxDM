@@ -24,6 +24,7 @@ Exemplo:
     texto = wm.para_texto()          # → compõe slices dos 5 substates
 """
 
+import random
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -786,13 +787,28 @@ class WorkingMemory:
     def aplicar_movimento(self, delta_ft: int) -> int:
         return self.combat.aplicar_movimento(delta_ft)
 
-    def popular_iniciativa(self, proposta_llm: dict[str, int] | None = None) -> None:
-        """Popula iniciativa usando mod_des do personagem."""
-        self.combat.popular_iniciativa(self.character.mod_des, proposta_llm)
+    def popular_iniciativa(
+        self,
+        proposta_llm: dict[str, int] | None = None,
+        rng: "random.Random | None" = None,
+    ) -> None:
+        """Rola iniciativa usando mod_des do personagem. Idempotente."""
+        self.combat.popular_iniciativa(self.character.mod_des, proposta_llm, rng)
 
-    def avancar_turno_iniciativa(self) -> None:
-        """Avança turno na ordem de iniciativa (pula mortos)."""
-        self.combat.avancar_turno_iniciativa(self.calcular_ordem_iniciativa)
+    def avancar_turno_iniciativa(self) -> bool:
+        """Avança turno na ordem (pula mortos). True quando a ordem DEU A VOLTA.
+
+        COMBATE-SEM-RODADA-1: o wrap é o que fecha a rodada — não o turno do
+        jogador. Quem chama é responsável por `avancar_rodada()` no True.
+        """
+        return self.combat.avancar_turno_iniciativa(self.calcular_ordem_iniciativa)
+
+    def avancar_turno_e_rodada(self) -> bool:
+        """Avança o cursor e, se a ordem deu a volta, abre a rodada seguinte."""
+        virou = self.avancar_turno_iniciativa()
+        if virou:
+            self.avancar_rodada()
+        return virou
 
     def calcular_ordem_iniciativa(self) -> list:
         """Retorna ordem de iniciativa (player + inimigos), sorted desc, com turno_atual marcado."""

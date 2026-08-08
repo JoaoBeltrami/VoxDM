@@ -72,11 +72,31 @@ def executar_turno_inimigos(wm: Any, rng: random.Random | None = None) -> dict[s
     Retorna o resumo de `resolver_turno_inimigos` acrescido de `hp_jogador` (o HP
     do personagem depois do dano). O dano no PJ usa o clamp do PlayerCharacter.
     """
-    res = resolver_turno_inimigos(wm.inimigos_combate, wm.ca, rng=rng)
+    res = resolver_turno_inimigos(
+        wm.inimigos_combate, wm.ca, rng=rng, ordem=ordem_de_iniciativa(wm),
+    )
     if res.get("dano_total", 0) > 0:
         wm.character.aplicar_dano(res["dano_total"])
     res["hp_jogador"] = wm.player_hp
     return res
+
+
+def ordem_de_iniciativa(wm: Any) -> list[str]:
+    """Ids dos inimigos na ordem de iniciativa (maior primeiro).
+
+    COMBATE-SEM-RODADA-1: até 07/08 ninguém consultava `iniciativa_cache` na
+    hora de resolver — a barra exibia uma ordem e a engine executava a de
+    inserção no dict. Lista vazia quando não há cache (o caller cai no
+    comportamento antigo, que continua determinístico).
+    """
+    cache = getattr(wm, "iniciativa_cache", None) or {}
+    if not cache:
+        return []
+    # Mesmo desempate de `calcular_ordem_iniciativa`: -iniciativa, depois id.
+    return sorted(
+        (i for i in wm.inimigos_combate if i in cache),
+        key=lambda i: (-int(cache[i]), i),
+    )
 
 
 def resolver_turno_ataque_jogador(
@@ -106,6 +126,12 @@ def resolver_turno_ataque_jogador(
     if r is None:
         return {"valido": False, "contexto": ""}
 
+    # COMBATE-SEM-RODADA-1: rola iniciativa AQUI, no começo da primeira troca
+    # resolvida — é idempotente e sem I/O. Antes, quem populava era o pipeline
+    # pós-turno, então a primeira troca do combate acontecia sem ordem nenhuma.
+    if hasattr(wm, "popular_iniciativa"):
+        wm.popular_iniciativa(rng=rng)
+
     alvo = wm.inimigos_combate.get(alvo_id, {})
     nome = str(alvo.get("nome") or alvo_id)
     linhas = [linha_ataque_jogador(nome, r)]
@@ -124,8 +150,23 @@ def resolver_turno_ataque_jogador(
     res_inim = executar_turno_inimigos(wm, rng)
     linhas.append(linha_turno_inimigos(res_inim))
 
-    # Nova rodada — renova ação/bônus/movimento.
-    wm.avancar_rodada()
+    # COMBATE-SEM-RODADA-1 (07/08): a rodada era incrementada aqui porque "o
+    # jogador agiu" — e era essa a queixa literal do playtest ("um turno de
+    # combate tem vários turnos com o mestre"). Agora a troca completa (jogador
+    # + todos os inimigos) É a volta da ordem, então o cursor dá a volta e a
+    # rodada vem como CONSEQUÊNCIA do wrap. `avancar_turno_e_rodada` renova
+    # ação/bônus/movimento no True.
+    if getattr(wm, "iniciativa_cache", None) and hasattr(wm, "avancar_turno_e_rodada"):
+        # +1 = o jogador. O teto é defensivo: sem ele, um cache corrompido
+        # (cursor fora de faixa) faria isto girar sem nunca dar a volta.
+        for _ in range(len(wm.inimigos_combate) + 1):
+            if wm.avancar_turno_e_rodada():
+                break
+    else:
+        # Sem iniciativa não existe "volta da ordem" — mantém o comportamento
+        # antigo pra que a rodada NUNCA congele. Foi assim que este caminho
+        # apareceu num teste: `_wm_combate` nunca rolava iniciativa.
+        wm.avancar_rodada()
 
     # XP engine-first (decisão 01/07): abate paga XP determinístico AQUI —
     # antes de fim_combate, porque sair_combate() (no caller) limpa o dict e

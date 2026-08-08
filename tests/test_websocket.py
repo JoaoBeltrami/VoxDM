@@ -681,24 +681,32 @@ def test_sincronizar_inimigos_ignora_pronome_no_estado():
     assert "voce" not in mem.inimigos_combate
 
 
-def test_pipeline_reseta_turno_para_jogador():
-    """Bug R4-1: após pipeline, turno_atual_idx aponta para o JOGADOR,
-    que pode não ser o índice 0 quando inimigos têm maior iniciativa."""
+def test_pipeline_nao_mexe_mais_no_cursor_de_iniciativa():
+    """COMBATE-SEM-RODADA-1 (07/08): substitui `test_pipeline_reseta_turno_para_jogador`.
+
+    O teste antigo amarrava um reset que forçava o cursor de volta pro jogador em
+    TODO turno (Bug R4-1). Aquele fix era honesto na época: com o fallback
+    decrescente o jogador era SEMPRE o último da ordem, e o cursor em 0 apontava
+    pro inimigo errado. Mas o efeito colateral era que
+    `avancar_turno_iniciativa` virava código morto e a barra de iniciativa, um
+    enfeite — que é a queixa "não temos mecânica de iniciativa pra dar sentido
+    ao combate". Agora todos rolam d20 e quem move o cursor é o WRAP da ordem.
+    """
     from api.turn_pipeline import aplicar_pos_turno
     from engine.memory.working_memory import WorkingMemory
 
     wm = WorkingMemory.nova_sessao("dungeon", "Dungeon", "sess-init")
     wm.entrar_combate()
     wm.registrar_inimigo("orc", "Orc", "intacto")
-    # Orc com iniciativa 15 > jogador 10 → jogador estará em índice 1, não 0.
-    # Fix R4-1: turno_atual_idx deve apontar pro jogador independentemente da posição.
     wm.iniciativa_cache = {"jogador": 10, "orc": 15}
-    wm.turno_atual_idx = 99  # estado sujo
+    wm.turno_atual_idx = 1
 
     aplicar_pos_turno(wm, "Ataco o orc.", "O orc rosna.")
 
-    # Ordem DESC: orc(15) em idx=0, jogador(10) em idx=1 — jogador não é mais sempre 0.
-    assert wm.turno_atual_idx == 1  # jogador está na posição 1 (orc tem maior iniciativa)
+    # O pipeline não é mais dono do cursor: ele fica onde a ordem o deixou.
+    assert wm.turno_atual_idx == 1
+    # E a iniciativa segue populada (a chamada idempotente continua lá).
+    assert wm.iniciativa_cache["orc"] == 15
 
 
 def test_pipeline_avanca_rodada_em_combate():

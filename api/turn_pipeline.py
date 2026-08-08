@@ -1156,17 +1156,13 @@ def aplicar_pos_turno(
             # de log a cada turno de combate sem indicar problema algum.
             log.debug("iniciativa_fallback", inimigos=inimigos_sem_ini)
         working_mem.popular_iniciativa()
-        # Volta o cursor visual pro JOGADOR — é a próxima vez que ele vai agir.
-        # Bug R4-1: turno_atual_idx=0 sempre apontava para a posição 0 da lista,
-        # que é o inimigo de MAIOR iniciativa (fallback 20,19,18...), não o jogador.
-        # Jogador começa com 10+mod_des ≈ 12 — fica após os inimigos. Solução:
-        # encontrar o índice real do token "jogador" entre os vivos.
-        _ordem_ini = working_mem.calcular_ordem_iniciativa()
-        _vivos = [t for t in _ordem_ini if not t.morto]
-        _idx_jogador = next(
-            (i for i, t in enumerate(_vivos) if t.id == "jogador"), 0
-        )
-        working_mem.turno_atual_idx = _idx_jogador
+        # COMBATE-SEM-RODADA-1 (07/08): aqui ficava um reset que forçava o cursor
+        # de volta pro índice do jogador em TODO turno — o que tornava
+        # `avancar_turno_iniciativa` código morto e a barra de iniciativa, um
+        # enfeite. Ele existia por um motivo honesto (Bug R4-1): com o fallback
+        # decrescente o jogador era SEMPRE o último, e o cursor em 0 apontava pro
+        # inimigo errado. Agora que todo mundo rola d20 de verdade, a causa
+        # sumiu — e quem move o cursor é o wrap da ordem, no orchestrator.
 
     # 4. Descanso — restaura spell slots se jogador declarou descanso neste turno.
     # detectar_tipo_descanso encapsula a prioridade engine-authority:

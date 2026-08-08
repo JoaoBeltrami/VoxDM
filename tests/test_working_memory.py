@@ -508,16 +508,41 @@ def test_entrar_combate_zera_iniciativa():
     assert wm.turno_atual_idx == 0
 
 
-def test_popular_iniciativa_fallback_decrescente():
-    wm = _wm(dex_score=12)  # mod_des = +1 → jogador iniciativa = 11
+def test_popular_iniciativa_rola_d20_de_verdade():
+    """COMBATE-SEM-RODADA-1 (07/08): substitui o antigo fallback decrescente.
+
+    Este teste ASSERIA o bug: jogador com "take 10" (10+mod) e inimigos numa
+    escada fixa 20, 19, 18… Ordem sempre idêntica e o jogador SEMPRE por último
+    — que é literalmente a queixa "não temos mecânica de iniciativa pra dar
+    sentido ao combate". Agora todo mundo rola d20; o RNG é semeado pra manter
+    o teste determinístico.
+    """
+    import random as _r
+    wm = _wm(dex_score=12)  # mod_des = +1
     wm.entrar_combate()
     wm.registrar_inimigo("goblin-1", "Goblin 1")
     wm.registrar_inimigo("ogro", "Ogro")
-    wm.popular_iniciativa()
+    wm.popular_iniciativa(rng=_r.Random(7))
 
-    assert wm.iniciativa_cache["jogador"] == 11
-    assert wm.iniciativa_cache["goblin-1"] == 20
-    assert wm.iniciativa_cache["ogro"] == 19
+    # O jogador soma o mod de DES; os inimigos rolam d20 puro (StatsInimigo não
+    # tem DES, e inventar modificador seria número sem lastro no SRD).
+    assert 2 <= wm.iniciativa_cache["jogador"] <= 21
+    for iid in ("goblin-1", "ogro"):
+        assert 1 <= wm.iniciativa_cache[iid] <= 20
+    # E a escada fixa morreu: não é mais garantido que o jogador seja o último.
+    assert wm.iniciativa_cache["goblin-1"] != 20 or wm.iniciativa_cache["ogro"] != 19
+
+
+def test_popular_iniciativa_com_rng_semeado_e_reprodutivel():
+    import random as _r
+    def _rodar():
+        wm = _wm(dex_score=12)
+        wm.entrar_combate()
+        wm.registrar_inimigo("a", "A")
+        wm.registrar_inimigo("b", "B")
+        wm.popular_iniciativa(rng=_r.Random(42))
+        return dict(wm.iniciativa_cache)
+    assert _rodar() == _rodar()
 
 
 def test_popular_iniciativa_respeita_proposta_llm():
@@ -538,10 +563,13 @@ def test_popular_iniciativa_idempotente():
 
 
 def test_calcular_ordem_ordena_desc():
-    wm = _wm(dex_score=14)  # +2 → jogador 12
+    wm = _wm(dex_score=14)  # +2
     wm.entrar_combate()
     wm.registrar_inimigo("a", "A")
     wm.registrar_inimigo("b", "B")
+    # A iniciativa do JOGADOR agora é rolada — fixá-la é o que mantém o teste
+    # sobre ORDENAÇÃO determinístico sem depender do d20.
+    wm.iniciativa_jogador = 12
     wm.popular_iniciativa({"a": 5, "b": 18})
     ordem = wm.calcular_ordem_iniciativa()
     assert [t.id for t in ordem] == ["b", "jogador", "a"]
@@ -558,16 +586,30 @@ def test_calcular_ordem_marca_morto():
     assert morto.morto is True
 
 
-def test_popular_iniciativa_sem_empates_com_muitos_inimigos():
-    """Bug #6: 10 inimigos sem proposta — todos devem ter iniciativa única."""
+def test_empate_de_iniciativa_e_aceito_e_nao_perde_ninguem():
+    """Substitui `test_popular_iniciativa_sem_empates_com_muitos_inimigos`.
+
+    O invariante antigo (iniciativa ÚNICA) era consequência do fallback
+    decrescente, não uma regra de D&D. Com d20 real e 10 inimigos num intervalo
+    de 20 valores, colisão é GARANTIDA por casa-dos-pombos — exigir unicidade
+    obrigaria a voltar pro fallback fixo, que é o bug. Empate é legal no SRD; o
+    que importa é a ordem ser determinística, e disso cuida
+    `test_calcular_ordem_deterministica_em_empate`.
+    """
+    import random as _r
     wm = _wm()
     wm.entrar_combate()
     for i in range(10):
         wm.registrar_inimigo(f"inim-{i}", f"Inim {i}")
-    wm.popular_iniciativa()
+    wm.popular_iniciativa(rng=_r.Random(3))
 
-    valores = list(wm.iniciativa_cache.values())
-    assert len(valores) == len(set(valores)), f"Duplicatas em iniciativa: {valores}"
+    # Ninguém fica sem iniciativa, e todo valor é um d20 legítimo.
+    assert len(wm.iniciativa_cache) == 11  # 10 inimigos + jogador
+    for i in range(10):
+        assert 1 <= wm.iniciativa_cache[f"inim-{i}"] <= 20
+    # A ordem continua estável entre chamadas mesmo com empates.
+    assert ([t.id for t in wm.calcular_ordem_iniciativa()]
+            == [t.id for t in wm.calcular_ordem_iniciativa()])
 
 
 def test_calcular_ordem_deterministica_em_empate():
