@@ -460,7 +460,18 @@ _RE_COMPANION_HP = re.compile(
 )
 _RE_COMPANION_REMOVE = re.compile(r"\[COMPANION_REMOVE:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 
-# ─── Regexes de detecção (compartilhados; espelham os do websocket.py) ────────
+# ─── Regexes de detecção — DEFINIÇÃO ÚNICA, este é o dono ─────────────────────
+#
+# O comentário aqui dizia "espelham os do websocket.py" e isso já não era
+# verdade: o `websocket.py` IMPORTA daqui (`_RE_ALVO_ATAQUE`, `_RE_INIMIGO_*`,
+# `_RE_LAMPEJO`) pra que o endpoint REST `/turn` e o WebSocket usem a mesma
+# implementação. "Espelham" descreve exatamente a classe de bug que o CLAUDE.md
+# registra como mais cara ("derivam em silêncio") — deixar o comentário no lugar
+# convidava alguém a recriar a cópia por acreditar que ela já existia.
+#
+# `tests/test_regex_unica.py` trava o invariante: nenhum nome de regex pode ser
+# definido em mais de um módulo entre api/websocket.py, api/turn_pipeline.py e
+# engine/llm/types.py.
 
 _RE_ALVO_ATAQUE = re.compile(
     # Bug R5-1: "lanço" removido — causava falso positivo onde armas/feitiços

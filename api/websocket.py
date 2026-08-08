@@ -1613,1490 +1613,1530 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
         await websocket.close(code=1008)
         return
 
+    # 6. P3 — conexão dupla do MESMO dono: fecha a antiga e assume.
+    #    Reconexão é o caso comum (browser dorme, rede cai, aba recarrega), então
+    #    o cliente novo vence. O antigo leva 1012 (Service Restart), que é o
+    #    código correto pra "reconecte, o servidor trocou de mão".
+    #    A chave é o par (sessão, DONO): dono diferente já foi recusado no passo
+    #    5, e é ali que o multiplayer do Bloco 3.5 vai plugar — não aqui.
+    _ws_anterior = getattr(sessao, "ws_ativo", None)
+    if _ws_anterior is not None and getattr(sessao, "ws_ativo_owner", "") == owner.email:
+        log.info("ws_conexao_dupla_fecha_antiga", session_id=session_id, owner=owner.email)
+        try:
+            await _ws_anterior.close(code=1012)
+        except Exception as exc:
+            # O socket antigo já pode estar morto — o que importa é soltar a vaga.
+            log.debug("ws_antigo_ja_fechado", session_id=session_id, erro=str(exc)[:80])
+    sessao.ws_ativo = websocket
+    sessao.ws_ativo_owner = owner.email
+
     log.info("ws_conectado", session_id=session_id, owner=owner.email)
 
     try:
         while True:
-            dados_raw = await websocket.receive_text()
+            # P3 — serializa o processamento de turno. Um turno em voo termina de
+            # ESCREVER antes do próximo começar: sem isto, dois pipelines mutavam a
+            # mesma `working_mem` (mordeu no playtest #6, quando o cliente reconectou
+            # no meio de um turno). O fecho da conexão dupla lá em cima encurta a
+            # janela; o lock é o que a fecha.
+            #
+            # Cada um dos 21 `continue` do corpo SAI do bloco e solta o lock — a volta
+            # seguinte do while readquire. É por isso que o `async with` envolve o
+            # corpo inteiro em vez de acquire/release manuais: com 21 saídas, o
+            # release manual vazaria o lock em pelo menos uma delas.
+            async with sessao.lock_turno:
+                dados_raw = await websocket.receive_text()
 
-            try:
-                dados: dict[str, Any] = json.loads(dados_raw)
-                texto_jogador: str = str(dados.get("texto", "")).strip()
-                # ENGINE-COMO-PERSONAGEM-1 (playtest 07/08): fatos resolvidos
-                # pela engine NESTE turno. Antes eram enfiados no texto do
-                # jogador — chegavam como `role: user` e o Mestre passava a
-                # narrar "a engine" como se ela fosse quem falava. Agora têm
-                # canal próprio (ContextoMontado.fatos_engine) e o texto do
-                # jogador volta a ser só o que ele falou (inclusive pro RAG).
-                _fatos_engine: list[str] = []
-                tipo_msg: str = str(dados.get("tipo", "")).strip()
-            except (json.JSONDecodeError, TypeError):
-                await _send_text_seguro(websocket,
-                    MensagemWS(
-                        tipo="erro",
-                        conteudo='Formato inválido — enviar JSON com chave "texto"',
-                    ).model_dump_json()
-                )
-                continue
-
-            # Mensagem de inicialização: frontend conectou, mestre abre a cena.
-            # Bug reconexão: quando iteracoes > 0 a sessão já foi iniciada e o
-            # jogador está reconectando (WS caiu e voltou). Reenviar a abertura
-            # completa (LLM + TTS) causa "Bem-vindo" no meio de uma batalha.
-            # Fix: para reconexões, apenas reenvia o estado atual como `fim`.
-            if tipo_msg == "init":
-                if sessao.iteracoes == 0:
-                    await _enviar_abertura(websocket, sessao)
-                else:
-                    # Reconexão rápida — reenvia estado sem LLM nem TTS.
-                    # ROB-1: incluir player_level para que CharacterSheet mostre o nível
-                    # correto após refresh (sem isso defaultava para 3 do schema).
-                    # ROB-2: incluir iniciativa_ordem para que InitiativeBar não desapareça
-                    # quando o jogador reconecta no meio de um combate.
-                    wm = sessao.working_mem
-                    # Reconexão rápida: reenvia o snapshot completo (mesmos campos
-                    # do fim de turno) com latência 0. O helper único garante que
-                    # nenhum campo (player_level, iniciativa_ordem…) fique de fora
-                    # aqui — origem histórica dos bugs ROB-1/ROB-2.
+                try:
+                    dados: dict[str, Any] = json.loads(dados_raw)
+                    texto_jogador: str = str(dados.get("texto", "")).strip()
+                    # ENGINE-COMO-PERSONAGEM-1 (playtest 07/08): fatos resolvidos
+                    # pela engine NESTE turno. Antes eram enfiados no texto do
+                    # jogador — chegavam como `role: user` e o Mestre passava a
+                    # narrar "a engine" como se ela fosse quem falava. Agora têm
+                    # canal próprio (ContextoMontado.fatos_engine) e o texto do
+                    # jogador volta a ser só o que ele falou (inclusive pro RAG).
+                    _fatos_engine: list[str] = []
+                    tipo_msg: str = str(dados.get("tipo", "")).strip()
+                    # P3: estado de combate ANTES do turno. Comparar antes×depois
+                    # pega TODOS os caminhos de saída (engine resolveu, jogador
+                    # fugiu, LLM declarou fim, todos mortos) — remendar os dois
+                    # `sair_combate()` deixaria os outros de fora em silêncio.
+                    _combate_antes = bool(sessao.working_mem.em_combate)
+                except (json.JSONDecodeError, TypeError):
                     await _send_text_seguro(websocket,
                         MensagemWS(
-                            tipo="fim",
-                            latencia_ms=0,
-                            **_snapshot_estado(wm),
+                            tipo="erro",
+                            conteudo='Formato inválido — enviar JSON com chave "texto"',
                         ).model_dump_json()
                     )
-                    log.info("ws_reconectado_estado_reenviado", session_id=session_id,
-                             iteracoes=sessao.iteracoes)
-                continue
-
-            # Sync de HP do jogador — CharacterSheet envia quando usuário ajusta
-            if tipo_msg == "sync_hp":
-                novo_hp = dados.get("hp")
-                if isinstance(novo_hp, int):
-                    sessao.working_mem.player_hp = max(0, min(sessao.working_mem.player_hp_max, novo_hp))
-                    log.info("hp_sincronizado", session_id=session_id, hp=sessao.working_mem.player_hp)
-                continue
-
-            # Sync de condições ativas — CharacterSheet envia lista completa atual.
-            # ROB-5: limita a _MAX_CONDS para evitar lista enorme que infle o contexto.
-            # D&D 5e tem 14 condições oficiais; o dobro é mais que suficiente.
-            if tipo_msg == "sync_conditions":
-                conditions = dados.get("conditions")
-                if isinstance(conditions, list):
-                    sessao.working_mem.player_conditions = [
-                        str(c)[:60] for c in conditions[:_MAX_CONDS]
-                    ]
-                    log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
-                continue
-
-            # Sync de inventário — CharacterSheet envia lista completa de itens.
-            # Itens são truncados a 80 chars e lista a _MAX_INVENT (defesa contra payload abusivo).
-            if tipo_msg == "sync_inventory":
-                inventory = dados.get("inventory")
-                if isinstance(inventory, list):
-                    sessao.working_mem.player_inventory = [
-                        str(i)[:80] for i in inventory[:_MAX_INVENT]
-                    ]
-                    log.info("inventory_sincronizado", session_id=session_id,
-                             total=len(sessao.working_mem.player_inventory))
-                continue
-
-            # Sync de spell slots — {spell_slots: {"1": {current: N, max: N}, ...}}
-            # Validação estrita: nível 1-9, current/max ints >= 0 e <= _MAX_SS_QTD.
-            # CRIT-5: usa MERGE em vez de REPLACE para preservar decrementos feitos
-            # pelo backend (spell_detector / restaurar_slots) entre o último envio
-            # ao frontend e este sync. Sem merge, o frontend reverte qualquer
-            # decremento que aconteceu no servidor desde o último fim — race comum
-            # se o jogador edita a ficha enquanto um turno termina.
-            if tipo_msg == "sync_spell_slots":
-                raw = dados.get("spell_slots", {})
-                if isinstance(raw, dict):
-                    for k, v in raw.items():
-                        try:
-                            nivel = int(k)
-                        except (TypeError, ValueError):
-                            continue
-                        if not (1 <= nivel <= _MAX_SS_NIVEL) or not isinstance(v, dict):
-                            continue
-                        cur = v.get("current", 0)
-                        mx  = v.get("max", 0)
-                        if not isinstance(cur, int) or not isinstance(mx, int):
-                            continue
-                        # Merge: atualiza só os níveis presentes no payload.
-                        # Níveis não enviados pelo frontend mantêm valor backend.
-                        sessao.working_mem.spell_slots[nivel] = {
-                            "current": max(0, min(_MAX_SS_QTD, cur)),
-                            "max":     max(0, min(_MAX_SS_QTD, mx)),
-                        }
-                    log.info("spell_slots_merge_aplicado", session_id=session_id,
-                             niveis_payload=list(raw.keys()),
-                             total_niveis_backend=len(sessao.working_mem.spell_slots))
-                continue
-
-            # Sync de hit dice restantes — limite no player_level
-            if tipo_msg == "sync_hit_dice":
-                current = dados.get("current")
-                if isinstance(current, int):
-                    sessao.working_mem.hit_dice_current = max(
-                        0, min(sessao.working_mem.hit_dice_max, current)
-                    )
-                continue
-
-            # Sync de death saves — clamp 0..3 com try/except no cast
-            if tipo_msg == "sync_death_saves":
-                try:
-                    succ = int(dados.get("successes", 0))
-                    fail = int(dados.get("failures", 0))
-                except (TypeError, ValueError):
-                    log.warning("death_saves_payload_invalido", session_id=session_id)
                     continue
-                sessao.working_mem.death_saves_successes = max(0, min(3, succ))
-                sessao.working_mem.death_saves_failures  = max(0, min(3, fail))
-                sessao.working_mem.death_saves_stable    = bool(dados.get("stable", False))
-                log.info("death_saves_sincronizados", session_id=session_id,
-                         succ=sessao.working_mem.death_saves_successes,
-                         fail=sessao.working_mem.death_saves_failures)
-                continue
 
-            # Sync de ouro — limite anti-abuso
-            if tipo_msg == "sync_gold":
-                gold = dados.get("gold")
-                if isinstance(gold, int) and 0 <= gold <= _MAX_GOLD:
-                    sessao.working_mem.gold = gold
-                continue
-
-            # Sync de XP — limite anti-abuso
-            if tipo_msg == "sync_xp":
-                xp = dados.get("xp")
-                if isinstance(xp, int) and 0 <= xp <= _MAX_XP:
-                    sessao.working_mem.xp = xp
-                continue
-
-            # Sync de inspiração
-            if tipo_msg == "sync_inspiration":
-                sessao.working_mem.inspiration = bool(dados.get("inspiration", False))
-                continue
-
-            # Sync de class features — frontend edita usos_atual manualmente
-            # (ex: clicar "gastar Action Surge" fora de turno de LLM).
-            # Payload: {feature_id: str, usos_atual: int}
-            # Validação: feature deve existir, usos_atual clampado [0, usos_max].
-            if tipo_msg == "aplicar_asi":
-                # O jogador escolheu o Incremento de Atributo. A REGRA (+2 num ou
-                # +1 em dois, teto 20) vive em PlayerCharacter.aplicar_asi — aqui
-                # só transporta. Validar apenas no frontend deixaria um cliente
-                # adulterado furar o SRD.
-                _nivel = dados.get("nivel")
-                _aumentos = dados.get("atributos")
-                if isinstance(_nivel, int) and isinstance(_aumentos, dict):
-                    if sessao.working_mem.aplicar_asi(_nivel, _aumentos):
-                        log.info("asi_aplicado", session_id=session_id,
-                                 nivel=_nivel, atributos=_aumentos)
-                        # Persiste JÁ: isto não passa pelo loop de turno, então o
-                        # auto-checkpoint de 5-em-5 turnos não cobriria — e perder
-                        # um ASI escolhido é pior que perder um turno de narração.
-                        _criar_background_task(_auto_checkpoint(sessao))
+                # Mensagem de inicialização: frontend conectou, mestre abre a cena.
+                # Bug reconexão: quando iteracoes > 0 a sessão já foi iniciada e o
+                # jogador está reconectando (WS caiu e voltou). Reenviar a abertura
+                # completa (LLM + TTS) causa "Bem-vindo" no meio de uma batalha.
+                # Fix: para reconexões, apenas reenvia o estado atual como `fim`.
+                if tipo_msg == "init":
+                    if sessao.iteracoes == 0:
+                        await _enviar_abertura(websocket, sessao)
                     else:
-                        log.warning("asi_recusado", session_id=session_id,
-                                    nivel=_nivel, atributos=_aumentos)
-                continue
-
-            if tipo_msg == "sync_class_feature":
-                fid = dados.get("feature_id")
-                usos = dados.get("usos_atual")
-                if isinstance(fid, str) and isinstance(usos, int):
-                    feat = sessao.working_mem.class_features.get(fid)
-                    if feat is not None:
-                        usos_max = feat.get("usos_max", 1)
-                        # ROB-3: features ilimitadas têm usos_max=-1 (Sneak Attack,
-                        # Reckless Attack, etc.) — min(-1, N)=-1 → max(0,-1)=0 desabilitaria
-                        # a feature permanentemente. Essas features são sempre disponíveis;
-                        # não faz sentido o frontend tentar sincronizá-las manualmente.
-                        if usos_max < 0:
-                            continue
-                        feat["usos_atual"] = max(0, min(usos_max, usos))
-                        feat["disponivel"] = feat["usos_atual"] > 0
-                        log.info("class_feature_sincronizada", session_id=session_id,
-                                 feature=fid, usos_atual=feat["usos_atual"])
-                continue
-
-            if not texto_jogador:
-                continue
-
-            if len(texto_jogador) > 500:
-                await _send_text_seguro(websocket,
-                    MensagemWS(
-                        tipo="erro",
-                        conteudo="Texto muito longo — máximo 500 caracteres",
-                    ).model_dump_json()
-                )
-                continue
-
-            t0 = time.perf_counter()
-            sessao.ultima_atividade = time.time()
-
-            # Idle nudge (P4): "[IDLE]" chega do frontend após ~75s de silêncio.
-            # Vira instrução parentética — empurrão atmosférico sem avançar a
-            # história. Não conta como turno (pacing/estilo/arco intocados).
-            idle_nudge = texto_jogador.strip().upper() == "[IDLE]"
-            if idle_nudge:
-                log.info("idle_nudge", session_id=session_id,
-                         session_zero=sessao.working_mem.session_zero_ativa)
-                if sessao.working_mem.session_zero_ativa:
-                    # Na entrevista, o silêncio é indecisão — reformular ajuda
-                    # mais que atmosfera de cena (que ainda nem existe).
-                    texto_jogador = (
-                        "(O jogador está pensando na resposta. Reformule sua "
-                        "última pergunta com gentileza, em 1-2 frases, oferecendo "
-                        "dois exemplos concretos para destravar.)"
-                    )
-                else:
-                    texto_jogador = (
-                        "(O jogador está em silêncio, pensando. Dê um leve empurrão "
-                        "atmosférico de 1-2 frases no presente da cena — um detalhe "
-                        "sensorial, um NPC que se mexe — SEM avançar eventos nem agir "
-                        "pelo personagem. Termine com uma pergunta aberta curta.)"
-                    )
-
-            # OOC-IC auto (teste 10/06: prompt-side não bastou): vocativo
-            # "mestre" no INÍCIO da fala = jogador falando com o DM, não com
-            # NPC. Prepend [OOC] — o master_system já trata o resto.
-            if _RE_VOCATIVO_MESTRE.match(texto_jogador) and not texto_jogador.startswith("[OOC]"):
-                texto_jogador = f"[OOC] {texto_jogador}"
-                log.info("ooc_auto_vocativo", session_id=session_id)
-
-            sessao.working_mem.registrar_fala(
-                "player",
-                "(o jogador permanece em silêncio)" if idle_nudge else texto_jogador,
-            )
-
-            # Captura location e estado de combate ANTES do turno para detectar mudanças.
-            # Usado ao final do turno para disparar imagem de cena quando necessário.
-            _location_antes = sessao.working_mem.location_id
-            _combate_antes = sessao.working_mem.em_combate
-            # Engine-first: True quando o resolver aplica o turno dos inimigos
-            # (dano no PJ) NESTE turno. Gateia o `dano_ao_jogador` do extractor de
-            # prosa abaixo pra ele não re-aplicar o que a engine já aplicou (HP-desync).
-            _engine_resolveu_turno = False
-
-            # Detecta entrada/saída de combate pelo texto do jogador.
-            # Condicional ("ataco SE aparecerem") NÃO entra — teste 10/06 virou
-            # 4 turnos de "combate-conversa"; o LLM decide via [COMBATE: iniciar].
-            # Session Zero: "luto com machado" na ENTREVISTA é descrição de
-            # personagem, não ação — a ficha nasceria em combate fantasma.
-            from engine.llm.types import RE_COMBATE_CONDICIONAL
-            if sessao.working_mem.session_zero_ativa:
-                pass  # entrevista de criação — nenhuma fala é ação de combate
-            elif _RE_COMBATE.search(texto_jogador):
-                if RE_COMBATE_CONDICIONAL.search(texto_jogador):
-                    log.info("combate_condicional_ignorado", session_id=session_id)
-                else:
-                    sessao.working_mem.entrar_combate()
-            elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
-                sessao.working_mem.sair_combate()
-                sessao.combate_pendente = None  # fuga explícita descarta a pendência
-
-            # ── CHECK-BONUS-1 (playtest 21/07): a engine soma o modificador ──
-            # A toolbar manda o dado CRU (`[Rolagem: d20 = 5]`) e o prompt pedia
-            # ao Mestre pra "usar o modificador do personagem" — aritmética por
-            # LLM, logo probabilística: "alguns não aplicaram o bônus". Aqui a
-            # engine resolve e entrega o TOTAL pronto. Só age quando a última
-            # fala do Mestre pediu um teste NOMEADO (alta confiança); pedido de
-            # ataque e fala ambígua não passam por `eh_teste_pericia`, e sem
-            # perícia identificada não se inventa bônus.
-            # CHECK-JOGADOR-ZERO (playtest 26/07): o jogador também pode ABRIR um
-            # check. Sem isto, "quero rolar Percepção" era só prosa — a UI de
-            # rolagem é derivada da fala do MESTRE, então nada abria e o pedido
-            # morria se o Mestre não repetisse a palavra ("pedi checks, ele não
-            # abre pra eu rodar"). A classificação já existia e acerta os pedidos
-            # em PT-BR; faltava chamá-la com o texto do jogador.
-            # Um turno começa sem resolução — o chip só vale pro turno em que
-            # a rolagem aconteceu, senão fica pendurado na tela igual o
-            # check_pedido ficava (CHECK-GRUDENTO-1).
-            sessao.check_resolvido = None
-            _d20_no_texto = extrair_d20_jogador(texto_jogador)
-            if _d20_no_texto is None and not sessao.combate_pendente:
-                _pericia_do_jogador = eh_teste_pericia(texto_jogador)
-                # CHECK-GRUDENTO-1 (probe headless 27/07): a pendência só era
-                # limpa quando o d20 chegava. Se o jogador pedia e depois fazia
-                # outra coisa, ela vivia pra sempre e TODO turno seguinte
-                # re-emitia `check_pedido` — o dado ficava aberto na perícia
-                # errada. Probe: após "vou tentar stealth", o turno "olho em
-                # volta com calma" ainda vinha com check_pedido='Furtividade'.
-                #
-                # O fluxo legítimo gasta exatamente um turno: ele pede, o Mestre
-                # enquadra e pede a rolagem, ele rola no turno SEGUINTE. Passado
-                # isso sem rolagem, o pedido foi abandonado. Mesmo formato do
-                # `combate_pendente` (ver _MAX_TURNOS_PENDENCIA).
-                if not _pericia_do_jogador and sessao.check_pendente:
-                    _idade = int(sessao.check_pendente.get("turnos", 0)) + 1
-                    if _idade > _MAX_TURNOS_CHECK:
-                        log.info("check_pendente_expirado", session_id=session_id,
-                                 pericia=sessao.check_pendente.get("pericia"))
-                        sessao.check_pendente = None
-                    else:
-                        sessao.check_pendente["turnos"] = _idade
-                if _pericia_do_jogador:
-                    sessao.check_pendente = {
-                        "pericia": _pericia_do_jogador,
-                        "bonus": bonus_de_check(sessao.working_mem, _pericia_do_jogador),
-                        "turnos": 0,
-                    }
-                    log.info("check_pedido_pelo_jogador", session_id=session_id,
-                             pericia=_pericia_do_jogador)
-                    # Diretiva determinística no mesmo estilo das linhas "ENGINE:"
-                    # do combate: a engine JÁ decidiu que há um teste: o Mestre só
-                    # enquadra a ficção. Sem isto a decisão fica com o LLM, e a
-                    # seção de rolagem do master_system lhe dá três licenças pra
-                    # recusar ("não há incerteza real") — o jogador pede e nada abre.
-                    _fatos_engine.append(
-                        f"O jogador PEDIU um teste de {_pericia_do_jogador}. "
-                        f"Aceite — diga em uma frase o que está em jogo, nomeie "
-                        f"'{_pericia_do_jogador}' e PARE, esperando a rolagem. "
-                        f"Não role, não narre o resultado, não decida por ele."
-                    )
-
-            if not sessao.combate_pendente:
-                _d20_check = _d20_no_texto
-                if _d20_check is not None:
-                    # A perícia pode vir do pedido do MESTRE (caminho original) ou
-                    # do pedido do JOGADOR guardado no turno anterior. O segundo é
-                    # o que faz o bônus sair certo quando o Mestre aceitou o teste
-                    # sem nomear a perícia de volta.
-                    _pericia_pedida = eh_teste_pericia(
-                        _ultima_fala_do_mestre(sessao.working_mem)
-                    ) or ((sessao.check_pendente or {}).get("pericia") or None)
-                    sessao.check_pendente = None
-                    if _pericia_pedida:
-                        _linha_check = resolver_check(
-                            sessao.working_mem, _d20_check, _pericia_pedida
+                        # Reconexão rápida — reenvia estado sem LLM nem TTS.
+                        # ROB-1: incluir player_level para que CharacterSheet mostre o nível
+                        # correto após refresh (sem isso defaultava para 3 do schema).
+                        # ROB-2: incluir iniciativa_ordem para que InitiativeBar não desapareça
+                        # quando o jogador reconecta no meio de um combate.
+                        wm = sessao.working_mem
+                        # Reconexão rápida: reenvia o snapshot completo (mesmos campos
+                        # do fim de turno) com latência 0. O helper único garante que
+                        # nenhum campo (player_level, iniciativa_ordem…) fique de fora
+                        # aqui — origem histórica dos bugs ROB-1/ROB-2.
+                        await _send_text_seguro(websocket,
+                            MensagemWS(
+                                tipo="fim",
+                                latencia_ms=0,
+                                **_snapshot_estado(wm),
+                            ).model_dump_json()
                         )
-                        if _linha_check:
-                            _fatos_engine.append(_linha_check)
-                            # Os mesmos números, agora também pro jogador.
-                            sessao.check_resolvido = detalhar_check(
+                        log.info("ws_reconectado_estado_reenviado", session_id=session_id,
+                                 iteracoes=sessao.iteracoes)
+                    continue
+
+                # Sync de HP do jogador — CharacterSheet envia quando usuário ajusta
+                if tipo_msg == "sync_hp":
+                    novo_hp = dados.get("hp")
+                    if isinstance(novo_hp, int):
+                        sessao.working_mem.player_hp = max(0, min(sessao.working_mem.player_hp_max, novo_hp))
+                        log.info("hp_sincronizado", session_id=session_id, hp=sessao.working_mem.player_hp)
+                    continue
+
+                # Sync de condições ativas — CharacterSheet envia lista completa atual.
+                # ROB-5: limita a _MAX_CONDS para evitar lista enorme que infle o contexto.
+                # D&D 5e tem 14 condições oficiais; o dobro é mais que suficiente.
+                if tipo_msg == "sync_conditions":
+                    conditions = dados.get("conditions")
+                    if isinstance(conditions, list):
+                        sessao.working_mem.player_conditions = [
+                            str(c)[:60] for c in conditions[:_MAX_CONDS]
+                        ]
+                        log.info("conditions_sincronizadas", session_id=session_id, conditions=sessao.working_mem.player_conditions)
+                    continue
+
+                # Sync de inventário — CharacterSheet envia lista completa de itens.
+                # Itens são truncados a 80 chars e lista a _MAX_INVENT (defesa contra payload abusivo).
+                if tipo_msg == "sync_inventory":
+                    inventory = dados.get("inventory")
+                    if isinstance(inventory, list):
+                        sessao.working_mem.player_inventory = [
+                            str(i)[:80] for i in inventory[:_MAX_INVENT]
+                        ]
+                        log.info("inventory_sincronizado", session_id=session_id,
+                                 total=len(sessao.working_mem.player_inventory))
+                    continue
+
+                # Sync de spell slots — {spell_slots: {"1": {current: N, max: N}, ...}}
+                # Validação estrita: nível 1-9, current/max ints >= 0 e <= _MAX_SS_QTD.
+                # CRIT-5: usa MERGE em vez de REPLACE para preservar decrementos feitos
+                # pelo backend (spell_detector / restaurar_slots) entre o último envio
+                # ao frontend e este sync. Sem merge, o frontend reverte qualquer
+                # decremento que aconteceu no servidor desde o último fim — race comum
+                # se o jogador edita a ficha enquanto um turno termina.
+                if tipo_msg == "sync_spell_slots":
+                    raw = dados.get("spell_slots", {})
+                    if isinstance(raw, dict):
+                        for k, v in raw.items():
+                            try:
+                                nivel = int(k)
+                            except (TypeError, ValueError):
+                                continue
+                            if not (1 <= nivel <= _MAX_SS_NIVEL) or not isinstance(v, dict):
+                                continue
+                            cur = v.get("current", 0)
+                            mx  = v.get("max", 0)
+                            if not isinstance(cur, int) or not isinstance(mx, int):
+                                continue
+                            # Merge: atualiza só os níveis presentes no payload.
+                            # Níveis não enviados pelo frontend mantêm valor backend.
+                            sessao.working_mem.spell_slots[nivel] = {
+                                "current": max(0, min(_MAX_SS_QTD, cur)),
+                                "max":     max(0, min(_MAX_SS_QTD, mx)),
+                            }
+                        log.info("spell_slots_merge_aplicado", session_id=session_id,
+                                 niveis_payload=list(raw.keys()),
+                                 total_niveis_backend=len(sessao.working_mem.spell_slots))
+                    continue
+
+                # Sync de hit dice restantes — limite no player_level
+                if tipo_msg == "sync_hit_dice":
+                    current = dados.get("current")
+                    if isinstance(current, int):
+                        sessao.working_mem.hit_dice_current = max(
+                            0, min(sessao.working_mem.hit_dice_max, current)
+                        )
+                    continue
+
+                # Sync de death saves — clamp 0..3 com try/except no cast
+                if tipo_msg == "sync_death_saves":
+                    try:
+                        succ = int(dados.get("successes", 0))
+                        fail = int(dados.get("failures", 0))
+                    except (TypeError, ValueError):
+                        log.warning("death_saves_payload_invalido", session_id=session_id)
+                        continue
+                    sessao.working_mem.death_saves_successes = max(0, min(3, succ))
+                    sessao.working_mem.death_saves_failures  = max(0, min(3, fail))
+                    sessao.working_mem.death_saves_stable    = bool(dados.get("stable", False))
+                    log.info("death_saves_sincronizados", session_id=session_id,
+                             succ=sessao.working_mem.death_saves_successes,
+                             fail=sessao.working_mem.death_saves_failures)
+                    continue
+
+                # Sync de ouro — limite anti-abuso
+                if tipo_msg == "sync_gold":
+                    gold = dados.get("gold")
+                    if isinstance(gold, int) and 0 <= gold <= _MAX_GOLD:
+                        sessao.working_mem.gold = gold
+                    continue
+
+                # Sync de XP — limite anti-abuso
+                if tipo_msg == "sync_xp":
+                    xp = dados.get("xp")
+                    if isinstance(xp, int) and 0 <= xp <= _MAX_XP:
+                        sessao.working_mem.xp = xp
+                    continue
+
+                # Sync de inspiração
+                if tipo_msg == "sync_inspiration":
+                    sessao.working_mem.inspiration = bool(dados.get("inspiration", False))
+                    continue
+
+                # Sync de class features — frontend edita usos_atual manualmente
+                # (ex: clicar "gastar Action Surge" fora de turno de LLM).
+                # Payload: {feature_id: str, usos_atual: int}
+                # Validação: feature deve existir, usos_atual clampado [0, usos_max].
+                if tipo_msg == "aplicar_asi":
+                    # O jogador escolheu o Incremento de Atributo. A REGRA (+2 num ou
+                    # +1 em dois, teto 20) vive em PlayerCharacter.aplicar_asi — aqui
+                    # só transporta. Validar apenas no frontend deixaria um cliente
+                    # adulterado furar o SRD.
+                    _nivel = dados.get("nivel")
+                    _aumentos = dados.get("atributos")
+                    if isinstance(_nivel, int) and isinstance(_aumentos, dict):
+                        if sessao.working_mem.aplicar_asi(_nivel, _aumentos):
+                            log.info("asi_aplicado", session_id=session_id,
+                                     nivel=_nivel, atributos=_aumentos)
+                            # Persiste JÁ: isto não passa pelo loop de turno, então o
+                            # auto-checkpoint de 5-em-5 turnos não cobriria — e perder
+                            # um ASI escolhido é pior que perder um turno de narração.
+                            _criar_background_task(_auto_checkpoint(sessao))
+                        else:
+                            log.warning("asi_recusado", session_id=session_id,
+                                        nivel=_nivel, atributos=_aumentos)
+                    continue
+
+                if tipo_msg == "sync_class_feature":
+                    fid = dados.get("feature_id")
+                    usos = dados.get("usos_atual")
+                    if isinstance(fid, str) and isinstance(usos, int):
+                        feat = sessao.working_mem.class_features.get(fid)
+                        if feat is not None:
+                            usos_max = feat.get("usos_max", 1)
+                            # ROB-3: features ilimitadas têm usos_max=-1 (Sneak Attack,
+                            # Reckless Attack, etc.) — min(-1, N)=-1 → max(0,-1)=0 desabilitaria
+                            # a feature permanentemente. Essas features são sempre disponíveis;
+                            # não faz sentido o frontend tentar sincronizá-las manualmente.
+                            if usos_max < 0:
+                                continue
+                            feat["usos_atual"] = max(0, min(usos_max, usos))
+                            feat["disponivel"] = feat["usos_atual"] > 0
+                            log.info("class_feature_sincronizada", session_id=session_id,
+                                     feature=fid, usos_atual=feat["usos_atual"])
+                    continue
+
+                if not texto_jogador:
+                    continue
+
+                if len(texto_jogador) > 500:
+                    await _send_text_seguro(websocket,
+                        MensagemWS(
+                            tipo="erro",
+                            conteudo="Texto muito longo — máximo 500 caracteres",
+                        ).model_dump_json()
+                    )
+                    continue
+
+                t0 = time.perf_counter()
+                sessao.ultima_atividade = time.time()
+
+                # Idle nudge (P4): "[IDLE]" chega do frontend após ~75s de silêncio.
+                # Vira instrução parentética — empurrão atmosférico sem avançar a
+                # história. Não conta como turno (pacing/estilo/arco intocados).
+                idle_nudge = texto_jogador.strip().upper() == "[IDLE]"
+                if idle_nudge:
+                    log.info("idle_nudge", session_id=session_id,
+                             session_zero=sessao.working_mem.session_zero_ativa)
+                    if sessao.working_mem.session_zero_ativa:
+                        # Na entrevista, o silêncio é indecisão — reformular ajuda
+                        # mais que atmosfera de cena (que ainda nem existe).
+                        texto_jogador = (
+                            "(O jogador está pensando na resposta. Reformule sua "
+                            "última pergunta com gentileza, em 1-2 frases, oferecendo "
+                            "dois exemplos concretos para destravar.)"
+                        )
+                    else:
+                        texto_jogador = (
+                            "(O jogador está em silêncio, pensando. Dê um leve empurrão "
+                            "atmosférico de 1-2 frases no presente da cena — um detalhe "
+                            "sensorial, um NPC que se mexe — SEM avançar eventos nem agir "
+                            "pelo personagem. Termine com uma pergunta aberta curta.)"
+                        )
+
+                # OOC-IC auto (teste 10/06: prompt-side não bastou): vocativo
+                # "mestre" no INÍCIO da fala = jogador falando com o DM, não com
+                # NPC. Prepend [OOC] — o master_system já trata o resto.
+                if _RE_VOCATIVO_MESTRE.match(texto_jogador) and not texto_jogador.startswith("[OOC]"):
+                    texto_jogador = f"[OOC] {texto_jogador}"
+                    log.info("ooc_auto_vocativo", session_id=session_id)
+
+                sessao.working_mem.registrar_fala(
+                    "player",
+                    "(o jogador permanece em silêncio)" if idle_nudge else texto_jogador,
+                )
+
+                # Captura location e estado de combate ANTES do turno para detectar mudanças.
+                # Usado ao final do turno para disparar imagem de cena quando necessário.
+                _location_antes = sessao.working_mem.location_id
+                _combate_antes = sessao.working_mem.em_combate
+                # Engine-first: True quando o resolver aplica o turno dos inimigos
+                # (dano no PJ) NESTE turno. Gateia o `dano_ao_jogador` do extractor de
+                # prosa abaixo pra ele não re-aplicar o que a engine já aplicou (HP-desync).
+                _engine_resolveu_turno = False
+
+                # Detecta entrada/saída de combate pelo texto do jogador.
+                # Condicional ("ataco SE aparecerem") NÃO entra — teste 10/06 virou
+                # 4 turnos de "combate-conversa"; o LLM decide via [COMBATE: iniciar].
+                # Session Zero: "luto com machado" na ENTREVISTA é descrição de
+                # personagem, não ação — a ficha nasceria em combate fantasma.
+                from engine.llm.types import RE_COMBATE_CONDICIONAL
+                if sessao.working_mem.session_zero_ativa:
+                    pass  # entrevista de criação — nenhuma fala é ação de combate
+                elif _RE_COMBATE.search(texto_jogador):
+                    if RE_COMBATE_CONDICIONAL.search(texto_jogador):
+                        log.info("combate_condicional_ignorado", session_id=session_id)
+                    else:
+                        sessao.working_mem.entrar_combate()
+                elif _RE_FIM_COMBATE_JOGADOR.search(texto_jogador):
+                    sessao.working_mem.sair_combate()
+                    sessao.combate_pendente = None  # fuga explícita descarta a pendência
+
+                # ── CHECK-BONUS-1 (playtest 21/07): a engine soma o modificador ──
+                # A toolbar manda o dado CRU (`[Rolagem: d20 = 5]`) e o prompt pedia
+                # ao Mestre pra "usar o modificador do personagem" — aritmética por
+                # LLM, logo probabilística: "alguns não aplicaram o bônus". Aqui a
+                # engine resolve e entrega o TOTAL pronto. Só age quando a última
+                # fala do Mestre pediu um teste NOMEADO (alta confiança); pedido de
+                # ataque e fala ambígua não passam por `eh_teste_pericia`, e sem
+                # perícia identificada não se inventa bônus.
+                # CHECK-JOGADOR-ZERO (playtest 26/07): o jogador também pode ABRIR um
+                # check. Sem isto, "quero rolar Percepção" era só prosa — a UI de
+                # rolagem é derivada da fala do MESTRE, então nada abria e o pedido
+                # morria se o Mestre não repetisse a palavra ("pedi checks, ele não
+                # abre pra eu rodar"). A classificação já existia e acerta os pedidos
+                # em PT-BR; faltava chamá-la com o texto do jogador.
+                # Um turno começa sem resolução — o chip só vale pro turno em que
+                # a rolagem aconteceu, senão fica pendurado na tela igual o
+                # check_pedido ficava (CHECK-GRUDENTO-1).
+                sessao.check_resolvido = None
+                _d20_no_texto = extrair_d20_jogador(texto_jogador)
+                if _d20_no_texto is None and not sessao.combate_pendente:
+                    _pericia_do_jogador = eh_teste_pericia(texto_jogador)
+                    # CHECK-GRUDENTO-1 (probe headless 27/07): a pendência só era
+                    # limpa quando o d20 chegava. Se o jogador pedia e depois fazia
+                    # outra coisa, ela vivia pra sempre e TODO turno seguinte
+                    # re-emitia `check_pedido` — o dado ficava aberto na perícia
+                    # errada. Probe: após "vou tentar stealth", o turno "olho em
+                    # volta com calma" ainda vinha com check_pedido='Furtividade'.
+                    #
+                    # O fluxo legítimo gasta exatamente um turno: ele pede, o Mestre
+                    # enquadra e pede a rolagem, ele rola no turno SEGUINTE. Passado
+                    # isso sem rolagem, o pedido foi abandonado. Mesmo formato do
+                    # `combate_pendente` (ver _MAX_TURNOS_PENDENCIA).
+                    if not _pericia_do_jogador and sessao.check_pendente:
+                        _idade = int(sessao.check_pendente.get("turnos", 0)) + 1
+                        if _idade > _MAX_TURNOS_CHECK:
+                            log.info("check_pendente_expirado", session_id=session_id,
+                                     pericia=sessao.check_pendente.get("pericia"))
+                            sessao.check_pendente = None
+                        else:
+                            sessao.check_pendente["turnos"] = _idade
+                    if _pericia_do_jogador:
+                        sessao.check_pendente = {
+                            "pericia": _pericia_do_jogador,
+                            "bonus": bonus_de_check(sessao.working_mem, _pericia_do_jogador),
+                            "turnos": 0,
+                        }
+                        log.info("check_pedido_pelo_jogador", session_id=session_id,
+                                 pericia=_pericia_do_jogador)
+                        # Diretiva determinística no mesmo estilo das linhas "ENGINE:"
+                        # do combate: a engine JÁ decidiu que há um teste: o Mestre só
+                        # enquadra a ficção. Sem isto a decisão fica com o LLM, e a
+                        # seção de rolagem do master_system lhe dá três licenças pra
+                        # recusar ("não há incerteza real") — o jogador pede e nada abre.
+                        _fatos_engine.append(
+                            f"O jogador PEDIU um teste de {_pericia_do_jogador}. "
+                            f"Aceite — diga em uma frase o que está em jogo, nomeie "
+                            f"'{_pericia_do_jogador}' e PARE, esperando a rolagem. "
+                            f"Não role, não narre o resultado, não decida por ele."
+                        )
+
+                if not sessao.combate_pendente:
+                    _d20_check = _d20_no_texto
+                    if _d20_check is not None:
+                        # A perícia pode vir do pedido do MESTRE (caminho original) ou
+                        # do pedido do JOGADOR guardado no turno anterior. O segundo é
+                        # o que faz o bônus sair certo quando o Mestre aceitou o teste
+                        # sem nomear a perícia de volta.
+                        _pericia_pedida = eh_teste_pericia(
+                            _ultima_fala_do_mestre(sessao.working_mem)
+                        ) or ((sessao.check_pendente or {}).get("pericia") or None)
+                        sessao.check_pendente = None
+                        if _pericia_pedida:
+                            _linha_check = resolver_check(
                                 sessao.working_mem, _d20_check, _pericia_pedida
                             )
-                            log.info("check_resolvido", session_id=session_id,
-                                     pericia=_pericia_pedida, bruto=_d20_check)
-
-            # ── Consumo de item pela ENGINE (ITEM-SEM-AUTORIDADE-1, 01/08) ─────
-            # "Não fui curado pela minha poção": o jogador TINHA o item, bebeu, e
-            # o HP não mexeu — beber era pura narração. Conceder item segue com o
-            # Mestre (rule-of-cool); CONSUMIR é mecânica. A linha é ANEXADA, não
-            # substitui o texto: a fala do jogador quase sempre traz intenção
-            # além do gole ("bebo a poção e avanço pro portão").
-            if not sessao.working_mem.session_zero_ativa:
-                try:
-                    _linha_item = resolver_consumo(sessao.working_mem, texto_jogador)
-                except Exception as e:  # noqa: BLE001 — item nunca derruba turno
-                    log.warning("consumo_item_falhou", erro=str(e)[:120])
-                    _linha_item = None
-                if _linha_item:
-                    _fatos_engine.append(_linha_item)
-
-            # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
-            # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
-            # ataque do jogador (d20+mod vs CA), o dano e o turno dos inimigos; o
-            # Mestre só NARRA o resultado (linhas "ENGINE: ..."). Sem alvo pendente
-            # o fluxo antigo (LLM narra combate livre) segue 100% intacto.
-            if settings.COMBATE_ENGINE_ATIVO and not sessao.working_mem.session_zero_ativa:
-                _d20_jogador = extrair_d20_jogador(texto_jogador)
-                if sessao.combate_pendente:
-                    # Rolagem-solta-resolve (decisão 01/07, "regra pura"): antes de
-                    # consumir a pendência de ataque, confere se a ÚLTIMA fala do
-                    # Mestre pediu um TESTE DE PERÍCIA (não o ataque em si — ex:
-                    # interrompeu a resolução pra pedir Furtividade/Persuasão no
-                    # meio do combate). Só desvia no caso CONFIRMADO (alta
-                    # confiança) — ambíguo mantém o comportamento de sempre
-                    # (trata como confirmação do ataque), sem chamada de LLM extra.
-                    _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
-                    _e_teste_pericia_solto = (
-                        _d20_jogador is not None
-                        and eh_teste_pericia(_ultima_fala_mestre) is not None
-                    )
-                    if _e_teste_pericia_solto:
-                        log.info(
-                            "rolagem_solta_teste_pericia_preserva_pendencia",
-                            session_id=session_id,
-                            alvo=sessao.combate_pendente.get("alvo"),
-                        )
-                        # combate_pendente FICA intacto — este d20 não é a
-                        # confirmação do ataque; segue pro fluxo normal do LLM.
-                    elif _d20_jogador is not None:
-                        # Rolagem de verdade chegou (e não é teste de perícia) —
-                        # consome a pendência e resolve.
-                        _pend = sessao.combate_pendente
-                        sessao.combate_pendente = None
-                        if sessao.working_mem.em_combate:
-                            _texto_engine = _resolver_ataque_engine(
-                                sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
-                            )
-                            if _texto_engine is not None:
-                                # A engine é a autoridade do dano do PJ neste turno —
-                                # o extractor de prosa abaixo NÃO deve re-aplicar.
-                                _engine_resolveu_turno = True
-                                _fatos_engine.append(_texto_engine)
-                            # resolve inválido (alvo morto/inexistente) → segue com o
-                            # texto cru da rolagem no fluxo antigo (fallback seguro).
-                    else:
-                        # BUGFIX (playtest 02/07, sess-6e2ff2a3f5ce): este turno
-                        # NÃO é rolagem nenhuma (o dado não acendeu a tempo, ou o
-                        # jogador só continuou a falar) — ANTES deste fix, a
-                        # pendência era descartada aqui incondicionalmente, dando
-                        # à janela de rolagem vida de exatamente 1 turno. Log real:
-                        # pendência setada, resolve NUNCA disparou em 2 sessões
-                        # seguidas porque o jogador quase nunca rola no turno
-                        # EXATO seguinte à declaração. Fix: a pendência PERSISTE
-                        # até um d20 de verdade chegar ou o combate encerrar
-                        # (clear de segurança logo após o pipeline, abaixo).
-                        # PENDENCIA-CONGELA-INIMIGO-1: a pendência PERSISTE (a
-                        # janela de rolagem precisa sobreviver a turnos de
-                        # conversa), mas ela também bloqueia o beat do inimigo —
-                        # e sem teto isso vira combate CONGELADO: o jogador
-                        # declara o ataque, muda de assunto, e os inimigos nunca
-                        # revidam. Numa camada cujo ponto é o RISCO SENTIDO
-                        # (ADR-005), inimigo parado é o pior defeito possível.
-                        # O contador não descarta a pendência — só para de
-                        # segurar os inimigos depois de _MAX_TURNOS_PENDENCIA.
-                        sessao.combate_pendente["turnos"] = (
-                            int(sessao.combate_pendente.get("turnos", 0)) + 1
-                        )
-                        log.info(
-                            "combate_pendente_persiste_sem_rolagem",
-                            session_id=session_id,
-                            alvo=sessao.combate_pendente.get("alvo"),
-                            turnos=sessao.combate_pendente["turnos"],
-                        )
-                elif (
-                    sessao.working_mem.em_combate
-                    and _d20_jogador is None
-                    and (
-                        _RE_COMBATE.search(texto_jogador)
-                        # Regra ampliada (01/07): citar magia de DANO conhecida em
-                        # combate é declaração de ataque, independente da conjugação
-                        # ("vou usar a explosão eldritch" — infinitivo fora do RE).
-                        # Condicional ("SE ele atacar, uso...") continua fora.
-                        or (
-                            not RE_COMBATE_CONDICIONAL.search(texto_jogador)
-                            and menciona_magia_ofensiva(
-                                texto_jogador, sessao.spells_conhecidas
-                            )
-                        )
-                    )
-                ):
-                    # Declaração de ataque em combate → fixa o alvo e deixa o LLM
-                    # PEDIR a rolagem (a engine resolve quando o d20 chegar). Sem
-                    # alvo claro (ambíguo), cai no fluxo antigo.
-                    _alvo = _extrair_alvo_ataque(texto_jogador, sessao.working_mem)
-                    if _alvo:
-                        try:
-                            from engine.bestiary.bestiary import enriquecer_fichas_inimigos
-                            await enriquecer_fichas_inimigos(sessao.working_mem)
-                        except Exception:
-                            pass  # stats default (CA 12) se o bestiário falhar
-                        # HOSTILIDADE POR GRAFO (Neo4j ativo, 29/06): atacar um NPC
-                        # traz seus ALIADOS presentes pro combate (a família defende
-                        # o patriarca); rivais NÃO. Timeout curto + falha silenciosa
-                        # (Neo4j offline → só o alvo vira inimigo). Os aliados ganham
-                        # stats no enriquecer pós-turno.
-                        _aliados: list[str] = []
-                        try:
-                            _neo4j = getattr(sessao.context_builder, "_neo4j", None)
-                            if _neo4j is not None:
-                                _rels = await asyncio.wait_for(
-                                    _neo4j.buscar_relacionamentos(_alvo), timeout=2.0
+                            if _linha_check:
+                                _fatos_engine.append(_linha_check)
+                                # Os mesmos números, agora também pro jogador.
+                                sessao.check_resolvido = detalhar_check(
+                                    sessao.working_mem, _d20_check, _pericia_pedida
                                 )
-                                _aliados = aliados_presentes_para_hostil(
-                                    _rels,
-                                    list(sessao.working_mem.npcs_presentes),
-                                    set(sessao.working_mem.inimigos_combate),
-                                    set(getattr(sessao.working_mem, "companions", {}) or {}),
-                                )
-                                for _a in _aliados:
-                                    sessao.working_mem.registrar_inimigo(
-                                        _a, str(_a).replace("-", " ").title(), "intacto"
-                                    )
-                                if _aliados:
-                                    log.info("hostilidade_grafo", session_id=session_id,
-                                             alvo=_alvo, aliados=_aliados)
-                        except Exception:
-                            pass  # Neo4j offline/lento → só o alvo atacado é inimigo
-                        sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
-                        # Autoridade social (decisão 02/07, intensidade FORTE): o ATO
-                        # de atacar já abala as relações — trust do alvo despenca,
-                        # aliados presentes (os da hostilidade acima) caem junto.
-                        # Eventos acumulados no scene; o ponto único pós-turno emite
-                        # os toasts e aplica o afeto Neo4j.
-                        try:
-                            from engine.authority.social import abalar_relacoes_por_ataque
-                            sessao.working_mem.scene.eventos_relacao_turno.extend(
-                                abalar_relacoes_por_ataque(sessao.working_mem, _alvo, _aliados)
-                            )
-                        except Exception as _e_soc:
-                            log.warning("relacao_abalo_falhou", erro=str(_e_soc)[:120])
-                        _nome_alvo = sessao.working_mem.inimigos_combate.get(_alvo, {}).get("nome", _alvo)
-                        texto_jogador = (
-                            f"{texto_jogador}\n(O jogador ataca {_nome_alvo}. Descreva a "
-                            "investida em 1-2 frases e PEÇA a rolagem de ataque (d20) — "
-                            "NÃO resolva o golpe nem invente o resultado; a engine "
-                            "resolve quando o dado chegar.)"
+                                log.info("check_resolvido", session_id=session_id,
+                                         pericia=_pericia_pedida, bruto=_d20_check)
+
+                # ── Consumo de item pela ENGINE (ITEM-SEM-AUTORIDADE-1, 01/08) ─────
+                # "Não fui curado pela minha poção": o jogador TINHA o item, bebeu, e
+                # o HP não mexeu — beber era pura narração. Conceder item segue com o
+                # Mestre (rule-of-cool); CONSUMIR é mecânica. A linha é ANEXADA, não
+                # substitui o texto: a fala do jogador quase sempre traz intenção
+                # além do gole ("bebo a poção e avanço pro portão").
+                if not sessao.working_mem.session_zero_ativa:
+                    try:
+                        _linha_item = resolver_consumo(sessao.working_mem, texto_jogador)
+                    except Exception as e:  # noqa: BLE001 — item nunca derruba turno
+                        log.warning("consumo_item_falhou", erro=str(e)[:120])
+                        _linha_item = None
+                    if _linha_item:
+                        _fatos_engine.append(_linha_item)
+
+                # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
+                # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
+                # ataque do jogador (d20+mod vs CA), o dano e o turno dos inimigos; o
+                # Mestre só NARRA o resultado (linhas "ENGINE: ..."). Sem alvo pendente
+                # o fluxo antigo (LLM narra combate livre) segue 100% intacto.
+                if settings.COMBATE_ENGINE_ATIVO and not sessao.working_mem.session_zero_ativa:
+                    _d20_jogador = extrair_d20_jogador(texto_jogador)
+                    if sessao.combate_pendente:
+                        # Rolagem-solta-resolve (decisão 01/07, "regra pura"): antes de
+                        # consumir a pendência de ataque, confere se a ÚLTIMA fala do
+                        # Mestre pediu um TESTE DE PERÍCIA (não o ataque em si — ex:
+                        # interrompeu a resolução pra pedir Furtividade/Persuasão no
+                        # meio do combate). Só desvia no caso CONFIRMADO (alta
+                        # confiança) — ambíguo mantém o comportamento de sempre
+                        # (trata como confirmação do ataque), sem chamada de LLM extra.
+                        _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
+                        _e_teste_pericia_solto = (
+                            _d20_jogador is not None
+                            and eh_teste_pericia(_ultima_fala_mestre) is not None
                         )
-                        log.info("combate_engine_pendente", session_id=session_id, alvo=_alvo)
-                elif sessao.working_mem.em_combate and _d20_jogador is not None:
-                    # d20 SOLTO em combate SEM pendência (playtest 01/07: 4 rolagens
-                    # órfãs na sessão inteira — a declaração do jogador não tinha
-                    # sido reconhecida, mas o Mestre PEDIU a rolagem de ataque e o
-                    # jogador rolou). Regra pura (decisão 01/07): perícia nomeada
-                    # tem precedência; senão, se a última fala do Mestre pediu
-                    # ATAQUE, resolve contra o inimigo citado nela (ou o único
-                    # vivo). Ambíguo de verdade → fluxo antigo, como sempre.
-                    _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
-                    if (
-                        eh_teste_pericia(_ultima_fala_mestre) is None
-                        and eh_pedido_ataque(_ultima_fala_mestre)
+                        if _e_teste_pericia_solto:
+                            log.info(
+                                "rolagem_solta_teste_pericia_preserva_pendencia",
+                                session_id=session_id,
+                                alvo=sessao.combate_pendente.get("alvo"),
+                            )
+                            # combate_pendente FICA intacto — este d20 não é a
+                            # confirmação do ataque; segue pro fluxo normal do LLM.
+                        elif _d20_jogador is not None:
+                            # Rolagem de verdade chegou (e não é teste de perícia) —
+                            # consome a pendência e resolve.
+                            _pend = sessao.combate_pendente
+                            sessao.combate_pendente = None
+                            if sessao.working_mem.em_combate:
+                                _texto_engine = _resolver_ataque_engine(
+                                    sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
+                                )
+                                if _texto_engine is not None:
+                                    # A engine é a autoridade do dano do PJ neste turno —
+                                    # o extractor de prosa abaixo NÃO deve re-aplicar.
+                                    _engine_resolveu_turno = True
+                                    _fatos_engine.append(_texto_engine)
+                                # resolve inválido (alvo morto/inexistente) → segue com o
+                                # texto cru da rolagem no fluxo antigo (fallback seguro).
+                        else:
+                            # BUGFIX (playtest 02/07, sess-6e2ff2a3f5ce): este turno
+                            # NÃO é rolagem nenhuma (o dado não acendeu a tempo, ou o
+                            # jogador só continuou a falar) — ANTES deste fix, a
+                            # pendência era descartada aqui incondicionalmente, dando
+                            # à janela de rolagem vida de exatamente 1 turno. Log real:
+                            # pendência setada, resolve NUNCA disparou em 2 sessões
+                            # seguidas porque o jogador quase nunca rola no turno
+                            # EXATO seguinte à declaração. Fix: a pendência PERSISTE
+                            # até um d20 de verdade chegar ou o combate encerrar
+                            # (clear de segurança logo após o pipeline, abaixo).
+                            # PENDENCIA-CONGELA-INIMIGO-1: a pendência PERSISTE (a
+                            # janela de rolagem precisa sobreviver a turnos de
+                            # conversa), mas ela também bloqueia o beat do inimigo —
+                            # e sem teto isso vira combate CONGELADO: o jogador
+                            # declara o ataque, muda de assunto, e os inimigos nunca
+                            # revidam. Numa camada cujo ponto é o RISCO SENTIDO
+                            # (ADR-005), inimigo parado é o pior defeito possível.
+                            # O contador não descarta a pendência — só para de
+                            # segurar os inimigos depois de _MAX_TURNOS_PENDENCIA.
+                            sessao.combate_pendente["turnos"] = (
+                                int(sessao.combate_pendente.get("turnos", 0)) + 1
+                            )
+                            log.info(
+                                "combate_pendente_persiste_sem_rolagem",
+                                session_id=session_id,
+                                alvo=sessao.combate_pendente.get("alvo"),
+                                turnos=sessao.combate_pendente["turnos"],
+                            )
+                    elif (
+                        sessao.working_mem.em_combate
+                        and _d20_jogador is None
+                        and (
+                            _RE_COMBATE.search(texto_jogador)
+                            # Regra ampliada (01/07): citar magia de DANO conhecida em
+                            # combate é declaração de ataque, independente da conjugação
+                            # ("vou usar a explosão eldritch" — infinitivo fora do RE).
+                            # Condicional ("SE ele atacar, uso...") continua fora.
+                            or (
+                                not RE_COMBATE_CONDICIONAL.search(texto_jogador)
+                                and menciona_magia_ofensiva(
+                                    texto_jogador, sessao.spells_conhecidas
+                                )
+                            )
+                        )
                     ):
-                        _vivos = {
-                            str(d.get("nome", iid)).lower(): iid
-                            for iid, d in sessao.working_mem.inimigos_combate.items()
-                            if d.get("estado") != "morto"
-                        }
-                        _alvo = _encontrar_id_inimigo(_ultima_fala_mestre, _vivos)
-                        if _alvo is None and len(_vivos) == 1:
-                            _alvo = next(iter(_vivos.values()))
+                        # Declaração de ataque em combate → fixa o alvo e deixa o LLM
+                        # PEDIR a rolagem (a engine resolve quando o d20 chegar). Sem
+                        # alvo claro (ambíguo), cai no fluxo antigo.
+                        _alvo = _extrair_alvo_ataque(texto_jogador, sessao.working_mem)
                         if _alvo:
-                            # Autoridade social: ataque sem declaração prévia
-                            # (d20 solto) também abala a relação do alvo — a
-                            # flag relacao_abalada deduplica se a declaração
-                            # já tiver abalado antes. Sem grafo aqui (aliados
-                            # já teriam vindo pela hostilidade da declaração).
+                            try:
+                                from engine.bestiary.bestiary import enriquecer_fichas_inimigos
+                                await enriquecer_fichas_inimigos(sessao.working_mem)
+                            except Exception:
+                                pass  # stats default (CA 12) se o bestiário falhar
+                            # HOSTILIDADE POR GRAFO (Neo4j ativo, 29/06): atacar um NPC
+                            # traz seus ALIADOS presentes pro combate (a família defende
+                            # o patriarca); rivais NÃO. Timeout curto + falha silenciosa
+                            # (Neo4j offline → só o alvo vira inimigo). Os aliados ganham
+                            # stats no enriquecer pós-turno.
+                            _aliados: list[str] = []
+                            try:
+                                _neo4j = getattr(sessao.context_builder, "_neo4j", None)
+                                if _neo4j is not None:
+                                    _rels = await asyncio.wait_for(
+                                        _neo4j.buscar_relacionamentos(_alvo), timeout=2.0
+                                    )
+                                    _aliados = aliados_presentes_para_hostil(
+                                        _rels,
+                                        list(sessao.working_mem.npcs_presentes),
+                                        set(sessao.working_mem.inimigos_combate),
+                                        set(getattr(sessao.working_mem, "companions", {}) or {}),
+                                    )
+                                    for _a in _aliados:
+                                        sessao.working_mem.registrar_inimigo(
+                                            _a, str(_a).replace("-", " ").title(), "intacto"
+                                        )
+                                    if _aliados:
+                                        log.info("hostilidade_grafo", session_id=session_id,
+                                                 alvo=_alvo, aliados=_aliados)
+                            except Exception:
+                                pass  # Neo4j offline/lento → só o alvo atacado é inimigo
+                            sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
+                            # Autoridade social (decisão 02/07, intensidade FORTE): o ATO
+                            # de atacar já abala as relações — trust do alvo despenca,
+                            # aliados presentes (os da hostilidade acima) caem junto.
+                            # Eventos acumulados no scene; o ponto único pós-turno emite
+                            # os toasts e aplica o afeto Neo4j.
                             try:
                                 from engine.authority.social import abalar_relacoes_por_ataque
                                 sessao.working_mem.scene.eventos_relacao_turno.extend(
-                                    abalar_relacoes_por_ataque(sessao.working_mem, _alvo, [])
+                                    abalar_relacoes_por_ataque(sessao.working_mem, _alvo, _aliados)
                                 )
                             except Exception as _e_soc:
                                 log.warning("relacao_abalo_falhou", erro=str(_e_soc)[:120])
-                            _texto_engine = _resolver_ataque_engine(
-                                sessao, session_id, _alvo, _d20_jogador
+                            _nome_alvo = sessao.working_mem.inimigos_combate.get(_alvo, {}).get("nome", _alvo)
+                            texto_jogador = (
+                                f"{texto_jogador}\n(O jogador ataca {_nome_alvo}. Descreva a "
+                                "investida em 1-2 frases e PEÇA a rolagem de ataque (d20) — "
+                                "NÃO resolva o golpe nem invente o resultado; a engine "
+                                "resolve quando o dado chegar.)"
                             )
-                            if _texto_engine is not None:
-                                _engine_resolveu_turno = True
-                                _fatos_engine.append(_texto_engine)
-                                log.info(
-                                    "combate_d20_solto_resolvido",
-                                    session_id=session_id, alvo=_alvo,
-                                )
-
-            # Monta contexto RAG — falha silenciosa com fallback para prompt simples
-            contexto = None
-            context_ms = 0
-            erros_turno: list[str] = []
-            try:
-                t_ctx = time.perf_counter()
-                if sessao.working_mem.session_zero_ativa:
-                    # Session Zero: a entrevista não usa lore/regras/grafo — o
-                    # montar_mensagens troca o system inteiro pelo session_zero.md.
-                    # Pular Qdrant+Neo4j corta 2-4s de latência por troca e
-                    # elimina dependência externa da feature mais nova.
-                    from engine.llm.types import ContextoMontado
-                    contexto = ContextoMontado(
-                        working_memory=sessao.working_mem,
-                        chunks_semanticos=[], chunks_episodicos=[],
-                        chunks_regras=[], relacoes_grafo=[],
-                        secrets_visiveis=[], transcricao_atual=texto_jogador,
-                    )
-                else:
-                    contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
-                    context_ms = int((time.perf_counter() - t_ctx) * 1000)
-
-                # Spell detector — injeta dados mecânicos de magia no contexto antes do LLM.
-                # Falha silenciosa: se Qdrant estiver fora ou a magia não for encontrada,
-                # o jogo segue com narração pura (sem dados mecânicos).
-                # Gated na Session Zero: "lanço magias de fogo" na entrevista é
-                # descrição de personagem, não um cast.
-                from engine.magic.spell_detector import (
-                    _RE_CASTING,
-                    buscar_dados_magia,
-                    extrair_nome_magia,
-                    formatar_bloco_magia,
-                )
-                if not sessao.working_mem.session_zero_ativa and _RE_CASTING.search(texto_jogador):
-                    nome_magia = extrair_nome_magia(texto_jogador)
-                    if nome_magia:
-                        # Bug #5: valida ANTES de decrementar slot. Se o jogador grita
-                        # "lanço bola de fogo" sem ter selecionado essa magia na criação,
-                        # o LLM nega ("você não conhece") mas o slot já tinha sumido.
-                        # Política: se o personagem é conjurador (tem spells_conhecidas
-                        # cadastradas) e a magia NÃO está na lista, pula tudo — busca,
-                        # injeção e decremento. O LLM ainda recebe a fala via contexto
-                        # geral e nega narrativamente.
-                        spells_lower = {s.lower() for s in sessao.spells_conhecidas}
-                        magia_conhecida = (
-                            not spells_lower  # personagem não-conjurador / sem lista
-                            or nome_magia.lower() in spells_lower
-                        )
-                        if not magia_conhecida:
-                            log.info(
-                                "spell_nao_conhecida",
-                                nome=nome_magia,
-                                session_id=session_id,
-                            )
-                        else:
-                            dados_magia = await buscar_dados_magia(nome_magia)
-                            if dados_magia:
-                                bloco = formatar_bloco_magia(dados_magia)
-                                # Insere no topo de chunks_regras para ter prioridade no prompt
-                                if contexto is not None:
-                                    contexto.chunks_regras.insert(
-                                        0,
-                                        {"text": bloco, "source_id": "spell-detector", "_score": 1.0},
+                            log.info("combate_engine_pendente", session_id=session_id, alvo=_alvo)
+                    elif sessao.working_mem.em_combate and _d20_jogador is not None:
+                        # d20 SOLTO em combate SEM pendência (playtest 01/07: 4 rolagens
+                        # órfãs na sessão inteira — a declaração do jogador não tinha
+                        # sido reconhecida, mas o Mestre PEDIU a rolagem de ataque e o
+                        # jogador rolou). Regra pura (decisão 01/07): perícia nomeada
+                        # tem precedência; senão, se a última fala do Mestre pediu
+                        # ATAQUE, resolve contra o inimigo citado nela (ou o único
+                        # vivo). Ambíguo de verdade → fluxo antigo, como sempre.
+                        _ultima_fala_mestre = _ultima_fala_do_mestre(sessao.working_mem)
+                        if (
+                            eh_teste_pericia(_ultima_fala_mestre) is None
+                            and eh_pedido_ataque(_ultima_fala_mestre)
+                        ):
+                            _vivos = {
+                                str(d.get("nome", iid)).lower(): iid
+                                for iid, d in sessao.working_mem.inimigos_combate.items()
+                                if d.get("estado") != "morto"
+                            }
+                            _alvo = _encontrar_id_inimigo(_ultima_fala_mestre, _vivos)
+                            if _alvo is None and len(_vivos) == 1:
+                                _alvo = next(iter(_vivos.values()))
+                            if _alvo:
+                                # Autoridade social: ataque sem declaração prévia
+                                # (d20 solto) também abala a relação do alvo — a
+                                # flag relacao_abalada deduplica se a declaração
+                                # já tiver abalado antes. Sem grafo aqui (aliados
+                                # já teriam vindo pela hostilidade da declaração).
+                                try:
+                                    from engine.authority.social import abalar_relacoes_por_ataque
+                                    sessao.working_mem.scene.eventos_relacao_turno.extend(
+                                        abalar_relacoes_por_ataque(sessao.working_mem, _alvo, [])
                                     )
+                                except Exception as _e_soc:
+                                    log.warning("relacao_abalo_falhou", erro=str(_e_soc)[:120])
+                                _texto_engine = _resolver_ataque_engine(
+                                    sessao, session_id, _alvo, _d20_jogador
+                                )
+                                if _texto_engine is not None:
+                                    _engine_resolveu_turno = True
+                                    _fatos_engine.append(_texto_engine)
+                                    log.info(
+                                        "combate_d20_solto_resolvido",
+                                        session_id=session_id, alvo=_alvo,
+                                    )
+
+                # Monta contexto RAG — falha silenciosa com fallback para prompt simples
+                contexto = None
+                context_ms = 0
+                erros_turno: list[str] = []
+                try:
+                    t_ctx = time.perf_counter()
+                    if sessao.working_mem.session_zero_ativa:
+                        # Session Zero: a entrevista não usa lore/regras/grafo — o
+                        # montar_mensagens troca o system inteiro pelo session_zero.md.
+                        # Pular Qdrant+Neo4j corta 2-4s de latência por troca e
+                        # elimina dependência externa da feature mais nova.
+                        from engine.llm.types import ContextoMontado
+                        contexto = ContextoMontado(
+                            working_memory=sessao.working_mem,
+                            chunks_semanticos=[], chunks_episodicos=[],
+                            chunks_regras=[], relacoes_grafo=[],
+                            secrets_visiveis=[], transcricao_atual=texto_jogador,
+                        )
+                    else:
+                        contexto = await sessao.context_builder.montar(texto_jogador, sessao.working_mem)
+                        context_ms = int((time.perf_counter() - t_ctx) * 1000)
+
+                    # Spell detector — injeta dados mecânicos de magia no contexto antes do LLM.
+                    # Falha silenciosa: se Qdrant estiver fora ou a magia não for encontrada,
+                    # o jogo segue com narração pura (sem dados mecânicos).
+                    # Gated na Session Zero: "lanço magias de fogo" na entrevista é
+                    # descrição de personagem, não um cast.
+                    from engine.magic.spell_detector import (
+                        _RE_CASTING,
+                        buscar_dados_magia,
+                        extrair_nome_magia,
+                        formatar_bloco_magia,
+                    )
+                    if not sessao.working_mem.session_zero_ativa and _RE_CASTING.search(texto_jogador):
+                        nome_magia = extrair_nome_magia(texto_jogador)
+                        if nome_magia:
+                            # Bug #5: valida ANTES de decrementar slot. Se o jogador grita
+                            # "lanço bola de fogo" sem ter selecionado essa magia na criação,
+                            # o LLM nega ("você não conhece") mas o slot já tinha sumido.
+                            # Política: se o personagem é conjurador (tem spells_conhecidas
+                            # cadastradas) e a magia NÃO está na lista, pula tudo — busca,
+                            # injeção e decremento. O LLM ainda recebe a fala via contexto
+                            # geral e nega narrativamente.
+                            spells_lower = {s.lower() for s in sessao.spells_conhecidas}
+                            magia_conhecida = (
+                                not spells_lower  # personagem não-conjurador / sem lista
+                                or nome_magia.lower() in spells_lower
+                            )
+                            if not magia_conhecida:
                                 log.info(
-                                    "spell_detectada",
+                                    "spell_nao_conhecida",
                                     nome=nome_magia,
-                                    nivel=dados_magia.get("nivel"),
                                     session_id=session_id,
                                 )
-                                # CRIT-1: NÃO decrementa o slot agora — registra como pendente.
-                                # Decremento real acontece APÓS o LLM narrar o cast com sucesso
-                                # (verificado no fim do turno via menção do nome da magia na resposta).
-                                # Sem isso, se o turno falhar (Groq cai, refusal, exception),
-                                # o jogador perde o slot sem nem ver o efeito da magia.
-                                nivel_magia = dados_magia.get("nivel")
-                                if isinstance(nivel_magia, int) and nivel_magia > 0:
-                                    sessao.spell_pending = (nome_magia, nivel_magia)
+                            else:
+                                dados_magia = await buscar_dados_magia(nome_magia)
+                                if dados_magia:
+                                    bloco = formatar_bloco_magia(dados_magia)
+                                    # Insere no topo de chunks_regras para ter prioridade no prompt
+                                    if contexto is not None:
+                                        contexto.chunks_regras.insert(
+                                            0,
+                                            {"text": bloco, "source_id": "spell-detector", "_score": 1.0},
+                                        )
                                     log.info(
-                                        "spell_pending_registrado",
+                                        "spell_detectada",
                                         nome=nome_magia,
-                                        nivel=nivel_magia,
+                                        nivel=dados_magia.get("nivel"),
                                         session_id=session_id,
                                     )
+                                    # CRIT-1: NÃO decrementa o slot agora — registra como pendente.
+                                    # Decremento real acontece APÓS o LLM narrar o cast com sucesso
+                                    # (verificado no fim do turno via menção do nome da magia na resposta).
+                                    # Sem isso, se o turno falhar (Groq cai, refusal, exception),
+                                    # o jogador perde o slot sem nem ver o efeito da magia.
+                                    nivel_magia = dados_magia.get("nivel")
+                                    if isinstance(nivel_magia, int) and nivel_magia > 0:
+                                        sessao.spell_pending = (nome_magia, nivel_magia)
+                                        log.info(
+                                            "spell_pending_registrado",
+                                            nome=nome_magia,
+                                            nivel=nivel_magia,
+                                            session_id=session_id,
+                                        )
 
-                # Injeta magias conhecidas no contexto antes de montar o prompt
-                contexto.spells_conhecidas = sessao.spells_conhecidas
-                contexto.fatos_engine = _fatos_engine
-                mensagens = montar_mensagens(contexto)
-            except Exception as e:
-                log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
-                erros_turno.append(f"context_builder: {e}")
-                _emit({"tipo": "erro", "session_id": session_id, "etapa": "context_builder", "mensagem": str(e)})
-                mensagens = [{"role": "user", "content": texto_jogador}]
+                    # Injeta magias conhecidas no contexto antes de montar o prompt
+                    contexto.spells_conhecidas = sessao.spells_conhecidas
+                    contexto.fatos_engine = _fatos_engine
+                    mensagens = montar_mensagens(contexto)
+                except Exception as e:
+                    log.error("ws_contexto_falhou", session_id=session_id, erro=str(e))
+                    erros_turno.append(f"context_builder: {e}")
+                    _emit({"tipo": "erro", "session_id": session_id, "etapa": "context_builder", "mensagem": str(e)})
+                    mensagens = [{"role": "user", "content": texto_jogador}]
 
-            # Groq streaming — tokens ao cliente em tempo real
-            resposta_completa = ""
-            latencia_primeiro_token = -1
-            tts = _obter_tts()
-            # A narração do Mestre é SEMPRE em PT-BR (IDIOMA OBRIGATÓRIO no
-            # master_system.md). Detectar idioma do texto do JOGADOR e aplicar
-            # à voz do Mestre era o bug: input curto como "Iniciativa" pontuava
-            # 0 em palavras-função PT-BR → Idioma.EN → Edge TTS lia a resposta
-            # do Mestre com fonética en-US. O idioma da fala do jogador não tem
-            # relação com o idioma da resposta sintetizada.
-            idioma = Idioma.PTBR
-            buffer_sentenca = ""
-            tts_tasks: list[asyncio.Task] = []
+                # Groq streaming — tokens ao cliente em tempo real
+                resposta_completa = ""
+                latencia_primeiro_token = -1
+                tts = _obter_tts()
+                # A narração do Mestre é SEMPRE em PT-BR (IDIOMA OBRIGATÓRIO no
+                # master_system.md). Detectar idioma do texto do JOGADOR e aplicar
+                # à voz do Mestre era o bug: input curto como "Iniciativa" pontuava
+                # 0 em palavras-função PT-BR → Idioma.EN → Edge TTS lia a resposta
+                # do Mestre com fonética en-US. O idioma da fala do jogador não tem
+                # relação com o idioma da resposta sintetizada.
+                idioma = Idioma.PTBR
+                buffer_sentenca = ""
+                tts_tasks: list[asyncio.Task] = []
 
-            # Estado por turno para TTS concorrente ordenado.
-            # Cada sentença gera uma task independente. A task que terminar primeiro
-            # drena o buffer em sequência — o browser recebe áudio durante o stream LLM.
-            tts_seq_prox: int = 0
-            tts_enviado_ate: int = -1
-            tts_buffer_audio: dict[int, bytes] = {}
-            tts_lock: asyncio.Lock = asyncio.Lock()
-            # Instante em que o PRIMEIRO áudio saiu — a métrica que interessa pro
-            # jogador (quando a voz começa), não quando o turno inteiro fecha.
-            # Lista de 1 posição porque a closure abaixo só lê/escreve por índice
-            # (nonlocal exigiria declarar em cada função aninhada que a toca).
-            t_primeiro_audio: list[float] = []
-            # `npc_em_foco` — npc_id que foi alvo de atribuição clara na sentença
-            # anterior. Permite que pronome "ela diz" / "ele murmura" herde a voz
-            # do NPC certo. Reseta naturalmente a cada turno (closure recriada).
-            npc_em_foco: str | None = None
+                # Estado por turno para TTS concorrente ordenado.
+                # Cada sentença gera uma task independente. A task que terminar primeiro
+                # drena o buffer em sequência — o browser recebe áudio durante o stream LLM.
+                tts_seq_prox: int = 0
+                tts_enviado_ate: int = -1
+                tts_buffer_audio: dict[int, bytes] = {}
+                tts_lock: asyncio.Lock = asyncio.Lock()
+                # Instante em que o PRIMEIRO áudio saiu — a métrica que interessa pro
+                # jogador (quando a voz começa), não quando o turno inteiro fecha.
+                # Lista de 1 posição porque a closure abaixo só lê/escreve por índice
+                # (nonlocal exigiria declarar em cada função aninhada que a toca).
+                t_primeiro_audio: list[float] = []
+                # `npc_em_foco` — npc_id que foi alvo de atribuição clara na sentença
+                # anterior. Permite que pronome "ela diz" / "ele murmura" herde a voz
+                # do NPC certo. Reseta naturalmente a cada turno (closure recriada).
+                npc_em_foco: str | None = None
 
-            async def _tts_sentenca(seq: int, texto_s: str) -> None:
-                nonlocal tts_enviado_ate, npc_em_foco
-                voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
-                # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
-                # Sobrescreve pitch/rate quando a sentença é PRIMARILY fala direta —
-                # regra de quote-dominance ≥40% protege contra falso positivo em
-                # narração que só menciona o nome do NPC.
-                if sessao.working_mem.npc_vozes:
-                    voz_npc = _detectar_voz_npc(
-                        texto_s, sessao.working_mem.npc_vozes, npc_em_foco
+                async def _tts_sentenca(seq: int, texto_s: str) -> None:
+                    nonlocal tts_enviado_ate, npc_em_foco
+                    voz_s, rate_s, pitch_s = sessao.voice_manager.voz_para_sentenca(texto_s)
+                    # Feature B: assinatura de voz do NPC via [VOZ: npc-id|pitch|rate].
+                    # Sobrescreve pitch/rate quando a sentença é PRIMARILY fala direta —
+                    # regra de quote-dominance ≥40% protege contra falso positivo em
+                    # narração que só menciona o nome do NPC.
+                    if sessao.working_mem.npc_vozes:
+                        voz_npc = _detectar_voz_npc(
+                            texto_s, sessao.working_mem.npc_vozes, npc_em_foco
+                        )
+                        if voz_npc:
+                            pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
+                            rate_s = voz_npc.get("rate", rate_s) or rate_s
+                        # Atualiza foco SÓ com atribuição clara (Nome + verbo de fala).
+                        # Pronome ("ela diz") herda mas não atualiza — mantém o NPC
+                        # original em foco até nova atribuição explícita.
+                        atrib = _extrair_atribuicao(texto_s, sessao.working_mem.npc_vozes)
+                        if atrib:
+                            npc_em_foco = atrib
+                    # Helper unificado: timeout + erro silencioso. Sentença sem áudio é
+                    # melhor que turno travado em half-open TCP do Edge TTS.
+                    audio = await _sintetizar_com_timeout(
+                        tts, texto_s, 12.0,
+                        voice=voz_s, rate=rate_s, pitch=pitch_s, idioma=idioma,
+                        label=f"sentenca_seq{seq}",
                     )
-                    if voz_npc:
-                        pitch_s = voz_npc.get("pitch", pitch_s) or pitch_s
-                        rate_s = voz_npc.get("rate", rate_s) or rate_s
-                    # Atualiza foco SÓ com atribuição clara (Nome + verbo de fala).
-                    # Pronome ("ela diz") herda mas não atualiza — mantém o NPC
-                    # original em foco até nova atribuição explícita.
-                    atrib = _extrair_atribuicao(texto_s, sessao.working_mem.npc_vozes)
-                    if atrib:
-                        npc_em_foco = atrib
-                # Helper unificado: timeout + erro silencioso. Sentença sem áudio é
-                # melhor que turno travado em half-open TCP do Edge TTS.
-                audio = await _sintetizar_com_timeout(
-                    tts, texto_s, 12.0,
-                    voice=voz_s, rate=rate_s, pitch=pitch_s, idioma=idioma,
-                    label=f"sentenca_seq{seq}",
+                    async with tts_lock:
+                        tts_buffer_audio[seq] = audio
+                        # Drena em ordem: envia todos os chunks prontos consecutivos
+                        while (tts_enviado_ate + 1) in tts_buffer_audio:
+                            prox = tts_enviado_ate + 1
+                            chunk = tts_buffer_audio.pop(prox)
+                            tts_enviado_ate = prox
+                            if chunk:
+                                if not t_primeiro_audio:
+                                    t_primeiro_audio.append(time.perf_counter())
+                                await _send_text_seguro(websocket,
+                                    MensagemWS(
+                                        tipo="audio_chunk",
+                                        conteudo_b64=base64.b64encode(chunk).decode("ascii"),
+                                        sequencia=prox,
+                                    ).model_dump_json()
+                                )
+
+                # Thinking audio: dispara "Hmm..." pré-sintetizado se o LLM
+                # demorar > 1.2s pro primeiro token. Mascarar latência sem
+                # afetar a resposta real — fila do useAudio toca antes do TTS.
+                primeiro_token_evento = asyncio.Event()
+                task_thinking = _criar_task_thinking(websocket, primeiro_token_evento, sessao)
+
+                # Multi-LLM por contexto: roteia turno para CLIMAX/NORMAL/LIGHT
+                # baseado em combate + pacing + cliffhanger pendente. Em sessão de
+                # 1h, ~30% dos turnos viram LIGHT (8B) economizando TPM do 70B.
+                from engine.llm.tasks import TaskType, escolher_task_type_narrativo
+                _dm_prof = sessao.working_mem.dm_profile
+                _grim = settings.GRIMDARK_ATIVO
+                # GRIM-ROTA-1 + GRIM-REATIVA-1: cena sombria = keywords de atrocidade
+                # no turno OU escalação reativa grudada (amarelada detectada em turno
+                # anterior desta cena). Alimenta TANTO a detecção nos providers
+                # quanto a rota da cascata (NARRATIVE_GRIM) — antes, keywords ligavam
+                # só o fragmento/detecção e a cascata seguia a comum, sem a garantia
+                # do ollama-grim.
+                _cena_sombria = _grim and (
+                    _dm_prof == "sombrio"
+                    or e_cena_sombria(texto_jogador)
+                    or sessao.working_mem.scene.cena_sombria_reativa
                 )
-                async with tts_lock:
-                    tts_buffer_audio[seq] = audio
-                    # Drena em ordem: envia todos os chunks prontos consecutivos
-                    while (tts_enviado_ate + 1) in tts_buffer_audio:
-                        prox = tts_enviado_ate + 1
-                        chunk = tts_buffer_audio.pop(prox)
-                        tts_enviado_ate = prox
-                        if chunk:
-                            if not t_primeiro_audio:
-                                t_primeiro_audio.append(time.perf_counter())
-                            await _send_text_seguro(websocket,
-                                MensagemWS(
-                                    tipo="audio_chunk",
-                                    conteudo_b64=base64.b64encode(chunk).decode("ascii"),
-                                    sequencia=prox,
-                                ).model_dump_json()
-                            )
+                _task_turno = escolher_task_type_narrativo(
+                    em_combate=sessao.working_mem.em_combate,
+                    pacing_nivel=sessao.working_mem.pacing_nivel,
+                    cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
+                    turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
+                    npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
+                    light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
+                    dm_profile=_dm_prof,
+                    grimdark_ativo=_grim,
+                    cena_sombria=_cena_sombria,
+                    idle_nudge=idle_nudge,
+                )
+                # Informa os providers se a cena atual exige detecção de amarelada.
+                # Setado antes do stream para que o buffer check do GroqProvider
+                # cascateie no próprio turno, não no próximo.
+                sessao.groq.router.set_cena_sombria(_cena_sombria)
+                # Atualiza o cap anti-robô: conta turnos LIGHT (8B) seguidos para
+                # que a próxima decisão force um 70B periódico e quebre o loop.
+                sessao.working_mem.narrative.registrar_task_narrativo(
+                    _task_turno == TaskType.NARRATIVE_LIGHT
+                )
+                log.info("task_type_escolhido", task=_task_turno.value,
+                         em_combate=sessao.working_mem.em_combate,
+                         pacing=round(sessao.working_mem.pacing_nivel, 1),
+                         npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
+                         light_seguidos=sessao.working_mem.turnos_light_consecutivos,
+                         session_id=session_id)
 
-            # Thinking audio: dispara "Hmm..." pré-sintetizado se o LLM
-            # demorar > 1.2s pro primeiro token. Mascarar latência sem
-            # afetar a resposta real — fila do useAudio toca antes do TTS.
-            primeiro_token_evento = asyncio.Event()
-            task_thinking = _criar_task_thinking(websocket, primeiro_token_evento, sessao)
-
-            # Multi-LLM por contexto: roteia turno para CLIMAX/NORMAL/LIGHT
-            # baseado em combate + pacing + cliffhanger pendente. Em sessão de
-            # 1h, ~30% dos turnos viram LIGHT (8B) economizando TPM do 70B.
-            from engine.llm.tasks import TaskType, escolher_task_type_narrativo
-            _dm_prof = sessao.working_mem.dm_profile
-            _grim = settings.GRIMDARK_ATIVO
-            # GRIM-ROTA-1 + GRIM-REATIVA-1: cena sombria = keywords de atrocidade
-            # no turno OU escalação reativa grudada (amarelada detectada em turno
-            # anterior desta cena). Alimenta TANTO a detecção nos providers
-            # quanto a rota da cascata (NARRATIVE_GRIM) — antes, keywords ligavam
-            # só o fragmento/detecção e a cascata seguia a comum, sem a garantia
-            # do ollama-grim.
-            _cena_sombria = _grim and (
-                _dm_prof == "sombrio"
-                or e_cena_sombria(texto_jogador)
-                or sessao.working_mem.scene.cena_sombria_reativa
-            )
-            _task_turno = escolher_task_type_narrativo(
-                em_combate=sessao.working_mem.em_combate,
-                pacing_nivel=sessao.working_mem.pacing_nivel,
-                cliffhanger_pendente=bool(sessao.working_mem.cliffhanger_pendente),
-                turnos_sem_tensao=sessao.working_mem.turnos_sem_tensao,
-                npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
-                light_consecutivos=sessao.working_mem.turnos_light_consecutivos,
-                dm_profile=_dm_prof,
-                grimdark_ativo=_grim,
-                cena_sombria=_cena_sombria,
-                idle_nudge=idle_nudge,
-            )
-            # Informa os providers se a cena atual exige detecção de amarelada.
-            # Setado antes do stream para que o buffer check do GroqProvider
-            # cascateie no próprio turno, não no próximo.
-            sessao.groq.router.set_cena_sombria(_cena_sombria)
-            # Atualiza o cap anti-robô: conta turnos LIGHT (8B) seguidos para
-            # que a próxima decisão force um 70B periódico e quebre o loop.
-            sessao.working_mem.narrative.registrar_task_narrativo(
-                _task_turno == TaskType.NARRATIVE_LIGHT
-            )
-            log.info("task_type_escolhido", task=_task_turno.value,
-                     em_combate=sessao.working_mem.em_combate,
-                     pacing=round(sessao.working_mem.pacing_nivel, 1),
-                     npc_na_cena=_cena_social(sessao.working_mem, texto_jogador),
-                     light_seguidos=sessao.working_mem.turnos_light_consecutivos,
-                     session_id=session_id)
-
-            try:
-                async for token in sessao.groq.completar_stream(
-                    mensagens, temperatura=0.8, max_tokens=400, task=_task_turno
-                ):
-                    resposta_completa += token
-                    if latencia_primeiro_token < 0:
-                        latencia_primeiro_token = int((time.perf_counter() - t0) * 1000)
-                        primeiro_token_evento.set()
-                    await _send_text_seguro(websocket,
-                        MensagemWS(tipo="token", conteudo=token).model_dump_json()
-                    )
-                    if tts:
-                        buffer_sentenca += token
-                        # Só flush se: terminou em pontuação E ≥4 palavras E todos os
-                        # colchetes de marcador estão FECHADOS. O último guard impede
-                        # que `[FIO: drevamor descobriu` chegue ao TTS por ainda estar
-                        # streamando — o `]` pode vir nos próximos tokens.
-                        # Flush normal: pontuação final + colchetes balanceados + ≥4 palavras.
-                        # Flush forçado (bug UX #3): buffer > 450 chars sem pontuação —
-                        # Edge TTS pode timeout ou engolir silenciosamente sentenças longas.
-                        # Só força quando colchetes estão balanceados (marcador não aberto).
-                        _balanceado = buffer_sentenca.count("[") == buffer_sentenca.count("]")
-                        # Descarte antecipado: buffer só contém marcadores sem narrativa real.
-                        # Sem isso, "[FIO:...][XP:...]" entre duas frases narrativas atrasa o
-                        # flush da segunda frase — cria gap de silêncio perceptível no áudio.
-                        if _balanceado and buffer_sentenca.strip() and not strip_marcadores(buffer_sentenca).strip():
-                            buffer_sentenca = ""
-                        else:
-                            _flush_normal = (
-                                buffer_sentenca.rstrip()[-1:] in ".!?"
-                                and len(buffer_sentenca.split()) >= 4
-                                and _balanceado
-                            )
-                            _flush_forcado = len(buffer_sentenca) > 450 and _balanceado
-                            if _flush_normal or _flush_forcado:
-                                # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
-                                # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
-                                texto_tts = strip_marcadores(buffer_sentenca).strip()
-                                if texto_tts:
-                                    tts_tasks.append(asyncio.create_task(
-                                        _tts_sentenca(tts_seq_prox, texto_tts)
-                                    ))
-                                    tts_seq_prox += 1
+                try:
+                    async for token in sessao.groq.completar_stream(
+                        mensagens, temperatura=0.8, max_tokens=400, task=_task_turno
+                    ):
+                        resposta_completa += token
+                        if latencia_primeiro_token < 0:
+                            latencia_primeiro_token = int((time.perf_counter() - t0) * 1000)
+                            primeiro_token_evento.set()
+                        await _send_text_seguro(websocket,
+                            MensagemWS(tipo="token", conteudo=token).model_dump_json()
+                        )
+                        if tts:
+                            buffer_sentenca += token
+                            # Só flush se: terminou em pontuação E ≥4 palavras E todos os
+                            # colchetes de marcador estão FECHADOS. O último guard impede
+                            # que `[FIO: drevamor descobriu` chegue ao TTS por ainda estar
+                            # streamando — o `]` pode vir nos próximos tokens.
+                            # Flush normal: pontuação final + colchetes balanceados + ≥4 palavras.
+                            # Flush forçado (bug UX #3): buffer > 450 chars sem pontuação —
+                            # Edge TTS pode timeout ou engolir silenciosamente sentenças longas.
+                            # Só força quando colchetes estão balanceados (marcador não aberto).
+                            _balanceado = buffer_sentenca.count("[") == buffer_sentenca.count("]")
+                            # Descarte antecipado: buffer só contém marcadores sem narrativa real.
+                            # Sem isso, "[FIO:...][XP:...]" entre duas frases narrativas atrasa o
+                            # flush da segunda frase — cria gap de silêncio perceptível no áudio.
+                            if _balanceado and buffer_sentenca.strip() and not strip_marcadores(buffer_sentenca).strip():
                                 buffer_sentenca = ""
+                            else:
+                                _flush_normal = (
+                                    buffer_sentenca.rstrip()[-1:] in ".!?"
+                                    and len(buffer_sentenca.split()) >= 4
+                                    and _balanceado
+                                )
+                                _flush_forcado = len(buffer_sentenca) > 450 and _balanceado
+                                if _flush_normal or _flush_forcado:
+                                    # Strip de marcadores ([FIO], [CONSEQUÊNCIA], [Q:], [LAMPEJO]...)
+                                    # ANTES de criar a task — senão Edge TTS lê o marcador em voz alta.
+                                    texto_tts = strip_marcadores(buffer_sentenca).strip()
+                                    if texto_tts:
+                                        tts_tasks.append(asyncio.create_task(
+                                            _tts_sentenca(tts_seq_prox, texto_tts)
+                                        ))
+                                        tts_seq_prox += 1
+                                    buffer_sentenca = ""
 
-            except Exception as e:
-                for task in tts_tasks:
-                    task.cancel()
-                log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
-                erros_turno.append(f"groq: {e}")
-                _emit({"tipo": "erro", "session_id": session_id, "etapa": "groq", "mensagem": str(e)})
-                await _send_text_seguro(websocket,
-                    MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
-                )
-                # CRIT-1: limpa pending para não decrementar slot em retry de outro turno
-                sessao.spell_pending = None
-                continue
-            finally:
-                # Solta a task thinking em qualquer caminho de saída (sucesso,
-                # exceção, continue). Setar o evento faz a task acordar e
-                # retornar silenciosa se ainda não disparou.
-                primeiro_token_evento.set()
-                if not task_thinking.done():
-                    try:
-                        await task_thinking
-                    except Exception:
-                        pass
-
-            # Flush da última sentença (sem pontuação final) e aguarda todas as tasks.
-            # A maioria já terminou durante o stream — gather retorna quase imediatamente.
-            # Strip de marcadores [Q:...] antes de síntese — evita falar o token em voz alta.
-            if tts and buffer_sentenca.strip():
-                flush_texto = strip_marcadores(buffer_sentenca).strip()
-                # Se o stream foi cortado sem pontuação final (max_tokens=400 atingido),
-                # busca o último ponto pra cortar limpo. Se não houver pontuação alguma,
-                # sintetiza o texto inteiro mesmo assim — soa truncado, mas é melhor que
-                # silêncio total (bug #4: a frase desaparecia inteira do áudio).
-                if flush_texto and flush_texto[-1] not in ".!?…\"'":
-                    ultimo_term = max(
-                        flush_texto.rfind("."),
-                        flush_texto.rfind("!"),
-                        flush_texto.rfind("?"),
-                        flush_texto.rfind("…"),
-                    )
-                    if ultimo_term > 0:
-                        flush_texto = flush_texto[:ultimo_term + 1]
-                    # else: mantém flush_texto inteiro — fragmento sem pontuação é melhor que nada
-                if flush_texto:
-                    tts_tasks.append(asyncio.create_task(
-                        _tts_sentenca(tts_seq_prox, flush_texto)
-                    ))
-            t_tts = time.perf_counter()
-            if tts_tasks:
-                await asyncio.gather(*tts_tasks, return_exceptions=True)
-            tts_ms = int((time.perf_counter() - t_tts) * 1000)
-
-            # Rolagens visíveis do mestre — detectadas antes de lampejos/quests para
-            # garantir que o frontend recebe "dado_rolado" assim que o stream termina.
-            # Enviadas uma a uma na ordem de aparição no texto.
-            for _m_dado in _RE_ROLAGEM_VISIVEL.finditer(resposta_completa):
-                try:
+                except Exception as e:
+                    for task in tts_tasks:
+                        task.cancel()
+                    log.error("ws_groq_falhou", session_id=session_id, erro=str(e))
+                    erros_turno.append(f"groq: {e}")
+                    _emit({"tipo": "erro", "session_id": session_id, "etapa": "groq", "mensagem": str(e)})
                     await _send_text_seguro(websocket,
-                        MensagemWS(
-                            tipo="dado_rolado",
-                            dado_tipo=f"d{_m_dado.group(1)}",
-                            dado_resultado=int(_m_dado.group(2)),
-                        ).model_dump_json()
+                        MensagemWS(tipo="erro", conteudo=f"LLM falhou: {e}").model_dump_json()
                     )
-                    log.info(
-                        "dado_rolado_enviado",
-                        session_id=session_id,
-                        dado_tipo=f"d{_m_dado.group(1)}",
-                        resultado=int(_m_dado.group(2)),
-                    )
-                except Exception as _e_dado:
-                    log.warning("dado_rolado_falhou", erro=str(_e_dado)[:120])
+                    # CRIT-1: limpa pending para não decrementar slot em retry de outro turno
+                    sessao.spell_pending = None
+                    continue
+                finally:
+                    # Solta a task thinking em qualquer caminho de saída (sucesso,
+                    # exceção, continue). Setar o evento faz a task acordar e
+                    # retornar silenciosa se ainda não disparou.
+                    primeiro_token_evento.set()
+                    if not task_thinking.done():
+                        try:
+                            await task_thinking
+                        except Exception:
+                            pass
 
-            # ROLL-AUTHORITY-1: o mestre não deve fabricar `[Rolagem: dX = Y]` (formato
-            # do jogador). O strip já tira do TTS/texto; aqui só logamos pra medir a
-            # frequência no playtest (frente C3) sem poluir a fala do jogador.
-            _fabricadas = _RE_ROLAGEM_FABRICADA.findall(resposta_completa)
-            if _fabricadas:
-                log.warning(
-                    "rolagem_fabricada_pelo_mestre",
-                    session_id=session_id,
-                    qtd=len(_fabricadas),
-                    exemplo=_fabricadas[0][:60],
-                )
-
-            # Lampejos — extraímos ANTES de quests pra remover dos markers do texto
-            # que vai pro pipeline (registrar_fala, episodic memory). Lampejos
-            # vão como mensagem separada com TTS de voz alterada.
-            resposta_completa, lampejos = _extrair_lampejos(resposta_completa)
-            for texto_lampejo in lampejos:
-                await _enviar_lampejo(websocket, tts, texto_lampejo, voice=sessao.working_mem.tts_voice)
-
-            # Detecção de quests — strip de [Q:...] antes do pipeline pós-turno.
-            # Ordem crítica: detectar_e_aplicar_quests ANTES de aplicar_pos_turno
-            # para que registrar_fala e o payload "fim" recebam o texto limpo.
-            resposta_limpa, avanco_quests = detectar_e_aplicar_quests(
-                resposta_completa, sessao.working_mem, sessao.quest_catalog
-            )
-            recompensas_por_quest = aplicar_recompensas_avancos(
-                avanco_quests, sessao.quest_efeitos, sessao.working_mem
-            )
-            if avanco_quests:
-                log.info("quests_avancaram_ws", session_id=session_id,
-                         avancos=[(q, s) for q, s in avanco_quests],
-                         recompensas=len(recompensas_por_quest))
-
-            # GRIM-REATIVA-1 (gatilho c do roadmap anti-amarelada): se QUALQUER
-            # provider amarelou/recusou neste turno em cena sombria, o resto da
-            # CENA roteia NARRATIVE_GRIM — mesmo que o próximo turno não tenha
-            # keyword. Lido ANTES do pipeline: se este mesmo turno trocar de
-            # local ([CENA]), a limpeza da mudança de cena vence (a cena onde
-            # amarelou ficou pra trás).
-            if getattr(sessao.groq.router, "ultima_chamada_amarelou", False) and (
-                not sessao.working_mem.scene.cena_sombria_reativa
-            ):
-                sessao.working_mem.scene.cena_sombria_reativa = True
-                log.warning("cena_sombria_reativa_grudada", session_id=session_id)
-
-            # Pipeline pós-turno compartilhado entre WebSocket e REST `/turn`.
-            # Centraliza: registrar fala, apresentar NPCs, sync inimigos,
-            # iniciativa, trust, consequências, avanço de rodada, fim de combate
-            # e contador de tensão — todos na ORDEM crítica (sync antes do
-            # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
-            # Imports estão no topo do arquivo — sem lazy redundante.
-            # aplicar_pos_turno retorna mudanças de trust (útil p/ telemetria),
-            # mas o WS não as consome — não atribui pra não deixar var órfã.
-            era_session_zero = sessao.working_mem.session_zero_ativa
-            aplicar_pos_turno(
-                sessao.working_mem,
-                # Idle nudge não é turno do jogador — "" pula pacing/estilo/
-                # rodada/arco (mesmos guards da abertura).
-                "" if idle_nudge else texto_jogador,
-                resposta_limpa,
-                engine_resolveu_turno=_engine_resolveu_turno,
-                # RODADA-SALTO (10/07): pendência viva = declaração sem d20 —
-                # nenhuma troca resolvida, rodada não anda no step 6.
-                aguardando_rolagem=bool(sessao.combate_pendente),
-            )
-            # Trava de segurança: combate encerrou neste turno (timeout, LLM,
-            # mudança de cena) por QUALQUER via com uma pendência ainda aberta
-            # — descarta pra ela não vazar pro próximo combate contra um alvo
-            # que pode nem existir mais.
-            if sessao.combate_pendente and not sessao.working_mem.em_combate:
-                sessao.combate_pendente = None
-
-            # F0 (teste #3): combate SEM inimigo registrado = beat dormente +
-            # tracker vazio (o LLM nunca emitiu [INIMIGO]). A engine registra um
-            # oponente genérico; o extractor refina nome/estado.
-            # COMBATE-FANTASMA (29/06): NÃO cria o genérico quando há NPCs
-            # presentes — o inimigo é um deles, registrado por nome no ataque
-            # (ALVO-FANTASMA). Sem isso, matar o fantasma encerrava o combate.
-            if deve_auto_registrar_generico(sessao.working_mem):
-                sessao.working_mem.registrar_inimigo("oponente-1", "Oponente", "intacto")
-                log.info("inimigo_generico_auto_registrado", session_id=session_id)
-
-            # Frente A mínima (12/06): extractor estruturado pós-turno de
-            # combate. Mesmo sem [INIMIGO]/[DANO] na resposta, a engine lê a
-            # narração via chamada barata (8B/Gemini, JSON) e sincroniza
-            # inimigos/estados/dano. Roda ANTES do fim → tracker correto já
-            # neste turno; o beat usa os inimigos refinados.
-            if (
-                settings.EXTRACTOR_COMBATE_ATIVO
-                and sessao.working_mem.em_combate
-                and not idle_nudge
-            ):
-                try:
-                    from api.turn_pipeline import deve_zerar_dano_extractor
-                    from engine.llm.extractor import (
-                        aplicar_estado_extraido,
-                        extrair_estado_combate,
-                    )
-                    estado_ext = await asyncio.wait_for(
-                        extrair_estado_combate(
-                            sessao.groq,
-                            resposta_limpa,
-                            dict(sessao.working_mem.inimigos_combate),
-                        ),
-                        timeout=8.0,
-                    )
-                    if estado_ext:
-                        # Não duplicar o dano do PJ: a engine (resolver) ou um
-                        # [DANO] explícito já o aplicaram — a prosa não re-aplica.
-                        if deve_zerar_dano_extractor(resposta_completa, _engine_resolveu_turno):
-                            estado_ext["dano_ao_jogador"] = 0
-                        aplicar_estado_extraido(sessao.working_mem, estado_ext)
-                        log.info(
-                            "extractor_aplicado",
-                            inimigos=len(estado_ext.get("inimigos", [])),
-                            dano=estado_ext.get("dano_ao_jogador", 0),
-                            session_id=session_id,
+                # Flush da última sentença (sem pontuação final) e aguarda todas as tasks.
+                # A maioria já terminou durante o stream — gather retorna quase imediatamente.
+                # Strip de marcadores [Q:...] antes de síntese — evita falar o token em voz alta.
+                if tts and buffer_sentenca.strip():
+                    flush_texto = strip_marcadores(buffer_sentenca).strip()
+                    # Se o stream foi cortado sem pontuação final (max_tokens=400 atingido),
+                    # busca o último ponto pra cortar limpo. Se não houver pontuação alguma,
+                    # sintetiza o texto inteiro mesmo assim — soa truncado, mas é melhor que
+                    # silêncio total (bug #4: a frase desaparecia inteira do áudio).
+                    if flush_texto and flush_texto[-1] not in ".!?…\"'":
+                        ultimo_term = max(
+                            flush_texto.rfind("."),
+                            flush_texto.rfind("!"),
+                            flush_texto.rfind("?"),
+                            flush_texto.rfind("…"),
                         )
-                except Exception as exc:
-                    log.warning("extractor_pulado", erro=str(exc)[:120])
+                        if ultimo_term > 0:
+                            flush_texto = flush_texto[:ultimo_term + 1]
+                        # else: mantém flush_texto inteiro — fragmento sem pontuação é melhor que nada
+                    if flush_texto:
+                        tts_tasks.append(asyncio.create_task(
+                            _tts_sentenca(tts_seq_prox, flush_texto)
+                        ))
+                t_tts = time.perf_counter()
+                if tts_tasks:
+                    await asyncio.gather(*tts_tasks, return_exceptions=True)
+                tts_ms = int((time.perf_counter() - t_tts) * 1000)
 
-            # PLAY5-NPC (13/06): extractor de NPC pós-turno SOCIAL. O Mestre
-            # improvisa NPCs e raramente emite [NPC:] → eles viravam "fantasmas"
-            # no chat (playtest #5: a quest começou com um NPC que nunca entrou
-            # em npcs_presentes). A engine lê a narração (8B JSON) e registra os
-            # NPCs novos como presença — o loop de voz abaixo lhes dá voz, e o
-            # frontend deriva o nome do id. Só fora de combate (lá os personagens
-            # são inimigos, tratados pelo extractor de combate) e fora da Sessão
-            # Zero. Falha silenciosa.
-            # TAIL-EXTRACTOR-SERIAL-1: os dois extractors pós-turno (NPC e
-            # quest) são chamadas LLM INDEPENDENTES — mutam domínios diferentes
-            # (registro de NPC vs quests improvisadas) e leem a mesma narração.
-            # Awaitados em série custavam 0,6-1,3s no fecho do turno, DEPOIS do
-            # áudio já ter saído: o jogador não vê, mas o turno seguinte espera.
-            # Largam juntos aqui; cada bloco abaixo só aguarda o SEU (a ordem de
-            # aplicação na WorkingMemory continua determinística).
-            _gate_extractors = _extractors_pos_turno_liberados(
-                sessao.working_mem.em_combate,
-                idle_nudge,
-                sessao.working_mem.session_zero_ativa,
-                era_session_zero,
-                bool(sessao.working_mem.inimigos_combate),
-            )
-            _task_quests = None
-            if settings.EXTRACTOR_QUEST_ATIVO and _gate_extractors:
-                from engine.llm.extractor import extrair_quests_cena as _extr_q
-                _task_quests = asyncio.create_task(
-                    asyncio.wait_for(
-                        _extr_q(
-                            sessao.groq,
-                            resposta_limpa,
-                            list(sessao.working_mem.quests_improvisadas),
-                        ),
-                        timeout=8.0,
-                    )
-                )
-                # Se o jogador desconectar no meio do turno, o await lá embaixo
-                # nunca acontece (CancelledError não é pego pelos `except
-                # Exception` do caminho) e a task ficaria órfã com exceção
-                # não-recuperada. O callback só MARCA como lida — quem awaita
-                # continua recebendo a exceção normalmente.
-                _task_quests.add_done_callback(
-                    lambda _t: None if _t.cancelled() else _t.exception()
-                )
-
-            if settings.EXTRACTOR_NPC_ATIVO and _gate_extractors:
-                try:
-                    from engine.llm.extractor import (
-                        aplicar_npcs_extraidos,
-                        extrair_npcs_cena,
-                    )
-                    # NPC-DEDUP-CANONICO-1 (playtest 06/07): "já conhecidos" inclui
-                    # o registro canônico da SESSÃO INTEIRA, não só quem está
-                    # presente agora — sem isso o LLM re-sugeria "homem-da-taberna"
-                    # pro MESMO taverneiro que tinha saído de npcs_presentes.
-                    _npcs_conhecidos = list(dict.fromkeys(
-                        list(sessao.working_mem.npcs_presentes)
-                        + list(sessao.working_mem.scene.npc_registro.keys())
-                    ))
-                    npcs_novos = await asyncio.wait_for(
-                        extrair_npcs_cena(
-                            sessao.groq,
-                            resposta_limpa,
-                            _npcs_conhecidos,
-                            nome_jogador=sessao.working_mem.player_name,
-                        ),
-                        timeout=8.0,
-                    )
-                    if npcs_novos:
-                        # narracao habilita o NAME-REVEAL (renomeia NPC presente
-                        # em vez de duplicar — NPC-IDENTIDADE 05/07). texto_jogador
-                        # é a 2ª fonte de âncora do reveal (NAME-REVEAL-DUP-1,
-                        # 10/07) — cobre quando o descritor do alvo só está na
-                        # pergunta do jogador, não na narração do Mestre.
-                        ids = aplicar_npcs_extraidos(
-                            sessao.working_mem, npcs_novos,
-                            narracao=resposta_limpa, texto_jogador=texto_jogador,
-                        )
-                        if ids:
-                            log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
-                except Exception as exc:
-                    log.warning("npc_extractor_pulado", erro=str(exc)[:120])
-
-            # Dossiê de personalidade (decisão 12/07): NPCs em cena sem dossiê
-            # ganham 2-3 traços via chamada barata (8B), fire-and-forget — o
-            # turno NÃO espera; o prompt do turno seguinte já os injeta. Mesmos
-            # gates dos extractors (fora de combate/idle/SZ). Cap 2 por turno.
-            if settings.DOSSIE_NPC_ATIVO and _extractors_pos_turno_liberados(
-                sessao.working_mem.em_combate,
-                idle_nudge,
-                sessao.working_mem.session_zero_ativa,
-                era_session_zero,
-                bool(sessao.working_mem.inimigos_combate),
-            ):
-                try:
-                    from engine.npc.dossie import npcs_sem_dossie_na_cena
-                    _pendentes_dossie = npcs_sem_dossie_na_cena(sessao.working_mem)
-                    if _pendentes_dossie:
-                        asyncio.create_task(
-                            _gerar_dossies_pendentes(
-                                sessao, _pendentes_dossie, resposta_limpa, session_id
-                            )
-                        )
-                except Exception as exc:
-                    log.warning("dossie_agendamento_falhou", erro=str(exc)[:120])
-
-            # PLAY5-QUEST (16/06): extractor de quest improvisada pós-turno
-            # SOCIAL. O sistema [Q:id:stage] valida contra o catálogo do módulo,
-            # então missões que o Mestre cria na hora eram rejeitadas e sumiam no
-            # chat (`quest_stages` vazio). A engine lê a narração (8B JSON) e
-            # captura missões novas/concluídas como estado rastreável — injetado
-            # no prompt do próximo turno (continuidade) e exposto no snapshot pro
-            # quest log. Mesmos guards do extractor de NPC. Falha silenciosa.
-            if _task_quests is not None:
-                try:
-                    from engine.llm.extractor import aplicar_quests_extraidas
-
-                    # Já estava rodando em paralelo com o extractor de NPC.
-                    quests_ext = await _task_quests
-                    if quests_ext:
-                        novas, concluidas = aplicar_quests_extraidas(
-                            sessao.working_mem, quests_ext
-                        )
-                        if novas or concluidas:
-                            log.info(
-                                "quest_extractor_aplicado",
-                                novas=novas,
-                                concluidas=concluidas,
-                                session_id=session_id,
-                            )
-                except Exception as exc:
-                    log.warning("quest_extractor_pulado", erro=str(exc)[:120])
-
-            # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
-            # ficha pro frontend popular a CharacterSheet e persiste no SQLite
-            # (o "Continuar como…" passa a listar o personagem). Falha = só log.
-            if era_session_zero and not sessao.working_mem.session_zero_ativa:
-                try:
-                    _ch = sessao.working_mem.character
-                    # Repertório recém-gerado precisa ir pro cache da sessão: o
-                    # guard de cast (spells_lower) e a cópia pro contexto do
-                    # prompt leem de sessao.spells_conhecidas, não do character.
-                    sessao.spells_conhecidas = list(_ch.spells_conhecidas)
-                    ficha_payload = {
-                        "player_name": _ch.player_name,
-                        "player_race": _ch.player_race,
-                        "player_class": _ch.player_class,
-                        "player_background": _ch.player_background,
-                        "player_description": _ch.player_description,
-                        "player_level": _ch.player_level,
-                        "player_hp": _ch.hp_current,
-                        "player_hp_max": _ch.hp_max,
-                        "str_score": _ch.str_score, "dex_score": _ch.dex_score,
-                        "con_score": _ch.con_score, "int_score": _ch.int_score,
-                        "wis_score": _ch.wis_score, "cha_score": _ch.cha_score,
-                    }
-                    await _send_text_seguro(websocket,
-                        MensagemWS(tipo="ficha_criada", ficha=ficha_payload).model_dump_json()
-                    )
-                    _criar_background_task(_auto_checkpoint(sessao))
-                    log.info("session_zero_concluida", session_id=session_id,
-                             nome=_ch.player_name, classe=_ch.player_class)
-                except Exception as exc:
-                    log.warning("ficha_criada_envio_falhou", erro=str(exc)[:120])
-
-            # CENA-1: se o turno trocou de local ([CENA: id|Nome|hora]), re-infere
-            # os NPCs do novo local via Neo4j (parte async do pipeline). Sem isto,
-            # os NPCs do local inicial permaneciam no prompt a sessão inteira e
-            # "perseguiam" o jogador pelo mapa. Falha silenciosa (Neo4j offline).
-            await reinferir_npcs_se_mudou_cena(
-                sessao.working_mem, sessao.context_builder
-            )
-
-            # Autoridade social (02/07): drena os eventos de relação do turno
-            # (ataque abalou / companion somou) — toast pro jogador + afeto Neo4j.
-            await _emitir_eventos_relacao(websocket, sessao)
-
-            # Voz pros NPCs novos da cena: sem registro, voz_para_sentenca cai
-            # no narrador e o NPC "perde a voz" (teste 10/06: só os NPCs do local
-            # inicial — registrados na abertura — alternavam voz). Idempotente.
-            try:
-                _ja = set(sessao.voice_manager.npcs_registrados())
-                for _npc_id in sessao.working_mem.npcs_presentes:
-                    if _npc_id not in _ja:
-                        sessao.voice_manager.registrar_npc(_npc_id)
-            except Exception as exc:
-                log.warning("registro_voz_npcs_falhou", erro=str(exc)[:120])
-
-            # Imersão P4: retrato 1× por NPC apresentado (fire-and-forget)
-            _criar_background_task(_enviar_retratos_npcs(websocket, sessao))
-
-            # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
-            # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a
-            # ficha entra no prompt do próximo turno. Falha silenciosa.
-            try:
-                from engine.bestiary.bestiary import enriquecer_fichas_inimigos
-                await enriquecer_fichas_inimigos(sessao.working_mem)
-            except Exception as exc:
-                log.warning("bestiario_enriquecimento_falhou", erro=str(exc)[:120])
-
-            # CRIT-1: decrementa spell slot SÓ se o LLM realmente narrou o cast.
-            # Heurística: nome da magia (ou variantes) aparece na resposta. Se LLM
-            # negou o cast ou ignorou, o slot fica intacto — política conservadora
-            # (perder slot por falso positivo é pior que não perder por falso negativo).
-            if sessao.spell_pending:
-                nome_pending, nivel_pending = sessao.spell_pending
-                resposta_lower = resposta_limpa.lower()
-                primeira_palavra = nome_pending.lower().split()[0] if nome_pending else ""
-                # Confirma cast se nome completo ou primeira palavra significativa aparece
-                # na resposta (>3 chars evita "de", "a", "o", "um" gerando falso positivo).
-                if (nome_pending and nome_pending.lower() in resposta_lower) or (
-                    len(primeira_palavra) > 3 and primeira_palavra in resposta_lower
-                ):
-                    from engine.magic.slot_tracker import decrementar_slot
-                    slot_ok = decrementar_slot(sessao.working_mem, nivel_pending)
-                    if not slot_ok:
-                        log.info("spell_sem_slot_pos_turno",
-                                 nome=nome_pending, nivel=nivel_pending,
-                                 session_id=session_id)
-                else:
-                    log.info("spell_pending_cancelado_sem_narrativa",
-                             nome=nome_pending, nivel=nivel_pending,
-                             session_id=session_id)
-                sessao.spell_pending = None
-
-            # Feature F: estado afetivo de NPC — fire-and-forget para Neo4j.
-            # Não bloqueia o turno; Neo4j pode estar offline sem impacto.
-            # _criar_background_task garante que a task não seja coletada pelo GC.
-            _criar_background_task(
-                aplicar_afeto_npcs(resposta_limpa, sessao.context_builder._neo4j)
-            )
-
-            # XP e progressão — extrai [XP: +N motivo] e aplica level up se cruzou
-            # o threshold da tabela SRD. Envia mensagem WS "level_up" antes do
-            # payload `fim` pra que o frontend renderize o modal sobre a bolha.
-            try:
-                level_up_resumo = aplicar_xp_e_detectar_level_up(
-                    sessao.working_mem, resposta_limpa
-                )
-                if level_up_resumo:
-                    await _send_text_seguro(websocket,
-                        MensagemWS(
-                            tipo="level_up",
-                            level_up=level_up_resumo,  # dict completo do resumo
-                        ).model_dump_json()
-                    )
-                    log.info(
-                        "level_up_emitido",
-                        session_id=session_id,
-                        nivel_antigo=level_up_resumo.get("nivel_antigo"),
-                        nivel_novo=level_up_resumo.get("nivel_novo"),
-                    )
-            except Exception as e:
-                log.warning("level_up_falhou", session_id=session_id, erro=str(e)[:200])
-
-            # Fase 5.8 — imagem de cena (deduplicada em _enviar_imagem_cena).
-            _criar_background_task(_enviar_imagem_cena(websocket, sessao))
-
-            sessao.iteracoes += 1
-
-            # AUTO-CHECKPOINT: salva estado no SQLite a cada 5 turnos.
-            # Fire-and-forget — nunca bloqueia o turno. Garante que XP, ouro,
-            # fios narrativos e HP não se percam se o browser fechar abruptamente.
-            if sessao.iteracoes % 5 == 0:
-                _criar_background_task(_auto_checkpoint(sessao))
-
-            latencia_ms = int((time.perf_counter() - t0) * 1000)
-
-            sessao.ultimo_turno = {
-                "texto_jogador": texto_jogador,
-                "mensagens_groq": mensagens,
-                "rag": {
-                    "chunks_lore": [
-                        {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
-                        for c in (contexto.chunks_semanticos if contexto else [])
-                    ],
-                    "chunks_regras": [
-                        {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
-                        for c in (contexto.chunks_regras if contexto else [])
-                    ],
-                    "relacoes_neo4j": (contexto.relacoes_grafo if contexto else []),
-                },
-                "latencias": {
-                    "context_ms": context_ms,
-                    "llm_first_token_ms": latencia_primeiro_token,
-                    "tts_ms": tts_ms,
-                    "total_ms": latencia_ms,
-                },
-                "erros": erros_turno,
-            }
-
-            # UX-2: detecta cascata silenciosa (Groq TPM → Gemini) e notifica o frontend.
-            # Se o provider que emitiu o primeiro token não é o esperado (primeiro da
-            # cascata efetiva para a TaskType DESTE turno), envia "cascade" antes do "fim".
-            # Bug 27/05: antes comparava sempre contra TaskType.NARRATIVE — turnos
-            # NARRATIVE_LIGHT (cuja cascata começa em groq-8b) disparavam toast falso
-            # de cascade toda vez que rodavam no 8B, que é exatamente o esperado.
-            _ultimo_prov = sessao.groq.ultimo_provider_stream
-            if _ultimo_prov is not None:
-                _prov_primario_esperado = next(
-                    (p.nome for p in sessao.groq._router._providers_disponiveis(_task_turno)),
-                    None,
-                )
-                if _prov_primario_esperado and _ultimo_prov != _prov_primario_esperado:
+                # Rolagens visíveis do mestre — detectadas antes de lampejos/quests para
+                # garantir que o frontend recebe "dado_rolado" assim que o stream termina.
+                # Enviadas uma a uma na ordem de aparição no texto.
+                for _m_dado in _RE_ROLAGEM_VISIVEL.finditer(resposta_completa):
                     try:
                         await _send_text_seguro(websocket,
-                            MensagemWS(tipo="cascade", conteudo=_ultimo_prov).model_dump_json()
+                            MensagemWS(
+                                tipo="dado_rolado",
+                                dado_tipo=f"d{_m_dado.group(1)}",
+                                dado_resultado=int(_m_dado.group(2)),
+                            ).model_dump_json()
                         )
                         log.info(
-                            "cascade_notificado",
+                            "dado_rolado_enviado",
                             session_id=session_id,
-                            primario=_prov_primario_esperado,
-                            efetivo=_ultimo_prov,
+                            dado_tipo=f"d{_m_dado.group(1)}",
+                            resultado=int(_m_dado.group(2)),
                         )
-                    except Exception as _e_casc:
-                        log.warning("cascade_notificacao_falhou", erro=str(_e_casc)[:120])
+                    except Exception as _e_dado:
+                        log.warning("dado_rolado_falhou", erro=str(_e_dado)[:120])
 
-            # Dashboard admin: enriquece ultimo_turno com routing info e
-            # registra entry no histórico para os gráficos de sessão.
-            sessao.ultimo_turno["task_type"] = _task_turno.value
-            sessao.ultimo_turno["provider_usado"] = _ultimo_prov or "groq-70b"
-            _hist_entry: dict[str, Any] = {
-                "turno": sessao.iteracoes,
-                "pacing": round(sessao.working_mem.pacing_nivel, 1),
-                "hp": sessao.working_mem.player_hp,
-                "hp_max": sessao.working_mem.player_hp_max,
-                "em_combate": sessao.working_mem.em_combate,
-                "provider": _ultimo_prov or "groq-70b",
-                "task_type": _task_turno.value,
-                "latencia_ms": latencia_ms,
-                "erros": len(erros_turno),
-            }
-            sessao.historico_turnos.append(_hist_entry)
-            if len(sessao.historico_turnos) > 50:
-                sessao.historico_turnos.pop(0)
-            sessao.task_type_ultimo = _task_turno.value
+                # ROLL-AUTHORITY-1: o mestre não deve fabricar `[Rolagem: dX = Y]` (formato
+                # do jogador). O strip já tira do TTS/texto; aqui só logamos pra medir a
+                # frequência no playtest (frente C3) sem poluir a fala do jogador.
+                _fabricadas = _RE_ROLAGEM_FABRICADA.findall(resposta_completa)
+                if _fabricadas:
+                    log.warning(
+                        "rolagem_fabricada_pelo_mestre",
+                        session_id=session_id,
+                        qtd=len(_fabricadas),
+                        exemplo=_fabricadas[0][:60],
+                    )
 
-            chunks_lore = [
-                c.get("text", "")[:120]
-                for c in (contexto.chunks_semanticos if contexto else [])
-            ]
-            chunks_regras = [
-                c.get("text", "")[:120]
-                for c in (contexto.chunks_regras if contexto else [])
-            ]
-            relacoes: list[dict[str, Any]] = contexto.relacoes_grafo if contexto else []
+                # Lampejos — extraímos ANTES de quests pra remover dos markers do texto
+                # que vai pro pipeline (registrar_fala, episodic memory). Lampejos
+                # vão como mensagem separada com TTS de voz alterada.
+                resposta_completa, lampejos = _extrair_lampejos(resposta_completa)
+                for texto_lampejo in lampejos:
+                    await _enviar_lampejo(websocket, tts, texto_lampejo, voice=sessao.working_mem.tts_voice)
 
-            await _send_text_seguro(websocket,
-                MensagemWS(
-                    tipo="fim",
-                    latencia_ms=latencia_ms,
-                    # Extras só do fim de turno (não pertencem ao snapshot comum):
-                    chunks_lore=chunks_lore,
-                    chunks_regras=chunks_regras,
-                    relacoes_grafo=relacoes,
-                    iteracao=sessao.iteracoes,
-                    log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
-                    quest_avancos=[
-                        {
-                            "quest_id": qid,
-                            "stage_id": sid,
-                            "recompensas": recompensas_por_quest.get((qid, sid), []),
+                # Detecção de quests — strip de [Q:...] antes do pipeline pós-turno.
+                # Ordem crítica: detectar_e_aplicar_quests ANTES de aplicar_pos_turno
+                # para que registrar_fala e o payload "fim" recebam o texto limpo.
+                resposta_limpa, avanco_quests = detectar_e_aplicar_quests(
+                    resposta_completa, sessao.working_mem, sessao.quest_catalog
+                )
+                recompensas_por_quest = aplicar_recompensas_avancos(
+                    avanco_quests, sessao.quest_efeitos, sessao.working_mem
+                )
+                if avanco_quests:
+                    log.info("quests_avancaram_ws", session_id=session_id,
+                             avancos=[(q, s) for q, s in avanco_quests],
+                             recompensas=len(recompensas_por_quest))
+
+                # GRIM-REATIVA-1 (gatilho c do roadmap anti-amarelada): se QUALQUER
+                # provider amarelou/recusou neste turno em cena sombria, o resto da
+                # CENA roteia NARRATIVE_GRIM — mesmo que o próximo turno não tenha
+                # keyword. Lido ANTES do pipeline: se este mesmo turno trocar de
+                # local ([CENA]), a limpeza da mudança de cena vence (a cena onde
+                # amarelou ficou pra trás).
+                if getattr(sessao.groq.router, "ultima_chamada_amarelou", False) and (
+                    not sessao.working_mem.scene.cena_sombria_reativa
+                ):
+                    sessao.working_mem.scene.cena_sombria_reativa = True
+                    log.warning("cena_sombria_reativa_grudada", session_id=session_id)
+
+                # Pipeline pós-turno compartilhado entre WebSocket e REST `/turn`.
+                # Centraliza: registrar fala, apresentar NPCs, sync inimigos,
+                # iniciativa, trust, consequências, avanço de rodada, fim de combate
+                # e contador de tensão — todos na ORDEM crítica (sync antes do
+                # fim-de-combate). Ver api/turn_pipeline.py para detalhes.
+                # Imports estão no topo do arquivo — sem lazy redundante.
+                # aplicar_pos_turno retorna mudanças de trust (útil p/ telemetria),
+                # mas o WS não as consome — não atribui pra não deixar var órfã.
+                era_session_zero = sessao.working_mem.session_zero_ativa
+                aplicar_pos_turno(
+                    sessao.working_mem,
+                    # Idle nudge não é turno do jogador — "" pula pacing/estilo/
+                    # rodada/arco (mesmos guards da abertura).
+                    "" if idle_nudge else texto_jogador,
+                    resposta_limpa,
+                    engine_resolveu_turno=_engine_resolveu_turno,
+                    # RODADA-SALTO (10/07): pendência viva = declaração sem d20 —
+                    # nenhuma troca resolvida, rodada não anda no step 6.
+                    aguardando_rolagem=bool(sessao.combate_pendente),
+                )
+                # Trava de segurança: combate encerrou neste turno (timeout, LLM,
+                # mudança de cena) por QUALQUER via com uma pendência ainda aberta
+                # — descarta pra ela não vazar pro próximo combate contra um alvo
+                # que pode nem existir mais.
+                if sessao.combate_pendente and not sessao.working_mem.em_combate:
+                    sessao.combate_pendente = None
+
+                # F0 (teste #3): combate SEM inimigo registrado = beat dormente +
+                # tracker vazio (o LLM nunca emitiu [INIMIGO]). A engine registra um
+                # oponente genérico; o extractor refina nome/estado.
+                # COMBATE-FANTASMA (29/06): NÃO cria o genérico quando há NPCs
+                # presentes — o inimigo é um deles, registrado por nome no ataque
+                # (ALVO-FANTASMA). Sem isso, matar o fantasma encerrava o combate.
+                if deve_auto_registrar_generico(sessao.working_mem):
+                    sessao.working_mem.registrar_inimigo("oponente-1", "Oponente", "intacto")
+                    log.info("inimigo_generico_auto_registrado", session_id=session_id)
+
+                # Frente A mínima (12/06): extractor estruturado pós-turno de
+                # combate. Mesmo sem [INIMIGO]/[DANO] na resposta, a engine lê a
+                # narração via chamada barata (8B/Gemini, JSON) e sincroniza
+                # inimigos/estados/dano. Roda ANTES do fim → tracker correto já
+                # neste turno; o beat usa os inimigos refinados.
+                if (
+                    settings.EXTRACTOR_COMBATE_ATIVO
+                    and sessao.working_mem.em_combate
+                    and not idle_nudge
+                ):
+                    try:
+                        from api.turn_pipeline import deve_zerar_dano_extractor
+                        from engine.llm.extractor import (
+                            aplicar_estado_extraido,
+                            extrair_estado_combate,
+                        )
+                        estado_ext = await asyncio.wait_for(
+                            extrair_estado_combate(
+                                sessao.groq,
+                                resposta_limpa,
+                                dict(sessao.working_mem.inimigos_combate),
+                            ),
+                            timeout=8.0,
+                        )
+                        if estado_ext:
+                            # Não duplicar o dano do PJ: a engine (resolver) ou um
+                            # [DANO] explícito já o aplicaram — a prosa não re-aplica.
+                            if deve_zerar_dano_extractor(resposta_completa, _engine_resolveu_turno):
+                                estado_ext["dano_ao_jogador"] = 0
+                            aplicar_estado_extraido(sessao.working_mem, estado_ext)
+                            log.info(
+                                "extractor_aplicado",
+                                inimigos=len(estado_ext.get("inimigos", [])),
+                                dano=estado_ext.get("dano_ao_jogador", 0),
+                                session_id=session_id,
+                            )
+                    except Exception as exc:
+                        log.warning("extractor_pulado", erro=str(exc)[:120])
+
+                # PLAY5-NPC (13/06): extractor de NPC pós-turno SOCIAL. O Mestre
+                # improvisa NPCs e raramente emite [NPC:] → eles viravam "fantasmas"
+                # no chat (playtest #5: a quest começou com um NPC que nunca entrou
+                # em npcs_presentes). A engine lê a narração (8B JSON) e registra os
+                # NPCs novos como presença — o loop de voz abaixo lhes dá voz, e o
+                # frontend deriva o nome do id. Só fora de combate (lá os personagens
+                # são inimigos, tratados pelo extractor de combate) e fora da Sessão
+                # Zero. Falha silenciosa.
+                # TAIL-EXTRACTOR-SERIAL-1: os dois extractors pós-turno (NPC e
+                # quest) são chamadas LLM INDEPENDENTES — mutam domínios diferentes
+                # (registro de NPC vs quests improvisadas) e leem a mesma narração.
+                # Awaitados em série custavam 0,6-1,3s no fecho do turno, DEPOIS do
+                # áudio já ter saído: o jogador não vê, mas o turno seguinte espera.
+                # Largam juntos aqui; cada bloco abaixo só aguarda o SEU (a ordem de
+                # aplicação na WorkingMemory continua determinística).
+                _gate_extractors = _extractors_pos_turno_liberados(
+                    sessao.working_mem.em_combate,
+                    idle_nudge,
+                    sessao.working_mem.session_zero_ativa,
+                    era_session_zero,
+                    bool(sessao.working_mem.inimigos_combate),
+                )
+                _task_quests = None
+                if settings.EXTRACTOR_QUEST_ATIVO and _gate_extractors:
+                    from engine.llm.extractor import extrair_quests_cena as _extr_q
+                    _task_quests = asyncio.create_task(
+                        asyncio.wait_for(
+                            _extr_q(
+                                sessao.groq,
+                                resposta_limpa,
+                                list(sessao.working_mem.quests_improvisadas),
+                            ),
+                            timeout=8.0,
+                        )
+                    )
+                    # Se o jogador desconectar no meio do turno, o await lá embaixo
+                    # nunca acontece (CancelledError não é pego pelos `except
+                    # Exception` do caminho) e a task ficaria órfã com exceção
+                    # não-recuperada. O callback só MARCA como lida — quem awaita
+                    # continua recebendo a exceção normalmente.
+                    _task_quests.add_done_callback(
+                        lambda _t: None if _t.cancelled() else _t.exception()
+                    )
+
+                if settings.EXTRACTOR_NPC_ATIVO and _gate_extractors:
+                    try:
+                        from engine.llm.extractor import (
+                            aplicar_npcs_extraidos,
+                            extrair_npcs_cena,
+                        )
+                        # NPC-DEDUP-CANONICO-1 (playtest 06/07): "já conhecidos" inclui
+                        # o registro canônico da SESSÃO INTEIRA, não só quem está
+                        # presente agora — sem isso o LLM re-sugeria "homem-da-taberna"
+                        # pro MESMO taverneiro que tinha saído de npcs_presentes.
+                        _npcs_conhecidos = list(dict.fromkeys(
+                            list(sessao.working_mem.npcs_presentes)
+                            + list(sessao.working_mem.scene.npc_registro.keys())
+                        ))
+                        npcs_novos = await asyncio.wait_for(
+                            extrair_npcs_cena(
+                                sessao.groq,
+                                resposta_limpa,
+                                _npcs_conhecidos,
+                                nome_jogador=sessao.working_mem.player_name,
+                            ),
+                            timeout=8.0,
+                        )
+                        if npcs_novos:
+                            # narracao habilita o NAME-REVEAL (renomeia NPC presente
+                            # em vez de duplicar — NPC-IDENTIDADE 05/07). texto_jogador
+                            # é a 2ª fonte de âncora do reveal (NAME-REVEAL-DUP-1,
+                            # 10/07) — cobre quando o descritor do alvo só está na
+                            # pergunta do jogador, não na narração do Mestre.
+                            ids = aplicar_npcs_extraidos(
+                                sessao.working_mem, npcs_novos,
+                                narracao=resposta_limpa, texto_jogador=texto_jogador,
+                            )
+                            if ids:
+                                log.info("npc_extractor_aplicado", ids=ids, session_id=session_id)
+                    except Exception as exc:
+                        log.warning("npc_extractor_pulado", erro=str(exc)[:120])
+
+                # Dossiê de personalidade (decisão 12/07): NPCs em cena sem dossiê
+                # ganham 2-3 traços via chamada barata (8B), fire-and-forget — o
+                # turno NÃO espera; o prompt do turno seguinte já os injeta. Mesmos
+                # gates dos extractors (fora de combate/idle/SZ). Cap 2 por turno.
+                if settings.DOSSIE_NPC_ATIVO and _extractors_pos_turno_liberados(
+                    sessao.working_mem.em_combate,
+                    idle_nudge,
+                    sessao.working_mem.session_zero_ativa,
+                    era_session_zero,
+                    bool(sessao.working_mem.inimigos_combate),
+                ):
+                    try:
+                        from engine.npc.dossie import npcs_sem_dossie_na_cena
+                        _pendentes_dossie = npcs_sem_dossie_na_cena(sessao.working_mem)
+                        if _pendentes_dossie:
+                            asyncio.create_task(
+                                _gerar_dossies_pendentes(
+                                    sessao, _pendentes_dossie, resposta_limpa, session_id
+                                )
+                            )
+                    except Exception as exc:
+                        log.warning("dossie_agendamento_falhou", erro=str(exc)[:120])
+
+                # PLAY5-QUEST (16/06): extractor de quest improvisada pós-turno
+                # SOCIAL. O sistema [Q:id:stage] valida contra o catálogo do módulo,
+                # então missões que o Mestre cria na hora eram rejeitadas e sumiam no
+                # chat (`quest_stages` vazio). A engine lê a narração (8B JSON) e
+                # captura missões novas/concluídas como estado rastreável — injetado
+                # no prompt do próximo turno (continuidade) e exposto no snapshot pro
+                # quest log. Mesmos guards do extractor de NPC. Falha silenciosa.
+                if _task_quests is not None:
+                    try:
+                        from engine.llm.extractor import aplicar_quests_extraidas
+
+                        # Já estava rodando em paralelo com o extractor de NPC.
+                        quests_ext = await _task_quests
+                        if quests_ext:
+                            novas, concluidas = aplicar_quests_extraidas(
+                                sessao.working_mem, quests_ext
+                            )
+                            if novas or concluidas:
+                                log.info(
+                                    "quest_extractor_aplicado",
+                                    novas=novas,
+                                    concluidas=concluidas,
+                                    session_id=session_id,
+                                )
+                    except Exception as exc:
+                        log.warning("quest_extractor_pulado", erro=str(exc)[:120])
+
+                # Session Zero (P3): [FICHA] fechou a criação neste turno — envia a
+                # ficha pro frontend popular a CharacterSheet e persiste no SQLite
+                # (o "Continuar como…" passa a listar o personagem). Falha = só log.
+                if era_session_zero and not sessao.working_mem.session_zero_ativa:
+                    try:
+                        _ch = sessao.working_mem.character
+                        # Repertório recém-gerado precisa ir pro cache da sessão: o
+                        # guard de cast (spells_lower) e a cópia pro contexto do
+                        # prompt leem de sessao.spells_conhecidas, não do character.
+                        sessao.spells_conhecidas = list(_ch.spells_conhecidas)
+                        ficha_payload = {
+                            "player_name": _ch.player_name,
+                            "player_race": _ch.player_race,
+                            "player_class": _ch.player_class,
+                            "player_background": _ch.player_background,
+                            "player_description": _ch.player_description,
+                            "player_level": _ch.player_level,
+                            "player_hp": _ch.hp_current,
+                            "player_hp_max": _ch.hp_max,
+                            "str_score": _ch.str_score, "dex_score": _ch.dex_score,
+                            "con_score": _ch.con_score, "int_score": _ch.int_score,
+                            "wis_score": _ch.wis_score, "cha_score": _ch.cha_score,
                         }
-                        for qid, sid in avanco_quests
-                    ],
-                    **_snapshot_estado(sessao.working_mem),
-                    # CHECK-JOGADOR-ZERO: a perícia que o JOGADOR pediu. O frontend
-                    # abre o dado por ISTO, sem depender de a prosa do Mestre casar
-                    # com um regex.
-                    # Só anuncia o dado no turno em que o pedido NASCEU. Antes
-                    # emitia enquanto a pendência existisse, e como ela só era
-                    # limpa pela rolagem, o dado ficava aberto na perícia errada
-                    # indefinidamente (probe headless: depois de "vou tentar
-                    # stealth", o turno "olho em volta com calma" ainda vinha com
-                    # check_pedido='Furtividade'). A pendência continua viva pro
-                    # bônus — ver _MAX_TURNOS_CHECK.
-                    check_pedido=(
-                        (sessao.check_pendente or {}).get("pericia") or ""
-                        if int((sessao.check_pendente or {}).get("turnos", 1)) == 0
-                        else ""
-                    ),
-                    eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
-                    golpes_inimigos=sessao.working_mem.drenar_golpes(),
-                    check_resolvido=sessao.check_resolvido or {},
-                    primeiro_audio_ms=(
+                        await _send_text_seguro(websocket,
+                            MensagemWS(tipo="ficha_criada", ficha=ficha_payload).model_dump_json()
+                        )
+                        _criar_background_task(_auto_checkpoint(sessao))
+                        log.info("session_zero_concluida", session_id=session_id,
+                                 nome=_ch.player_name, classe=_ch.player_class)
+                    except Exception as exc:
+                        log.warning("ficha_criada_envio_falhou", erro=str(exc)[:120])
+
+                # CENA-1: se o turno trocou de local ([CENA: id|Nome|hora]), re-infere
+                # os NPCs do novo local via Neo4j (parte async do pipeline). Sem isto,
+                # os NPCs do local inicial permaneciam no prompt a sessão inteira e
+                # "perseguiam" o jogador pelo mapa. Falha silenciosa (Neo4j offline).
+                await reinferir_npcs_se_mudou_cena(
+                    sessao.working_mem, sessao.context_builder
+                )
+
+                # Autoridade social (02/07): drena os eventos de relação do turno
+                # (ataque abalou / companion somou) — toast pro jogador + afeto Neo4j.
+                await _emitir_eventos_relacao(websocket, sessao)
+
+                # Voz pros NPCs novos da cena: sem registro, voz_para_sentenca cai
+                # no narrador e o NPC "perde a voz" (teste 10/06: só os NPCs do local
+                # inicial — registrados na abertura — alternavam voz). Idempotente.
+                try:
+                    _ja = set(sessao.voice_manager.npcs_registrados())
+                    for _npc_id in sessao.working_mem.npcs_presentes:
+                        if _npc_id not in _ja:
+                            sessao.voice_manager.registrar_npc(_npc_id)
+                except Exception as exc:
+                    log.warning("registro_voz_npcs_falhou", erro=str(exc)[:120])
+
+                # Imersão P4: retrato 1× por NPC apresentado (fire-and-forget)
+                _criar_background_task(_enviar_retratos_npcs(websocket, sessao))
+
+                # Bestiário: carrega a ficha SRD dos inimigos declarados via [INIMIGO]
+                # neste turno. Async (Qdrant) → roda aqui, fora do pipeline sync; a
+                # ficha entra no prompt do próximo turno. Falha silenciosa.
+                try:
+                    from engine.bestiary.bestiary import enriquecer_fichas_inimigos
+                    await enriquecer_fichas_inimigos(sessao.working_mem)
+                except Exception as exc:
+                    log.warning("bestiario_enriquecimento_falhou", erro=str(exc)[:120])
+
+                # CRIT-1: decrementa spell slot SÓ se o LLM realmente narrou o cast.
+                # Heurística: nome da magia (ou variantes) aparece na resposta. Se LLM
+                # negou o cast ou ignorou, o slot fica intacto — política conservadora
+                # (perder slot por falso positivo é pior que não perder por falso negativo).
+                if sessao.spell_pending:
+                    nome_pending, nivel_pending = sessao.spell_pending
+                    resposta_lower = resposta_limpa.lower()
+                    primeira_palavra = nome_pending.lower().split()[0] if nome_pending else ""
+                    # Confirma cast se nome completo ou primeira palavra significativa aparece
+                    # na resposta (>3 chars evita "de", "a", "o", "um" gerando falso positivo).
+                    if (nome_pending and nome_pending.lower() in resposta_lower) or (
+                        len(primeira_palavra) > 3 and primeira_palavra in resposta_lower
+                    ):
+                        from engine.magic.slot_tracker import decrementar_slot
+                        slot_ok = decrementar_slot(sessao.working_mem, nivel_pending)
+                        if not slot_ok:
+                            log.info("spell_sem_slot_pos_turno",
+                                     nome=nome_pending, nivel=nivel_pending,
+                                     session_id=session_id)
+                    else:
+                        log.info("spell_pending_cancelado_sem_narrativa",
+                                 nome=nome_pending, nivel=nivel_pending,
+                                 session_id=session_id)
+                    sessao.spell_pending = None
+
+                # Feature F: estado afetivo de NPC — fire-and-forget para Neo4j.
+                # Não bloqueia o turno; Neo4j pode estar offline sem impacto.
+                # _criar_background_task garante que a task não seja coletada pelo GC.
+                _criar_background_task(
+                    aplicar_afeto_npcs(resposta_limpa, sessao.context_builder._neo4j)
+                )
+
+                # XP e progressão — extrai [XP: +N motivo] e aplica level up se cruzou
+                # o threshold da tabela SRD. Envia mensagem WS "level_up" antes do
+                # payload `fim` pra que o frontend renderize o modal sobre a bolha.
+                try:
+                    level_up_resumo = aplicar_xp_e_detectar_level_up(
+                        sessao.working_mem, resposta_limpa
+                    )
+                    if level_up_resumo:
+                        await _send_text_seguro(websocket,
+                            MensagemWS(
+                                tipo="level_up",
+                                level_up=level_up_resumo,  # dict completo do resumo
+                            ).model_dump_json()
+                        )
+                        log.info(
+                            "level_up_emitido",
+                            session_id=session_id,
+                            nivel_antigo=level_up_resumo.get("nivel_antigo"),
+                            nivel_novo=level_up_resumo.get("nivel_novo"),
+                        )
+                except Exception as e:
+                    log.warning("level_up_falhou", session_id=session_id, erro=str(e)[:200])
+
+                # Fase 5.8 — imagem de cena (deduplicada em _enviar_imagem_cena).
+                _criar_background_task(_enviar_imagem_cena(websocket, sessao))
+
+                sessao.iteracoes += 1
+
+                # AUTO-CHECKPOINT: salva estado no SQLite a cada 5 turnos.
+                # Fire-and-forget — nunca bloqueia o turno. Garante que XP, ouro,
+                # fios narrativos e HP não se percam se o browser fechar abruptamente.
+                #
+                # P3: os 5 turnos são o PISO, não o único gatilho — crash no turno 4
+                # perdia 4 turnos de campanha. Fim de combate também salva: é onde XP
+                # de abate, ouro e loot acabaram de ser aplicados, o ponto mais caro
+                # de perder. Os outros dois gatilhos que o P3 pede já existiam —
+                # `[FICHA]` (Session Zero) e a escolha de ASI no level up.
+                _fim_de_combate = _combate_antes and not sessao.working_mem.em_combate
+                if sessao.iteracoes % 5 == 0 or _fim_de_combate:
+                    _criar_background_task(_auto_checkpoint(sessao))
+
+                latencia_ms = int((time.perf_counter() - t0) * 1000)
+
+                sessao.ultimo_turno = {
+                    "texto_jogador": texto_jogador,
+                    "mensagens_groq": mensagens,
+                    "rag": {
+                        "chunks_lore": [
+                            {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
+                            for c in (contexto.chunks_semanticos if contexto else [])
+                        ],
+                        "chunks_regras": [
+                            {"text": c.get("text", "")[:200], "score": round(c.get("_score", 0), 3)}
+                            for c in (contexto.chunks_regras if contexto else [])
+                        ],
+                        "relacoes_neo4j": (contexto.relacoes_grafo if contexto else []),
+                    },
+                    "latencias": {
+                        "context_ms": context_ms,
+                        "llm_first_token_ms": latencia_primeiro_token,
+                        "tts_ms": tts_ms,
+                        "total_ms": latencia_ms,
+                    },
+                    "erros": erros_turno,
+                }
+
+                # UX-2: detecta cascata silenciosa (Groq TPM → Gemini) e notifica o frontend.
+                # Se o provider que emitiu o primeiro token não é o esperado (primeiro da
+                # cascata efetiva para a TaskType DESTE turno), envia "cascade" antes do "fim".
+                # Bug 27/05: antes comparava sempre contra TaskType.NARRATIVE — turnos
+                # NARRATIVE_LIGHT (cuja cascata começa em groq-8b) disparavam toast falso
+                # de cascade toda vez que rodavam no 8B, que é exatamente o esperado.
+                _ultimo_prov = sessao.groq.ultimo_provider_stream
+                if _ultimo_prov is not None:
+                    _prov_primario_esperado = next(
+                        (p.nome for p in sessao.groq._router._providers_disponiveis(_task_turno)),
+                        None,
+                    )
+                    if _prov_primario_esperado and _ultimo_prov != _prov_primario_esperado:
+                        try:
+                            await _send_text_seguro(websocket,
+                                MensagemWS(tipo="cascade", conteudo=_ultimo_prov).model_dump_json()
+                            )
+                            log.info(
+                                "cascade_notificado",
+                                session_id=session_id,
+                                primario=_prov_primario_esperado,
+                                efetivo=_ultimo_prov,
+                            )
+                        except Exception as _e_casc:
+                            log.warning("cascade_notificacao_falhou", erro=str(_e_casc)[:120])
+
+                # Dashboard admin: enriquece ultimo_turno com routing info e
+                # registra entry no histórico para os gráficos de sessão.
+                sessao.ultimo_turno["task_type"] = _task_turno.value
+                sessao.ultimo_turno["provider_usado"] = _ultimo_prov or "groq-70b"
+                _hist_entry: dict[str, Any] = {
+                    "turno": sessao.iteracoes,
+                    "pacing": round(sessao.working_mem.pacing_nivel, 1),
+                    "hp": sessao.working_mem.player_hp,
+                    "hp_max": sessao.working_mem.player_hp_max,
+                    "em_combate": sessao.working_mem.em_combate,
+                    "provider": _ultimo_prov or "groq-70b",
+                    "task_type": _task_turno.value,
+                    "latencia_ms": latencia_ms,
+                    "erros": len(erros_turno),
+                }
+                sessao.historico_turnos.append(_hist_entry)
+                if len(sessao.historico_turnos) > 50:
+                    sessao.historico_turnos.pop(0)
+                sessao.task_type_ultimo = _task_turno.value
+
+                chunks_lore = [
+                    c.get("text", "")[:120]
+                    for c in (contexto.chunks_semanticos if contexto else [])
+                ]
+                chunks_regras = [
+                    c.get("text", "")[:120]
+                    for c in (contexto.chunks_regras if contexto else [])
+                ]
+                relacoes: list[dict[str, Any]] = contexto.relacoes_grafo if contexto else []
+
+                await _send_text_seguro(websocket,
+                    MensagemWS(
+                        tipo="fim",
+                        latencia_ms=latencia_ms,
+                        # Extras só do fim de turno (não pertencem ao snapshot comum):
+                        chunks_lore=chunks_lore,
+                        chunks_regras=chunks_regras,
+                        relacoes_grafo=relacoes,
+                        iteracao=sessao.iteracoes,
+                        log_consequencias=list(sessao.working_mem.log_consequencias[-2:]),
+                        quest_avancos=[
+                            {
+                                "quest_id": qid,
+                                "stage_id": sid,
+                                "recompensas": recompensas_por_quest.get((qid, sid), []),
+                            }
+                            for qid, sid in avanco_quests
+                        ],
+                        **_snapshot_estado(sessao.working_mem),
+                        # CHECK-JOGADOR-ZERO: a perícia que o JOGADOR pediu. O frontend
+                        # abre o dado por ISTO, sem depender de a prosa do Mestre casar
+                        # com um regex.
+                        # Só anuncia o dado no turno em que o pedido NASCEU. Antes
+                        # emitia enquanto a pendência existisse, e como ela só era
+                        # limpa pela rolagem, o dado ficava aberto na perícia errada
+                        # indefinidamente (probe headless: depois de "vou tentar
+                        # stealth", o turno "olho em volta com calma" ainda vinha com
+                        # check_pedido='Furtividade'). A pendência continua viva pro
+                        # bônus — ver _MAX_TURNOS_CHECK.
+                        check_pedido=(
+                            (sessao.check_pendente or {}).get("pericia") or ""
+                            if int((sessao.check_pendente or {}).get("turnos", 1)) == 0
+                            else ""
+                        ),
+                        eventos_vitais=sessao.working_mem.drenar_eventos_vitais(),
+                        golpes_inimigos=sessao.working_mem.drenar_golpes(),
+                        check_resolvido=sessao.check_resolvido or {},
+                        primeiro_audio_ms=(
+                            int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
+                        ),
+                    ).model_dump_json()
+                )
+
+                # Aftermath dura exatamente um turno — reset após o "fim" ser enviado
+                if sessao.working_mem.saiu_combate_recentemente:
+                    sessao.working_mem.saiu_combate_recentemente = False
+
+                # Pilar Perigo: turno dos inimigos como beat separado. Roda DEPOIS
+                # do "fim" (frontend já sincronizou) e ANTES do rolling summary —
+                # o áudio do beat chega enquanto o TTS principal ainda toca.
+                # engine_resolveu_turno=True (resolve já rodou o turno dos inimigos)
+                # OU combate_pendente setado (aguardando o d20 do jogador) → o beat
+                # não roda (BEAT-DUPLO-1, ver docstring da função).
+                await _beat_turno_inimigo(
+                    websocket, sessao, texto_jogador,
+                    engine_resolveu_turno=_engine_resolveu_turno,
+                )
+
+                # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
+                # O contador é incrementado dentro de aplicar_pos_turno (só turnos
+                # reais). Quando fecha o intervalo, regenera o resumo contínuo da
+                # sessão. Awaitar aqui (antes do próximo receive) evita race com o
+                # turno seguinte e não soma latência percebida — o "fim" já foi
+                # enviado. Try/except amplo: resumo NUNCA bloqueia a sessão.
+                if settings.ROLLING_SUMMARY_ATIVO and sessao.working_mem.narrative.deve_resumir(
+                    settings.ROLLING_SUMMARY_INTERVALO
+                ):
+                    try:
+                        await atualizar_resumo_rolling(sessao.working_mem)
+                    except Exception as e:
+                        log.warning("rolling_summary_turno_falhou", erro=str(e))
+
+                # Campos alinhados com voice_loop.py para compatibilidade com dashboard.py
+                _emit({
+                    "evento": "ws_ciclo",
+                    "session_id": session_id,
+                    "iteracao": sessao.iteracoes,
+                    "texto_jogador": texto_jogador,
+                    "resposta_mestre": resposta_completa,
+                    "total_ms": latencia_ms,
+                    "llm_ms": latencia_primeiro_token,   # proxy: tempo até 1º token ≈ tempo de LLM
+                    # Tempo real até a voz começar. Era `latencia_ms` (o turno INTEIRO)
+                    # com o comentário "TTS ocorre após stream" — stale desde que o TTS
+                    # virou concorrente ao stream. A métrica mentia pra cima e escondia
+                    # o gargalo: no playtest 26/07 o TTS era 3937ms de um turno de
+                    # 6540ms e ninguém tinha olhado, porque não havia número pra olhar.
+                    # 0 = nenhum áudio saiu neste turno (TTS falhou ou resposta vazia).
+                    "primeiro_audio_ms": (
                         int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
                     ),
-                ).model_dump_json()
-            )
+                    "status": "OK" if latencia_ms < 2000 else "ACIMA DO LIMITE",
+                    "chunks_lore": chunks_lore,
+                    "chunks_regras": chunks_regras,
+                    "relacoes_grafo": relacoes,
+                })
 
-            # Aftermath dura exatamente um turno — reset após o "fim" ser enviado
-            if sessao.working_mem.saiu_combate_recentemente:
-                sessao.working_mem.saiu_combate_recentemente = False
-
-            # Pilar Perigo: turno dos inimigos como beat separado. Roda DEPOIS
-            # do "fim" (frontend já sincronizou) e ANTES do rolling summary —
-            # o áudio do beat chega enquanto o TTS principal ainda toca.
-            # engine_resolveu_turno=True (resolve já rodou o turno dos inimigos)
-            # OU combate_pendente setado (aguardando o d20 do jogador) → o beat
-            # não roda (BEAT-DUPLO-1, ver docstring da função).
-            await _beat_turno_inimigo(
-                websocket, sessao, texto_jogador,
-                engine_resolveu_turno=_engine_resolveu_turno,
-            )
-
-            # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
-            # O contador é incrementado dentro de aplicar_pos_turno (só turnos
-            # reais). Quando fecha o intervalo, regenera o resumo contínuo da
-            # sessão. Awaitar aqui (antes do próximo receive) evita race com o
-            # turno seguinte e não soma latência percebida — o "fim" já foi
-            # enviado. Try/except amplo: resumo NUNCA bloqueia a sessão.
-            if settings.ROLLING_SUMMARY_ATIVO and sessao.working_mem.narrative.deve_resumir(
-                settings.ROLLING_SUMMARY_INTERVALO
-            ):
-                try:
-                    await atualizar_resumo_rolling(sessao.working_mem)
-                except Exception as e:
-                    log.warning("rolling_summary_turno_falhou", erro=str(e))
-
-            # Campos alinhados com voice_loop.py para compatibilidade com dashboard.py
-            _emit({
-                "evento": "ws_ciclo",
-                "session_id": session_id,
-                "iteracao": sessao.iteracoes,
-                "texto_jogador": texto_jogador,
-                "resposta_mestre": resposta_completa,
-                "total_ms": latencia_ms,
-                "llm_ms": latencia_primeiro_token,   # proxy: tempo até 1º token ≈ tempo de LLM
-                # Tempo real até a voz começar. Era `latencia_ms` (o turno INTEIRO)
-                # com o comentário "TTS ocorre após stream" — stale desde que o TTS
-                # virou concorrente ao stream. A métrica mentia pra cima e escondia
-                # o gargalo: no playtest 26/07 o TTS era 3937ms de um turno de
-                # 6540ms e ninguém tinha olhado, porque não havia número pra olhar.
-                # 0 = nenhum áudio saiu neste turno (TTS falhou ou resposta vazia).
-                "primeiro_audio_ms": (
-                    int((t_primeiro_audio[0] - t0) * 1000) if t_primeiro_audio else 0
-                ),
-                "status": "OK" if latencia_ms < 2000 else "ACIMA DO LIMITE",
-                "chunks_lore": chunks_lore,
-                "chunks_regras": chunks_regras,
-                "relacoes_grafo": relacoes,
-            })
-
-            log.info(
-                "ws_turno_completo",
-                session_id=session_id,
-                iteracao=sessao.iteracoes,
-                latencia_ms=latencia_ms,
-                latencia_primeiro_token_ms=latencia_primeiro_token,
-            )
+                log.info(
+                    "ws_turno_completo",
+                    session_id=session_id,
+                    iteracao=sessao.iteracoes,
+                    latencia_ms=latencia_ms,
+                    latencia_primeiro_token_ms=latencia_primeiro_token,
+                )
 
     except WebSocketDisconnect:
         log.info("ws_desconectado", session_id=session_id)
@@ -3108,3 +3148,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             )
         except Exception:
             pass
+    finally:
+        # P3: solta a vaga — mas SÓ se ainda formos o dono dela. Sem este
+        # `is`, uma conexão antiga terminando de morrer (depois de levar 1012)
+        # limparia o registro da conexão NOVA que acabou de assumir, e a
+        # próxima reconexão não fecharia ninguém.
+        if getattr(sessao, "ws_ativo", None) is websocket:
+            sessao.ws_ativo = None
+            sessao.ws_ativo_owner = ""
