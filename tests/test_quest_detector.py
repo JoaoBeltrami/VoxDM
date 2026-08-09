@@ -759,15 +759,33 @@ def _quests_legiveis_fake():
     }]
 
 
-def test_bloco_traz_nome_e_descricao_do_proximo_passo():
+def test_quest_nao_iniciada_e_enganchavel_mas_nao_detalhada():
+    """PROMPT-QUESTS-NAO-INICIADAS (playtest 09/08): o bloco custava 2 046 chars
+    num prompt de 17 078 porque as OITO missões estavam `não iniciada` e cada uma
+    imprimia a descrição completa do próximo passo.
+
+    Missão não iniciada precisa ser ENGANCHÁVEL (o Mestre sabe que existe e como
+    se chama), não detalhada. O passo detalhado volta quando ela anda — que é
+    quando o `[Q:]` passa a importar. Ver o teste irmão logo abaixo.
+    """
     texto = catalog_para_texto(
         {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]},
         quests_legiveis=_quests_legiveis_fake(),
     )
-    assert "O contrato de Kaelmünd" in texto
-    assert "contrato-de-ferro" in texto
-    assert "Forçar um contrato leonino" in texto
+    assert "O contrato de Kaelmünd" in texto      # o gancho fica
+    assert "esforco-guerra-kaelmund" in texto     # o id fica (o [Q:] precisa dele)
     assert "não iniciada" in texto
+    assert "Forçar um contrato leonino" not in texto   # a enciclopédia sai
+
+
+def test_quest_em_curso_recupera_o_passo_detalhado():
+    texto = catalog_para_texto(
+        {"esforco-guerra-kaelmund": ["contrato-de-ferro", "o-lacre", "a-verdade-reescrita"]},
+        quests_legiveis=_quests_legiveis_fake(),
+        stages_atuais={"esforco-guerra-kaelmund": "contrato-de-ferro"},
+    )
+    assert "em curso" in texto
+    assert "o-lacre" in texto
 
 
 def test_bloco_mostra_um_estagio_por_vez_nao_o_menu_inteiro():
@@ -813,8 +831,11 @@ def test_render_do_modulo_real_traz_a_quest_do_playtest():
     wm = WorkingMemory.nova_sessao("kaelmund", "Kaelmund", "sess-quest-opaca")
     texto = renderizar_quests(wm, settings.DEFAULT_MODULE_PATH)
     assert "O contrato de Kaelmünd" in texto
-    assert "contrato-de-ferro" in texto
-    assert len(texto) < 3000          # legível, não um dump de roteiro
+    assert "esforco-guerra-kaelmund" in texto
+    # 09/08: era 3000. Com as não iniciadas resumidas, o módulo inteiro (8
+    # quests, nenhuma tocada) rende ~570 chars — o teto aperta pra flagrar
+    # crescimento de verdade em vez de acomodar o dump antigo.
+    assert len(texto) < 1200
 
 
 # ── QUEST-SKIP-1 (playtest estendido 23/07) ──────────────────────────────────
