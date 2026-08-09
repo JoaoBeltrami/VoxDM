@@ -256,10 +256,22 @@ def catalog_para_texto(
                 if ids.index(atual) >= len(ids) - 1:
                     continue                       # quest concluída — sai da lista
                 proximo = stages[ids.index(atual) + 1]
-        desc = proximo["descricao"][:_MAX_DESC_STAGE]
         nome = f" ({q['nome']})" if q.get("nome") else ""
-        marca = "em curso" if atual else "não iniciada"
-        linha = f"• {qid}{nome} [{marca}] → próximo `{proximo['id']}`: {desc}"
+        if atual:
+            desc = proximo["descricao"][:_MAX_DESC_STAGE]
+            linha = f"• {qid}{nome} [em curso] → próximo `{proximo['id']}`: {desc}"
+        else:
+            # PROMPT-QUESTS-NAO-INICIADAS (playtest 09/08): o bloco custava 2 046
+            # chars num prompt de 17 078 (teto 15 000) porque as OITO missões do
+            # módulo estavam `não iniciada` e cada uma imprimia a descrição
+            # completa do próximo passo — dois mil caracteres, em todo turno,
+            # descrevendo missões que o jogador nunca tocou.
+            #
+            # Missão não iniciada precisa ser ENGANCHÁVEL, não detalhada: o
+            # Mestre só tem que saber que ela existe e como se chama pra puxá-la
+            # na ficção. O passo detalhado aparece quando ela anda — que é
+            # exatamente quando o `[Q:]` passa a importar.
+            linha = f"• {qid}{nome} [não iniciada]"
         # Lembrete de ritmo — só pra quest que acabou de andar. Consultivo: o
         # Mestre decide. Ver _PISO_TURNOS_ESTAGIO.
         idade = (turnos_no_estagio or {}).get(qid)
