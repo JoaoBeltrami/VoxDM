@@ -2476,7 +2476,38 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     ):
                         from engine.magic.resolucao import mecanica_da_magia
                         _mec = mecanica_da_magia(nome_magia)
-                        if _mec and _mec.get("resolucao") == "ataque":
+                        # P16 passo 4: RESISTÊNCIA resolve na hora — quem rola é
+                        # o ALVO, e quem rola pelo alvo é a engine. Não há d20 do
+                        # jogador pra esperar, então não vira pendência.
+                        if _mec and _mec.get("resolucao") == "resistencia":
+                            _alvo_res = _extrair_alvo_ataque(
+                                texto_jogador, sessao.working_mem
+                            ) or next(
+                                (
+                                    iid for iid, d in sessao.working_mem.inimigos_combate.items()
+                                    if d.get("estado") != "morto"
+                                ),
+                                "",
+                            )
+                            if _alvo_res:
+                                try:
+                                    from engine.magic.salvaguarda import resolver_resistencia
+                                    _r_save = resolver_resistencia(
+                                        sessao.working_mem, nome_magia, _alvo_res
+                                    )
+                                except Exception as _e:
+                                    log.error("magia_save_falhou",
+                                              session_id=session_id, erro=str(_e))
+                                    _r_save = None
+                                if _r_save:
+                                    _fatos_engine.append(str(_r_save["contexto"]))
+                                    _engine_resolveu_turno = True
+                                    log.info("magia_save_resolvido",
+                                             session_id=session_id, magia=nome_magia,
+                                             alvo=_alvo_res, cd=_r_save["cd"],
+                                             resistiu=_r_save["resistiu"],
+                                             dano=_r_save["dano"])
+                        elif _mec and _mec.get("resolucao") == "ataque":
                             _alvo_magia = _extrair_alvo_ataque(
                                 texto_jogador, sessao.working_mem
                             ) or next(
