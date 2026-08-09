@@ -2018,6 +2018,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             sessao.check_pendente = None
                         else:
                             sessao.check_pendente["turnos"] = _idade
+                            # CHECK-SEM-COBERTURA-1: a COBRANÇA. Pendência que
+                            # envelhece calada é pendência que morre — foi assim
+                            # que 20 dos 22 turnos passaram sem teste resolvido.
+                            # A engine lembra o Mestre de que o teste continua
+                            # aberto, pelo canal de fatos (nunca no texto do
+                            # jogador), com o bônus já somado pra ele não ter que
+                            # fazer conta.
+                            _p = sessao.check_pendente
+                            _b = int(_p.get("bonus") or 0)
+                            _fatos_engine.append(
+                                f"ENGINE: o teste de {_p['pericia']} que você pediu "
+                                f"continua ABERTO (bônus do personagem "
+                                f"{_b:+d} já calculado). Retome a cobrança na cena — "
+                                "não deixe a ação seguir como se o teste não existisse."
+                            )
+                            log.info("check_pendente_cobrado", session_id=session_id,
+                                     pericia=_p.get("pericia"), turnos=_idade)
                     if _pericia_do_jogador:
                         sessao.check_pendente = {
                             "pericia": _pericia_do_jogador,
@@ -2706,6 +2723,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 # Imports estão no topo do arquivo — sem lazy redundante.
                 # aplicar_pos_turno retorna mudanças de trust (útil p/ telemetria),
                 # mas o WS não as consome — não atribui pra não deixar var órfã.
+                # CHECK-SEM-COBERTURA-1 (playtest 09/08): 22 turnos, e só DOIS
+                # testes chegaram à engine. A pendência só nascia quando o
+                # JOGADOR pedia o teste; quando o MESTRE pedia — que é a maioria
+                # ("já pede testes de acrobacia e etc") — não havia registro
+                # nenhum: a engine tentava ler a perícia da prosa dele só no
+                # instante em que o d20 chegava, e se você não rolasse o teste
+                # evaporava. Sem bônus da ficha, sem CD, sem consequência do P8.
+                #
+                # Agora o pedido do Mestre também vira PENDÊNCIA. `eh_teste_pericia`
+                # é a mesma detecção que já era usada na hora da rolagem — ela só
+                # rodava tarde demais.
+                if not sessao.check_pendente and not sessao.working_mem.session_zero_ativa:
+                    _pericia_mestre = eh_teste_pericia(resposta_limpa)
+                    if _pericia_mestre:
+                        sessao.check_pendente = {
+                            "pericia": _pericia_mestre,
+                            "bonus": bonus_de_check(sessao.working_mem, _pericia_mestre),
+                            "turnos": 0,
+                            "origem": "mestre",
+                        }
+                        log.info("check_pedido_pelo_mestre", session_id=session_id,
+                                 pericia=_pericia_mestre,
+                                 bonus=sessao.check_pendente["bonus"])
+
                 era_session_zero = sessao.working_mem.session_zero_ativa
                 aplicar_pos_turno(
                     sessao.working_mem,
