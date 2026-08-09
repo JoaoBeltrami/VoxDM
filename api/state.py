@@ -84,6 +84,11 @@ class SessaoAtiva:
     # (no fim do pipeline). Se o turno falhar, o slot não é perdido.
     spell_pending: tuple[str, int] | None = None
 
+    # TURNO-COLAPSADO-1 (playtest 09/08): o golpe do jogador resolveu, mas a
+    # segunda metade da rodada (o turno dos inimigos) ficou pro beat — que é a
+    # SEGUNDA mensagem do Mestre. One-shot: consumido e zerado a cada turno.
+    inimigos_adiados: bool = False
+
     # P3 — conexão dupla no mesmo session_id (mordeu no playtest #6: o cliente
     # reconectou no meio de um turno e o pipeline em voo continuou escrevendo).
     # `_send_text_seguro` resolveu o SINTOMA (crash ao enviar em socket morto),

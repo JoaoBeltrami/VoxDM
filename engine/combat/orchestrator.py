@@ -99,6 +99,49 @@ def ordem_de_iniciativa(wm: Any) -> list[str]:
     )
 
 
+def _fim_de_combate(wm: Any) -> bool:
+    """True quando não sobrou inimigo vivo."""
+    return not [d for d in wm.inimigos_combate.values() if d.get("estado") != "morto"]
+
+
+def resolver_turno_inimigos_adiado(
+    wm: Any, rng: random.Random | None = None
+) -> dict[str, Any]:
+    """A SEGUNDA metade da rodada: os inimigos agem, e só então a rodada fecha.
+
+    Existe por causa do TURNO-COLAPSADO-1 — ver o comentário em
+    `resolver_turno_ataque_jogador`. Chamada pelo beat, que entrega isto como uma
+    mensagem SEPARADA do Mestre. A engine continua sendo a autoridade sobre os
+    números; o que mudou é que a entrega deixou de ser um bloco só.
+
+    Idempotente por turno: sem inimigo vivo (o jogador matou o último), não faz
+    nada e não avança rodada — o combate acabou no golpe dele.
+    """
+    rng = rng or random.Random()
+    if not getattr(wm, "em_combate", False) or _fim_de_combate(wm):
+        return {"valido": False, "contexto": "", "dano_total": 0}
+
+    res = executar_turno_inimigos(wm, rng)
+
+    # A rodada fecha AQUI, não no golpe do jogador: ela é a volta completa da
+    # ordem, e a ordem só deu a volta depois que os inimigos agiram.
+    if getattr(wm, "iniciativa_cache", None) and hasattr(wm, "avancar_turno_e_rodada"):
+        for _ in range(len(wm.inimigos_combate) + 1):
+            if wm.avancar_turno_e_rodada():
+                break
+    else:
+        wm.avancar_rodada()
+
+    return {
+        "valido": True,
+        "contexto": linha_turno_inimigos(res),
+        "dano_total": int(res.get("dano_total", 0)),
+        "ataques": res.get("ataques"),
+        "hp_jogador": wm.player_hp,
+        "fim_combate": _fim_de_combate(wm),
+    }
+
+
 def resolver_turno_ataque_jogador(
     wm: Any,
     alvo_id: str,
@@ -106,6 +149,7 @@ def resolver_turno_ataque_jogador(
     *,
     dado_arma: int = _DADO_ARMA_PADRAO,
     rng: random.Random | None = None,
+    adiar_inimigos: bool = False,
 ) -> dict[str, Any]:
     """Resolve um turno de combate COMPLETO do jogador, engine-autoritativo (task 7).
 
@@ -145,6 +189,42 @@ def resolver_turno_ataque_jogador(
 
     # Action economy: a ação do jogador foi gasta nesta rodada.
     wm.usar_acao()
+
+    # TURNO-COLAPSADO-1 (playtest 09/08): "tomei dano no meu ataque em vez da LLM
+    # tomar o turno dela", "só o player age". O turno INTEIRO dos inimigos rodava
+    # aqui dentro, na mesma chamada — o log mostra `dano=6 dano_inimigos=7` numa
+    # linha só. A rodada virou unidade de tempo no estado (COMBATE-SEM-RODADA-1),
+    # mas a ENTREGA continuou colapsada: o jogador não joga o estado interno, ele
+    # joga a sequência de mensagens, e nela nada tinha mudado.
+    #
+    # Com `adiar_inimigos`, esta função resolve só a METADE do jogador e o turno
+    # dos inimigos vai pro beat (`_beat_turno_inimigo`), que já existe e já é uma
+    # SEGUNDA mensagem do Mestre — ele só estava desligado no caminho
+    # engine-autoritativo, justamente pra não dobrar o dano (BEAT-DUPLO-1).
+    #
+    # ⚠️ Quem decide adiar é o CALLER, e só depois de saber que o beat vai mesmo
+    # rodar. Adiar sem beat = inimigo que nunca age, que é pior que o colapso.
+    if adiar_inimigos:
+        return {
+            "valido": True,
+            "contexto": "\n".join(linhas),
+            "acertou": r.acertou,
+            "critico": r.critico,
+            "falha_critica": r.falha_critica,
+            "estado_alvo": estado,
+            "dano": dano,
+            "inimigos_adiados": True,
+            "dano_inimigos": 0,
+            "hp_jogador": wm.player_hp,
+            "fim_combate": _fim_de_combate(wm),
+            "tier": classificar_tier(
+                critico=r.critico,
+                falha_critica=r.falha_critica,
+                estado_alvo=estado,
+                fim_combate=_fim_de_combate(wm),
+                ataques_inimigos=None,
+            ),
+        }
 
     # Turno dos inimigos (engine rola vs a CA do jogador e aplica o dano no PJ).
     res_inim = executar_turno_inimigos(wm, rng)
