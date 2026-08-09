@@ -366,13 +366,30 @@ def _resolver_ataque_engine(
     caminhos de rolagem: pendência declarada ("ataco X" → d20) e d20 solto com
     pedido de ataque do Mestre (regra ampliada, 01/07).
     """
+    # TURNO-COLAPSADO-1 (playtest 09/08): adiar o turno dos inimigos pro beat só
+    # é seguro se o beat FOR rodar. Adiar sem beat = inimigo que nunca age, que é
+    # pior que o colapso que estamos consertando. A condição espelha os guards do
+    # `_beat_turno_inimigo` — se um mudar, o outro tem que mudar junto, e o teste
+    # `test_adiar_espelha_os_guards_do_beat` amarra os dois.
+    _wm = sessao.working_mem
+    _adiar = bool(
+        settings.BEAT_INIMIGO_ATIVO
+        and getattr(_wm, "em_combate", False)
+        and _wm.player_hp > 0
+    )
     try:
-        _res = resolver_turno_ataque_jogador(sessao.working_mem, alvo, d20)
+        _res = resolver_turno_ataque_jogador(
+            sessao.working_mem, alvo, d20, adiar_inimigos=_adiar,
+        )
     except Exception as _e:  # nunca derruba o turno
         log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
         return None
     if not _res.get("valido"):
         return None
+    # TURNO-COLAPSADO-1: o beat precisa saber que a segunda metade da rodada
+    # ficou pendente. Na sessão (e não no retorno) porque a função devolve a
+    # instrução de narração e os dois call-sites já a tratam como string.
+    sessao.inimigos_adiados = bool(_res.get("inimigos_adiados"))
     log.info(
         "combate_engine_resolveu", session_id=session_id,
         alvo=alvo, acertou=_res.get("acertou"),
@@ -1041,6 +1058,7 @@ async def _beat_turno_inimigo(
     texto_jogador: str,
     *,
     engine_resolveu_turno: bool = False,
+    inimigos_adiados: bool = False,
 ) -> None:
     """Turno dos inimigos como beat separado (Pilar Perigo, 10/06).
 
@@ -1069,7 +1087,11 @@ async def _beat_turno_inimigo(
     # sem este guard os inimigos agiam ANTES da rolagem existir ("narra o turno
     # inteiro antes de eu rolar"). Em ambos os casos a ordem de turno já foi (ou
     # está sendo) resolvida pela engine — o beat é só o fallback prompt-only.
-    if engine_resolveu_turno:
+    # TURNO-COLAPSADO-1: o guard continua valendo pro caso em que a engine
+    # resolveu TUDO (inimigos inclusos) — aí o beat seria dano dobrado. Mas
+    # quando os inimigos foram ADIADOS, é justamente o beat quem tem que
+    # resolvê-los: é ele a segunda mensagem do Mestre.
+    if engine_resolveu_turno and not inimigos_adiados:
         return
     # A pendência segura os inimigos só enquanto a rolagem é plausível. Passado
     # o teto, ela continua VIVA (o d20 ainda resolve quando chegar) mas para de
@@ -1091,6 +1113,22 @@ async def _beat_turno_inimigo(
     try:
         from engine.llm.tasks import TaskType
 
+        # TURNO-COLAPSADO-1: no caminho ADIADO, quem rola é a ENGINE — o beat
+        # deixa de ser improviso e vira narração de fato resolvido, igual ao
+        # turno do jogador. Sem isto o beat pediria [DANO:] ao modelo e o
+        # combate teria dois donos do mesmo número.
+        _fato_inimigos = ""
+        if inimigos_adiados:
+            from engine.combat.orchestrator import resolver_turno_inimigos_adiado
+            _r_inim = resolver_turno_inimigos_adiado(wm)
+            if not _r_inim.get("valido"):
+                return
+            _fato_inimigos = str(_r_inim.get("contexto") or "")
+            log.info("beat_inimigos_resolvido_pela_engine",
+                     dano_total=_r_inim.get("dano_total"),
+                     hp_jogador=_r_inim.get("hp_jogador"),
+                     rodada=getattr(wm, "rodada_combate", 0))
+
         # Nome do personagem — o beat narra na 3ª pessoa COM o nome, nunca "o
         # jogador" (teste 13/06: "O jogador respira aliviado" quebrava a imersão,
         # misturando a pessoa real com o personagem).
@@ -1102,9 +1140,16 @@ async def _beat_turno_inimigo(
             f"a {nome_pj} pelo nome ou em 2ª pessoa).\n"
             f"{wm.para_texto()}\n"
             f"CA de {nome_pj}: {wm.ca}. HP: {wm.player_hp}/{wm.player_hp_max}.\n"
-            "Cada inimigo vivo age UMA vez: ataque (rolagem interna vs CA), "
-            "reposicionamento ou manobra coerente com a ficha. Acertou → narre o "
-            "golpe e emita [DANO: -N motivo]; errou → narre o quase. Use "
+            + (
+                "=== JÁ RESOLVIDO PELA ENGINE ===" + chr(10) + _fato_inimigos + chr(10)
+                + "Narre EXATAMENTE isto. NÃO role nada e NÃO emita [DANO:] — o dano "
+                  "já foi aplicado. Você escolhe as palavras, não os números. "
+                if _fato_inimigos else
+                "Cada inimigo vivo age UMA vez: ataque (rolagem interna vs CA), "
+                "reposicionamento ou manobra coerente com a ficha. Acertou → narre o "
+                "golpe e emita [DANO: -N motivo]; errou → narre o quase. "
+            )
+            + "Use "
             "[POSICAO]/[INIMIGO_MORTO] se aplicável. PT-BR falado, 2-4 frases, "
             "máximo 70 palavras, sem markdown. Termine na tensão da cena (o que "
             "os inimigos fazem em seguida) — NUNCA anuncie 'iniciativa', 'sua "
@@ -3138,7 +3183,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 await _beat_turno_inimigo(
                     websocket, sessao, texto_jogador,
                     engine_resolveu_turno=_engine_resolveu_turno,
+                    inimigos_adiados=bool(getattr(sessao, "inimigos_adiados", False)),
                 )
+                sessao.inimigos_adiados = False   # one-shot, por turno
 
                 # Rolling summary (Frente A) — DEPOIS de entregar o turno ao jogador.
                 # O contador é incrementado dentro de aplicar_pos_turno (só turnos
