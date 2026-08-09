@@ -293,6 +293,10 @@ from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
 from engine.authority.checks import bonus_de_check, detalhar_check, resolver_check
+from engine.authority.consequencia import (
+    classificar_contexto,
+    resolver_consequencia,
+)
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 from engine.memory.item_authority import resolver_consumo
@@ -2026,6 +2030,36 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                         log.info("relogios_tick_falha",
                                                  session_id=session_id,
                                                  estourados=_estourados)
+                                    # P8: a engine diz a CLASSE do custo; o LLM
+                                    # narra dentro do trilho. Sem isto, ele
+                                    # improvisa consequência pra baixo (não quer
+                                    # machucar o jogador) e falhar fora de
+                                    # combate não custa nada — a causa direta do
+                                    # "não sinto muito perigo" de 01/08.
+                                    _conseq = resolver_consequencia(
+                                        margem=int(sessao.check_resolvido.get("margem", 0)),
+                                        falha_critica=bool(
+                                            sessao.check_resolvido.get("falha_critica")
+                                        ),
+                                        contexto=classificar_contexto(
+                                            em_combate=bool(sessao.working_mem.em_combate),
+                                            cena_social=_cena_social(
+                                                sessao.working_mem, texto_jogador
+                                            ),
+                                        ),
+                                    )
+                                    _fatos_engine.append(_conseq.linha_engine())
+                                    sessao.check_resolvido["consequencia"] = {
+                                        "classe": _conseq.classe,
+                                        "intensidade": _conseq.intensidade,
+                                        "complicacao": _conseq.complicacao,
+                                    }
+                                    log.info("consequencia_resolvida",
+                                             session_id=session_id,
+                                             classe=_conseq.classe,
+                                             intensidade=_conseq.intensidade,
+                                             contexto=_conseq.contexto,
+                                             margem=_conseq.margem)
 
                 # ── Consumo de item pela ENGINE (ITEM-SEM-AUTORIDADE-1, 01/08) ─────
                 # "Não fui curado pela minha poção": o jogador TINHA o item, bebeu, e
