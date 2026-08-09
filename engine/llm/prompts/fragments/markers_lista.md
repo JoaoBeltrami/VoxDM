@@ -8,7 +8,6 @@ Extraídos antes da voz — o jogador nunca ouve. Opcionais; máx 1 por tipo por
 - `[AGENDA: npc-id → plano]` — plano de fundo de NPC.
 - `[CONSEQUÊNCIA: texto]` — efeito duradouro além da cena. Máx 1-2/turno.
 - `[ANCORA: texto]` — fato já narrado, não repetir.
-- `[RELOGIO_AVANCA: id]` — ameaça do relógio listado ganha força.
 - `[XP: +N motivo]` — SÓ bônus narrativo (descoberta, diplomacia, 25–100). Abate e quest a engine paga sozinha — NUNCA dê XP por morte de inimigo.
 
 **Combate:**

@@ -1724,12 +1724,15 @@ def aplicar_pos_turno(
                 log.info("front_latente_ativado", relogio=rid)
         elif working_mem.narrative.criar_relogio(rid, m.group(2), seg):
             log.info("relogio_criado", relogio=rid, nome=m.group(2).strip()[:40], max=seg)
+    # P7 (07/08): `[RELOGIO_AVANCA]` virou OBSOLETO — quem move o relógio é a
+    # engine (viagem, descanso longo, falha em teste, efeito de quest do módulo).
+    # "Avançar N fatias" é QUANTO, e pelo ADR-006 isso não é do LLM. O marcador
+    # segue sendo LIMPO do texto (engine/markers.NOMES_OBSOLETOS) pra não ser
+    # lido em voz alta, mas não altera mais estado nenhum. Só telemetria: saber
+    # se o modelo ainda tenta é o que diz se o prompt foi mesmo entendido.
     for m in _RE_RELOGIO_AVANCA.finditer(resposta_completa):
-        rid = m.group(1).strip().lower()
-        if working_mem.narrative.avancar_relogio(rid):
-            log.info("relogio_estourou", relogio=rid)
-        else:
-            log.info("relogio_avancou", relogio=rid)
+        log.info("marcador_obsoleto_ignorado", marcador="RELOGIO_AVANCA",
+                 alvo=m.group(1).strip().lower()[:40])
 
     # 17. Mudança de cena (CENA-1) — [CENA: local-id|Nome|hora] atualiza local/hora
     # (sync, sem I/O). A re-inferência de NPCs do novo local (Neo4j, async) é feita
