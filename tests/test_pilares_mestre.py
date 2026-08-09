@@ -314,12 +314,20 @@ def test_relogio_enche_e_gera_irrupcao_one_shot():
     assert wm.narrative.consumir_relogio_irrompido() == ""  # one-shot
 
 
-def test_pipeline_cria_e_avanca_relogio():
+def test_pipeline_cria_relogio_mas_nao_deixa_o_llm_avancar():
+    """P7 (07/08): a segunda metade deste teste asseria o comportamento ANTIGO.
+
+    `[RELOGIO]` continua canônico — nomear uma ameaça que vira relógio visível
+    responde "o que isso significa", e isso o LLM ainda decide. Já
+    `[RELOGIO_AVANCA]` virou OBSOLETO: "avançar N fatias" é QUANTO, e pelo
+    ADR-006 quem move o relógio é a engine (viagem, descanso longo, falha em
+    teste, efeito de quest). Ver engine/markers.NOMES_OBSOLETOS.
+    """
     wm = _wm()
     aplicar_pos_turno(wm, "Aceito a missão.", "Que assim seja. [RELOGIO: cacada|A caçada|4]")
     assert wm.narrative.relogios["cacada"]["atual"] == 0
     aplicar_pos_turno(wm, "Continuo bebendo na taverna.", "Você ignora os uivos lá fora. [RELOGIO_AVANCA: cacada]")
-    assert wm.narrative.relogios["cacada"]["atual"] == 1
+    assert wm.narrative.relogios["cacada"]["atual"] == 0
 
 
 def test_descanso_longo_tica_todos_os_relogios():

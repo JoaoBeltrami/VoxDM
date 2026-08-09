@@ -104,10 +104,18 @@ def test_fragmento_markers_lista_carregavel():
 # Strings UNICAS dos fragmentos — nao aparecem nos stubs deixados no master_system.md.
 # Garantem que o teste checa o FRAGMENTO completo injetado, nao o stub resumido.
 _MARKER_UNICO_VOZ_DUPLA = "passa de raspão"   # exemplo dentro do fragmento
-# [RELOGIO_AVANCA: só existe na lista completa — o master_system menciona apenas
-# FIO/CONSEQUÊNCIA/XP/CENA/NPC. (Era "CR≤¼=25", removida na dieta 01/07: a tabela
-# de XP por CR saiu do prompt porque a engine paga abate/quest sozinha agora.)
-_MARKER_UNICO_MARKERS = "[RELOGIO_AVANCA:"
+# [CICATRIZ: só existe na lista completa — o master_system menciona apenas
+# FIO/CONSEQUÊNCIA/XP/CENA/NPC.
+#
+# Histórico deste sentinela, que já trocou duas vezes pelo MESMO motivo — o
+# marcador escolhido saiu do prompt:
+#   - era "CR≤¼=25", removida na dieta de 01/07 (a tabela de XP por CR saiu do
+#     prompt porque a engine paga abate/quest sozinha);
+#   - virou "[RELOGIO_AVANCA:", que ficou OBSOLETO em 07/08 (P7 — quem avança
+#     relógio é a engine; ver engine/markers.NOMES_OBSOLETOS).
+# Se cair de novo, o conserto é o mesmo: escolher um marcador que esteja no
+# fragmento e NÃO no master_system.md.
+_MARKER_UNICO_MARKERS = "[CICATRIZ:"
 
 
 def test_cena_calma_omite_ambos_fragmentos():

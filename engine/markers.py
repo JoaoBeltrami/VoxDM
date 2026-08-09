@@ -38,7 +38,7 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     "COMPANION_ADD", "COMPANION_HP", "COMPANION_REMOVE",
     # Cena e persistência
     "DESCANSO", "VOZ", "AFETO", "CENA", "FEATURE_GASTA", "NPC",
-    "CICATRIZ", "RELOGIO", "RELOGIO_AVANCA", "FICHA",
+    "CICATRIZ", "RELOGIO", "FICHA",
     # Diretor de Arco — o jogador declarou um segredo e o Mestre confirma.
     "SEGREDO_REVELADO",
     # Alinhamento — ato moral que só a narrativa sabe (poupar, trair, honrar).
@@ -51,6 +51,39 @@ NOMES_MARCADORES: Final[tuple[str, ...]] = (
     # variante sem acento (o eco nem sempre preserva o acento).
     "PRESSÁGIO", "PRESSAGIO", "REINCORPORAR", "PACING",
 )
+
+
+# ── Marcadores OBSOLETOS (Bloco 3 — autoridade da engine) ────────────────────
+#
+# Nomes que a ENGINE passou a decidir. O LLM não deve mais emiti-los, o prompt
+# não os pede, e nenhum handler os processa — se aparecerem, são ignorados em
+# silêncio (mesmo tratamento que o vocabulário fechado de [ALINHAMENTO] dá pra
+# ato inventado).
+#
+# ⚠️ POR QUE ELES NÃO SAEM DE VEZ. A regra de migração do Bloco 3, como escrita
+# na fila, manda tirar o nome de `NOMES_MARCADORES`. Seguir isso ao pé da letra
+# QUEBRA A VOZ: `RE_STRIP_MARCADORES` é DERIVADO daquela tupla, e é o único
+# strip do TTS. Um nome removido de lá deixa de ser limpo do texto, e o jogador
+# passa a OUVIR "colchete RELOGIO_AVANCA dois pontos guerra-das-vilas".
+#
+# Então a migração tem duas metades, e só uma delas é "remover":
+#   1. o PROCESSAMENTO morre  → o handler sai de api/turn_pipeline.py
+#   2. o STRIP continua vivo   → o nome muda de tupla, não some
+#
+# Isto vale pro P5, P8, P9 e P10 também — todo item do Bloco 3 termina aqui.
+NOMES_OBSOLETOS: Final[tuple[str, ...]] = (
+    # P7 (07/08): quem avança relógio é a engine (viagem, descanso longo, falha
+    # em teste, efeito de quest). "Avançar N fatias" é QUANTO — território da
+    # engine pelo ADR-006. O irmão `[RELOGIO: id|nome|segmentos]` CONTINUA
+    # canônico de propósito: nomear uma ameaça que vira relógio visível responde
+    # "o que isso significa", que é exatamente o que o LLM ainda pode decidir.
+    "RELOGIO_AVANCA",
+)
+
+
+def e_obsoleto(nome: str) -> bool:
+    """True se o marcador foi migrado pra engine e deve ser ignorado em silêncio."""
+    return nome.strip().upper() in {n.upper() for n in NOMES_OBSOLETOS}
 
 
 def _construir_regex_strip() -> re.Pattern[str]:
@@ -69,7 +102,11 @@ def _construir_regex_strip() -> re.Pattern[str]:
         rolagem do jogador. Stripar evita que o TTS leia o marcador e que o
         número fabricado confunda a autoridade de dados.
     """
-    alternativa = "|".join(re.escape(n) for n in NOMES_MARCADORES)
+    # Canônicos + OBSOLETOS: um marcador migrado pra engine para de ser
+    # PROCESSADO, mas continua sendo LIMPO — senão o jogador o ouve no TTS.
+    alternativa = "|".join(
+        re.escape(n) for n in (*NOMES_MARCADORES, *NOMES_OBSOLETOS)
+    )
     # TAG-MALFORM-1 (A/B 17/07): o LLM emitiu `[TAG: NPC: id|nome]` — envelope
     # "TAG:" espúrio em volta de um marker legítimo. O strip exigia o nome
     # conhecido logo após `[`, então o bloco inteiro vazava pro chat/TTS.
