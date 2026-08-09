@@ -23,6 +23,24 @@ consequência das mãos do modelo**.
 - **Breakdown por bloco no warning de orçamento de prompt** — total sem composição não
   diz o que cortar.
 - **Canal próprio para fatos da engine** (`ContextoMontado.fatos_engine`).
+- **Consequência determinística de falha** — a engine passa a decidir a CLASSE do custo
+  (DANO, RECURSO, POSICAO, RELOGIO, INFORMACAO, COMPLICACAO) e a intensidade, pela margem
+  do teste. O Mestre narra o *como*, nunca o *se* nem o *qual*. Inclui o degrau "falhou
+  por 1–2 = conseguiu, mas paga", que é o que permite ser generoso sem que a falha vire
+  nada. Zero aleatoriedade: previsibilidade é o produto.
+- **Relógio de ameaça avança quando o jogador FALHA num teste** — antes os quatro
+  gatilhos mediam tempo (viagem, descanso) ou narração (marcador, quest); nenhum media o
+  jogador errando.
+- **Tabela de XP por CR do SRD 5.1** — ficha com CR mas sem "(N XP)" caía num fallback de
+  25 XP em silêncio; uma criatura lendária valia o mesmo que um bandido.
+- **Âncora SRD para statblock de inimigo** — casa índice ou nome PT-BR contra os 15
+  statblocks estáticos antes do genérico, e cada inimigo carrega a origem dos seus
+  números (`ficha_fonte`).
+- **O dano causado no inimigo chega à tela** — a engine já calculava e o número morria no
+  log do servidor, porque o Mestre é proibido de citar número.
+- **Atalho de teclado para rolar d20** (Ctrl direito).
+- **Lock de turno por sessão** e fecho de conexão duplicada do mesmo dono; checkpoint
+  também em fim de combate.
 
 ### Alterado
 - **Ordem do system prompt** — condicionais que oscilam foram para depois do conteúdo
@@ -34,6 +52,17 @@ consequência das mãos do modelo**.
 - **Slots de LLM nomeiam papel, não tamanho de modelo** (`groq-leve`), com teste que
   impede o nome de divergir do modelo configurado.
 - **Roteamento de cena social por recência**, não por histórico cumulativo da sessão.
+- **A rodada de combate virou a volta completa da ordem de iniciativa**, não o turno do
+  jogador — e todo mundo passou a rolar iniciativa de verdade. Antes o jogador entrava com
+  um "take 10" e os inimigos numa escada fixa a partir de 20, então a ordem era sempre a
+  mesma e ele era sempre o último.
+- **Vantagem e desvantagem rolam dois dados visíveis**, e quem escolhe o vencedor é a
+  engine — o cliente mandava um número já resolvido.
+- **A ficha SRD saiu do prompt de combate**: os números ficam com a engine e o Mestre
+  recebe só o porte da criatura, sem dígito nenhum (−1030 chars por turno de combate).
+- **Marcador migrado para a engine agora tem ciclo de vida próprio** (`NOMES_OBSOLETOS`):
+  para de ser processado, mas continua sendo removido do texto — senão o jogador passa a
+  ouvi-lo. `[RELOGIO_AVANCA]` foi o primeiro; `[RELOGIO]` continua com o Mestre.
 
 ### Corrigido
 - Fato da engine chegava ao modelo como fala do jogador (`role: user`) — e virava a
@@ -45,9 +74,11 @@ consequência das mãos do modelo**.
   numerados (`vyrmathax-1`) não achavam a própria ficha.
 - Extractor criava NPC a partir da classe do próprio jogador.
 - `stream_options` como kwarg direto quebrava o SDK `groq==1.1.2` no caminho de stream.
+- Duas conexões WebSocket na mesma sessão mutavam o mesmo estado em paralelo.
+- Um teste de combate dependia da rolagem de iniciativa e passava por sorte (flaky).
 
 ### Infra
-- 2395 testes automatizados (eram 919 na 0.1.0).
+- 2514 testes automatizados (eram 919 na 0.1.0).
 
 ## [0.1.0] - 2026-06-05
 

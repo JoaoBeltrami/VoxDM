@@ -163,7 +163,7 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | — | Frontend "BG1 híbrido" (launcher de painéis, FichaViva, retratos, dock slim) | ✅ |
 | 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
 
-**Cobertura de testes:** 2395/2395 passam.
+**Cobertura de testes:** 2514/2514 passam.
 
 ---
 
@@ -285,7 +285,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  2395 testes (pytest)
+└── tests/                  2514 testes (pytest)
 ```
 
 ---
@@ -293,7 +293,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 2395 testes
+uv run pytest tests/ -q   # 2514 testes
 make ingest
 make run-api
 make debug

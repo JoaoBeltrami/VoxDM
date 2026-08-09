@@ -1,6 +1,6 @@
 # VoxDM — Instruções para Claude Code
 
-> Atualizado: 7 de agosto de 2026 (passada de `/docs` após dois playtests e 11 merges).
+> Atualizado: 9 de agosto de 2026 (passada de `/docs` após o Bloco 3 — P3, P4, P5.1, P7, P8).
 > Este arquivo responde UMA pergunta: **como se escreve código aqui.**
 > Onde estamos agora → `.internal/ESTADO.md`. O que vem pela frente e em que ordem
 > → `.internal/VOXDM_FILA.md`. Como o sistema é desenhado → `ARCHITECTURE.md`.
@@ -44,6 +44,15 @@ perigo"* — 1 combate, HP 21→17, dano só de armadilha. Em 07/08 (36 turnos) 
 combate de verdade e a resposta foi *"matei uma lenda, foi bem fácil"* — mas ali a
 causa era mecânica, não de design (a entidade lendária recebeu ficha genérica de
 warlock). A Camada 2 **continua aberta**.
+
+**As duas causas já foram atacadas, e nenhuma foi validada em jogo.** A de 07/08
+(perigo mecanicamente falso) fechou com a cadeia de statblock e o dano visível. A
+de 01/08 (falhar não custa nada fora de combate) fechou com o **P8** — a engine
+passou a decidir a CLASSE do custo de toda falha. Por isso o P8 carrega um
+**gate de sessão jogada obrigatório**: ele muda a SENSAÇÃO, não a mecânica de um
+subsistema, e teste verde ali não significa nada. Nada entra em cima do P8 antes
+de o Beltrami jogar. Se ele continuar arriscando por instinto, o problema é a
+INTENSIDADE (matriz + bordas do gradiente), não a classe.
 
 ### Engine-first em TUDO (ADR-006, declarado pelo Beltrami em 01/08)
 
@@ -147,6 +156,11 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Conceder × consumir item | **Conceder** continua com o Mestre (rule-of-cool é gosto do Beltrami; item ausente só gera aviso, não proibição). **Consumir** é da engine — fórmula do SRD, teto de HP, frasco sai do inventário |
 | Fato de engine tem canal próprio | `ContextoMontado.fatos_engine` → bloco na zona dinâmica. Nunca no `texto_jogador` (ver armadilha) |
 | Fim de campanha | É epílogo do **arco**, não fim do mundo: não reabre e não desfaz o desfecho, mas a cena volta a correr e o Mestre volta a ter iniciativa |
+| Classe da consequência de falha | Da **engine** (P8): seis classes fechadas (DANO, RECURSO, POSICAO, RELOGIO, INFORMACAO, COMPLICACAO), gradiente pela MARGEM do teste, zero random. O LLM escolhe **como** narrar, nunca **se** dói nem **qual** é o custo. A matriz contexto×classe em `engine/authority/consequencia.py` é **proposta aguardando revisão do Beltrami** |
+| Quem move o relógio de ameaça | A **engine**: viagem (cadência 2), descanso longo, efeito de quest do módulo e falha em teste (cadência 3). `[RELOGIO_AVANCA]` virou OBSOLETO — "avançar N fatias" é *quanto*. `[RELOGIO: id\|nome\|segmentos]` **continua canônico**: nomear uma ameaça é *o que significa*, e isso o LLM ainda decide |
+| Vencedor de vantagem/desvantagem | Da **engine**. O frontend manda os DOIS dados (`d20 = 18 (18 vs 7) — VANTAGEM`) e `extrair_d20_jogador` reescolhe; o número do cliente é sugestão de exibição. Formato aditivo de propósito: o `= <vencedor>` é o primeiro `=` do colchete e não há `[`/`]` internos |
+| Iniciativa e rodada | Todo mundo rola d20 (inimigo sem DES rola puro). **Rodada = a volta completa da ordem**, não o turno do jogador. Empate é aceito: o desempate de `calcular_ordem_iniciativa` já é determinístico, e com d20 a colisão é inevitável por casa-dos-pombos |
+| Conexão dupla na mesma sessão | Chaveada pelo par **(sessão, dono)** — nunca pela sessão sozinha. Conexão nova do mesmo dono fecha a antiga com 1012. Dono diferente segue recusado pelo ownership: é ali que o multiplayer pluga |
 | STT | Faster-Whisper `large-v3-turbo` em GPU (`settings.STT_MODEL`). Medido 21/07: WER 3,67% e 0,58s/fala — mais rápido **e** mais correto que o `small` |
 | TTS principal | Edge TTS Microsoft. Nuance por **pontuação** — SSML foi tentado e é impossível no endpoint gratuito |
 | TTS fallback | Kokoro-82M local (`pip install kokoro` — NÃO kokoro-tts) |
@@ -251,6 +265,49 @@ NÃO casar id de combate com id de módulo sem normalizar sufixo → o combate n
 NÃO deixar peça do módulo cair calada no fallback → avisar alto
                             (`npc_do_modulo_sem_ficha_autoral`). Errar calado custou um
                             playtest inteiro.
+NÃO derivar valor de tabela PARSEANDO texto sem 2º elo → `xp_do_inimigo` lia o "(N XP)"
+                            da ficha, e o ingestor só escreve esse parêntese quando o
+                            campo existe no 5e-database. Ficha com "CR 17" sem parêntese
+                            caía em 25 XP: a lenda pagando preço de bandido, em silêncio.
+                            Hoje: parêntese → `XP_POR_CR` (SRD) → fallback, e o fallback
+                            grita. Mesma classe do BESTIARIO-CR-ERRADO-1.
+
+# Marcador migrado pra engine (Bloco 3) — a regra da fila está INCOMPLETA
+NÃO tirar nome de `NOMES_MARCADORES` ao migrar → `RE_STRIP_MARCADORES` é DERIVADO dessa
+                            tupla e é o ÚNICO strip do TTS. Remover o nome não desliga
+                            o marcador: faz ele deixar de ser LIMPO do texto, e o jogador
+                            passa a OUVIR "colchete RELOGIO_AVANCA dois pontos guerra".
+                            A migração tem DUAS metades: o PROCESSAMENTO morre (handler
+                            sai do turn_pipeline) e o STRIP continua (o nome vai pra
+                            `NOMES_OBSOLETOS`, não some). Vale pro P5, P8, P9 e P10.
+NÃO usar marcador do prompt como sentinela de teste → `test_gating_fragments` usava
+                            `[RELOGIO_AVANCA:` pra provar que o fragmento completo foi
+                            injetado, e quebrou quando o marcador saiu. Já tinha quebrado
+                            antes pelo mesmo motivo (era "CR≤¼=25" até a dieta de 01/07).
+                            Escolha um marcador e deixe a receita de conserto escrita.
+
+# Teste que casa a frase ANTIGA acusa a própria explicação (2× em 2 dias)
+NÃO assertar `"frase velha" not in fonte` → o comentário novo CITA a frase velha pra
+                            explicar o que mudou, e o assert falha no próprio texto que
+                            documenta o fix. Aconteceu com "espelham os do websocket" (P4)
+                            e com "random" (P8). Duas saídas: afirmar o que o arquivo DEVE
+                            dizer, ou checar o CÓDIGO via `ast` em vez do texto.
+
+# Aleatoriedade nova torna teste antigo FLAKY, não quebrado
+NÃO trocar valor determinístico por rolagem sem varrer quem depende dele → a iniciativa
+                            virou d20 real e `test_avancar_turno_pula_mortos` passou a
+                            depender de sorte: passou na suíte daquele dia e quebrou dois
+                            dias depois. Flaky é PIOR que quebrado — some no CI e volta em
+                            jogo. Fixe a rolagem no teste, com a razão escrita.
+
+# asyncio dentro de dataclass
+NÃO criar `asyncio.Lock` em `field(default_factory=asyncio.Lock)` → a dataclass é
+                            instanciada fora de loop rodando (POST /session/start em
+                            thread de teste) e o lock prende o loop ERRADO. Criar lazy,
+                            numa property.
+NÃO liberar slot de conexão no `finally` sem comparar com `is` → a conexão ANTIGA
+                            terminando de morrer (depois de levar 1012) limpa o registro
+                            da conexão NOVA que acabou de assumir.
 
 # Sinais cumulativos mentem sobre o AGORA
 NÃO usar acumulador de sessão como sinal de "está acontecendo" → `npcs_apresentados`

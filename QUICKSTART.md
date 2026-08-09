@@ -148,10 +148,9 @@ REM ← tokens chegam um a um; finaliza com {"tipo":"fim","latencia_ms":...}
 REM Testa Groq + Qdrant + Neo4j de uma vez
 python connection_test.py
 
-REM Rodar testes unitários
-make test
-REM → 14 testes (trust_detector + context_builder + prompt_builder)
-REM    Para rodar a suite completa: uv pip install structlog fastapi httpx antes
+REM Rodar a suíte de testes
+uv run pytest tests/ -q
+REM → 2514 testes. Leva ~2min30 e não precisa de GPU, LLM nem banco no ar.
 ```
 
 ---

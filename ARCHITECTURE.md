@@ -150,6 +150,15 @@ rótulos de instrução como `PACING`/`PRESSÁGIO`, que existem só para o eco d
 não vazar para o TTS). `aplicar_pos_turno()` parseia tudo e atualiza a `WorkingMemory`.
 Regex de vocabulário PT-BR ficam como *fallback* de defesa quando o LLM não emite o marcador.
 
+**Marcador tem ciclo de vida, e aposentar um tem duas metades.** Quando a engine passa
+a decidir o que um marcador decidia, ele não some da tabela — vai para
+`NOMES_OBSOLETOS`. O motivo é uma armadilha que só aparece quando se tenta:
+`RE_STRIP_MARCADORES` é *derivado* de `NOMES_MARCADORES` e é o único strip do TTS, então
+remover o nome não desliga o marcador — faz o jogador **ouvi-lo**. A migração correta é
+matar o **processamento** (o handler sai do pipeline) e manter o **strip** (o nome muda
+de tupla). Se o modelo ainda emitir, vira telemetria (`marcador_obsoleto_ignorado`) e
+nada mais — saber se ele insiste é o que diz se o prompt foi entendido.
+
 O contrato tem **guarda automática ponta-a-ponta** (`tests/test_contrato_markers_ws.py`):
 todo marker documentado ⊆ tabela de strip (`engine/markers.py`) ⊆ processador na engine
 ⊆ instrução ao LLM, e todo tipo WS emitido ⊆ enum zod do frontend — cortar qualquer
@@ -188,7 +197,23 @@ narrado — sempre com a engine como autoridade final.
   e o mapa é chaveado pelo id do módulo. Entidade do módulo sem bloco `combat` autoral
   agora **avisa alto** (`npc_do_modulo_sem_ficha_autoral`) em vez de cair calada no
   fallback genérico por CR — foi assim que uma entidade lendária recebeu ficha de warlock
-  e morreu com 9 de dano.
+  e morreu com 9 de dano. A cadeia de resolução termina numa **âncora SRD real**
+  (`ancorar_no_srd`, que casa índice *ou nome PT-BR*) antes do genérico, e cada inimigo
+  carrega `ficha_fonte` (`modulo` / `bestiario` / `srd-ancora` / `generico`) — a
+  invisibilidade dessa cadeia foi o que deixou o bug passar uma sessão inteira.
+- **Número é da engine, porte é do Mestre.** A ficha SRD saía inteira no prompt em todo
+  turno de combate (até 3, ~55 palavras cada) — uma *tabela* num lugar onde o Mestre nem
+  pode citar número. O prompt recebe agora um descritor sem dígito nenhum
+  ("coriáceo, protegido, perigoso"); os números ficam em `inimigos_combate`, com a engine.
+- **A rodada é a volta da ordem**, não o turno do jogador. Todo mundo rola d20 de verdade
+  (o inimigo rola puro — `StatsInimigo` não tem DES, e inventar modificador seria número
+  sem lastro no SRD), os inimigos agem na sequência de iniciativa, e a rodada abre quando
+  o cursor dá a volta. Empate é aceito: exigir unicidade era o que obrigava o fallback
+  decrescente fixo, e com d20 a colisão é inevitável por casa-dos-pombos — o que precisa
+  ser determinístico é a *ordem*, e disso cuida o desempate de `calcular_ordem_iniciativa`.
+- **O dano que o jogador causa chega à tela** (`golpes_turno` → payload `fim`), espelho do
+  canal que já existia para o dano *sofrido*. Registrado no ponto em que o dano é
+  aplicado, não no websocket — assim nenhum caminho de aplicação fica de fora.
 - **`alinhamento.py`**: caráter **acumulado** em dois eixos, derivado do que o jogador faz
   (≠ pacing — não volta pra base). Híbrido: a engine deriva o que já sabe (atacar NPC
   pacífico), o marcador `[ALINHAMENTO:]` cobre o resto, com vocabulário FECHADO.
@@ -209,6 +234,33 @@ acabou), mas a **cena volta a correr**: o jogador ainda está dentro do mundo qu
 final deixou. A diretiva nomeia o final alcançado — o Mestre precisa saber em que mundo
 está narrando — e degrada sem quebrar quando `arc_ending_id` se perde numa sessão
 restaurada. Um teste lista o vocabulário que CONGELA a cena e falha se ele voltar.
+
+### 7b. Consequência de falha (`engine/authority/consequencia.py`)
+A engine resolvia o teste, mas quem decidia o que a falha **significa** era o LLM — e o
+LLM improvisa consequência pra baixo, porque não quer machucar o jogador. Dava para ter
+combate mecanicamente perfeito e o jogador nunca sentir risco, porque *fora* do combate
+falhar não custava nada.
+
+Agora a engine emite, junto do veredito, a **classe** e a **intensidade** do custo. O LLM
+narra dentro do trilho: escolhe o *como*, nunca o *se* nem o *qual*.
+
+- **Seis classes fechadas** — `DANO`, `RECURSO`, `POSICAO`, `RELOGIO`, `INFORMACAO`,
+  `COMPLICACAO`. Vocabulário fechado pelo mesmo motivo da tabela de CD: rótulo
+  desconhecido cai no padrão, nunca inventa.
+- **Gradiente pela margem**, não por sorteio: falhou por 1–2 → *sucesso com custo*;
+  3–7 → padrão; 8+ → duro; natural 1 → duro + complicação. O degrau "sucesso com custo"
+  é o que permite o Mestre ser generoso sem que a falha vire nada — o que um mestre
+  veterano faz o tempo todo e o LLM sozinho nunca faz.
+- **Matriz contexto × classe**: cada contexto tem um custo *imediato* (dói e acaba) e um
+  *estrutural* (sobrevive ao turno). Quanto pior a falha, mais o custo sobrevive ao
+  momento. A matriz é a superfície de calibragem — é gosto de mestre, e por isso está
+  isolada num dict de seis células.
+- **Zero random**, em ponto nenhum: previsibilidade *é* o produto. O jogador só consegue
+  "calcular que vai doer" se o custo for legível de antemão. Um teste varre o AST do
+  módulo atrás de `random`.
+
+A linha viaja pelo canal `fatos_engine` (nunca no `texto_jogador`) e diz a classe **e**
+proíbe trocá-la — sem essa segunda metade o trilho é decorativo.
 
 ### 8. Persistência (`engine/persistence/`)
 - **SQLite** (`character_store.py`, via aiosqlite): HP, spell slots, ouro, XP, death saves,
