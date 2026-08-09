@@ -2012,6 +2012,20 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 )
                                 log.info("check_resolvido", session_id=session_id,
                                          pericia=_pericia_pedida, bruto=_d20_check)
+                                # P7: FALHA move o mundo. Até 07/08 os quatro
+                                # gatilhos de relógio mediam tempo (viagem,
+                                # descanso) ou narração (marcador, quest) —
+                                # nenhum media o jogador ERRANDO. É o gatilho
+                                # que serve o gate aberto da Camada 2: falhar
+                                # deixa de doer só na cena.
+                                if sessao.check_resolvido.get("sucesso") is False:
+                                    _estourados = (
+                                        sessao.working_mem.narrative.tick_relogios_falha()
+                                    )
+                                    if _estourados:
+                                        log.info("relogios_tick_falha",
+                                                 session_id=session_id,
+                                                 estourados=_estourados)
 
                 # ── Consumo de item pela ENGINE (ITEM-SEM-AUTORIDADE-1, 01/08) ─────
                 # "Não fui curado pela minha poção": o jogador TINHA o item, bebeu, e

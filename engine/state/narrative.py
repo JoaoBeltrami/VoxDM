@@ -49,6 +49,12 @@ _IMPULSO_PACING: dict[str, float] = {
     "aftermath": -1.2,
 }
 
+# P7 (07/08) — falhas necessárias pra mover uma fatia de relógio. Superfície de
+# calibragem do Beltrami: mexer aqui muda a velocidade do mundo e não quebra
+# mecânica nenhuma. Metade da cadência de viagem (2), que já foi calibrada em jogo.
+_FALHAS_POR_FATIA: int = 3
+
+
 @dataclass
 class NarrativeState:
     """Memória de longo prazo do mestre dentro da sessão atual."""
@@ -122,6 +128,8 @@ class NarrativeState:
     # Cadência do tick de viagem (PLAYTEST 24/06): só avança relógios a cada 2ª
     # troca de cena — andar de sala em sala num hub social não enche a ameaça.
     viagens_desde_tick_relogio: int = 0
+    # P7: contador do gatilho de FALHA (ver `tick_relogios_falha`).
+    falhas_desde_tick_relogio: int = 0
 
     # PLAY5-FRONTS: ameaças latentes (fronts autorais do Schema v2) — id →
     # {nome, segmentos, filled}. Mostrar um front como relógio do HUD no turno 1
@@ -349,6 +357,32 @@ class NarrativeState:
         if self.viagens_desde_tick_relogio < 2:
             return []
         self.viagens_desde_tick_relogio = 0
+        return self.avancar_todos_relogios(1)
+
+    def tick_relogios_falha(self) -> list[str]:
+        """Tick de relógio por FALHA em teste. Uma fatia a cada N falhas.
+
+        P7 (07/08) — o gatilho que faltava, e o que mais serve o gate aberto da
+        Camada 2 ("minhas escolhas podem dar errado"). Até aqui, falhar num teste
+        doía só na cena: o mundo seguia parado. Os quatro gatilhos existentes
+        (viagem, descanso longo, efeito de quest, marcador do LLM) medem TEMPO e
+        NARRAÇÃO — nenhum media o jogador errando.
+
+        Cadência, e não 1:1, pelo mesmo motivo registrado no tick de viagem: no
+        playtest de 24/06 ticar a cada evento encheu a ameaça rápido demais. Uma
+        sessão tem dezenas de testes e boa parte falha.
+
+        ⚠️ `_FALHAS_POR_FATIA` é SUPERFÍCIE DE CALIBRAGEM do Beltrami — mexer nele
+        muda a velocidade do mundo inteiro e não quebra mecânica nenhuma. Fica em
+        3 por ser conservador: a metade da cadência de viagem, que já foi
+        calibrada em jogo.
+
+        Retorna os nomes dos relógios que encheram.
+        """
+        self.falhas_desde_tick_relogio += 1
+        if self.falhas_desde_tick_relogio < _FALHAS_POR_FATIA:
+            return []
+        self.falhas_desde_tick_relogio = 0
         return self.avancar_todos_relogios(1)
 
     def avancar_todos_relogios(self, passos: int = 1) -> list[str]:
