@@ -469,7 +469,8 @@ da pergunta ganha.
 
 Complementares (não são fonte de estado):
 `.internal/ADR/` (decisões arquiteturais numeradas — **ADR-005** é o norte de produto,
-**ADR-006** estende a autoridade da engine à narrativa),
+**ADR-006** estende a autoridade da engine à narrativa, **ADR-007** separa
+conteúdo de regra e põe magia na engine),
 `docs/VOXDM_SCHEMA_v1.2.md` e `docs/VOXDM_SCHEMA_v2.md` (especificação do formato de módulo),
 `docs/GUIA_USO.md`, `QUICKSTART.md`, `README.md`, `CONTRIBUTING.md`.
 
