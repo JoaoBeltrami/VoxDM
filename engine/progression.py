@@ -80,14 +80,60 @@ XP_ABATE_FALLBACK: int = 25
 XP_QUEST_CONCLUIDA: int = 100
 
 
-def xp_do_inimigo(dados: dict) -> int:
-    """XP de abate de um inimigo pela ficha SRD, ou fallback CR ~1/8.
+# Tabela oficial de XP por CR (SRD 5.1). Mesmo padrão de STATBLOCKS_SRD: dado
+# aberto em código, sem I/O.
+#
+# P5 (07/08): ela não existia. `xp_do_inimigo` só sabia PARSEAR o "(N XP)" do
+# texto da ficha — e `ingestor/rules_loader.py:317` só escreve esse parêntese
+# quando o campo `xp` vem preenchido. Ficha com "CR 17" e sem o parêntese caía
+# no fallback de 25 XP EM SILÊNCIO: uma lenda pagando preço de lacaio. É a mesma
+# classe do BESTIARIO-CR-ERRADO-1, que custou um playtest inteiro.
+XP_POR_CR: dict[str, int] = {
+    "0": 10, "1/8": 25, "1/4": 50, "1/2": 100,
+    "1": 200, "2": 450, "3": 700, "4": 1_100, "5": 1_800,
+    "6": 2_300, "7": 2_900, "8": 3_900, "9": 5_000, "10": 5_900,
+    "11": 7_200, "12": 8_400, "13": 10_000, "14": 11_500, "15": 13_000,
+    "16": 15_000, "17": 18_000, "18": 20_000, "19": 22_000, "20": 25_000,
+    "21": 33_000, "22": 41_000, "23": 50_000, "24": 62_000, "25": 75_000,
+    "26": 90_000, "27": 105_000, "28": 120_000, "29": 135_000, "30": 155_000,
+}
 
-    A ficha em texto do bestiário traz "CR 1/4 (50 XP)" — parseamos o valor
-    oficial. Inimigo sem ficha (NPC do módulo, genérico) vale o fallback.
+# "CR 1/4" ou "CR 5" na ficha em texto. Aceita a fração do SRD.
+_RE_CR_FICHA = re.compile(r"\bCR\s+(\d+(?:\s*/\s*\d+)?)", re.IGNORECASE)
+
+
+def xp_de_cr(ficha: str) -> int | None:
+    """XP oficial pelo CR declarado na ficha. None se não houver CR reconhecível."""
+    m = _RE_CR_FICHA.search(ficha or "")
+    if not m:
+        return None
+    return XP_POR_CR.get(m.group(1).replace(" ", ""))
+
+
+def xp_do_inimigo(dados: dict) -> int:
+    """XP de abate pela ficha SRD, em três elos, do mais preciso ao mais burro.
+
+    1. "(N XP)" no texto — o valor oficial que o próprio bestiário já traz.
+    2. CR declarado → `XP_POR_CR` (SRD 5.1). É este elo que impede uma lenda de
+       valer 25 XP quando a ficha tem CR mas o ingestor não escreveu o parêntese.
+    3. Fallback CR ~1/8, e ALTO: se chegou aqui, a engine não sabe o que o
+       inimigo vale, e errar calado sobre isso já custou um playtest.
     """
-    m = _RE_XP_FICHA.search(str(dados.get("ficha", "")))
-    return int(m.group(1)) if m else XP_ABATE_FALLBACK
+    ficha = str(dados.get("ficha", ""))
+    m = _RE_XP_FICHA.search(ficha)
+    if m:
+        return int(m.group(1))
+    por_cr = xp_de_cr(ficha)
+    if por_cr is not None:
+        return por_cr
+    log.warning(
+        "xp_abate_sem_referencia",
+        nome=dados.get("nome", ""),
+        tem_ficha=bool(ficha),
+        xp_aplicado=XP_ABATE_FALLBACK,
+        acao="ficha sem '(N XP)' nem CR reconhecível — confira o statblock",
+    )
+    return XP_ABATE_FALLBACK
 
 
 def conceder_xp_abates_pendentes(wm: WorkingMemory) -> int:
