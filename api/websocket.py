@@ -355,6 +355,32 @@ async def _emitir_eventos_relacao(websocket: WebSocket, sessao: Any) -> None:
                 log.warning("relacao_toast_falhou", erro=str(e)[:120])
 
 
+def _resolver_magia_engine(
+    sessao: Any, session_id: str, magia: str, alvo: str, d20: int
+) -> str | None:
+    """Resolve um ataque de MAGIA via engine; devolve a linha de narração.
+
+    Gêmeo de `_resolver_ataque_engine` para o caminho mágico (ADR-007, P16 passo
+    3). None quando não se aplica — a magia não está na tabela, não é de ataque,
+    ou o alvo morreu — e aí o turno segue no fluxo antigo.
+
+    NÃO consome slot: quem faz isso é o `spell_pending`, que decrementa no FIM do
+    turno e só se a narrativa confirmar o cast (CRIT-1). Chamar o consumo aqui
+    seria gasto DUPLO, e pior: gastaria mesmo quando o turno falha.
+    """
+    try:
+        from engine.magic.resolucao import resolver_ataque_de_magia
+        _res = resolver_ataque_de_magia(sessao.working_mem, magia, alvo, d20)
+    except Exception as _e:  # nunca derruba o turno
+        log.error("magia_engine_falhou", session_id=session_id, erro=str(_e))
+        return None
+    if not _res:
+        return None
+    log.info("magia_engine_resolveu", session_id=session_id, magia=magia,
+             alvo=alvo, acertou=_res.get("acertou"), dano=_res.get("dano"))
+    return str(_res.get("contexto") or "") or None
+
+
 def _resolver_ataque_engine(
     sessao: Any, session_id: str, alvo: str, d20: int
 ) -> str | None:
@@ -2172,9 +2198,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             _pend = sessao.combate_pendente
                             sessao.combate_pendente = None
                             if sessao.working_mem.em_combate:
-                                _texto_engine = _resolver_ataque_engine(
-                                    sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
-                                )
+                                if _pend.get("tipo") == "magia":
+                                    _texto_engine = _resolver_magia_engine(
+                                        sessao, session_id,
+                                        str(_pend.get("magia", "")),
+                                        str(_pend.get("alvo", "")),
+                                        _d20_jogador,
+                                    )
+                                else:
+                                    _texto_engine = _resolver_ataque_engine(
+                                        sessao, session_id, str(_pend.get("alvo", "")), _d20_jogador
+                                    )
                                 if _texto_engine is not None:
                                     # A engine é a autoridade do dano do PJ neste turno —
                                     # o extractor de prosa abaixo NÃO deve re-aplicar.
@@ -2430,6 +2464,36 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                             nivel=nivel_magia,
                                             session_id=session_id,
                                         )
+
+                    # P16 passo 3 (ADR-007, decisão 3): magia de ATAQUE segue a mesma
+                    # regra do ataque físico — o JOGADOR rola o d20 na UI e a engine
+                    # resolve. Reusa a máquina de `combate_pendente` que já existe;
+                    # o que muda é o `tipo`, que roteia pro resolvedor de magia.
+                    if (
+                        nome_magia
+                        and sessao.working_mem.em_combate
+                        and not sessao.combate_pendente
+                    ):
+                        from engine.magic.resolucao import mecanica_da_magia
+                        _mec = mecanica_da_magia(nome_magia)
+                        if _mec and _mec.get("resolucao") == "ataque":
+                            _alvo_magia = _extrair_alvo_ataque(
+                                texto_jogador, sessao.working_mem
+                            ) or next(
+                                (
+                                    iid for iid, d in sessao.working_mem.inimigos_combate.items()
+                                    if d.get("estado") != "morto"
+                                ),
+                                "",
+                            )
+                            if _alvo_magia:
+                                sessao.combate_pendente = {
+                                    "tipo": "magia",
+                                    "alvo": _alvo_magia,
+                                    "magia": nome_magia,
+                                }
+                                log.info("magia_de_ataque_pendente", session_id=session_id,
+                                         magia=nome_magia, alvo=_alvo_magia)
 
                     # Injeta magias conhecidas no contexto antes de montar o prompt
                     contexto.spells_conhecidas = sessao.spells_conhecidas
