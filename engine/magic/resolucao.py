@@ -81,7 +81,7 @@ def _dado_de_dano(mecanica: dict[str, Any], nivel_pj: int, nivel_slot: int) -> s
         disponiveis = sorted((int(k) for k in por if str(k).isdigit()), reverse=True)
         chave = next((str(d) for d in disponiveis if d <= degrau), None)
         return str(por.get(chave, "")) if chave else ""
-    disponiveis = sorted((int(k) for k in por if str(k).isdigit()))
+    disponiveis = sorted(int(k) for k in por if str(k).isdigit())
     if not disponiveis:
         return ""
     # Slot abaixo do mínimo da magia não deveria acontecer (o caller valida),
