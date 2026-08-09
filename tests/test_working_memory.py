@@ -632,6 +632,11 @@ def test_avancar_turno_pula_mortos():
     wm.entrar_combate()
     wm.registrar_inimigo("vivo", "Vivo")
     wm.registrar_inimigo("morto-1", "Morto", estado="morto")
+    # COMBATE-SEM-RODADA-1 (07/08): a iniciativa do JOGADOR passou a ser ROLADA.
+    # Sem fixá-la, este teste vira FLAKY — passa ou falha conforme o d20: se o
+    # jogador rolar abaixo de 5, ele fica DEPOIS de "vivo" e o assert final
+    # inverte. Flaky é pior que quebrado, porque some no CI e volta em jogo.
+    wm.iniciativa_jogador = 10
     wm.popular_iniciativa({"vivo": 5, "morto-1": 99})
     # ordem por valor desc: morto-1(99), jogador(10), vivo(5)
     # vivos: jogador, vivo
