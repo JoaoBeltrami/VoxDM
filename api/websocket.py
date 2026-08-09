@@ -2364,8 +2364,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         extrair_nome_magia,
                         formatar_bloco_magia,
                     )
-                    if not sessao.working_mem.session_zero_ativa and _RE_CASTING.search(texto_jogador):
-                        nome_magia = extrair_nome_magia(texto_jogador)
+                    if not sessao.working_mem.session_zero_ativa:
+                        # P16 passo 2 (ADR-007, decisão 2): o gatilho PRIMÁRIO é o
+                        # NOME da magia na ficha; os seis verbos viraram reforço.
+                        # No playtest de 09/08 um Clérigo conjurou a sessão inteira
+                        # e a engine viu ZERO — "abençoo" não é nenhum dos verbos.
+                        from engine.magic.casting import detectar_conjuracao
+                        nome_magia = detectar_conjuracao(
+                            texto_jogador, sessao.spells_conhecidas
+                        )
+                        if nome_magia:
+                            log.info("conjuracao_detectada_por_nome",
+                                     session_id=session_id, magia=nome_magia)
+                        elif _RE_CASTING.search(texto_jogador):
+                            # Reforço: verbo sem nome reconhecido na ficha ainda
+                            # pode ser conjuração (o jogador diz "lanço algo pra
+                            # curar"). A validação contra a ficha continua abaixo.
+                            nome_magia = extrair_nome_magia(texto_jogador)
                         if nome_magia:
                             # Bug #5: valida ANTES de decrementar slot. Se o jogador grita
                             # "lanço bola de fogo" sem ter selecionado essa magia na criação,
