@@ -337,8 +337,10 @@ class CombatState:
         unicidade era o que exigia o fallback decrescente — e com d20 e muitos
         inimigos a colisão é garantida por casa-dos-pombos, não é evitável.
 
-        Inimigo rola d20 puro: `StatsInimigo` não tem DES, e inventar um
-        modificador seria número sem lastro no SRD.
+        ATRIBUTOS-DO-INIMIGO (09/08): o inimigo soma o modificador de DES quando
+        a ficha dele o traz, e rola puro quando não traz. Antes rolava sempre
+        puro — uma dragoa CR 17 agia na mesma velocidade de um goblin, e dar
+        ficha melhor a ela não mudava nada.
         """
         rng = rng or random.Random()
         if "jogador" not in self.iniciativa_cache:
@@ -352,7 +354,11 @@ class CombatState:
                 continue
             valor = proposta_llm.get(inimigo_id)
             if valor is None:
-                valor = rng.randint(1, 20)
+                dados = self.inimigos_combate.get(inimigo_id) or {}
+                mod_des = stats_inimigo(
+                    ficha=str(dados.get("ficha", "")), nome=str(dados.get("nome", ""))
+                ).mod("des")
+                valor = rng.randint(1, 20) + mod_des
             self.iniciativa_cache[inimigo_id] = valor
 
     def avancar_turno_iniciativa(self, calcular_ordem) -> bool:

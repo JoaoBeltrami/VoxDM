@@ -764,7 +764,10 @@
         "Controle total das gargantas vulcânicas",
         "NÃO é para ser enfrentada — é para ser temida",
         "Procura um NOME, não um tesouro"
-      ]
+      ],
+      "combat": {
+        "srd_analogo": "adult-red-dragon"
+      }
     }
   ],
   "factions": [
