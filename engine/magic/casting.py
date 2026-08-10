@@ -38,8 +38,19 @@ _VERBOS_CASTING: tuple[str, ...] = (
     # lançar / conjurar / invocar
     "lanco", "lancar", "lancando", "conjuro", "conjurar", "conjurando",
     "invoco", "invocar", "invocando", "evoco", "evocar",
-    # usar — a forma mais natural em português falado
+    # usar — a forma mais natural em português falado.
+    # ⚠️ `utilizar` custou o gate inteiro do P16 (playtest 10/08): o jogador disse
+    # "vou UTILIZAR a marca do caçador", a magia estava na ficha, a mecânica
+    # resolvia — e a detecção devolveu None porque só `usar` estava aqui. Zero
+    # conjurações em 26 turnos por causa de uma palavra. Sinônimo que falta neste
+    # tupla não falha alto: falha como se a magia não existisse.
     "uso", "usar", "usando",
+    "utilizo", "utilizar", "utilizando",
+    "emprego", "empregar", "empregando",
+    # o jogador também DECLARA a intenção sem verbo de conjuração próprio —
+    # "vou de bola de fogo", "solto uma bola de fogo", "disparo chama sagrada"
+    "solto", "soltar", "soltando", "disparo", "disparar", "disparando",
+    "ativo", "ativar", "ativando",
     # castar — anglicismo comum de mesa
     "casto", "castar", "castando",
     # canalizar / recitar / cantar / entoar / rezar — o vocabulário de clérigo,

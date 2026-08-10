@@ -333,6 +333,13 @@ class MensagemWS(BaseModel):
     # payload e NUNCA em `_snapshot_estado` — o snapshot alimenta também a
     # abertura e a reconexão, e o golpe vazaria nesses dois.
     golpes_inimigos: list[dict[str, Any]] = Field(default_factory=list)
+    # ROLAGEM-INIMIGO-INVISIVEL-1 (playtest 10/08): *"eu preciso só confiar no que
+    # o mestre diz, ele não tá rolando visível"*. O golpe do jogador já chegava à
+    # tela; a rolagem do INIMIGO não chegava nunca. Cada item traz a conta inteira
+    # — {id, nome, d20, atk_bonus, total, ca_alvo, acertou, critico, dano} — porque
+    # só o resultado continuaria sendo palavra do Mestre. Enviado pelo beat do
+    # turno dos inimigos, nunca em `_snapshot_estado`.
+    ataques_inimigos: list[dict[str, Any]] = Field(default_factory=list)
     # Dado rolado pelo mestre — enviado como tipo="dado_rolado" quando roll_visibility
     # for "open" ou "result_only". Frontend exibe animação (open) ou só o número (result_only).
     dado_tipo: str = ""       # "d4", "d6", "d8", "d10", "d12", "d20", "d100"

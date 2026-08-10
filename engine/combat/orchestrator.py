@@ -24,6 +24,7 @@ import random
 from typing import Any
 
 from engine.combat.enemy_turn import resolver_turno_inimigos
+from engine.combat.morte import estado_de_morte, falha_por_golpe, linha_de_morte
 from engine.combat.narration import (
     classificar_tier,
     linha_ataque_jogador,
@@ -39,16 +40,25 @@ from engine.combat.resolver import ResultadoAtaque, resolver_ataque, resolver_da
 _DADO_ARMA_PADRAO = 8
 
 
-def resolver_ataque_do_jogador(wm: Any, alvo_id: str, d20: int) -> ResultadoAtaque | None:
+def resolver_ataque_do_jogador(
+    wm: Any, alvo_id: str, d20: int, *, mod_ataque: int | None = None
+) -> ResultadoAtaque | None:
     """Resolve o ataque do jogador (d20 + mod de ataque) vs a CA do alvo.
 
     Retorna o ResultadoAtaque, ou None se o alvo não existe ou já está morto.
+
+    MOD-ARMA-1 (10/08): `mod_ataque` permite ao caller passar o modificador
+    derivado da ARMA (arco → DES, espada grande → FOR, finesse → o melhor). Sem
+    ele o comportamento é o antigo — `wm.mod_ataque()`, o melhor atributo de
+    todos — que acerta o número por acidente mas não sabe NOMEAR o atributo, e
+    era por isso que o Mestre pedia Força a um Ranger de arco.
     """
     alvo = wm.inimigos_combate.get(alvo_id)
     if not alvo or alvo.get("estado") == "morto":
         return None
     ca = int(alvo.get("ca", 12))  # default se o inimigo ainda não tem stats aplicados
-    return resolver_ataque(d20, wm.mod_ataque(), ca)
+    mod = wm.mod_ataque() if mod_ataque is None else int(mod_ataque)
+    return resolver_ataque(d20, mod, ca)
 
 
 def aplicar_dano_do_jogador(
@@ -75,9 +85,24 @@ def executar_turno_inimigos(wm: Any, rng: random.Random | None = None) -> dict[s
     res = resolver_turno_inimigos(
         wm.inimigos_combate, wm.ca, rng=rng, ordem=ordem_de_iniciativa(wm),
     )
+    # MORTE-SEM-DESFECHO-1 (10/08, pedido do Beltrami: *"se o inimigo finalizar o
+    # jogador é morte mesmo"*). Golpe que acerta quem JÁ está a 0 PV não tira HP —
+    # não há HP pra tirar — e sim uma falha automática no teste de morte (duas se
+    # for crítico). Sem isto, estar caído ao lado de um inimigo seria mais seguro
+    # que estar de pé, e a regra que o SRD usa pra fechar a luta não existiria.
+    if estado_de_morte(wm) in ("caido", "estavel"):
+        golpes = [a for a in (res.get("ataques") or []) if a.get("acertou")]
+        res["falhas_de_morte"] = [
+            falha_por_golpe(wm, critico=bool(a.get("critico"))) for a in golpes
+        ]
+        res["dano_total"] = 0   # o dano não se aplica a quem já caiu
+        res["hp_jogador"] = wm.player_hp
+        res["estado_morte"] = estado_de_morte(wm)
+        return res
     if res.get("dano_total", 0) > 0:
         wm.character.aplicar_dano(res["dano_total"])
     res["hp_jogador"] = wm.player_hp
+    res["estado_morte"] = estado_de_morte(wm)
     return res
 
 
@@ -132,11 +157,19 @@ def resolver_turno_inimigos_adiado(
     else:
         wm.avancar_rodada()
 
+    # As falhas de morte entram no contexto junto do turno: o Mestre precisa
+    # narrar a lâmina descendo sobre quem já caiu, e precisa saber a contagem.
+    _linhas = [linha_turno_inimigos(res)]
+    _nome = str(getattr(wm, "player_name", "") or "")
+    _linhas += [linha_de_morte(f, _nome) for f in (res.get("falhas_de_morte") or [])]
+
     return {
         "valido": True,
-        "contexto": linha_turno_inimigos(res),
+        "contexto": "\n".join(x for x in _linhas if x),
         "dano_total": int(res.get("dano_total", 0)),
         "ataques": res.get("ataques"),
+        "falhas_de_morte": res.get("falhas_de_morte") or [],
+        "estado_morte": res.get("estado_morte") or estado_de_morte(wm),
         "hp_jogador": wm.player_hp,
         "fim_combate": _fim_de_combate(wm),
     }
@@ -148,6 +181,7 @@ def resolver_turno_ataque_jogador(
     d20: int,
     *,
     dado_arma: int = _DADO_ARMA_PADRAO,
+    mod_ataque: int | None = None,
     rng: random.Random | None = None,
     adiar_inimigos: bool = False,
 ) -> dict[str, Any]:
@@ -166,7 +200,10 @@ def resolver_turno_ataque_jogador(
     (cai no fluxo antigo). RNG injetável pra teste determinístico.
     """
     rng = rng or random.Random()
-    r = resolver_ataque_do_jogador(wm, alvo_id, d20)
+    # MOD-ARMA-1: `mod_ataque` e `dado_arma` vêm da ARMA quando o caller
+    # conseguiu identificá-la na declaração do jogador; None/padrão preservam o
+    # comportamento antigo pra quem ataca sem nomear nada.
+    r = resolver_ataque_do_jogador(wm, alvo_id, d20, mod_ataque=mod_ataque)
     if r is None:
         return {"valido": False, "contexto": ""}
 

@@ -82,7 +82,31 @@ def extrair(magia: dict[str, Any]) -> dict[str, Any]:
         "dano": _dano(magia),
         "cura": {str(k): str(v) for k, v in cura.items()},
         "concentracao": bool(magia.get("concentration")),
+        # ACAO-BONUS-INEXISTENTE-1 (playtest 10/08): *"não deixou eu usar a magia
+        # de ação bônus, ignorou ela e só narrou meu ataque"*. A economia de ação
+        # (`acao_usada`/`bonus_usada`) já existia no estado desde sempre; o que
+        # faltava era a engine SABER que Marca do Caçador custa bônus e não ação.
+        # São 14 magias de bônus e 4 de reação no SRD — a diferença entre poder
+        # marcar E atacar na mesma rodada, ou não poder.
+        "tempo_conjuracao": _tempo_conjuracao(magia),
     }
+
+
+def _tempo_conjuracao(magia: dict[str, Any]) -> str:
+    """"acao" | "bonus" | "reacao" | "longo" — vocabulário FECHADO.
+
+    O SRD escreve isto em prosa ("1 bonus action", "10 minutes"). Rótulo
+    desconhecido cai em "acao", que é o custo mais caro e portanto o seguro:
+    errar pra baixo daria uma ação de graça ao jogador.
+    """
+    bruto = str(magia.get("casting_time") or "").strip().lower()
+    if "bonus" in bruto:
+        return "bonus"
+    if "reaction" in bruto:
+        return "reacao"
+    if any(u in bruto for u in ("minute", "hour")):
+        return "longo"
+    return "acao"
 
 
 def _formatar(registros: dict[str, dict[str, Any]]) -> str:

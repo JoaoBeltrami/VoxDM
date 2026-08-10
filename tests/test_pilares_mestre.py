@@ -509,16 +509,26 @@ async def test_beat_nao_roda_com_jogador_a_zero():
 
 @pytest.mark.asyncio
 async def test_beat_aplica_dano_do_turno_inimigo():
-    """Ataque do jogador → beat roda → [DANO] do LLM reduz HP de verdade."""
+    """Ataque do jogador → beat roda → o dano vem da ENGINE, não do `[DANO:]`.
+
+    ⚠️ Este teste FOI REESCRITO em 10/08 porque asseria o comportamento errado:
+    ele provava que o `[DANO:]` do modelo reduzia o HP — que é exatamente o
+    DANO-SEM-ROLAGEM-1. No playtest, 4 dos 5 danos do jogador (inclusive o golpe
+    que o matou) vieram desse caminho, sem rolagem nenhuma por trás. O beat agora
+    sempre resolve pela engine; o marcador do modelo é descartado.
+    """
     from api.websocket import _beat_turno_inimigo
 
     wm = _wm(player_hp=20, player_hp_max=20)
     wm.entrar_combate()
     wm.registrar_inimigo("guarda", "Guarda", "intacto")
-    groq = _GroqSoMarkers()
+    groq = _GroqSoMarkers()   # emite [DANO: -5 lança do guarda]
     await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, groq), "Ataco o guarda!")
     assert groq.chamadas == 1
-    assert wm.player_hp == 15
+    # O HP mudou (a engine resolveu o turno do inimigo) mas NUNCA pelos 5 do
+    # marcador: 15 seria a prova de que o modelo continua sendo o dono do número.
+    assert wm.player_hp != 15, "o `[DANO: -5]` do modelo não pode mais valer"
+    assert 0 <= wm.player_hp <= 20
 
 
 @pytest.mark.asyncio
@@ -572,7 +582,11 @@ async def test_beat_nao_roda_com_combate_pendente():
 @pytest.mark.asyncio
 async def test_beat_roda_normalmente_sem_pendencia_via_getattr():
     """_sessao_fake não seta combate_pendente — getattr default None não
-    bloqueia o fluxo antigo (fallback prompt-only intacto)."""
+    bloqueia o beat.
+
+    ⚠️ Reescrito em 10/08 junto do gêmeo acima: não existe mais "fallback
+    prompt-only" para o turno do inimigo. O beat roda, e quem resolve é a engine.
+    """
     from api.websocket import _beat_turno_inimigo
 
     wm = _wm(player_hp=20, player_hp_max=20)
@@ -584,7 +598,7 @@ async def test_beat_roda_normalmente_sem_pendencia_via_getattr():
         engine_resolveu_turno=False,
     )
     assert groq.chamadas == 1
-    assert wm.player_hp == 15
+    assert wm.player_hp != 15, "o `[DANO: -5]` do modelo não pode mais valer"
 
 
 # ══ Ritual de mesa — modo episódio ════════════════════════════════════════════

@@ -63,6 +63,12 @@ log = structlog.get_logger()
 # o combate estava congelando — inimigo que não revida é risco não-sentido.
 _MAX_TURNOS_PENDENCIA = 1
 
+# DANO-SEM-ROLAGEM-1: o `[DANO:]` que o modelo emite no BEAT do turno dos
+# inimigos é descartado — a engine já resolveu aquele mesmo turno e aplicar os
+# dois é dano dobrado. Cópia local do padrão de `turn_pipeline._RE_DANO` de
+# propósito: aqui só se REMOVE o marcador do texto, nunca se lê o número dele.
+_RE_DANO_BEAT = re.compile(r"\[DANO:\s*-?\d+\s*[^\]]*?\]", re.IGNORECASE)
+
 # Set de referências a tasks fire-and-forget (scene_image, etc.) — módulo-level.
 # Sem isso, o GC pode coletar tasks "floating" antes de terminarem.
 # O discard callback remove a referência quando a task completa.
@@ -298,9 +304,21 @@ from engine.authority.consequencia import (
     resolver_consequencia,
 )
 from engine.authority.resolve import resolver_turno_ataque_jogador
+from engine.combat.arma import (
+    atributo_do_ataque,
+    dado_de_dano,
+    identificar_arma,
+    linha_de_arma,
+)
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
+from engine.combat.morte import (
+    linha_de_morte,
+    precisa_rolar_save,
+    rolar_save_de_morte,
+)
 from engine.combat.turn_control import avaliar_acao_jogador
 from engine.magic.casting import detectar_conjuracao
+from engine.magic.economia import gastar_recurso_da_magia
 from engine.magic.resolucao import consumir_slot_da_magia, mecanica_da_magia
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
@@ -406,9 +424,21 @@ def _resolver_ataque_engine(
         and getattr(_wm, "em_combate", False)
         and _wm.player_hp > 0
     )
+    # MOD-ARMA-1: a arma foi identificada na DECLARAÇÃO e guardada na pendência —
+    # aqui só chega o d20, sem texto nenhum. Sem arma reconhecida, `None`/padrão
+    # devolvem o comportamento antigo.
+    _pend_arma = str((getattr(sessao, "combate_pendente", None) or {}).get("arma") or "")
+    _mod_arma: int | None = None
+    _dado_arma = 8
+    if _pend_arma:
+        _atr, _mod_arma = atributo_do_ataque(sessao.working_mem, _pend_arma)
+        _dado_arma = dado_de_dano(_pend_arma, padrao=8)
+        log.info("ataque_com_arma", session_id=session_id, arma=_pend_arma,
+                 atributo=_atr, mod=_mod_arma, dado=_dado_arma)
     try:
         _res = resolver_turno_ataque_jogador(
             sessao.working_mem, alvo, d20, adiar_inimigos=_adiar,
+            mod_ataque=_mod_arma, dado_arma=_dado_arma,
         )
     except Exception as _e:  # nunca derruba o turno
         log.error("combate_engine_falhou", session_id=session_id, erro=str(_e))
@@ -1140,23 +1170,37 @@ async def _beat_turno_inimigo(
     if not (_RE_COMBATE.search(texto_jogador) or RE_ROLAGEM.search(texto_jogador)):
         return
     try:
+        from engine.combat.orchestrator import resolver_turno_inimigos_adiado
         from engine.llm.tasks import TaskType
 
         # TURNO-COLAPSADO-1: no caminho ADIADO, quem rola é a ENGINE — o beat
         # deixa de ser improviso e vira narração de fato resolvido, igual ao
         # turno do jogador. Sem isto o beat pediria [DANO:] ao modelo e o
         # combate teria dois donos do mesmo número.
-        _fato_inimigos = ""
-        if inimigos_adiados:
-            from engine.combat.orchestrator import resolver_turno_inimigos_adiado
-            _r_inim = resolver_turno_inimigos_adiado(wm)
-            if not _r_inim.get("valido"):
-                return
-            _fato_inimigos = str(_r_inim.get("contexto") or "")
-            log.info("beat_inimigos_resolvido_pela_engine",
-                     dano_total=_r_inim.get("dano_total"),
-                     hp_jogador=_r_inim.get("hp_jogador"),
-                     rodada=getattr(wm, "rodada_combate", 0))
+        # DANO-SEM-ROLAGEM-1 (playtest 10/08, sess-e2221414ef32): este `if` era
+        # `if inimigos_adiados:` — e quando a flag era False o prompt abaixo
+        # mandava o modelo "rolar internamente" e emitir `[DANO: -N motivo]`.
+        # Esse ramo rodou 5 das 6 vezes: dos 5 danos que o jogador levou, 4 não
+        # tiveram rolagem nenhuma, INCLUSIVE o golpe que o matou
+        # (`dano=8 motivo='- causa morte'`). O LLM decidiu *quanto* e *se* — o
+        # oposto exato do ADR-006 — e a queixa foi literal: *"fiquei tomando dano
+        # sem o inimigo nem rolar nem agir"*.
+        #
+        # A flag `inimigos_adiados` só liga quando o ataque do JOGADOR passou
+        # pela engine com d20. Amarrar a autoridade sobre o turno do INIMIGO a
+        # isso era o erro: são duas metades independentes da rodada. Agora o beat
+        # sempre resolve pela engine, e o modelo nunca é a fonte do número.
+        _r_inim = resolver_turno_inimigos_adiado(wm)
+        if not _r_inim.get("valido"):
+            return
+        _fato_inimigos = str(_r_inim.get("contexto") or "")
+        _golpes_inimigos = list(_r_inim.get("ataques") or [])
+        log.info("beat_inimigos_resolvido_pela_engine",
+                 dano_total=_r_inim.get("dano_total"),
+                 hp_jogador=_r_inim.get("hp_jogador"),
+                 ataques=len(_golpes_inimigos),
+                 adiado=bool(inimigos_adiados),
+                 rodada=getattr(wm, "rodada_combate", 0))
 
         # Nome do personagem — o beat narra na 3ª pessoa COM o nome, nunca "o
         # jogador" (teste 13/06: "O jogador respira aliviado" quebrava a imersão,
@@ -1173,10 +1217,6 @@ async def _beat_turno_inimigo(
                 "=== JÁ RESOLVIDO PELA ENGINE ===" + chr(10) + _fato_inimigos + chr(10)
                 + "Narre EXATAMENTE isto. NÃO role nada e NÃO emita [DANO:] — o dano "
                   "já foi aplicado. Você escolhe as palavras, não os números. "
-                if _fato_inimigos else
-                "Cada inimigo vivo age UMA vez: ataque (rolagem interna vs CA), "
-                "reposicionamento ou manobra coerente com a ficha. Acertou → narre o "
-                "golpe e emita [DANO: -N motivo]; errou → narre o quase. "
             )
             + "Use "
             "[POSICAO]/[INIMIGO_MORTO] se aplicável. PT-BR falado, 2-4 frases, "
@@ -1203,8 +1243,19 @@ async def _beat_turno_inimigo(
         texto_beat = (texto_beat or "").strip()
         if not texto_beat:
             return
-        # Markers do beat valem de verdade: [DANO] reduz HP, mortes e posições
-        # sincronizam. texto_jogador="" mantém pacing/rodada intocados (CRIT-4).
+        # DANO-SEM-ROLAGEM-1, segunda metade: os OUTROS markers do beat continuam
+        # valendo (mortes, posições), mas o `[DANO:]` deixa de valer contra o
+        # jogador — a engine ACABOU de resolver este mesmo turno de inimigo, e
+        # aplicar os dois é dano dobrado. Não basta pedir no prompt que o modelo
+        # não emita: ele emite assim mesmo, e foi assim que o golpe fatal do
+        # playtest de 10/08 (`dano=8 motivo='- causa morte'`) nasceu sem rolagem.
+        # Instrução de prompt é pedido; remover o marcador é regra.
+        _tentou_dano = _RE_DANO_BEAT.search(texto_beat)
+        if _tentou_dano:
+            log.info("beat_dano_do_modelo_descartado",
+                     trecho=_tentou_dano.group(0)[:40], session_id=wm.session_id)
+        texto_beat = _RE_DANO_BEAT.sub("", texto_beat)
+        # texto_jogador="" mantém pacing/rodada intocados (CRIT-4).
         aplicar_pos_turno(wm, "", texto_beat)
         # strip_marcadores tira os bem-formados; _sanitizar_texto_beat tira o que
         # o 8B emite cru (BEAT-MARKER-LEAK-1) — sem isso o TTS lê "DANO: ...".
@@ -1226,7 +1277,14 @@ async def _beat_turno_inimigo(
             npc_vozes=wm.npc_vozes or None,
         )
         await _send_text_seguro(websocket,
-            MensagemWS(tipo="fim", **_snapshot_estado(wm)).model_dump_json()
+            MensagemWS(
+                tipo="fim",
+                # A conta do inimigo viaja junto da narração dele — se chegasse
+                # num payload separado, o jogador veria o número descolado do
+                # golpe que o causou.
+                ataques_inimigos=_golpes_inimigos,
+                **_snapshot_estado(wm),
+            ).model_dump_json()
         )
         log.info(
             "beat_turno_inimigo",
@@ -2050,6 +2108,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 # check_pedido ficava (CHECK-GRUDENTO-1).
                 sessao.check_resolvido = None
                 _d20_no_texto = extrair_d20_jogador(texto_jogador)
+
+                # MORTE-SEM-DESFECHO-1 (playtest 10/08): o jogador morreu e não
+                # houve regra nenhuma — zero PV era o fim da linha, sem save e sem
+                # chance de estabilizar. Agora, enquanto ele está caído, TODO turno
+                # começa com um teste de resistência contra a morte. Se ele mandou
+                # um d20, é o dele que vale: mesma decisão travada do ataque — quem
+                # rola o dado do próprio personagem é o jogador.
+                # Tem precedência sobre qualquer outra leitura do turno: caído, ele
+                # não ataca, não conjura e não faz perícia.
+                if precisa_rolar_save(sessao.working_mem):
+                    _f_morte = rolar_save_de_morte(sessao.working_mem, _d20_no_texto)
+                    _fatos_engine.append(
+                        linha_de_morte(_f_morte, sessao.working_mem.player_name or "")
+                    )
+                    log.info("save_de_morte", session_id=session_id,
+                             resultado=_f_morte.get("resultado"),
+                             d20=_f_morte.get("d20"),
+                             sucessos=_f_morte.get("sucessos"),
+                             falhas=_f_morte.get("falhas"),
+                             estado=_f_morte.get("estado"))
+                    if _f_morte.get("estado") == "morto":
+                        sessao.working_mem.sair_combate()
+                        log.warning("jogador_morreu", session_id=session_id,
+                                    falhas=_f_morte.get("falhas"))
                 if _d20_no_texto is None and not sessao.combate_pendente:
                     _pericia_do_jogador = eh_teste_pericia(texto_jogador)
                     # CHECK-GRUDENTO-1 (probe headless 27/07): a pendência só era
@@ -2338,7 +2420,32 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                                  alvo=_alvo, aliados=_aliados)
                             except Exception:
                                 pass  # Neo4j offline/lento → só o alvo atacado é inimigo
-                            sessao.combate_pendente = {"tipo": "ataque", "alvo": _alvo}
+                            # MOD-ARMA-1 (playtest 10/08): *"pedindo ataque com
+                            # Força que seria com Destreza"*. A arma é nomeada na
+                            # DECLARAÇÃO ("ataco com meu arco"), e o d20 chega numa
+                            # mensagem separada — se não guardarmos aqui, na hora de
+                            # resolver não há mais texto nenhum pra identificar.
+                            # ⚠️ `player_inventory`, não `inventory`: o atributo
+                            # errado levantou AttributeError DENTRO do handler do
+                            # WS, o `fim` nunca era enviado, e o teste ficava
+                            # bloqueado pra sempre em `receive_json()` — hang, não
+                            # falha. Erro dentro do loop do WS não aparece como
+                            # teste vermelho; aparece como suíte que não termina.
+                            _arma_idx, _arma_termo = identificar_arma(
+                                texto_jogador,
+                                list(getattr(sessao.working_mem, "player_inventory", []) or []),
+                            )
+                            sessao.combate_pendente = {
+                                "tipo": "ataque", "alvo": _alvo,
+                                "arma": _arma_idx, "arma_termo": _arma_termo,
+                            }
+                            if _arma_idx:
+                                _at, _md = atributo_do_ataque(sessao.working_mem, _arma_idx)
+                                _fatos_engine.append(
+                                    linha_de_arma(_arma_idx, _arma_termo, _at, _md)
+                                )
+                                log.info("arma_identificada", session_id=session_id,
+                                         arma=_arma_idx, atributo=_at, mod=_md)
                             # Autoridade social (decisão 02/07, intensidade FORTE): o ATO
                             # de atacar já abala as relações — trust do alvo despenca,
                             # aliados presentes (os da hostilidade acima) caem junto.
@@ -2560,10 +2667,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 # A engine é a dona da cura DESTE turno — o
                                 # `[CURA:]` do modelo não pode somar por cima.
                                 _engine_resolveu_turno = True
-                                # MAGIA-SEM-ECONOMIA-1: curar gasta a ação, e em
-                                # combate os inimigos seguem agindo (ver acima).
+                                # MAGIA-SEM-ECONOMIA-1: conjurar custa a rodada,
+                                # e em combate os inimigos seguem agindo.
+                                # ACAO-BONUS-INEXISTENTE-1 (10/08): QUAL recurso
+                                # sai depende da magia — cobrar ação de uma magia
+                                # de bônus tirava do jogador o ataque da rodada.
                                 if sessao.working_mem.em_combate:
-                                    sessao.working_mem.usar_acao()
+                                    _rec, _ = gastar_recurso_da_magia(
+                                        sessao.working_mem, nome_magia
+                                    )
+                                    log.info("magia_custou_recurso", magia=nome_magia,
+                                             recurso=_rec, session_id=session_id)
                                     sessao.inimigos_adiados = True
 
                                 log.info("magia_cura_resolvida",
@@ -2614,10 +2728,16 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                     _fatos_engine.append(str(_r_save["contexto"]))
                                     _engine_resolveu_turno = True
                                     # MAGIA-SEM-ECONOMIA-1 (09/08, achado antes do
-                                    # playtest): conjurar GASTA a ação da rodada,
-                                    # igual a atacar. Sem isto dava pra lançar Bola
-                                    # de Fogo E atacar na mesma rodada.
-                                    sessao.working_mem.usar_acao()
+                                    # playtest): conjurar GASTA a rodada, igual a
+                                    # atacar. Sem isto dava pra lançar Bola de Fogo
+                                    # E atacar na mesma rodada.
+                                    # ACAO-BONUS-INEXISTENTE-1 (10/08): e QUAL
+                                    # recurso sai é da magia, não do call-site.
+                                    _rec, _ = gastar_recurso_da_magia(
+                                        sessao.working_mem, nome_magia
+                                    )
+                                    log.info("magia_custou_recurso", magia=nome_magia,
+                                             recurso=_rec, session_id=session_id)
                                     # E os inimigos precisam AGIR. `_engine_resolveu_turno`
                                     # suprime o beat; sem marcar o adiamento, conjurar
                                     # fazia o inimigo simplesmente não jogar a rodada —

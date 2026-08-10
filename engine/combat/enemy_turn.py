@@ -79,6 +79,13 @@ def resolver_turno_inimigos(
             "id": iid,
             "nome": dados.get("nome", iid),
             "d20": d20,
+            # ROLAGEM-INIMIGO-INVISIVEL-1 (playtest 10/08): *"eu preciso só
+            # confiar no que o mestre diz, ele não tá rolando visível"*. O d20
+            # sozinho não deixa ninguém CONFERIR — a conta é `d20 + atk vs CA`,
+            # e sem os três números a rolagem continua sendo palavra do Mestre.
+            "atk_bonus": stats.atk_bonus,
+            "total": d20 + stats.atk_bonus,
+            "ca_alvo": player_ca,
             "acertou": res.acertou,
             "critico": res.critico,
             "dano": dano,
