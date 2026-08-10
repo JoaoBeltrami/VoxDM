@@ -291,10 +291,16 @@ def test_ws_d20_solto_resolve_alvo_citado_na_fala_do_mestre(client):
     assert wm.inimigos_combate["bjorn"]["hp_atual"] == 20, "Bjorn não foi tocado"
 
 
-def test_ws_magia_ofensiva_conhecida_vira_declaracao_de_ataque(client):
-    """"Vou usar a explosão eldritch" (infinitivo, sem alvo explícito) — fora do
-    RE_COMBATE, mas a magia de DANO conhecida citada em combate é declaração de
-    ataque: a pendência é setada contra o único inimigo vivo."""
+def test_ws_magia_ofensiva_conhecida_vira_declaracao_de_MAGIA(client):
+    """"Vou usar a explosão eldritch" fixa a pendência — mas de MAGIA, não de arma.
+
+    MAGIA-VIRA-ATAQUE-1 (smoke test autônomo 09/08): até aqui a pendência era
+    `"ataque"`, e a conjuração resolveria pelas regras de ARMA (dado de arma, mod
+    de ataque físico). Pior: o bloco de magia tem guard `not combate_pendente`,
+    então a conjuração era DETECTADA e nunca RESOLVIDA — no smoke test foram 2
+    detecções e 0 resoluções. Magia declarada tem precedência sobre ataque: é a
+    leitura mais específica das duas.
+    """
     from api.state import sessions
 
     sid = _criar_sessao_ws(client)
@@ -309,8 +315,14 @@ def test_ws_magia_ofensiva_conhecida_vira_declaracao_de_ataque(client):
         while ws.receive_json()["tipo"] != "fim":
             pass
 
-    assert sessions[sid].combate_pendente == {"tipo": "ataque", "alvo": "goblin"}, \
-        "magia ofensiva conhecida citada em combate deve fixar a pendência de ataque"
+    _pend = sessions[sid].combate_pendente
+    assert _pend, "magia ofensiva conhecida em combate deve fixar a pendência"
+    assert _pend.get("tipo") == "magia", (
+        "conjuração não pode virar pendência de ARMA — resolveria com dado de "
+        f"arma e mod de ataque físico. Veio: {_pend}"
+    )
+    assert _pend.get("alvo") == "goblin"
+    assert _pend.get("magia") == "Explosão Eldritch"
 
 
 def test_ws_magia_utilitaria_nao_vira_declaracao(client):
