@@ -59,13 +59,17 @@ def test_resistencia_gasta_a_acao_no_websocket():
     """
     i = _WS.index('log.info("magia_save_resolvido"')
     bloco = _WS[max(0, i - 900):i]
-    assert "sessao.working_mem.usar_acao()" in bloco
+    # 10/08: deixou de ser `usar_acao()` direto. QUAL recurso sai passou a ser da
+    # MAGIA (ACAO-BONUS-INEXISTENTE-1) — Marca do Caçador custa bônus, não ação —
+    # e o call-site chama o helper que sabe disso. A economia continua sendo
+    # cobrada; o que mudou é quem decide de qual bolso.
+    assert "gastar_recurso_da_magia(" in bloco
 
 
 def test_cura_gasta_a_acao_no_websocket():
     i = _WS.index('log.info("magia_cura_resolvida"')
     bloco = _WS[max(0, i - 900):i]
-    assert "sessao.working_mem.usar_acao()" in bloco
+    assert "gastar_recurso_da_magia(" in bloco
 
 
 # ── E o inimigo precisa AGIR ─────────────────────────────────────────────────

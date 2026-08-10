@@ -1117,8 +1117,20 @@ def aplicar_pos_turno(
                 if srd and not existente.get("srd_index"):
                     existente["srd_index"] = srd
             else:
+                # NPC-VIRA-INIMIGO-1 (playtest 10/08): *"ele misturou os NPCs na
+                # luta"* e *"o combate se iniciou antes do adversário perceber"*.
+                # Um NPC que estava CONVERSANDO na cena virava inimigo em silêncio
+                # — `combate_inimigo_declarado id=ruben` sendo que `ruben` estava em
+                # `npcs_presentes`. Do lado do jogador não havia transição nenhuma:
+                # o interlocutor virava alvo entre uma frase e outra. A engine não
+                # decide se a hostilidade é legítima (isso é narrativa), mas registra
+                # ALTO quando o inimigo novo é alguém que já estava na cena.
+                _era_npc = iid in set(working_mem.scene.npcs_presentes or [])
                 working_mem.registrar_inimigo(iid, nome, "intacto", srd_index=srd)
-                log.info("combate_inimigo_declarado", id=iid, srd=srd)
+                log.info("combate_inimigo_declarado", id=iid, srd=srd,
+                         era_npc_da_cena=_era_npc)
+                if _era_npc:
+                    log.warning("npc_da_cena_virou_inimigo", id=iid, nome=nome)
         working_mem.rodadas_sem_acao_inimigo = 0
 
     # 2. Sync de inimigos ANTES de detectar fim de combate (ordem crítica —
