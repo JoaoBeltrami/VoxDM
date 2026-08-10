@@ -150,7 +150,7 @@ python connection_test.py
 
 REM Rodar a suíte de testes
 uv run pytest tests/ -q
-REM → 2514 testes. Leva ~2min30 e não precisa de GPU, LLM nem banco no ar.
+REM → 2648 testes. Leva ~2min30 e não precisa de GPU, LLM nem banco no ar.
 ```
 
 ---

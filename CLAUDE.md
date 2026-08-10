@@ -1,6 +1,6 @@
 # VoxDM — Instruções para Claude Code
 
-> Atualizado: 9 de agosto de 2026 (passada de `/docs` após o Bloco 3 — P3, P4, P5.1, P7, P8).
+> Atualizado: 10 de agosto de 2026 (passada de `/docs` após o Bloco 3 e o P16 — magia na engine).
 > Este arquivo responde UMA pergunta: **como se escreve código aqui.**
 > Onde estamos agora → `.internal/ESTADO.md`. O que vem pela frente e em que ordem
 > → `.internal/VOXDM_FILA.md`. Como o sistema é desenhado → `ARCHITECTURE.md`.
@@ -53,6 +53,20 @@ passou a decidir a CLASSE do custo de toda falha. Por isso o P8 carrega um
 subsistema, e teste verde ali não significa nada. Nada entra em cima do P8 antes
 de o Beltrami jogar. Se ele continuar arriscando por instinto, o problema é a
 INTENSIDADE (matriz + bordas do gradiente), não a classe.
+
+**Hoje há QUATRO gates de sessão jogada abertos, não um** — e é o maior débito do
+projeto, porque nenhum deles fecha com teste:
+
+| Gate | A pergunta que o fecha |
+|---|---|
+| **P8** — consequência de falha | *você parou de arriscar porque calculou que ia doer?* |
+| **Combate em dois beats** | o golpe do jogador e o turno do inimigo viraram mensagens separadas; o loop mudou e nunca foi jogado |
+| **P16** — magia na engine | *conjurar deixou de ser prosa?* (o slot saiu, a rolagem foi pedida, o dano veio de tabela) |
+| **Atributos de inimigo** | a lenda finalmente machuca? Vyrmathax deixou de ser warlock genérico e virou dragão vermelho adulto |
+
+Empilhar trabalho em cima de quatro gates fechados é como o projeto acumula
+engenharia que talvez não sirva. Enquanto eles não forem jogados, o trabalho
+headless seguro é o que NÃO depende deles.
 
 ### Engine-first em TUDO (ADR-006, declarado pelo Beltrami em 01/08)
 
@@ -133,7 +147,8 @@ Exemplo:
 **Módulo puro > módulo acoplado.** Regra de jogo nova nasce como função pura em
 `engine/` (testável sem I/O, sem LLM, sem banco) e só depois é plugada no
 `api/turn_pipeline.py` ou no `api/websocket.py`. Foi assim com `checks`, `alinhamento`,
-`multiclasse`, `chargen` e `arco`.
+`multiclasse`, `chargen`, `arco` e, mais recentemente, o pacote `engine/magic/` inteiro
+(tabela → detecção → ataque → resistência → cura, cada peça testável sem rede).
 
 **Coluna nova no SQLite entra por migração idempotente** — `ALTER TABLE ... ADD COLUMN`
 que ignora apenas `duplicate column` e propaga o resto. Bancos antigos existem.
@@ -157,6 +172,11 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Fato de engine tem canal próprio | `ContextoMontado.fatos_engine` → bloco na zona dinâmica. Nunca no `texto_jogador` (ver armadilha) |
 | Fim de campanha | É epílogo do **arco**, não fim do mundo: não reabre e não desfaz o desfecho, mas a cena volta a correr e o Mestre volta a ter iniciativa |
 | Classe da consequência de falha | Da **engine** (P8): seis classes fechadas (DANO, RECURSO, POSICAO, RELOGIO, INFORMACAO, COMPLICACAO), gradiente pela MARGEM do teste, zero random. O LLM escolhe **como** narrar, nunca **se** dói nem **qual** é o custo. A matriz contexto×classe em `engine/authority/consequencia.py` é **proposta aguardando revisão do Beltrami** |
+| Onde mora a regra de magia | Numa **tabela local** (`engine/magic/spell_mechanics.py`, 319 magias do SRD, artefato de build gerado por `ingestor/gerar_tabela_magias.py`). **Rede não entra no caminho do número** — o Qdrant falha calada por design, e o ADR-007 tirou a resolução de cima dele. Conteúdo é DADO; resolução é CÓDIGO atrás do `RuleSystem` |
+| O que dispara uma conjuração | **Declaração**, não menção. Exige VERBO de lançamento + nome da magia NA FICHA ("eu uso Hex", "casto/canto/rezo Hex"). Citar o nome solto não conjura — "o hex daquele bruxo era famoso" é prosa. Magia cujo nome JÁ é verbo (Bênção/"abençoo") tem exceção por radical. ⚠️ Esta lógica é **específica do módulo D&D**; o schema universal futuro usará outra por sistema |
+| Idioma do nome da magia | Vale em **PT e em inglês** ("Bola de Fogo" = "Fireball"), decisão do Beltrami em 09/08. A tabela é chaveada em INGLÊS e há ponte PT→EN — o idioma NÃO afrouxa a regra da declaração |
+| As 19 magias fora do SRD 2014 | Ganharam **equivalência declarada** (`engine/magic/equivalencias.py`) em vez de saírem da lista — *"prefiro ter as magias mesmo que parecidas"*. É APROXIMAÇÃO assumida, não igualdade: `Hex → hunters-mark`, e algumas doem de propósito (`Phantasmal Force` nv2 → `phantasmal-killer` nv4). Superfície de revisão, não lei |
+| Quem paga o espaço de magia | A **engine**, e paga na RESOLUÇÃO. O guard do CRIT-1 ("só decrementa se a narrativa confirmar") continua valendo pro caminho da PROSA; magia que a engine resolveu não passa por ele — é fato consumado, não promessa. Truque não gasta nada (SRD), e devolver 0 ali é resposta certa |
 | Quem move o relógio de ameaça | A **engine**: viagem (cadência 2), descanso longo, efeito de quest do módulo e falha em teste (cadência 3). `[RELOGIO_AVANCA]` virou OBSOLETO — "avançar N fatias" é *quanto*. `[RELOGIO: id\|nome\|segmentos]` **continua canônico**: nomear uma ameaça é *o que significa*, e isso o LLM ainda decide |
 | Vencedor de vantagem/desvantagem | Da **engine**. O frontend manda os DOIS dados (`d20 = 18 (18 vs 7) — VANTAGEM`) e `extrair_d20_jogador` reescolhe; o número do cliente é sugestão de exibição. Formato aditivo de propósito: o `= <vencedor>` é o primeiro `=` do colchete e não há `[`/`]` internos |
 | Iniciativa e rodada | Todo mundo rola d20 (inimigo sem DES rola puro). **Rodada = a volta completa da ordem**, não o turno do jogador. Empate é aceito: o desempate de `calcular_ordem_iniciativa` já é determinístico, e com d20 a colisão é inevitável por casa-dos-pombos |
@@ -286,12 +306,51 @@ NÃO usar marcador do prompt como sentinela de teste → `test_gating_fragments`
                             antes pelo mesmo motivo (era "CR≤¼=25" até a dieta de 01/07).
                             Escolha um marcador e deixe a receita de conserto escrita.
 
-# Teste que casa a frase ANTIGA acusa a própria explicação (2× em 2 dias)
+# Teste que casa a frase ANTIGA acusa a própria explicação (4× em 3 dias)
 NÃO assertar `"frase velha" not in fonte` → o comentário novo CITA a frase velha pra
                             explicar o que mudou, e o assert falha no próprio texto que
-                            documenta o fix. Aconteceu com "espelham os do websocket" (P4)
-                            e com "random" (P8). Duas saídas: afirmar o que o arquivo DEVE
-                            dizer, ou checar o CÓDIGO via `ast` em vez do texto.
+                            documenta o fix. Aconteceu com "espelham os do websocket" (P4),
+                            com "random" (P8), com "qdrant" (spell_mechanics) e com
+                            `_WS.index("magia_save_resolvido")` casando o COMENTÁRIO em vez
+                            da chamada. Três saídas: afirmar o que o arquivo DEVE dizer,
+                            checar o CÓDIGO via `ast`, ou ancorar na CHAMADA literal
+                            (`log.info("evento"`) — nunca no nome solto do evento.
+NÃO ancorar teste numa JANELA de N chars sem dizer o porquê → `test_magia_economia` mede
+                            os 900 chars ANTES de um `log.info` pra provar que a ação foi
+                            gasta. Código novo inserido acima da âncora empurra o alvo pra
+                            fora e o teste falha sem que nada tenha regredido. Se você
+                            precisa da janela, escreva na docstring o que ela protege — e
+                            ponha o código novo DEPOIS da âncora quando a semântica permitir.
+
+# Método: o portão que você acha que rodou (todas custaram uma medição errada)
+NÃO encadear gate com PIPE → `ruff check ... | tail -1 && git commit` commitou com uma
+                            violação UP034 enquanto a mensagem dizia "ruff limpo": o exit
+                            code do pipe é o do ÚLTIMO comando. Rode o gate cru e olhe `$?`.
+NÃO confiar em "reiniciei a API" sem PROVAR o frescor → `until curl health` passa
+                            instantaneamente contra o processo VELHO, e dois smoke tests
+                            inteiros mediram código morto. Prova de frescor são três coisas
+                            juntas: truncar o log, conferir o timestamp de `voxdm_api_iniciando`,
+                            e ver `/debug/sessoes` vazio. (Bônus Windows: `taskkill` no PID
+                            dono do socket devolve SUCCESS e a porta CONTINUA ocupada — o
+                            handle herdado sobrevive no processo filho. Derrube o worker também.)
+NÃO escrever regex dentro de heredoc do shell → `\b` vira o byte 0x08 literal, o padrão
+                            nunca casa, e nada acusa. O detector de conjuração ficou inerte
+                            assim. Arquivo com regex se escreve com a ferramenta de escrita.
+NÃO usar `json.dumps` em GERADOR de módulo Python → escreve `false`/`null`/`true`, que não
+                            são literais de Python: o artefato gerado explode no import.
+                            Usar `pprint.pformat`. Mordeu no gerador da tabela de magias.
+
+# Lookup que devolve vazio em vez de levantar (a família silenciosa)
+NÃO chavear dict de regra por string quando o consumidor usa int → `spell_slots` é chaveado
+                            por INT; `decrementar_slot` faz `.get(nivel)` e devolve False
+                            CALADO se não achar. Chave string faria TODA conjuração sair de
+                            graça sem um erro sequer. As bordas que escrevem já coagem (store,
+                            `sync_spell_slots`, tabela SRD) — o teste é o que impede a quarta.
+NÃO comparar nome de classe/raça sem passar pelo normalizador → `slots_padrao("clerigo")`
+                            sem acento caía no `else` e devolvia `{}`: clérigo com ZERO
+                            espaços de magia, mudo. A forma sem acento circula de verdade
+                            (é a chave do `SessionPicker.tsx`). Use `normalizar_classe` —
+                            a fonte única — em vez de abrir a enésima lista de apelidos.
 
 # Aleatoriedade nova torna teste antigo FLAKY, não quebrado
 NÃO trocar valor determinístico por rolagem sem varrer quem depende dele → a iniciativa

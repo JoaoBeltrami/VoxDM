@@ -12,6 +12,20 @@ playtests (58 e 36 turnos, 01/08 e 07/08) e seguem a mesma tese: **tirar decisã
 consequência das mãos do modelo**.
 
 ### Adicionado
+- **Magia deixou de ser prosa** — a engine passou a ver, resolver e cobrar conjuração.
+  As 319 magias do SRD viram uma tabela local (artefato de build), e nenhum número de
+  magia depende mais de rede. O jogador **declara** o lançamento ("eu uso Hex", "casto
+  Bola de Fogo") em vez de só citar o nome; o alvo rola a resistência contra a CD de
+  conjuração; o dano e a cura saem da tabela; e o espaço de magia sai da ficha de verdade.
+  Antes: uma sessão inteira conjurando terminava com os slots intactos e os números
+  inventados pelo Mestre.
+- **Nome de magia vale em português e em inglês** — "Bola de Fogo" e "Fireball" resolvem
+  a mesma mecânica. O idioma não afrouxa a regra da declaração.
+- **As 19 magias fora do SRD 2014 ganharam lastro** — magias de Xanathar's/Tasha's que a
+  ficha oferece (incluindo `Hex`, a assinatura do bruxo) emprestam mecânica de uma magia
+  equivalente do SRD em vez de continuarem sem resolução. É aproximação declarada.
+- **Inimigo ganhou atributos** — o statblock passou a carregar os modificadores lidos do
+  SRD, então um dragão deixou de rolar iniciativa e resistências como um goblin.
 - **CD nos testes de perícia** — tabela do SRD 5.1 (5/10/15/20/25/30, padrão Médio 15).
   A engine compara e entrega o veredito (`19 vs CD 15: SUCESSO por 4`); antes mandava só
   o total e quem decidia se passou era o LLM.
@@ -76,9 +90,18 @@ consequência das mãos do modelo**.
 - `stream_options` como kwarg direto quebrava o SDK `groq==1.1.2` no caminho de stream.
 - Duas conexões WebSocket na mesma sessão mutavam o mesmo estado em paralelo.
 - Um teste de combate dependia da rolagem de iniciativa e passava por sorte (flaky).
+- **O turno de combate colapsava**: o golpe do jogador e a resposta dos inimigos saíam na
+  mesma mensagem, e a luta parecia ter só um lado agindo. Viraram dois beats separados.
+- **Conjurar não gastava a ação da rodada** — dava para lançar uma magia *e* atacar no
+  mesmo turno — e ainda suprimia o turno dos inimigos.
+- **Conjurar não custava o espaço de magia**, por três causas independentes e todas mudas:
+  o nível era procurado em português numa fonte indexada em inglês; o gasto era cancelado
+  quando o Mestre narrava sem citar o nome da magia; e um clérigo cujo nome de classe
+  chegasse sem acento nascia com zero espaços.
+- Uma criatura lendária do módulo recebia ficha genérica de warlock e lutava como tal.
 
 ### Infra
-- 2514 testes automatizados (eram 919 na 0.1.0).
+- 2648 testes automatizados (eram 919 na 0.1.0).
 
 ## [0.1.0] - 2026-06-05
 

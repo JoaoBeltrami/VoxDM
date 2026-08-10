@@ -188,7 +188,7 @@ narrado — sempre com a engine como autoridade final.
   atributos (Standard Array priorizado por classe) e HP pela fórmula SRD.
 - **`progression.py`** (XP → nível, HP, slots, ASI), **`multiclasse.py`** (regra do BG3:
   multiclasse livre; o SRD entra como nota, decisão de produto de 29/07),
-  **`magic/`** (lista de magias, slots, detector de casting), **`combat/`** (statblocks
+  **`magic/`** (ver 6b), **`combat/`** (statblocks
   de NPC fixo do módulo, resolver, turno do inimigo, controle de rodada).
   O mapa de statblocks autorais varre `npcs`, **`entities` e `companions`** do schema —
   as `entities` são justamente as criaturas não-humanoides com papel narrativo, ou seja,
@@ -206,8 +206,11 @@ narrado — sempre com a engine como autoridade final.
   pode citar número. O prompt recebe agora um descritor sem dígito nenhum
   ("coriáceo, protegido, perigoso"); os números ficam em `inimigos_combate`, com a engine.
 - **A rodada é a volta da ordem**, não o turno do jogador. Todo mundo rola d20 de verdade
-  (o inimigo rola puro — `StatsInimigo` não tem DES, e inventar modificador seria número
-  sem lastro no SRD), os inimigos agem na sequência de iniciativa, e a rodada abre quando
+  e soma o modificador da própria ficha: `StatsInimigo` passou a carregar `mods`, lidos do
+  bloco de atributos do statblock SRD (`"FOR 27 (+8) DES 10 (+0)"`), então um dragão deixou
+  de resistir como um goblin. Inimigo sem bloco de atributos ainda rola puro — o fallback
+  é ausência de dado, não invenção de número. Os inimigos agem na sequência de iniciativa,
+  e a rodada abre quando
   o cursor dá a volta. Empate é aceito: exigir unicidade era o que obrigava o fallback
   decrescente fixo, e com d20 a colisão é inevitável por casa-dos-pombos — o que precisa
   ser determinístico é a *ordem*, e disso cuida o desempate de `calcular_ordem_iniciativa`.
@@ -217,6 +220,43 @@ narrado — sempre com a engine como autoridade final.
 - **`alinhamento.py`**: caráter **acumulado** em dois eixos, derivado do que o jogador faz
   (≠ pacing — não volta pra base). Híbrido: a engine deriva o que já sabe (atacar NPC
   pacífico), o marcador `[ALINHAMENTO:]` cobre o resto, com vocabulário FECHADO.
+
+### 6b. Magia (`engine/magic/`)
+
+Até 09/08 conjurar era **prosa**: a engine não via conjuração nenhuma, o dano e a cura
+saíam da imaginação do modelo, e uma sessão inteira terminava com os espaços de magia
+intactos. O ADR-007 fechou o desenho, e a regra dele é a separação que dá nome ao
+documento: **conteúdo é DADO, resolução é CÓDIGO.**
+
+- **`spell_mechanics.py`** — as 319 magias do SRD como **artefato de build** (gerado por
+  `ingestor/gerar_tabela_magias.py`, mesmo padrão dos statblocks). Nível, escola, tipo de
+  resolução (`ataque` | `resistencia` | `nenhum`), atributo do save, dado de dano por
+  nível de slot, tipo de dano, cura. **Rede não entra no caminho do número** — a única
+  fonte estruturada antes era o Qdrant, que falha calada por design; um teste varre o AST
+  atrás de qualquer import de rede.
+- **`casting.py`** — o gatilho é **declaração, não menção**: exige verbo de lançamento
+  ("uso", "casto", "canalizo", "rezo", "canto") mais o nome da magia *na ficha do jogador*.
+  Citar o nome solto é prosa. Magia cujo nome já é verbo (Bênção → "abençoo") tem exceção
+  por radical. Vale em PT e em inglês, e o idioma não afrouxa a regra da declaração.
+- **`resolucao.py`** — a ponte. A tabela é chaveada em inglês; o jogador fala português.
+  Três caminhos, nessa ordem: nome em EN → índice PT→EN → equivalência.
+- **`salvaguarda.py`** e **`cura.py`** — quem resiste é o ALVO (a engine rola por ele
+  contra a CD de conjuração do jogador, `8 + proficiência + mod`), e a cura passou a rolar
+  `1d8 + mod` da tabela. O `[CURA:]` do modelo sobrevive só para cura **não-mecânica**
+  (erva, NPC que socorre): a origem decide o dono, igual ao "conceder × consumir item".
+- **`equivalencias.py`** — 19 magias da lista jogável vêm de Xanathar's/Tasha's e não
+  existem no SRD 2014. Em vez de sumirem, **emprestam** mecânica de uma magia equivalente
+  (`Hex` → `hunters-mark`). É aproximação declarada, não igualdade — e algumas doem de
+  propósito, marcadas no módulo. Decisão de conteúdo do Beltrami, não de engenharia.
+- **O espaço de magia é cobrado na RESOLUÇÃO.** Havia um guard antigo que só decrementava
+  o slot se a narrativa confirmasse o cast — proteção correta para o caminho da prosa,
+  desastrosa para o da engine: ele *cancelava* o gasto de uma magia já executada, e
+  conjurar continuava de graça mesmo com todo o resto funcionando. Magia resolvida pela
+  engine é fato consumado e não passa por esse guard.
+
+Fora do escopo por decisão registrada no ADR-007, não por esquecimento: **concentração**
+(exige estado persistente novo), **inimigo conjurador** (inverteria o fluxo de resistência)
+e a migração big-bang do `RuleSystem`.
 
 ### 7. Diretor de Arco (`engine/authority/arco.py`)
 A campanha tem **final**. O arco vive no schema do módulo (blocos `arc` e `endings`), não

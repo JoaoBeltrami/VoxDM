@@ -45,12 +45,12 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 - **Prompt de mestre v4**: passive perception proativa, conseqüências persistentes, lampejo narrativo em momentos dramáticos, múltiplos perfis de DM (rigoroso/equilibrado/tranquilo/rule_of_cool)
 
 ### Mecânicas D&D 5e
-- **Spell detector**: detecta casting no texto → busca mecânica no Qdrant → injeta CD/dano/área no prompt
+- **Magia resolvida pela engine**: o jogador **declara** o lançamento ("eu uso Hex", "casto Bola de Fogo") e a engine resolve contra uma tabela local das 319 magias do SRD — CD de conjuração, resistência do alvo, dano e cura. Nome vale em PT e em inglês; nenhum número depende de rede
 - **Spell slot tracker**: decrementa ao usar, restaura em descanso curto/longo, protege contra casts sem slots
 - **Class features**: Action Surge, Rage, Sneak Attack e mais — chips interativos com botões –/+ para gastar/restaurar, persistidos entre sessões no SQLite
 - **Progressão XP/Level Up**: LLM concede `[XP: +N motivo]` → engine aplica tabela SRD → HP máximo sobe, slots recalculados, modal celebra
 - **Subclass picker**: seleção de subclasse no CharacterForm (Campeão/Mestre de Batalha/Cavaleiro Místico para Guerreiro, etc.)
-- **Lista de 246 magias SRD**: seleção na criação com tabs por nível, limite por classe/nível
+- **Lista de 154 magias jogáveis** (282 entradas somando as 9 classes): seleção na criação com tabs por nível, limite por classe/nível
 - **Bestiário SRD**: 334 monstros indexados em `voxdm_bestiary`; o LLM declara combatentes com `[INIMIGO: id\|nome\|srd]` e a engine puxa a ficha real (CA/PV/ataques + mecânica dos traços) direto pro combate
 
 ### Combate (engine-first)
@@ -163,7 +163,7 @@ CLASSIFICATION: Groq 8B → Gemini → Ollama
 | — | Frontend "BG1 híbrido" (launcher de painéis, FichaViva, retratos, dock slim) | ✅ |
 | 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
 
-**Cobertura de testes:** 2514/2514 passam.
+**Cobertura de testes:** 2648/2648 passam.
 
 ---
 
@@ -217,7 +217,7 @@ OLLAMA_MODEL=llama3.1:8b
 
 ```bash
 make ingest        # carrega "Os Filhos de Valdrek" no Qdrant + Neo4j (~4s GPU)
-make ingest-rules  # carrega SRD 5e (246 magias, condições, equipamentos)
+make ingest-rules  # carrega SRD 5e (319 magias, condições, equipamentos)
 ```
 
 ### 6. Subir
@@ -267,7 +267,9 @@ voxdm/
 │   │   ├── tasks.py        TaskType enum + cascatas por tipo
 │   │   └── prompts/        master_system.md, dice.md, combat.md, saves.md,
 │   │                       social.md, intro_system.md, session_eval.md
-│   ├── magic/              spell_detector.py, slot_tracker.py, spell_list.py (246 spells)
+│   ├── magic/              spell_mechanics.py (tabela SRD, 319), casting.py, resolucao.py,
+│   │                       salvaguarda.py, cura.py, equivalencias.py, slot_tracker.py,
+│   │                       spell_list.py (154 magias jogáveis)
 │   ├── memory/             working_memory.py (estado autoritativo), context_builder.py,
 │   │                       episodic_memory.py, session_writer.py, trust_detector.py,
 │   │                       qdrant_client.py, neo4j_client.py, quest_detector.py
@@ -285,7 +287,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  2514 testes (pytest)
+└── tests/                  2648 testes (pytest)
 ```
 
 ---
@@ -293,7 +295,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 2514 testes
+uv run pytest tests/ -q   # 2648 testes
 make ingest
 make run-api
 make debug
