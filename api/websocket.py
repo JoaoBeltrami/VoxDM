@@ -301,6 +301,7 @@ from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 from engine.combat.turn_control import avaliar_acao_jogador
 from engine.magic.casting import detectar_conjuracao
+from engine.magic.resolucao import consumir_slot_da_magia, mecanica_da_magia
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
@@ -2518,8 +2519,26 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # Resistência e cura não esperam d20 nenhum — só o ataque de
                     # magia precisa da pendência livre, e esse caso é guardado
                     # dentro do próprio ramo.
+                    # SLOT-SEM-CONSUMO-1 (smoke test 09/08): o `spell_pending` só
+                    # era registrado quando o lookup do QDRANT devolvia o nível — e
+                    # ele busca com o nome em PORTUGUÊS numa coleção indexada em
+                    # INGLÊS. Resultado medido: "Curar Ferimentos" resolveu a cura e
+                    # os slots continuaram 4/4. Era o mesmo problema bilíngue, agora
+                    # no caminho do recurso.
+                    #
+                    # A tabela LOCAL já tem o nível, e o ADR-007 diz que resolução
+                    # não depende de rede. Registrar aqui mantém o CRIT-1 intacto: o
+                    # decremento continua no fim do turno, só se a narrativa
+                    # confirmar o cast.
+                    if nome_magia and not sessao.spell_pending:
+                        _mec_slot = mecanica_da_magia(nome_magia)
+                        _nv = int((_mec_slot or {}).get("nivel", 0) or 0)
+                        if _nv > 0:
+                            sessao.spell_pending = (nome_magia, _nv)
+                            log.info("spell_pending_da_tabela_local",
+                                     nome=nome_magia, nivel=_nv, session_id=session_id)
+
                     if nome_magia and sessao.working_mem.em_combate:
-                        from engine.magic.resolucao import mecanica_da_magia
                         _mec = mecanica_da_magia(nome_magia)
                         # P16 passo 5: CURA resolve na hora — não há alvo
                         # inimigo nem d20 do jogador, é a ficha do conjurador
@@ -2546,9 +2565,27 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 if sessao.working_mem.em_combate:
                                     sessao.working_mem.usar_acao()
                                     sessao.inimigos_adiados = True
+
                                 log.info("magia_cura_resolvida",
                                          session_id=session_id, magia=nome_magia,
                                          curado=_r_cura["curado"], hp=_r_cura["hp"])
+                                # SLOT-CANCELADO-1 (smoke 10/08): a ENGINE resolveu
+                                # esta magia — o cast é FATO, e não depende do
+                                # Mestre citar o nome. O guard do CRIT-1 ("só
+                                # decrementa se a narrativa confirmar") existe pro
+                                # caso em que a magia é pura prosa; aqui ele
+                                # cancelava (`spell_pending_cancelado_sem_narrativa`)
+                                # o slot de uma conjuração já executada, e o jogador
+                                # lançava de graça. Fica DEPOIS do log de resolução
+                                # de propósito: consumir o slot é consequência dela.
+                                _gasto = consumir_slot_da_magia(
+                                    sessao.working_mem, nome_magia
+                                )
+                                sessao.spell_pending = None
+                                if _gasto:
+                                    log.info("slot_gasto_pela_engine",
+                                             magia=nome_magia, nivel=_gasto,
+                                             session_id=session_id)
 
                         # P16 passo 4: RESISTÊNCIA resolve na hora — quem rola é
                         # o ALVO, e quem rola pelo alvo é a engine. Não há d20 do
@@ -2587,11 +2624,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                     # o "só o player age" que o TURNO-COLAPSADO-1
                                     # tinha acabado de consertar.
                                     sessao.inimigos_adiados = True
+
                                     log.info("magia_save_resolvido",
                                              session_id=session_id, magia=nome_magia,
                                              alvo=_alvo_res, cd=_r_save["cd"],
                                              resistiu=_r_save["resistiu"],
                                              dano=_r_save["dano"])
+                                    # SLOT-CANCELADO-1 — ver o gêmeo no caminho da
+                                    # cura. Depois do log de propósito: o slot sai
+                                    # porque a magia foi resolvida, não antes dela.
+                                    _gasto = consumir_slot_da_magia(
+                                        sessao.working_mem, nome_magia
+                                    )
+                                    sessao.spell_pending = None
+                                    if _gasto:
+                                        log.info("slot_gasto_pela_engine",
+                                                 magia=nome_magia, nivel=_gasto,
+                                                 session_id=session_id)
                         elif (
                             _mec
                             and _mec.get("resolucao") == "ataque"

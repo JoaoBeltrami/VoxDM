@@ -48,12 +48,17 @@ _HIT_DIE: Final[dict[str, int]] = {
 
 # Aliases de transcrição/caixa → nome canônico de classe
 _ALIASES_CLASSE: Final[dict[str, str]] = {
+    # As formas femininas que faltavam entraram em 10/08: a tabela já tinha
+    # "guerreira" e "maga", mas não "clériga" — e quem falasse isso na criação
+    # por voz recebia "" (classe desconhecida), sem slot de magia nenhum.
     "barbaro": "Bárbaro", "bárbaro": "Bárbaro",
-    "bardo": "Bardo",
+    "barbara": "Bárbaro", "bárbara": "Bárbaro",
+    "bardo": "Bardo", "barda": "Bardo",
     "clerigo": "Clérigo", "clérigo": "Clérigo",
-    "druida": "Druida",
+    "cleriga": "Clérigo", "clériga": "Clérigo",
+    "druida": "Druida", "druidesa": "Druida",
     "guerreiro": "Guerreiro", "guerreira": "Guerreiro",
-    "monge": "Monge",
+    "monge": "Monge", "monja": "Monge",
     "paladino": "Paladino", "paladina": "Paladino",
     "ranger": "Ranger", "patrulheiro": "Ranger", "patrulheira": "Ranger",
     "ladino": "Ladino", "ladina": "Ladino", "ladrao": "Ladino", "ladrão": "Ladino",

@@ -19,6 +19,8 @@ Exemplo:
 import re
 from dataclasses import dataclass
 
+from engine.chargen import normalizar_classe
+
 
 @dataclass
 class SpellEntry:
@@ -655,7 +657,15 @@ def slots_padrao(classe: str, nivel_personagem: int) -> dict[int, dict[str, int]
         slots_padrao("Guerreiro", 3)
         # → {}
     """
-    classe_lower = classe.lower()
+    # SLOT-CLASSE-SEM-ACENTO-1 (10/08): `"clerigo"` sem acento caía no `else` e
+    # devolvia {} — clérigo sem NENHUM espaço de magia, calado. A forma sem
+    # acento circula de verdade (é a chave do SessionPicker.tsx), e toda outra
+    # tabela do projeto já a aceita: SPELLS_POR_CLASSE, PROGRESSAO_MAGIAS e o
+    # _ATRIBUTO_CONJURACAO carregam o alias. Em vez de abrir a QUARTA lista de
+    # apelidos, passa pela fonte única — `normalizar_classe` também resolve as
+    # formas femininas ("maga", "bruxa", "feiticeira") e "patrulheiro" → Ranger.
+    canonica = normalizar_classe(classe)
+    classe_lower = (canonica or classe).lower()
     # Índice na tabela — clampa em 10 (máx suportado)
     idx = max(0, min(9, nivel_personagem - 1))
 
