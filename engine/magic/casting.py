@@ -65,6 +65,28 @@ def _normalizar(texto: str) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
 
 
+_APELIDOS: dict[str, list[str]] | None = None
+
+
+def _apelidos_em_ingles(nome_pt: str) -> list[str]:
+    """Nome(s) em inglês desta magia PT-BR. [] quando não há correspondência.
+
+    Construído de `spell_list`, que já guarda os dois nomes. Existe porque o
+    jogador mistura os idiomas na mesa — "uso Hex" e "uso Armadura de Hex" são a
+    mesma conjuração, e a engine tem que ouvir as duas.
+    """
+    global _APELIDOS
+    if _APELIDOS is None:
+        from engine.magic.spell_list import SPELLS_POR_CLASSE
+        mapa: dict[str, list[str]] = {}
+        for lista in SPELLS_POR_CLASSE.values():
+            for e in lista:
+                if e.nome_pt and e.nome_en:
+                    mapa.setdefault(_normalizar(e.nome_pt), []).append(e.nome_en)
+        _APELIDOS = mapa
+    return _APELIDOS.get(_normalizar(nome_pt), [])
+
+
 def _stem_verbal(nome_norm: str) -> str | None:
     """Radical de um nome que É um verbo no infinitivo ('abencoar' → 'abenc').
 
@@ -110,7 +132,14 @@ def detectar_conjuracao(
         nome_norm = _normalizar(nome)
         if not nome_norm:
             continue
-        citou = bool(re.search(rf"\b{re.escape(nome_norm)}\b", texto_norm))
+        # O Mestre — e a engine — entendem o nome nos DOIS idiomas (pedido do
+        # Beltrami, 09/08). A ficha guarda o PT-BR, mas o jogador diz "uso Hex"
+        # tanto quanto "uso Armadura de Hex"; e vários nomes de mesa são falados
+        # em inglês por hábito.
+        formas = {nome_norm, *(_normalizar(a) for a in _apelidos_em_ingles(nome))}
+        citou = any(
+            re.search(rf"\b{re.escape(f)}\b", texto_norm) for f in formas if f
+        )
         stem = _stem_verbal(nome_norm)
         conjugou = bool(
             stem and not citou and re.search(rf"\b{re.escape(stem)}\w*", texto_norm)

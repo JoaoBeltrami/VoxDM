@@ -100,9 +100,19 @@ def test_toda_magia_pt_br_tem_lastro_ou_esta_na_lista_de_excecoes():
     )
 
 
-def test_a_lista_de_excecoes_nao_cresceu():
-    """Congela o débito. Se alguém adicionar magia fora do SRD, aparece aqui."""
+def test_as_excecoes_ganharam_equivalencia():
+    """09/08: as 19 deixaram de ser débito.
+
+    Decisão do Beltrami — "prefiro ter as magias mesmo que parecidas". Elas
+    continuam fora do SRD 2014 (por isso seguem nesta lista), mas agora
+    EMPRESTAM mecânica de uma magia equivalente, e o teste passou a exigir isso
+    em vez de só congelar o buraco. Ver engine/magic/equivalencias.py.
+    """
+    from engine.magic.equivalencias import equivalente_srd
+
     assert len(SEM_LASTRO_SRD) == 19
+    sem_mapa = sorted(n for n in SEM_LASTRO_SRD if equivalente_srd(n) is None)
+    assert not sem_mapa, f"fora do SRD e sem equivalência: {sem_mapa}"
 
 
 def test_os_aliases_realmente_resolvem():
