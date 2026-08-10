@@ -1,24 +1,25 @@
 """
-Detecta que o jogador CONJUROU, a partir do nome da magia na ficha dele.
+Detecta que o jogador DECLAROU lançar uma magia da ficha dele.
 
-Por que existe: até 09/08 o gatilho era uma lista fechada de seis verbos
-    (`lanço`, `conjuro`, `uso a magia`, `uso o feitiço`, `casto`, `castando`)
-    aplicada ao texto do jogador. No playtest daquele dia um Clérigo nível 3
-    conjurou a sessão inteira e a engine registrou ZERO eventos — os slots
-    terminaram intactos e o Mestre levou dois turnos pra entender. "Abençoo" não
-    é nenhum dos seis verbos.
+Por que existe: até 09/08 o gatilho era uma lista de seis verbos (`lanço`,
+    `conjuro`, `uso a magia`, `uso o feitiço`, `casto`, `castando`). Um Clérigo
+    nível 3 conjurou uma sessão inteira e a engine registrou ZERO eventos — os
+    slots terminaram intactos e o Mestre levou dois turnos pra entender.
 Dependências: nenhuma (regex puro, sem I/O, sem LLM). ADR-007, decisão 2.
-Armadilha: nome de magia solto é PERIGOSO. 37 dos 154 nomes PT-BR têm uma
-    palavra só, e vários são prosa comum — "Luz", "Guia", "Conselho",
-    "Mensagem". Casar esses sem contexto faria "a luz da tocha tremeluz" virar
-    conjuração. Por isso a regra tem dois níveis, e o corte entre eles é
-    `_NOMES_AMBIGUOS` — que é superfície de calibragem, não lei.
+Armadilha: o gatilho é a DECLARAÇÃO, não o nome. Dizer "Luz" no meio de uma
+    frase não é conjurar — 37 dos 154 nomes PT-BR têm uma palavra só e vários são
+    prosa comum ("Luz", "Guia", "Conselho", "Mensagem"). Exigir o verbo de
+    lançamento é o que impede "a luz da tocha tremeluz" de queimar um slot.
+
+⚠️ ESTA LÓGICA É ESPECÍFICA DE D&D 5e. O Beltrami declarou em 09/08 que o schema
+universal futuro pode usar OUTRA lógica por sistema — um sistema sem "conjuração"
+(Call of Cthulhu, PbtA) não tem verbo de casting nem lista de magias. Quando o
+`RuleSystem` virar consumidor real, este módulo é um dos que passa por trás dele.
 
 Exemplo:
-    detectar_conjuracao("abençoo o grupo", ["Abençoar", "Curar Ferimentos"])
-    # → "Abençoar"
-    detectar_conjuracao("a luz da tocha tremeluz", ["Luz"])
-    # → None  (nome ambíguo sem verbo de conjuração)
+    detectar_conjuracao("eu uso Hex no bandido", ["Hex"])      # → "Hex"
+    detectar_conjuracao("vou cantar Bênção", ["Bênção"])       # → "Bênção"
+    detectar_conjuracao("a luz da tocha tremeluz", ["Luz"])    # → None
 """
 
 from __future__ import annotations
@@ -26,30 +27,32 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# Verbos de conjuração — continuam existindo, mas como REFORÇO. Eles são o que
-# desambigua um nome de magia que também é palavra comum.
+# A REGRA: verbo de lançamento + magia da ficha.
+#
+# Correção de rota (09/08): a primeira versão fazia o NOME ser o gatilho primário
+# e o verbo ser reforço. Funcionava, mas exigia uma lista de nomes "ambíguos" pra
+# não transformar "a luz da tocha" em conjuração — sintoma de que a regra estava
+# no lugar errado. Exigir a declaração resolve a causa, e nenhum nome precisa
+# mais ser marcado como perigoso.
 _VERBOS_CASTING: tuple[str, ...] = (
-    "lanço", "lanco", "conjuro", "invoco", "canalizo", "recito", "evoco",
-    "uso a magia", "uso o feitiço", "uso o feitico", "casto", "castando",
+    # lançar / conjurar / invocar
+    "lanco", "lancar", "lancando", "conjuro", "conjurar", "conjurando",
+    "invoco", "invocar", "invocando", "evoco", "evocar",
+    # usar — a forma mais natural em português falado
+    "uso", "usar", "usando",
+    # castar — anglicismo comum de mesa
+    "casto", "castar", "castando",
+    # canalizar / recitar / cantar / entoar / rezar — o vocabulário de clérigo,
+    # druida e bardo, que a lista original ignorava inteira
+    "canalizo", "canalizar", "canalizando",
+    "recito", "recitar", "recitando",
+    "canto", "cantar", "cantando", "entoo", "entoar", "entoando",
+    "rezo", "rezar", "rezando",
 )
 _RE_VERBO = re.compile(
     r"\b(?:" + "|".join(re.escape(v) for v in _VERBOS_CASTING) + r")\b",
     re.IGNORECASE,
 )
-
-# ⚠️ SUPERFÍCIE DE CALIBRAGEM DO BELTRAMI. Nomes de UMA palavra que também são
-# prosa comum em português: só contam como conjuração se vierem acompanhados de
-# um verbo de casting. Tirar um nome daqui o torna mais sensível (pega mais
-# conjuração, arrisca falso positivo); acrescentar torna mais conservador.
-#
-# Nomes de várias palavras ("Curar Ferimentos", "Chama Sagrada") nunca precisam
-# disto: ninguém diz "curar ferimentos" por acaso.
-_NOMES_AMBIGUOS: frozenset[str] = frozenset({
-    "luz", "guia", "conselho", "resistencia", "mensagem", "silencio",
-    "escuridao", "dormir", "saltar", "salto", "alarme", "confusao",
-    "despertar", "identificar", "auxilio", "ajuda", "cura",
-    "protecao", "voo", "medo", "corrente", "teia", "praga",
-})
 
 # Stem mínimo pra casar conjugação de nome-verbo ("Abençoar" → "abençoo").
 # Curto demais casa qualquer coisa; 5 é o que separa "abenç" de "cur".
@@ -66,7 +69,8 @@ def _stem_verbal(nome_norm: str) -> str | None:
     """Radical de um nome que É um verbo no infinitivo ('abencoar' → 'abenc').
 
     Magia cujo nome é verbo é conjugada pelo jogador: ele não diz "uso Abençoar",
-    diz "abençoo". Sem isto, justamente as magias mais faladas escapam.
+    diz "abençoo". Conjugar o nome JÁ é declarar o lançamento — por isso este é
+    o único caso que dispensa verbo separado.
     """
     if " " in nome_norm:
         return None
@@ -77,33 +81,22 @@ def _stem_verbal(nome_norm: str) -> str | None:
     return None
 
 
-def _cita_nome(texto_norm: str, nome: str) -> bool:
-    """O texto menciona esta magia — pelo nome ou por conjugação do nome-verbo."""
-    nome_norm = _normalizar(nome)
-    if not nome_norm:
-        return False
-    if re.search(rf"\b{re.escape(nome_norm)}\b", texto_norm):
-        return True
-    stem = _stem_verbal(nome_norm)
-    return bool(stem and re.search(rf"\b{re.escape(stem)}\w*", texto_norm))
-
-
 def detectar_conjuracao(
     texto_jogador: str, spells_conhecidas: list[str] | None
 ) -> str | None:
-    """Nome PT-BR da magia que o jogador conjurou, ou None.
+    """Nome PT-BR da magia que o jogador DECLAROU lançar, ou None.
 
-    A regra tem dois níveis, e a diferença é o risco de falso positivo:
-      - nome de VÁRIAS palavras, ou de uma palavra distintiva → basta citar;
-      - nome de uma palavra que também é prosa comum (`_NOMES_AMBIGUOS`) → só
-        conta acompanhado de um verbo de conjuração.
+    A regra é uma só: **verbo de lançamento + magia da ficha**. "eu uso Hex",
+    "casto Hex", "vou cantar Hex" — todas declaram o ato. O nome sozinho não
+    basta.
 
-    Só casa magia que está na ficha DO JOGADOR: é a mitigação registrada no
-    ADR-007 contra um NPC ou lugar chamado "Luz" virar conjuração. Sem ficha
-    (personagem não-conjurador), devolve None — quem não tem magia não conjura.
+    Única exceção: magia cujo nome é VERBO ("Abençoar" → "abençoo o grupo"). Aí
+    o jogador conjuga o próprio nome, e conjugar já é declarar.
 
-    Preferimos o nome MAIS LONGO quando dois casam ("Palavra de Cura" ganha de
-    "Cura"), porque o mais específico é o que o jogador quis dizer.
+    Só casa magia que está na ficha DO JOGADOR — mitigação do ADR-007 contra NPC
+    ou lugar com nome de magia, e o que mantém a decisão 6 (magia fora da ficha
+    continua negada). Quando dois nomes casam, ganha o mais específico:
+    "Palavra de Cura" não pode cair em "Cura".
     """
     if not spells_conhecidas:
         return None
@@ -114,13 +107,16 @@ def detectar_conjuracao(
 
     candidatos: list[str] = []
     for nome in spells_conhecidas:
-        if not _cita_nome(texto_norm, nome):
-            continue
         nome_norm = _normalizar(nome)
-        ambiguo = " " not in nome_norm and nome_norm in _NOMES_AMBIGUOS
-        if ambiguo and not tem_verbo:
+        if not nome_norm:
             continue
-        candidatos.append(nome)
+        citou = bool(re.search(rf"\b{re.escape(nome_norm)}\b", texto_norm))
+        stem = _stem_verbal(nome_norm)
+        conjugou = bool(
+            stem and not citou and re.search(rf"\b{re.escape(stem)}\w*", texto_norm)
+        )
+        if (citou and tem_verbo) or conjugou:
+            candidatos.append(nome)
 
     if not candidatos:
         return None

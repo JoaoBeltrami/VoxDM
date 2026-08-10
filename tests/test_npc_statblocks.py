@@ -187,11 +187,15 @@ def test_entities_entram_no_mapa_de_combate():
 
     limpar_cache()
     _carregar_combat_map()  # não deve estourar com seções ausentes
-    from engine.combat.npc_statblocks import _SEM_FICHA
 
-    assert "vyrmathax" in _SEM_FICHA, (
-        "vyrmathax é uma `entity` do módulo — se não aparece nem como "
-        "'conhecido sem ficha', o loader voltou a ignorar a seção"
+    # 09/08: vyrmathax GANHOU ficha autoral (dragão vermelho adulto), então ele
+    # saiu do `_SEM_FICHA` — o que se prova agora é que a seção `entities` é
+    # varrida de verdade, e a prova disso é ele estar no MAPA.
+    from engine.combat.npc_statblocks import resolver_ficha_npc
+
+    assert resolver_ficha_npc("vyrmathax"), (
+        "vyrmathax é uma `entity` do módulo — se a ficha dele não resolve, "
+        "o loader voltou a ignorar a seção"
     )
 
 
@@ -200,8 +204,17 @@ def test_criatura_conhecida_sem_ficha_e_sinalizada():
     from engine.combat.npc_statblocks import limpar_cache, sem_ficha_autoral
 
     limpar_cache()
-    assert sem_ficha_autoral("vyrmathax") is True
-    assert sem_ficha_autoral("vyrmathax-1") is True, "o sufixo tem que normalizar aqui também"
+    # 09/08: vyrmathax deixou de ser o exemplo — ele ganhou ficha. O mecanismo
+    # continua valendo pra QUALQUER peça do módulo que fique sem `combat`, e é
+    # isso que este teste guarda. Se um dia todas tiverem ficha, `_SEM_FICHA`
+    # fica vazio e os dois primeiros asserts abaixo passam a ser vacuosos —
+    # trocar por uma entidade nova, não apagar o teste.
+    from engine.combat.npc_statblocks import _SEM_FICHA
+
+    for orfao in sorted(_SEM_FICHA):
+        assert sem_ficha_autoral(orfao) is True, orfao
+        assert sem_ficha_autoral(f"{orfao}-1") is True, "o sufixo tem que normalizar"
+    assert sem_ficha_autoral("vyrmathax") is False, "vyrmathax tem ficha desde 09/08"
     assert sem_ficha_autoral("bjorn-tharnsson") is False, "quem TEM ficha não é sinalizado"
     assert sem_ficha_autoral("monstro-inventado-pelo-llm") is False, (
         "criatura que o módulo não conhece não é problema autoral — é improviso"

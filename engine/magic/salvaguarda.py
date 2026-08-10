@@ -7,10 +7,11 @@ Por que existe: é o inverso do ataque de magia (P16 passo 3). Ali o jogador rol
 Dependências: engine.combat.enemy_turn.rolar_dado, engine.combat.resolver
     (matemática já testada — esta camada não reimplementa),
     engine.magic.spell_mechanics (tabela local, sem rede).
-Armadilha: `StatsInimigo` NÃO tem atributos — não há DES nem CON para somar na
-    resistência. O inimigo rola d20 PURO, que é a mesma decisão já travada na
-    iniciativa ("inimigo sem DES rola puro"). Inventar um modificador seria
-    número sem lastro no SRD, e o projeto já pagou caro por isso.
+Armadilha: o inimigo soma o modificador do atributo QUANDO A FICHA O TRAZ, e
+    rola puro quando não traz. Ficha sem atributo não é erro — é uma criatura
+    improvisada, e somar zero é honesto. O que seria errado é INVENTAR o
+    modificador: número sem lastro no SRD foi o que produziu o
+    BESTIARIO-CR-ERRADO-1.
 
 Exemplo:
     r = resolver_resistencia(wm, "Bola de Fogo", "goblin-1", nome_en="Fireball")
@@ -38,6 +39,13 @@ _ATRIBUTO_PADRAO = "sab"
 
 # Metade do dano em sucesso, quando a magia diz "half" (SRD).
 _SUCESSO_METADE = "half"
+
+# A tabela de magias nomeia o atributo do save em inglês ("DEX", "WIS"); o
+# `StatsInimigo` guarda em PT-BR. Este é o único ponto onde os dois se encontram.
+_SAVE_PARA_ATRIBUTO: dict[str, str] = {
+    "STR": "for", "DEX": "des", "CON": "con",
+    "INT": "int", "WIS": "sab", "CHA": "car",
+}
 
 
 def atributo_de_conjuracao(classe: str) -> str:
@@ -79,9 +87,17 @@ def resolver_resistencia(
 
     rng = rng or random.Random()
     cd = cd_de_magia(wm)
-    # d20 PURO: o inimigo não tem atributos na ficha (ver armadilha no topo).
+    # ATRIBUTOS-DO-INIMIGO (09/08): o alvo soma o modificador do atributo que a
+    # magia exige, quando a ficha dele o traz. Antes rolava SEMPRE puro, e uma
+    # dragoa CR 17 resistia como um goblin — a ficha melhor não valia nada.
+    from engine.combat.stats import stats_inimigo
+    _st = stats_inimigo(ficha=str(alvo.get("ficha", "")), nome=str(alvo.get("nome", "")))
+    _attr = _SAVE_PARA_ATRIBUTO.get(
+        str(mecanica.get("save_atributo") or "").upper(), ""
+    )
+    mod_alvo = _st.mod(_attr) if _attr else 0
     d20 = rng.randint(1, 20)
-    resistiu = d20 >= cd
+    resistiu = (d20 + mod_alvo) >= cd
 
     dado = _dado_de_dano(
         mecanica,
@@ -128,6 +144,7 @@ def resolver_resistencia(
         "resistiu": resistiu,
         "cd": cd,
         "d20_alvo": d20,
+        "mod_alvo": mod_alvo,
         "dano": dano,
         "estado_alvo": estado,
         "contexto": contexto,

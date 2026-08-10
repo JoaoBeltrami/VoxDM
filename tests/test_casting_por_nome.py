@@ -38,11 +38,24 @@ def test_conjugacoes_do_nome_verbo():
         assert detectar_conjuracao(fala, FICHA_CLERIGO) == "Abençoar", fala
 
 
-def test_nome_composto_dispensa_verbo():
-    """'Curar Ferimentos' ninguém diz por acaso."""
+def test_nome_composto_TAMBEM_precisa_de_declaracao():
+    """Correção de 09/08: nem nome composto dispensa o verbo.
+
+    A versão anterior deixava "curar ferimentos no bárbaro" passar sozinho. O
+    Beltrami corrigiu o desenho: o gatilho é DECLARAR o lançamento, não
+    mencionar a magia. "eu uso X", "casto X", "vou cantar X".
+    """
+    assert detectar_conjuracao("curar ferimentos no bárbaro", FICHA_CLERIGO) is None
     assert detectar_conjuracao(
-        "curar ferimentos no bárbaro", FICHA_CLERIGO
+        "uso Curar Ferimentos no bárbaro", FICHA_CLERIGO
     ) == "Curar Ferimentos"
+
+
+def test_as_formas_que_o_beltrami_usa():
+    """Os exemplos literais dele: "eu uso hex", "eu casto/vou cantar hex"."""
+    ficha = [*FICHA_CLERIGO, "Hex"]
+    for fala in ("eu uso Hex no bandido", "eu casto Hex", "vou cantar Hex"):
+        assert detectar_conjuracao(fala, ficha) == "Hex", fala
 
 
 def test_verbo_novo_que_o_regex_antigo_nao_cobria():
@@ -52,18 +65,23 @@ def test_verbo_novo_que_o_regex_antigo_nao_cobria():
 # ── O que NÃO pode virar conjuração ──────────────────────────────────────────
 
 
-def test_nome_ambiguo_sozinho_nao_conta():
-    """'Luz' está na ficha do clérigo — e é prosa comum. Sem verbo, não é cast."""
+def test_nome_sozinho_nunca_conta():
+    """Sem declaração, não é cast — vale pra QUALQUER nome, não só os ambíguos.
+
+    A lista de nomes perigosos deixou de existir: era um remendo pra uma regra
+    que estava no lugar errado.
+    """
     assert detectar_conjuracao("a luz da tocha tremeluz na parede", FICHA_CLERIGO) is None
-
-
-def test_nome_ambiguo_com_verbo_conta():
-    assert detectar_conjuracao("conjuro Luz na ponta do cajado", FICHA_CLERIGO) == "Luz"
-
-
-def test_outro_ambiguo_da_ficha():
     assert detectar_conjuracao("peço conselho ao velho taverneiro", FICHA_CLERIGO) is None
+    assert detectar_conjuracao(
+        "a Chama Sagrada é uma lenda desta vila", FICHA_CLERIGO
+    ) is None
+
+
+def test_declaracao_faz_qualquer_nome_contar():
+    assert detectar_conjuracao("conjuro Luz na ponta do cajado", FICHA_CLERIGO) == "Luz"
     assert detectar_conjuracao("lanço Guia no batedor", FICHA_CLERIGO) == "Guia"
+    assert detectar_conjuracao("rezo Santuário", FICHA_CLERIGO) == "Santuário"
 
 
 def test_magia_fora_da_ficha_nao_conta():
@@ -102,3 +120,11 @@ def test_nome_parcial_nao_casa_por_substring():
     """'Guia' não pode casar dentro de 'guiando' por acidente de substring —
     o limite de palavra existe pra isso."""
     assert detectar_conjuracao("sigo guiando o grupo pela trilha", FICHA_CLERIGO) is None
+
+
+def test_vocabulario_de_clerigo_e_bardo_cobre():
+    """A lista original tinha seis verbos de mago. Clérigo canaliza e reza;
+    bardo canta. Nenhum deles conjurava, segundo a engine."""
+    ficha = [*FICHA_CLERIGO, "Hex"]
+    for fala in ("canalizo Chama Sagrada", "rezo Santuário", "entoo Hex", "recito Hex"):
+        assert detectar_conjuracao(fala, ficha) is not None, fala

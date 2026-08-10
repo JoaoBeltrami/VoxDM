@@ -54,10 +54,28 @@ STATBLOCKS_SRD: dict[str, dict[str, Any]] = {
     "veteran":        {"nome": "Veterano",           "cr": "3",   "xp": 700,  "ca": 17, "hp": 58,  "atk": 5, "dano": "1d8",  "dano_bonus": 3},
     "knight":         {"nome": "Cavaleiro",          "cr": "3",   "xp": 700,  "ca": 18, "hp": 52,  "atk": 5, "dano": "2d6",  "dano_bonus": 3},
     "hill-giant":     {"nome": "Gigante das Colinas", "cr": "5",  "xp": 1800, "ca": 13, "hp": 105, "atk": 8, "dano": "3d8",  "dano_bonus": 5},
+    # ── Criaturas de PORTE, pra quem é mais que um NPC comum (09/08) ──────────
+    # A tabela parava no CR 5, então qualquer coisa acima disso — uma lenda, um
+    # chefe — caía num humanoide genérico. Foi assim que Vyrmathax (CR 17)
+    # recebeu ficha de warlock e o Beltrami "matou uma lenda, foi bem fácil".
+    # Valores do SRD 5.1, com os MODIFICADORES de atributo, que a engine agora
+    # usa em iniciativa e salvaguarda.
+    "ogre":           {"nome": "Ogro",                 "cr": "2",  "xp": 450,  "ca": 11, "hp": 59,  "atk": 6,  "dano": "2d8",  "dano_bonus": 4,
+                       "mods": {"for": 4, "des": -1, "con": 3, "int": -3, "sab": -2, "car": -2}},
+    "owlbear":        {"nome": "Urso-Coruja",          "cr": "3",  "xp": 700,  "ca": 13, "hp": 59,  "atk": 7,  "dano": "1d10", "dano_bonus": 5,
+                       "mods": {"for": 5, "des": 1, "con": 3, "int": -4, "sab": 1, "car": -2}},
+    "troll":          {"nome": "Troll",                "cr": "5",  "xp": 1800, "ca": 15, "hp": 84,  "atk": 7,  "dano": "2d6",  "dano_bonus": 4,
+                       "mods": {"for": 4, "des": 1, "con": 5, "int": -2, "sab": -1, "car": -2}},
+    "young-red-dragon": {"nome": "Dragão Vermelho Jovem", "cr": "10", "xp": 5900, "ca": 18, "hp": 178, "atk": 10, "dano": "2d10", "dano_bonus": 6,
+                       "mods": {"for": 6, "des": 0, "con": 5, "int": 2, "sab": 0, "car": 4}},
+    "adult-red-dragon": {"nome": "Dragão Vermelho Adulto", "cr": "17", "xp": 18000, "ca": 19, "hp": 256, "atk": 14, "dano": "2d10", "dano_bonus": 8,
+                       "mods": {"for": 8, "des": 0, "con": 7, "int": 3, "sab": 1, "car": 5}},
 }
 
 # Campos numéricos/textuais que o `combat` do NPC pode sobrescrever no análogo.
-_CAMPOS_OVERRIDE: tuple[str, ...] = ("nome", "cr", "xp", "ca", "hp", "atk", "dano", "dano_bonus")
+_CAMPOS_OVERRIDE: tuple[str, ...] = (
+    "nome", "cr", "xp", "ca", "hp", "atk", "dano", "dano_bonus", "mods",
+)
 
 # Cache do mapa npc_id → dict `combat` do módulo. Carregado 1x por processo —
 # o JSON do módulo não muda mid-sessão (uvicorn --reload recarrega em dev).
@@ -73,9 +91,22 @@ def _ficha_texto(campos: dict[str, Any]) -> str:
     """Formata os campos num texto parseável por parse_ficha + xp_do_inimigo."""
     bonus = int(campos.get("dano_bonus", 0) or 0)
     sufixo_bonus = f"+{bonus}" if bonus > 0 else ""
+    # Atributos no MESMO formato que o bestiário do Qdrant escreve
+    # ("FOR 27 (+8) DES 10 (+0) ..."), porque `parse_atributos` lê esse formato —
+    # emitir diferente aqui faria a engine ignorar os atributos da ficha autoral.
+    mods = campos.get("mods") or {}
+    linha_attr = ""
+    if mods:
+        siglas = (("for", "FOR"), ("des", "DES"), ("con", "CON"),
+                  ("int", "INT"), ("sab", "SAB"), ("car", "CAR"))
+        partes = [
+            f"{sigla} {10 + 2 * int(mods[k])} ({int(mods[k]):+d})"
+            for k, sigla in siglas if k in mods
+        ]
+        linha_attr = " " + " ".join(partes) + "."
     return (
         f"{campos['nome']} — CR {campos['cr']} ({int(campos['xp'])} XP). "
-        f"CA {int(campos['ca'])} | PV {int(campos['hp'])}. "
+        f"CA {int(campos['ca'])} | PV {int(campos['hp'])}.{linha_attr} "
         f"Ataques: golpe +{int(campos['atk'])} ({campos['dano']}{sufixo_bonus})"
     )
 

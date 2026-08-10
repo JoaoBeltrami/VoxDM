@@ -15,7 +15,7 @@ Exemplo:
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _RE_CA = re.compile(r"\bCA\s*(\d+)", re.IGNORECASE)
 _RE_PV = re.compile(r"\bPV\s*(\d+)", re.IGNORECASE)
@@ -23,6 +23,32 @@ _RE_PV = re.compile(r"\bPV\s*(\d+)", re.IGNORECASE)
 _RE_ATK = re.compile(r"Ataques?:[^.\n]*?\+(\d+)", re.IGNORECASE)
 # Dado de dano em qualquer lugar (ex: "1d6+1", "2d8"); bônus opcional
 _RE_DANO = re.compile(r"(\d+d\d+)\s*(?:\+\s*(\d+))?", re.IGNORECASE)
+
+# Atributos na ficha do bestiário: "FOR 16 (+3) DES 12 (+1) CON 17 (+3) ...".
+# É o formato que `ingestor/rules_loader.py` escreve, então o parse casa com a
+# fonte real e não com um formato imaginado.
+_SIGLAS_ATRIBUTO: dict[str, str] = {
+    "FOR": "for", "DES": "des", "CON": "con",
+    "INT": "int", "SAB": "sab", "CAR": "car",
+}
+_RE_ATRIBUTO = re.compile(
+    r"\b(FOR|DES|CON|INT|SAB|CAR)\s+(\d+)\s*\(\s*([+-]?\d+)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def parse_atributos(ficha: str) -> dict[str, int]:
+    """Modificadores de atributo da ficha em texto. {} quando ela não os traz.
+
+    Lê o MODIFICADOR do parêntese em vez de recalcular do score: é o número que
+    a própria ficha declara, e derivar por conta abriria espaço pra divergir dela.
+    """
+    mods: dict[str, int] = {}
+    for m in _RE_ATRIBUTO.finditer(ficha or ""):
+        chave = _SIGLAS_ATRIBUTO.get(m.group(1).upper())
+        if chave:
+            mods[chave] = int(m.group(3))
+    return mods
 
 
 @dataclass(frozen=True)
@@ -34,6 +60,23 @@ class StatsInimigo:
     atk_bonus: int
     dano_dado: str       # ex "1d6"
     dano_bonus: int
+    # MODIFICADORES de atributo (for/des/con/int/sab/car). Vazio = desconhecido.
+    #
+    # ATRIBUTOS-DO-INIMIGO (09/08): até aqui `StatsInimigo` não tinha nenhum, e
+    # a consequência era invisível mas grande — o inimigo rolava d20 PURO na
+    # iniciativa e nas salvaguardas. Uma dragoa CR 17 resistia a uma Bola de
+    # Fogo exatamente tão bem quanto um goblin, e agia na mesma velocidade.
+    # Ficha melhor não adiantava nada, porque a engine não tinha onde ler.
+    mods: dict[str, int] = field(default_factory=dict)
+
+    def mod(self, atributo: str) -> int:
+        """Modificador do atributo ('des', 'con'…). 0 quando a ficha não diz.
+
+        Zero é o valor honesto pra ausência: é o mesmo que a engine já usava
+        implicitamente quando rolava puro, então nada regride — o que muda é que
+        a ficha COM atributo passa a valer.
+        """
+        return int(self.mods.get(str(atributo or "").strip().lower(), 0))
 
 
 # Inimigo genérico CR ~1/8 (guarda/bandido/lacaio) — usado quando a ficha SRD não
@@ -66,6 +109,7 @@ def parse_ficha(ficha: str) -> StatsInimigo | None:
         atk_bonus=atk_bonus,
         dano_dado=dano_dado,
         dano_bonus=dano_bonus,
+        mods=parse_atributos(ficha),
     )
 
 
