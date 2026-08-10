@@ -2476,6 +2476,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     ):
                         from engine.magic.resolucao import mecanica_da_magia
                         _mec = mecanica_da_magia(nome_magia)
+                        # P16 passo 5: CURA resolve na hora — não há alvo
+                        # inimigo nem d20 do jogador, é a ficha do conjurador
+                        # contra o próprio HP. `[CURA:]` do modelo sobrevive pra
+                        # cura NÃO-mecânica (erva, NPC que socorre): a ORIGEM
+                        # decide o dono, igual ao "conceder × consumir item".
+                        if _mec and (_mec.get("cura") or {}):
+                            try:
+                                from engine.magic.cura import resolver_cura_de_magia
+                                _r_cura = resolver_cura_de_magia(
+                                    sessao.working_mem, nome_magia
+                                )
+                            except Exception as _e:
+                                log.error("magia_cura_falhou",
+                                          session_id=session_id, erro=str(_e))
+                                _r_cura = None
+                            if _r_cura:
+                                _fatos_engine.append(str(_r_cura["contexto"]))
+                                # A engine é a dona da cura DESTE turno — o
+                                # `[CURA:]` do modelo não pode somar por cima.
+                                _engine_resolveu_turno = True
+                                log.info("magia_cura_resolvida",
+                                         session_id=session_id, magia=nome_magia,
+                                         curado=_r_cura["curado"], hp=_r_cura["hp"])
+
                         # P16 passo 4: RESISTÊNCIA resolve na hora — quem rola é
                         # o ALVO, e quem rola pelo alvo é a engine. Não há d20 do
                         # jogador pra esperar, então não vira pendência.
