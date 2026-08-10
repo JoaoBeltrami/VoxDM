@@ -34,6 +34,8 @@ _DEGRAUS_TRUQUE: tuple[int, ...] = (1, 5, 11, 17)
 
 # A tabela vem do SRD em inglês; a linha vai pro Mestre, que narra em PT-BR.
 # Sem isto o prompt recebia "3 de dano fire" — inglês no meio da narração.
+_PT_PARA_EN: dict[str, str] | None = None
+
 _TIPO_DANO_PT: dict[str, str] = {
     "acid": "ácido", "bludgeoning": "concussão", "cold": "frio",
     "fire": "fogo", "force": "energia", "lightning": "elétrico",
@@ -48,17 +50,53 @@ def _normalizar(texto: str) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
 
 
-def mecanica_da_magia(nome_pt: str, nome_en: str = "") -> dict[str, Any] | None:
-    """Registro mecânico da magia, pela junção com a lista PT-BR. None se não há.
+def _indice_pt_para_en() -> dict[str, str]:
+    """PT-BR normalizado → nome inglês, a partir de `spell_list`. Cache no módulo.
 
-    Aceita o nome inglês direto (o caminho barato) e cai no PT-BR só quando
-    preciso — a tabela é chaveada pelo índice do SRD.
+    Sem esta ponte, "Bola de Fogo" não achava a mecânica de Fireball: a tabela é
+    chaveada em INGLÊS e a lista PT-BR nunca era consultada. O Beltrami pediu em
+    09/08 que o Mestre entenda os dois idiomas — isto é a metade mecânica disso.
     """
+    global _PT_PARA_EN
+    if _PT_PARA_EN is None:
+        from engine.magic.spell_list import SPELLS_POR_CLASSE
+        _PT_PARA_EN = {
+            _normalizar(e.nome_pt): e.nome_en
+            for lista in SPELLS_POR_CLASSE.values()
+            for e in lista
+            if e.nome_pt and e.nome_en
+        }
+    return _PT_PARA_EN
+
+
+def mecanica_da_magia(nome_pt: str, nome_en: str = "") -> dict[str, Any] | None:
+    """Registro mecânico da magia, em PT-BR ou em inglês. None se não há.
+
+    Três caminhos, do mais direto ao mais indulgente:
+      1. o nome inglês (a tabela é chaveada por ele);
+      2. o nome PT-BR, traduzido pela ponte de `spell_list`;
+      3. a equivalência declarada, pras magias fora do SRD 2014.
+    """
+    ponte = _indice_pt_para_en()
     for candidato in (nome_en, nome_pt):
         chave = _normalizar(candidato)
         if not chave:
             continue
         indice = POR_NOME_EN.get(chave)
+        if indice:
+            return MECANICA_MAGIA.get(indice)
+        # O mesmo nome, agora traduzido do PT-BR.
+        en = ponte.get(chave)
+        if en:
+            indice = POR_NOME_EN.get(_normalizar(en))
+            if indice:
+                return MECANICA_MAGIA.get(indice)
+    # Fora do SRD 2014 (Xanathar's/Tasha's): empresta a mecânica da equivalência
+    # declarada. Decisão do Beltrami em 09/08 — "prefiro ter as magias mesmo que
+    # parecidas". Sem isto, 19 magias da lista PT-BR continuavam sendo prosa.
+    from engine.magic.equivalencias import equivalente_srd
+    for candidato in (nome_pt, nome_en):
+        indice = equivalente_srd(candidato)
         if indice:
             return MECANICA_MAGIA.get(indice)
     return None
