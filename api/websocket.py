@@ -300,6 +300,7 @@ from engine.authority.consequencia import (
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
 from engine.combat.turn_control import avaliar_acao_jogador
+from engine.magic.casting import detectar_conjuracao
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
@@ -2287,10 +2288,22 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             )
                         )
                     ):
-                        # Declaração de ataque em combate → fixa o alvo e deixa o LLM
-                        # PEDIR a rolagem (a engine resolve quando o d20 chegar). Sem
-                        # alvo claro (ambíguo), cai no fluxo antigo.
-                        _alvo = _extrair_alvo_ataque(texto_jogador, sessao.working_mem)
+                        # MAGIA-VIRA-ATAQUE-1 (smoke test autônomo 09/08): "eu uso
+                        # Chama Sagrada NO BANDIDO" é indistinguível de um ataque
+                        # com arma pro `_RE_COMBATE` — o alvo está lá, o verbo
+                        # também. O que acontecia: este bloco setava
+                        # `combate_pendente`, e o bloco de magia (que roda depois)
+                        # tem guard `not combate_pendente`, então a conjuração era
+                        # DETECTADA e nunca RESOLVIDA. No smoke test:
+                        # `conjuracao_detectada_por_nome` 2×, `magia_save_resolvido` 0.
+                        #
+                        # Declarar magia não é declarar ataque com arma. A magia
+                        # tem precedência: ela é a mais específica das duas leituras.
+                        if detectar_conjuracao(texto_jogador, sessao.spells_conhecidas):
+                            log.info("ataque_cedido_a_magia", session_id=session_id)
+                            _alvo = ""
+                        else:
+                            _alvo = _extrair_alvo_ataque(texto_jogador, sessao.working_mem)
                         if _alvo:
                             try:
                                 from engine.bestiary.bestiary import enriquecer_fichas_inimigos
@@ -2428,7 +2441,6 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         # NOME da magia na ficha; os seis verbos viraram reforço.
                         # No playtest de 09/08 um Clérigo conjurou a sessão inteira
                         # e a engine viu ZERO — "abençoo" não é nenhum dos verbos.
-                        from engine.magic.casting import detectar_conjuracao
                         nome_magia = detectar_conjuracao(
                             texto_jogador, sessao.spells_conhecidas
                         )
@@ -2494,11 +2506,19 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # regra do ataque físico — o JOGADOR rola o d20 na UI e a engine
                     # resolve. Reusa a máquina de `combate_pendente` que já existe;
                     # o que muda é o `tipo`, que roteia pro resolvedor de magia.
-                    if (
-                        nome_magia
-                        and sessao.working_mem.em_combate
-                        and not sessao.combate_pendente
-                    ):
+                    # MAGIA-BLOQUEADA-POR-PENDENCIA-1 (smoke test 09/08): o guard
+                    # era `not sessao.combate_pendente`, e a pendência de ataque
+                    # PERSISTE entre turnos por design (PENDENCIA-CONGELA-INIMIGO-1,
+                    # pra janela de rolagem sobreviver a turnos de conversa). O
+                    # efeito: em QUALQUER combate onde o jogador já tinha declarado
+                    # um ataque, magia era detectada e nunca resolvida. Duas
+                    # corridas do smoke test: 2 detecções, 0 resoluções, slots
+                    # intactos.
+                    #
+                    # Resistência e cura não esperam d20 nenhum — só o ataque de
+                    # magia precisa da pendência livre, e esse caso é guardado
+                    # dentro do próprio ramo.
+                    if nome_magia and sessao.working_mem.em_combate:
                         from engine.magic.resolucao import mecanica_da_magia
                         _mec = mecanica_da_magia(nome_magia)
                         # P16 passo 5: CURA resolve na hora — não há alvo
@@ -2572,7 +2592,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                              alvo=_alvo_res, cd=_r_save["cd"],
                                              resistiu=_r_save["resistiu"],
                                              dano=_r_save["dano"])
-                        elif _mec and _mec.get("resolucao") == "ataque":
+                        elif (
+                            _mec
+                            and _mec.get("resolucao") == "ataque"
+                            and not sessao.combate_pendente
+                        ):
                             _alvo_magia = _extrair_alvo_ataque(
                                 texto_jogador, sessao.working_mem
                             ) or next(

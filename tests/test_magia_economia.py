@@ -51,14 +51,19 @@ def test_a_economia_de_acao_funciona_no_estado():
 
 def test_resistencia_gasta_a_acao_no_websocket():
     """O consumo mora no call-site, porque `resolver_resistencia` é pura — ela
-    não deve ter efeito colateral de economia pra continuar testável."""
-    i = _WS.index("magia_save_resolvido")
+    não deve ter efeito colateral de economia pra continuar testável.
+
+    Âncora na CHAMADA (`log.info("magia_save_resolvido"`), não no nome solto: um
+    comentário que cite o evento pra explicar um bug faria o teste medir o
+    trecho errado. Aconteceu — foi assim que este teste quebrou em 09/08.
+    """
+    i = _WS.index('log.info("magia_save_resolvido"')
     bloco = _WS[max(0, i - 900):i]
     assert "sessao.working_mem.usar_acao()" in bloco
 
 
 def test_cura_gasta_a_acao_no_websocket():
-    i = _WS.index("magia_cura_resolvida")
+    i = _WS.index('log.info("magia_cura_resolvida"')
     bloco = _WS[max(0, i - 900):i]
     assert "sessao.working_mem.usar_acao()" in bloco
 
@@ -69,14 +74,14 @@ def test_cura_gasta_a_acao_no_websocket():
 def test_resistencia_adia_o_turno_dos_inimigos():
     """`_engine_resolveu_turno` suprime o beat. Sem marcar o adiamento, conjurar
     fazia o inimigo pular a rodada inteira."""
-    i = _WS.index("magia_save_resolvido")
+    i = _WS.index('log.info("magia_save_resolvido"')
     bloco = _WS[max(0, i - 900):i]
     assert "sessao.inimigos_adiados = True" in bloco
 
 
 def test_cura_adia_o_turno_dos_inimigos_apenas_em_combate():
     """Curar fora de combate não pode inventar um turno de inimigo."""
-    i = _WS.index("magia_cura_resolvida")
+    i = _WS.index('log.info("magia_cura_resolvida"')
     bloco = _WS[max(0, i - 900):i]
     assert "if sessao.working_mem.em_combate:" in bloco
     assert "sessao.inimigos_adiados = True" in bloco
