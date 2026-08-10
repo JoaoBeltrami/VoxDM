@@ -299,6 +299,7 @@ from engine.authority.consequencia import (
 )
 from engine.authority.resolve import resolver_turno_ataque_jogador
 from engine.combat.intent import eh_pedido_ataque, eh_teste_pericia, menciona_magia_ofensiva
+from engine.combat.turn_control import avaliar_acao_jogador
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
@@ -1738,6 +1739,30 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # fugiu, LLM declarou fim, todos mortos) — remendar os dois
                     # `sair_combate()` deixaria os outros de fora em silêncio.
                     _combate_antes = bool(sessao.working_mem.em_combate)
+
+                    # ECONOMIA-DE-ACAO (task 5 de 19/06, código morto até 09/08):
+                    # a engine recusa a 2ª ação de combate na MESMA rodada. Estava
+                    # escrito e testado desde junho e nunca teve call-site — a
+                    # classe "feature dormente" que o BEAT-NUNCA-RODOU-1 registrou.
+                    #
+                    # Só ganhou sentido agora: até o TURNO-COLAPSADO-1 a rodada
+                    # avançava junto com o golpe do jogador, então `pode_agir`
+                    # praticamente nunca era False. Com a rodada fechando no WRAP
+                    # (depois dos inimigos), a janela existe de verdade.
+                    #
+                    # Movimento, fala e ação bônus seguem permitidos — a recusa é
+                    # só da AÇÃO principal.
+                    _permitido, _motivo_recusa = avaliar_acao_jogador(
+                        sessao.working_mem, texto_jogador
+                    )
+                    if not _permitido:
+                        log.info("acao_recusada_economia", session_id=session_id,
+                                 rodada=sessao.working_mem.rodada_combate)
+                        await _send_text_seguro(websocket, MensagemWS(
+                            tipo="fim", conteudo=_motivo_recusa,
+                            **_snapshot_estado(sessao.working_mem),
+                        ).model_dump_json())
+                        continue
                 except (json.JSONDecodeError, TypeError):
                     await _send_text_seguro(websocket,
                         MensagemWS(
@@ -2496,6 +2521,11 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 # A engine é a dona da cura DESTE turno — o
                                 # `[CURA:]` do modelo não pode somar por cima.
                                 _engine_resolveu_turno = True
+                                # MAGIA-SEM-ECONOMIA-1: curar gasta a ação, e em
+                                # combate os inimigos seguem agindo (ver acima).
+                                if sessao.working_mem.em_combate:
+                                    sessao.working_mem.usar_acao()
+                                    sessao.inimigos_adiados = True
                                 log.info("magia_cura_resolvida",
                                          session_id=session_id, magia=nome_magia,
                                          curado=_r_cura["curado"], hp=_r_cura["hp"])
@@ -2526,6 +2556,17 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 if _r_save:
                                     _fatos_engine.append(str(_r_save["contexto"]))
                                     _engine_resolveu_turno = True
+                                    # MAGIA-SEM-ECONOMIA-1 (09/08, achado antes do
+                                    # playtest): conjurar GASTA a ação da rodada,
+                                    # igual a atacar. Sem isto dava pra lançar Bola
+                                    # de Fogo E atacar na mesma rodada.
+                                    sessao.working_mem.usar_acao()
+                                    # E os inimigos precisam AGIR. `_engine_resolveu_turno`
+                                    # suprime o beat; sem marcar o adiamento, conjurar
+                                    # fazia o inimigo simplesmente não jogar a rodada —
+                                    # o "só o player age" que o TURNO-COLAPSADO-1
+                                    # tinha acabado de consertar.
+                                    sessao.inimigos_adiados = True
                                     log.info("magia_save_resolvido",
                                              session_id=session_id, magia=nome_magia,
                                              alvo=_alvo_res, cd=_r_save["cd"],
