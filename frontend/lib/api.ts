@@ -277,6 +277,8 @@ export interface PersonagemConfig {
   player_alignment?: string;
   // Magias selecionadas na criação — lista de nomes PT-BR (truques + magias)
   player_spells?: string[];
+  /** P18 frente A: itens escolhidos nas opções do SRD, já resolvidos. */
+  player_equipamento?: string[];
   // Visibilidade das rolagens do mestre (Fase 5.7)
   roll_visibility?: "open" | "result_only" | "narrated";
   // Pilar Perigo (10/06): política de morte — narrativo (default) ou mortal
@@ -414,4 +416,44 @@ export async function trocarLlmBackend(session_id: string, backend: LlmBackend):
  *  Backend só aceita vozes da allowlist (api/routes/health.py). */
 export function urlAmostraVoz(voice: string): string {
   return `${API_BASE}/voice/preview?voice=${encodeURIComponent(voice)}`;
+}
+
+
+/** P18 frente A — as escolhas de equipamento do SRD para a classe.
+ *
+ * `rotulo` é a MESMA frase que a criação por voz vai ler em voz alta: a ficha e
+ * o Mestre falam do mesmo dado de propósito. `categoria` preenchida significa
+ * que a opção NÃO fecha sozinha ("uma arma marcial") — a ficha abre um campo. */
+export interface OpcaoEquipamento {
+  rotulo: string;
+  itens: { nome: string; quantidade: number }[];
+  categoria: string;
+}
+
+export interface EscolhaEquipamento {
+  escolher: number;
+  opcoes: OpcaoEquipamento[];
+}
+
+export interface EquipamentoDaClasse {
+  classe: string;
+  fixos: string[];
+  escolhas: EscolhaEquipamento[];
+}
+
+export async function obterEquipamentoInicial(
+  classe: string,
+): Promise<EquipamentoDaClasse | null> {
+  if (!classe) return null;
+  try {
+    const r = await fetch(
+      `${API_BASE}/session/equipamento-inicial/${encodeURIComponent(classe)}`,
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as EquipamentoDaClasse;
+  } catch {
+    // Falha silenciosa: sem equipamento a criação segue igual a antes. Perder a
+    // escolha é ruim; impedir o jogador de criar personagem é pior.
+    return null;
+  }
 }

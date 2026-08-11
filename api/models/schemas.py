@@ -101,6 +101,11 @@ class SessaoConfig(BaseModel):
     # Magias selecionadas na criação — lista de nomes PT-BR (truques + magias).
     # Usadas para popular SessaoAtiva.spells_conhecidas e injetar no prompt.
     player_spells: list[str] = Field(default_factory=list, max_length=80)
+    # P18 frente A: itens escolhidos na ficha a partir das opções do SRD
+    # (`GET /rules/equipamento/{classe}`). Vão junto do equipamento FIXO que a
+    # engine já dá — a ficha manda o RESULTADO da escolha, não os índices, pra
+    # que o servidor não precise reproduzir a navegação da UI.
+    player_equipamento: list[str] = Field(default_factory=list, max_length=40)
 
     @model_validator(mode="after")
     def validar_session_anterior(self) -> "SessaoConfig":

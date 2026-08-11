@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PersonagemConfig } from "@/lib/api";
+import { obterEquipamentoInicial, type PersonagemConfig } from "@/lib/api";
 import {
   spellsDaClasse, spellsPorNivel, limiteProgressao,
   type SpellEntry,
@@ -218,6 +218,15 @@ export function CharacterForm({ onChange }: Props) {
     str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0,
   });
 
+  // P18 frente A — equipamento inicial: o que a classe dá de graça e o que o
+  // jogador escolhe. Buscado do servidor pra que a REGRA (quais opções existem)
+  // continue morando atrás do RuleSystem, e não numa cópia no frontend.
+  const [equipDaClasse, setEquipDaClasse] = useState<import("@/lib/api").EquipamentoDaClasse | null>(null);
+  // índice da opção escolhida por pergunta; -1 = ainda não escolheu
+  const [equipEscolhas, setEquipEscolhas] = useState<number[]>([]);
+  // texto livre das opções ABERTAS ("uma arma marcial"), por índice de pergunta
+  const [equipAbertas, setEquipAbertas] = useState<Record<number, string>>({});
+
   // Magias selecionadas no CharacterForm — sincronizadas no onChange
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
   // Aba ativa na seção de magias: "truques" | 1 | 2 | 3 | 4 | 5
@@ -357,8 +366,40 @@ export function CharacterForm({ onChange }: Props) {
       skill_profs: allSkills,
       save_profs:  CLASS_SAVES[classe] ?? [],
       player_spells: selectedSpells,
+      player_equipamento: itensEscolhidos,
     });
-  }, [nome, raca, classe, subclasse, background, descricao, nivel, localId, scores, selectedSpells]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nome, raca, classe, subclasse, background, descricao, nivel, localId, scores,
+      selectedSpells, equipEscolhas, equipAbertas, equipDaClasse]);
+
+  // Classe mudou → busca as opções e ZERA as escolhas. Manter a escolha antiga
+  // daria ao Guerreiro o alaúde do Bardo, e o índice nem apontaria pra mesma
+  // pergunta: as listas têm tamanhos diferentes por classe.
+  useEffect(() => {
+    let vivo = true;
+    if (!classe) { setEquipDaClasse(null); setEquipEscolhas([]); setEquipAbertas({}); return; }
+    obterEquipamentoInicial(classe).then(dados => {
+      if (!vivo) return;
+      setEquipDaClasse(dados);
+      setEquipEscolhas((dados?.escolhas ?? []).map(() => -1));
+      setEquipAbertas({});
+    });
+    return () => { vivo = false; };
+  }, [classe]);
+
+  // Itens que a escolha produziu — é isto que vai no payload da sessão. A opção
+  // ABERTA vira o texto que o jogador digitou; vazio simplesmente não entra,
+  // porque item sem nome é item que ninguém acha depois.
+  const itensEscolhidos: string[] = (equipDaClasse?.escolhas ?? []).flatMap((esc, i) => {
+    const j = equipEscolhas[i];
+    if (j == null || j < 0 || j >= esc.opcoes.length) return [];
+    const opcao = esc.opcoes[j];
+    const itens = opcao.itens.flatMap(it => Array(it.quantidade).fill(it.nome) as string[]);
+    const aberto = (equipAbertas[i] ?? "").trim();
+    return opcao.categoria && aberto ? [...itens, aberto] : itens;
+  });
+
+  const faltamEscolhas = (equipDaClasse?.escolhas ?? []).some((_, i) => (equipEscolhas[i] ?? -1) < 0);
 
   return (
     <div className="w-full space-y-4 text-left">
@@ -463,6 +504,62 @@ export function CharacterForm({ onChange }: Props) {
           ))}
         </select>
       </div>
+
+      {/* P18 frente A — Equipamento inicial (SRD). O bloco só aparece quando a
+          classe tem algo a mostrar: classe sem dados não deixa um vazio na tela. */}
+      {equipDaClasse && (equipDaClasse.fixos.length > 0 || equipDaClasse.escolhas.length > 0) && (
+        <div className="space-y-2 rounded-lg border border-vox-border-soft bg-vox-bg-elevated/40 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-vox-accent-glow">
+            Equipamento
+            {faltamEscolhas && (
+              <span className="ml-2 rounded bg-amber-900/50 px-1.5 py-0.5 text-[9px] normal-case tracking-normal text-amber-300">
+                falta escolher
+              </span>
+            )}
+          </p>
+
+          {equipDaClasse.fixos.length > 0 && (
+            <p className="text-xs text-vox-text-muted">
+              Já vem com você: {Array.from(new Set(equipDaClasse.fixos)).join(", ")}
+            </p>
+          )}
+
+          {equipDaClasse.escolhas.map((esc, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex flex-wrap gap-1.5">
+                {esc.opcoes.map((opcao, j) => {
+                  const ativa = equipEscolhas[i] === j;
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() => setEquipEscolhas(a => a.map((v, k) => (k === i ? j : v)))}
+                      className={`rounded border px-2 py-1 text-[11px] transition ${
+                        ativa
+                          ? "border-violet-500 bg-violet-900/40 text-violet-100"
+                          : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-violet-500/60 hover:text-violet-300"
+                      }`}
+                    >
+                      {opcao.rotulo}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Opção ABERTA: o SRD diz "uma arma marcial" e quem escolhe qual é
+                  o jogador — preencher por ele seria decidir a build dele. */}
+              {equipEscolhas[i] >= 0 && esc.opcoes[equipEscolhas[i]]?.categoria && (
+                <input
+                  value={equipAbertas[i] ?? ""}
+                  onChange={e => setEquipAbertas(a => ({ ...a, [i]: e.target.value }))}
+                  placeholder={`Qual? (${esc.opcoes[equipEscolhas[i]].categoria})`}
+                  maxLength={40}
+                  className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-violet-500"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Seleção de Magias — só para classes conjuradoras */}
       {(() => {

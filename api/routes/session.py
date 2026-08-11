@@ -111,6 +111,31 @@ async def listar_personagens_salvos(
     return await store.listar_por_owner(owner.email)
 
 
+@router.get("/equipamento-inicial/{classe}")
+async def equipamento_inicial_da_classe(
+    classe: str,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, Any]:
+    """O que a classe começa carregando + as ESCOLHAS que o jogador precisa fazer.
+
+    P18 frente A (pedido do Beltrami, 11/08). Passa pelo `RuleSystem`, nunca pela
+    tabela do D&D: quando outro sistema entrar, esta rota não muda.
+
+    `escolhas[].opcoes[].rotulo` é a mesma frase que a criação por VOZ vai ler em
+    voz alta — a ficha e o Mestre falam do mesmo dado de propósito. `categoria`
+    preenchida = a opção não fecha sozinha (o jogador ainda escolhe qual arma).
+    """
+    from engine.rules import obter_sistema
+
+    regras = obter_sistema()
+    nome = (classe or "").strip()[:60]
+    return {
+        "classe": nome,
+        "fixos": regras.equipamento_inicial(nome),
+        "escolhas": regras.escolhas_de_equipamento(nome),
+    }
+
+
 @router.get("/list", response_model=list[SessaoListaItem])
 async def listar_sessoes_salvas(
     owner: Annotated[Owner, Depends(get_owner)],
@@ -189,6 +214,24 @@ async def iniciar_sessao(
         modo_episodio=config.modo_episodio,
         session_zero=config.session_zero,
     )
+
+    # P18 frente A: o que o jogador ESCOLHEU na ficha entra por cima do
+    # equipamento fixo que a engine já deu. Adiciona (não substitui): as duas
+    # coisas são do SRD e somam — o Guerreiro pega tudo pela escolha, o Ranger
+    # já tinha arco e ganha o resto.
+    if config.player_equipamento:
+        for _item in config.player_equipamento:
+            if str(_item or "").strip():
+                working_mem.character.adicionar_item(str(_item)[:80])
+        if not working_mem.character.arma_equipada():
+            for _it in working_mem.character.inventario:
+                if _it.tipo == "arma":
+                    working_mem.character.equipar_item(_it.nome)
+                    break
+        log.info("equipamento_escolhido_aplicado",
+                 session_id=config.session_id,
+                 itens=len(config.player_equipamento),
+                 arma=working_mem.character.arma_equipada())
 
     context_builder = ContextBuilder()
     voice_manager = VoiceManager(narrator_voz=config.tts_voice or "pt-BR-FranciscaNeural")
