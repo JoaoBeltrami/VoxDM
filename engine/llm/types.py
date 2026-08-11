@@ -77,7 +77,12 @@ RE_COMBATE = re.compile(
     # <golpe>" virava quest social ("acalmar-a-situação") — a regex pegava só o
     # VERBO (soco/chuto), não o substantivo de golpe. Esses substantivos são
     # inerentemente agressivos, então dispensam alvo explícito (como os Nível 1).
-    r"(?:dou|dei|desfiro|desferi|acerto|acertei|mando|mandei)\s+(?:lhe\s+)?"
+    # ATAQUE-FORA-DA-ENGINE-1: `dar` no infinitivo faltava, e "VOU DAR um golpe"
+    # é a forma natural na fala por voz — "Eu vou dar agora um golpe cortando as
+    # pernas dele" passou batido no playtest de 11/08. O `\w+\s+` opcional cobre
+    # o advérbio que entra no meio ("vou dar AGORA um golpe").
+    r"(?:dou|dei|dar|desfiro|desferi|desferir|acerto|acertei|acertar|mando|mandei)\s+"
+    r"(?:lhe\s+)?(?:\w+\s+)?"
     r"(?:um|uma)\s+(?:tapa|soco|murro|chute|empurr[ãa]o|joelhada|cabe[çc]ada|"
     r"cotovelada|bofetada|tabefe|coronhada|rasteira|patada|golpe|estocada|"
     r"cutilada|bordoada|porrada|pancada)|"
@@ -145,7 +150,17 @@ RE_COMBATE = re.compile(
     r"abr[oi] as tripas|abrir as tripas|"
     r"degol[oa]|degolei|degolar|"
     r"esfaquei[oa]|esfaqueei|esfaquear|"
-    r"arranc[oa] (?:o|a) (?:cora[çc][ãa]o|olho|bra[çc]o|l[íi]ngua)|"
+    # ATAQUE-FORA-DA-ENGINE-1 (playtest 11/08): a lista de partes do corpo não
+    # tinha CABEÇA — a mais óbvia delas — e só cobria o presente ("arranco"),
+    # não o infinitivo com auxiliar ("vou tentar ARRANCAR a cabeça dele"), que é
+    # como se fala por voz. Mesma classe do bug já documentado no "vou lançar".
+    # Custou a sessão inteira: 4 das 5 falas de combate do jogador passaram
+    # batido, a engine nunca abriu pendência, ele nunca rolou nada, e a queixa
+    # foi "ele rolou o ataque pra mim".
+    r"arranc\w*\s+(?:a|o)\s+(?:cabe[çc]a|cora[çc][ãa]o|olho|bra[çc]o|perna|"
+    r"l[íi]ngua|garganta|orelha|m[ãa]o)|"
+    r"esmag\w+\s+(?:a|o|\w+\s+)?(?:cabe[çc]a|cara|cr[âa]nio|peito|ele|ela|você)|"
+    r"decep\w+|estripar|estripo|"
     # ── Nível 1: golpe físico ANEXADO a "dele/dela" (não objeto direto do verbo) ─
     # "o chute na cara dele" — o alvo aparece como possessivo do CORPO atingido,
     # padrão que o golpe-descritivo clássico (linha acima, exige um/uma + verbo
