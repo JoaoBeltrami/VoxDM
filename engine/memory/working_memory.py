@@ -582,6 +582,23 @@ class WorkingMemory:
             from engine.magic.spell_list import slots_padrao
             spell_slots = slots_padrao(player_class, player_level)
 
+        # INVENTARIO-VAZIO-1 (decisão do Beltrami, 11/08): *"o jogador só deve
+        # conseguir utilizar itens que estão no seu inventário, então a criação
+        # de personagem deve oferecer as coisas básicas que estão no SRD"*. Sem
+        # isto, cobrar posse seria punição pura — o personagem nascia com a
+        # mochila vazia. Só o equipamento FIXO do SRD; as opções de escolha
+        # ("escolha uma arma marcial") são UI de criação, e portanto gosto dele.
+        # Nunca sobrescreve: inventário vindo do cliente ou de sessão restaurada
+        # manda, e este bloco só preenche o que nasceu vazio.
+        _inventario_inicial: list[str] = []
+        if player_class:
+            from engine.chargen import normalizar_classe
+            from engine.state.equipamento_inicial import EQUIPAMENTO_INICIAL
+
+            canonica = normalizar_classe(player_class) or player_class
+            for item in EQUIPAMENTO_INICIAL.get(canonica, []):
+                _inventario_inicial += [str(item["nome"])] * int(item["quantidade"])
+
         scene = SceneState(
             location_id=location_id,
             location_nome=location_nome,
@@ -614,6 +631,16 @@ class WorkingMemory:
             character.inicializar_features_classe(player_class, player_subclass)
         if player_spells:
             character.spells_conhecidas = list(player_spells)
+        # INVENTARIO-VAZIO-1: só preenche o que nasceu vazio — inventário do
+        # cliente ou de sessão restaurada tem precedência sobre o padrão do SRD.
+        if _inventario_inicial and not character.inventario:
+            character.player_inventory = _inventario_inicial
+            # A arma inicial já vai EQUIPADA: obrigar o jogador a equipar antes
+            # do primeiro golpe seria transformar um padrão do SRD em pegadinha.
+            for it in character.inventario:
+                if it.tipo == "arma":
+                    character.equipar_item(it.nome)
+                    break
 
         wm = cls(
             scene=scene,
