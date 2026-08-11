@@ -14,6 +14,11 @@ interface Props {
   onSyncHP?: (hp: number) => void;
   onSyncConditions?: (conditions: string[]) => void;
   onSyncInventory?: (items: string[]) => void;
+  /** Inventário como a ENGINE o conhece — quantidade e equipado. A lista de
+   *  nomes (`initInventory`) continua sendo a fonte de edição; esta é a de
+   *  EXIBIÇÃO, e some sem quebrar nada se o backend for antigo. */
+  inventarioDetalhado?: import("@/lib/api").ItemInventario[];
+  onEquiparItem?: (item: string) => void;
   onSyncSpellSlots?: (slots: Record<number, SpellSlot>) => void;
   onSyncHitDice?: (current: number) => void;
   onSyncDeathSaves?: (saves: { successes: number; failures: number; stable: boolean }) => void;
@@ -157,6 +162,7 @@ export function CharacterSheet({
   personagem,
   sessionId,
   onRolar, onSyncHP, onSyncConditions, onSyncInventory,
+  inventarioDetalhado, onEquiparItem,
   onSyncSpellSlots, onSyncHitDice, onSyncDeathSaves,
   onSyncGold, onSyncXP, onSyncInspiration,
   questStages = {}, activeQuests = [],
@@ -1286,10 +1292,36 @@ export function CharacterSheet({
                   ? <p className="text-xs text-vox-text-muted">Nenhum item.</p>
                   : (
                     <ul className="max-h-32 space-y-1 overflow-y-auto">
-                      {itens.map((item, idx) => (
+                      {itens.map((item, idx) => {
+                        // INVENTARIO-SEM-ESTADO-1: casa pelo NOME porque a lista
+                        // de edição é de nomes. Sem par no detalhado (backend
+                        // antigo, item recém-digitado), o item aparece igual a
+                        // antes — a ficha nunca depende do detalhado existir.
+                        const det = inventarioDetalhado?.find(d => d.nome === item);
+                        const equipavel = det?.tipo === "arma" || det?.tipo === "armadura";
+                        return (
                         <li key={idx} className="flex items-center justify-between gap-1">
-                          <span className="truncate text-xs text-vox-text-secondary">{item}</span>
+                          <span className="truncate text-xs text-vox-text-secondary">
+                            {item}
+                            {det && det.quantidade > 1 && (
+                              <span className="ml-1 opacity-60">×{det.quantidade}</span>
+                            )}
+                            {det?.equipado && (
+                              <span className="ml-1.5 rounded bg-violet-900/50 px-1 py-0.5 text-[9px] uppercase tracking-wider text-violet-300">
+                                equipado
+                              </span>
+                            )}
+                          </span>
                           <div className="flex shrink-0 items-center gap-1">
+                            {equipavel && !det?.equipado && onEquiparItem && (
+                              <button
+                                onClick={() => onEquiparItem(item)}
+                                title={`Equipar ${item}`}
+                                className="rounded border border-violet-800/60 bg-violet-900/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300 transition hover:border-violet-500 hover:bg-violet-700/40 hover:text-violet-100"
+                              >
+                                equipar
+                              </button>
+                            )}
                             {emMercado && onVenderItem && (
                               <button
                                 onClick={() => onVenderItem(item)}
@@ -1302,7 +1334,8 @@ export function CharacterSheet({
                             <button onClick={() => removerItem(idx)} className="text-xs text-vox-text-muted transition hover:text-red-400">×</button>
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )
                 }

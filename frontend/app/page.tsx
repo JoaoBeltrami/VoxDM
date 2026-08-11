@@ -460,6 +460,56 @@ function GolpeToast({
   );
 }
 
+/**
+ * ROLAGEM-INIMIGO-INVISIVEL-1 (playtest 10/08): *"eu preciso só confiar no que o
+ * mestre diz, ele não tá rolando visível"*. O golpe que o JOGADOR causa já
+ * aparecia (GolpeToast, logo acima); o do inimigo nunca apareceu.
+ *
+ * Mostra a CONTA, não só o resultado: `14 + 4 = 18 vs CA 15`. Sem os três
+ * números não dá pra conferir nada, e conferir é justamente o que ele pediu —
+ * um "acertou" sozinho continua sendo palavra do Mestre.
+ */
+function AtaqueInimigoToast({
+  ataques, onDismiss,
+}: {
+  ataques: import("@/lib/api").AtaqueInimigo[];
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 7000);
+    return () => clearTimeout(t);
+  }, [onDismiss, ataques]);
+
+  if (ataques.length === 0) return null;
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 bottom-56 z-40 flex flex-col items-center gap-1.5 px-4">
+      {ataques.map((a, i) => (
+        <button
+          key={i}
+          onClick={onDismiss}
+          className={`animate-slide-down rounded-xl border px-4 py-2 text-center text-xs shadow-lg backdrop-blur-sm transition ${
+            a.acertou
+              ? "border-red-800/60 bg-red-950/85 text-red-200/95 hover:bg-red-900/85"
+              : "border-zinc-700/60 bg-zinc-900/85 text-zinc-300/90 hover:bg-zinc-800/85"
+          }`}
+        >
+          <span className="font-semibold">
+            {a.critico ? "★" : a.acertou ? "▼" : "○"} {a.nome}
+          </span>
+          <span className="ml-2 font-mono opacity-80">
+            {a.d20}
+            {a.atk_bonus >= 0 ? "+" : "−"}
+            {Math.abs(a.atk_bonus)} = {a.total} vs CA {a.ca_alvo}
+          </span>
+          <span className="ml-2 opacity-60">
+            {a.acertou ? `−${a.dano}` : "errou"}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function RelacaoToast({
   relacao, onDismiss,
 }: {
@@ -522,6 +572,7 @@ export default function Home() {
     serverHp, serverHpMax,
     cascadeAtivo, limparCascade,
     relacaoToast, limparRelacaoToast, eventosVitais, golpesInimigos,
+    ataquesInimigos, inventarioDetalhado,
     pacingNivel,
   } = useGameSession();
 
@@ -542,6 +593,14 @@ export default function Home() {
   useEffect(() => {
     if (golpesInimigos.length > 0) setGolpesVisiveis(golpesInimigos);
   }, [golpesInimigos]);
+
+  // ROLAGEM-INIMIGO-INVISIVEL-1: o mesmo, do lado que apanha.
+  const [ataquesVisiveis, setAtaquesVisiveis] = useState<
+    import("@/lib/api").AtaqueInimigo[]
+  >([]);
+  useEffect(() => {
+    if (ataquesInimigos.length > 0) setAtaquesVisiveis(ataquesInimigos);
+  }, [ataquesInimigos]);
 
   // Fase 5.6 — sync texto-voz: toggle persistido em localStorage
   const [syncAtivo, setSyncAtivo] = useState(true);
@@ -1728,6 +1787,8 @@ export default function Home() {
           onSyncHP={(hp) => sincronizarEstado("sync_hp", { hp })}
           onSyncConditions={handleSyncConditions}
           onSyncInventory={(inventory) => sincronizarEstado("sync_inventory", { inventory })}
+          inventarioDetalhado={inventarioDetalhado}
+          onEquiparItem={(item) => sincronizarEstado("equipar_item", { item })}
           onSyncSpellSlots={(spell_slots) => sincronizarEstado("sync_spell_slots", { spell_slots })}
           onSyncHitDice={(current) => sincronizarEstado("sync_hit_dice", { current })}
           onSyncDeathSaves={(saves) => sincronizarEstado("sync_death_saves", saves)}
@@ -2330,6 +2391,10 @@ export default function Home() {
             combate não tem contabilidade — "matei uma lenda, foi bem fácil"
             veio de uma luta em que ele nunca viu um número seu. */}
         <GolpeToast golpes={golpesVisiveis} onDismiss={() => setGolpesVisiveis([])} />
+        <AtaqueInimigoToast
+          ataques={ataquesVisiveis}
+          onDismiss={() => setAtaquesVisiveis([])}
+        />
 
         {/* CHECK-INVISIVEL-1: a conta do teste. `key` remonta a cada rolagem
             pra reiniciar o timer — duas rolagens seguidas mostram duas vezes. */}

@@ -10,7 +10,9 @@ import {
   type SpellSlot,
   type TokenIniciativa,
   type EventoVital,
-  type GolpeInimigo,
+  type AtaqueInimigo,
+  type ItemInventario,
+  GolpeInimigo,
   type AsiPendente,
   type CheckResolvido,
 } from "@/lib/api";
@@ -136,6 +138,8 @@ interface EstadoSessao {
   eventosVitais: EventoVital[];
   /** DANO-INIMIGO-INVISIVEL-1: o dano que o JOGADOR causou neste turno. */
   golpesInimigos: GolpeInimigo[];
+  ataquesInimigos: AtaqueInimigo[];
+  inventarioDetalhado: ItemInventario[];
   /** Incrementos de Atributo que o jogador DEVE escolher (SRD: 4/8/12/16/19,
    *  +6/+14 Guerreiro, +10 Ladino). Persiste no backend. */
   asiPendente: AsiPendente[];
@@ -270,6 +274,8 @@ const ESTADO_INICIAL: EstadoSessao = {
   checkPedido: "",
   eventosVitais: [],
   golpesInimigos: [],
+  ataquesInimigos: [],
+  inventarioDetalhado: [],
   asiPendente: [],
   checkResolvido: null,
   inimigos: {},
@@ -674,6 +680,8 @@ export function useGameSession() {
           checkPedido: msg.check_pedido ?? "",
           eventosVitais: msg.eventos_vitais ?? [],
           golpesInimigos: msg.golpes_inimigos ?? [],
+          ataquesInimigos: msg.ataques_inimigos ?? [],
+          inventarioDetalhado: msg.inventario_detalhado ?? [],
           asiPendente: msg.asi_pendente ?? [],
           checkResolvido: (msg.check_resolvido && "total" in msg.check_resolvido)
             ? (msg.check_resolvido as CheckResolvido) : null,
@@ -1033,7 +1041,7 @@ export function useGameSession() {
   }, [TURN_TIMEOUT_MS, _flushTurnoPendente, pararTudo]);
 
   const sincronizarEstado = useCallback((
-    tipo: "sync_hp" | "sync_conditions" | "sync_inventory" |
+    tipo: "sync_hp" | "sync_conditions" | "sync_inventory" | "equipar_item" |
           "sync_spell_slots" | "sync_hit_dice" | "sync_death_saves" |
           "sync_gold" | "sync_xp" | "sync_inspiration" | "sync_class_feature"
         | "aplicar_asi",

@@ -213,6 +213,9 @@ class MensagemWS(BaseModel):
     quest_stages: dict[str, str] = Field(default_factory=dict)
     active_quest_hooks: list[str] = Field(default_factory=list)
     inventory: list[str] = Field(default_factory=list)
+    # Inventário estruturado (id, nome, tipo, quantidade, equipado) — a ficha
+    # precisa dele pra mostrar quantidade e oferecer o botão de equipar.
+    inventario_detalhado: list[dict[str, Any]] = Field(default_factory=list)
     # Condições ativas confirmadas pelo jogador (via sync_conditions) — persistidas
     # no backend e reenviadas no "fim" para que a CharacterSheet sobreviva a reloads.
     conditions: list[str] = Field(default_factory=list)

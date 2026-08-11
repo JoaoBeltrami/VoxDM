@@ -84,6 +84,32 @@ export interface GolpeInimigo {
   morreu: boolean;
 }
 
+/** ROLAGEM-INIMIGO-INVISIVEL-1 (playtest 10/08): *"eu preciso só confiar no que
+ * o mestre diz, ele não tá rolando visível"*. A conta INTEIRA viaja — só o
+ * resultado continuaria sendo palavra do Mestre. */
+/** Item do inventário como a engine o conhece — a ficha usa isto pra mostrar
+ * quantidade e oferecer o botão de equipar. `inventory` (só nomes) continua
+ * sendo o contrato de checagem de posse. */
+export interface ItemInventario {
+  id: string;
+  nome: string;
+  tipo: "arma" | "armadura" | "consumivel" | "misc";
+  quantidade: number;
+  equipado: boolean;
+}
+
+export interface AtaqueInimigo {
+  id: string;
+  nome: string;
+  d20: number;
+  atk_bonus: number;
+  total: number;
+  ca_alvo: number;
+  acertou: boolean;
+  critico: boolean;
+  dano: number;
+}
+
 export interface MensagemWS {
   tipo: "token" | "fim" | "erro" | "audio_chunk" | "recap" | "lampejo" | "dado_rolado" | "scene_image" | "level_up" | "cascade" | "ficha_criada" | "npc_retrato" | "relacao";
   conteudo?: string;
@@ -130,6 +156,8 @@ export interface MensagemWS {
    *  (playtest 07/08). Só vem no payload `fim` de turno — nunca no snapshot,
    *  que alimenta também abertura e reconexão. */
   golpes_inimigos?: GolpeInimigo[];
+  ataques_inimigos?: AtaqueInimigo[];
+  inventario_detalhado?: ItemInventario[];
   asi_pendente?: AsiPendente[];
   check_resolvido?: CheckResolvido | Record<string, never>;
   inimigos_combate?: Record<string, { nome: string; estado: string; hp_rel?: string }>;

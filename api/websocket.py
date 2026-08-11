@@ -1405,6 +1405,11 @@ def _snapshot_estado(wm: Any) -> dict[str, Any]:
         "quest_stages": wm.quest_stages,
         "active_quest_hooks": wm.active_quest_hooks,
         "inventory": wm.player_inventory,
+        # INVENTARIO-SEM-ESTADO-1: a lista de NOMES continua sendo o contrato
+        # antigo (o resto do frontend checa posse com ela). O detalhado viaja ao
+        # lado pra que a ficha possa mostrar quantidade e EQUIPAR — sem ele, a
+        # arma equipada era um estado que só a engine enxergava.
+        "inventario_detalhado": [i.para_dict() for i in wm.character.inventario],
         "conditions": list(wm.player_conditions),
         "location_nome": wm.location_nome,
         "time_of_day": wm.time_of_day,
@@ -1888,6 +1893,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
                 # Sync de inventário — CharacterSheet envia lista completa de itens.
                 # Itens são truncados a 80 chars e lista a _MAX_INVENT (defesa contra payload abusivo).
+                # INVENTARIO-SEM-ESTADO-1: equipar é AÇÃO, não sync — o
+                # frontend manda o item e a engine decide (desequipa o do mesmo
+                # slot, recusa o que não é arma/armadura). Mandar "equipado" no
+                # sync_inventory deixaria o cliente ditar estado de regra.
+                if tipo_msg == "equipar_item":
+                    _alvo = str(dados.get("item") or "")[:80]
+                    if _alvo:
+                        _ok = sessao.working_mem.character.equipar_item(_alvo)
+                        log.info("equipar_item", session_id=session_id,
+                                 item=_alvo, ok=_ok,
+                                 arma=sessao.working_mem.character.arma_equipada())
+                        await _send_text_seguro(websocket,
+                            MensagemWS(tipo="fim", **_snapshot_estado(
+                                sessao.working_mem)).model_dump_json()
+                        )
+                    continue
+
                 if tipo_msg == "sync_inventory":
                     inventory = dados.get("inventory")
                     if isinstance(inventory, list):
