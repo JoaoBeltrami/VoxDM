@@ -525,9 +525,12 @@ async def test_beat_aplica_dano_do_turno_inimigo():
     groq = _GroqSoMarkers()   # emite [DANO: -5 lança do guarda]
     await _beat_turno_inimigo(_WsNuncaUsado(), _sessao_fake(wm, groq), "Ataco o guarda!")
     assert groq.chamadas == 1
-    # O HP mudou (a engine resolveu o turno do inimigo) mas NUNCA pelos 5 do
-    # marcador: 15 seria a prova de que o modelo continua sendo o dono do número.
-    assert wm.player_hp != 15, "o `[DANO: -5]` do modelo não pode mais valer"
+    # Âncora DETERMINÍSTICA: só `resolver_turno_inimigos_adiado` avança a rodada.
+    # A primeira versão deste assert comparava o HP com 15 (20 menos os 5 do
+    # marcador) e era FLAKY — a engine rola dano de verdade e às vezes tira 5
+    # também. Aleatoriedade nova torna teste antigo flaky, não quebrado; foi o
+    # que aconteceu aqui, no mesmo dia em que a armadilha entrou no CLAUDE.md.
+    assert wm.rodada_combate == 2, "a rodada só fecha quando a ENGINE resolve"
     assert 0 <= wm.player_hp <= 20
 
 
@@ -598,7 +601,7 @@ async def test_beat_roda_normalmente_sem_pendencia_via_getattr():
         engine_resolveu_turno=False,
     )
     assert groq.chamadas == 1
-    assert wm.player_hp != 15, "o `[DANO: -5]` do modelo não pode mais valer"
+    assert wm.rodada_combate == 2, "a rodada só fecha quando a ENGINE resolve"
 
 
 # ══ Ritual de mesa — modo episódio ════════════════════════════════════════════

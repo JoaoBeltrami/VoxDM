@@ -140,7 +140,10 @@ async def test_beat_completo_nunca_usa_o_numero_do_modelo():
 
         async def completar(self, *_a, **_k) -> str:
             _Groq.chamadas += 1
-            return "O guarda desce a lâmina. [DANO: -8 golpe fatal]"
+            # -999 de propósito: a engine NÃO consegue rolar isso, então se o HP
+            # sumir foi o marcador. Um valor pequeno colidiria com a rolagem real
+            # e o teste ficaria flaky (foi o que aconteceu no gêmeo em pilares).
+            return "O guarda desce a lâmina. [DANO: -999 golpe fatal]"
 
     class _Sessao:
         def __init__(self, wm):
@@ -148,7 +151,8 @@ async def test_beat_completo_nunca_usa_o_numero_do_modelo():
             self.groq = _Groq()
             self.combate_pendente = None
 
-    wm = _wm_em_combate(hp=9)
+    wm = _wm_em_combate(hp=60)   # alto: a engine não zera isso num turno
     await _beat_turno_inimigo(_Ws(), _Sessao(wm), "Ataco o guarda!")
     assert _Groq.chamadas == 1
-    assert wm.player_hp != 1, "9 - 8 = 1 seria o número do MODELO tendo valido"
+    assert wm.player_hp > 0, "o `[DANO: -999]` do modelo teria matado o jogador"
+    assert wm.rodada_combate == 2, "a rodada só fecha quando a ENGINE resolve"
