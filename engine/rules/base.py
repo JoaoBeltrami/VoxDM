@@ -21,7 +21,7 @@ Exemplo:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from engine.memory.working_memory import WorkingMemory
@@ -57,6 +57,34 @@ class RuleSystem(Protocol):
 
     def slots_iniciais(self, classe: str, nivel: int) -> dict[int, dict[str, int]]:
         """Espaços de magia por nível para a classe/nível ({} se não-conjurador)."""
+        ...
+
+    def equipamento_inicial(self, classe: str) -> list[str]:
+        """Itens que a classe começa carregando, já expandidos por quantidade.
+
+        Lembrete do Beltrami (11/08): *"nossa engine futuramente não narrará só
+        D&D… de maneira modular pra que no futuro outros sistemas sejam lidos"*.
+        Equipamento inicial é conceito de CHAR-GEN, e char-gen é do sistema —
+        Tormenta e CoC dão equipamento por outras regras, e um deles nem tem
+        classe. Por isso entra no contrato, e não numa tabela que a
+        `WorkingMemory` importa direto.
+
+        [] é resposta legítima: sistema sem equipamento fixo, ou classe cujo
+        equipamento todo está nas ESCOLHAS (o Guerreiro do SRD é assim).
+        """
+        ...
+
+    def escolhas_de_equipamento(self, classe: str) -> list[dict[str, Any]]:
+        """As escolhas de equipamento da classe, prontas pra ficha OU pra voz.
+
+        Cada escolha: `{"escolher": N, "opcoes": [{"rotulo", "itens", "categoria"}]}`.
+        `rotulo` é a frase que o Mestre lê em voz alta e que a ficha põe no
+        botão; `itens` é o efeito no inventário; `categoria` marca a opção que o
+        jogador ainda precisa fechar ("uma arma marcial"). O formato serve os
+        DOIS caminhos de propósito — se cada um tivesse o seu, divergiriam.
+
+        [] quando o sistema não tem escolhas de equipamento.
+        """
         ...
 
     # ── Resolução ─────────────────────────────────────────────────────────────

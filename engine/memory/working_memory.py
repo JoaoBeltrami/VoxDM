@@ -590,14 +590,19 @@ class WorkingMemory:
         # ("escolha uma arma marcial") são UI de criação, e portanto gosto dele.
         # Nunca sobrescreve: inventário vindo do cliente ou de sessão restaurada
         # manda, e este bloco só preenche o que nasceu vazio.
+        #
+        # ⚠️ Passa pelo RuleSystem, não pela tabela do D&D. A primeira versão
+        # importava `EQUIPAMENTO_INICIAL` direto daqui — e o Beltrami lembrou, no
+        # mesmo dia: *"nossa engine futuramente não narrará só D&D… de maneira
+        # modular pra que no futuro outros sistemas sejam lidos"*. Equipamento
+        # inicial é char-gen, char-gen é do SISTEMA, e a costura pra isso já
+        # existia em `engine/rules/`. Atalhar por ela é como a modularidade morre:
+        # não de uma vez, mas um import direto por vez.
         _inventario_inicial: list[str] = []
         if player_class:
-            from engine.chargen import normalizar_classe
-            from engine.state.equipamento_inicial import EQUIPAMENTO_INICIAL
+            from engine.rules import obter_sistema
 
-            canonica = normalizar_classe(player_class) or player_class
-            for item in EQUIPAMENTO_INICIAL.get(canonica, []):
-                _inventario_inicial += [str(item["nome"])] * int(item["quantidade"])
+            _inventario_inicial = list(obter_sistema().equipamento_inicial(player_class))
 
         scene = SceneState(
             location_id=location_id,
