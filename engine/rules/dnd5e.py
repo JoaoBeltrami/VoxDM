@@ -18,7 +18,7 @@ Exemplo:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from engine import chargen, progression
 from engine.magic import slot_tracker
@@ -48,6 +48,27 @@ class Dnd5eRuleSystem:
 
     def slots_iniciais(self, classe: str, nivel: int) -> dict[int, dict[str, int]]:
         return slots_padrao(classe, nivel)
+
+    def equipamento_inicial(self, classe: str) -> list[str]:
+        """Equipamento FIXO do SRD, já expandido por quantidade.
+
+        As tabelas são artefatos de build gerados do 5e-database — conteúdo,
+        não regra. A REGRA (qual classe recebe o quê, e que a quantidade vira
+        entradas repetidas) é o que mora aqui, atrás do contrato.
+        """
+        from engine.state.equipamento_inicial import EQUIPAMENTO_INICIAL
+
+        canonica = chargen.normalizar_classe(classe) or classe
+        itens: list[str] = []
+        for item in EQUIPAMENTO_INICIAL.get(canonica, []):
+            itens += [str(item["nome"])] * int(item.get("quantidade") or 1)
+        return itens
+
+    def escolhas_de_equipamento(self, classe: str) -> list[dict[str, Any]]:
+        from engine.state.escolhas_iniciais import ESCOLHAS_INICIAIS
+
+        canonica = chargen.normalizar_classe(classe) or classe
+        return list(ESCOLHAS_INICIAIS.get(canonica, []))
 
     # ── Resolução ─────────────────────────────────────────────────────────────
     def modificador(self, score: int) -> int:
