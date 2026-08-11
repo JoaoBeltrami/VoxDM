@@ -16,6 +16,16 @@ Armadilha: properties D&D 5e (mod_*, prof_bonus, ca, passive_perception) são
 from dataclasses import dataclass, field
 from typing import Any
 
+from engine.state.inventario import (
+    ItemInventario,
+    adicionar,
+    arma_equipada,
+    equipar,
+    para_strings,
+    remover,
+    sincronizar,
+)
+
 # Mapa de perícia D&D 5e → atributo abreviado
 _PERICIA_ATRIBUTO: dict[str, str] = {
     "Acrobacia": "des", "Adestrar Animais": "sab", "Arcanismo": "int",
@@ -44,7 +54,13 @@ class PlayerCharacter:
     hp_current: int = 30
     hp_max: int = 30
     player_conditions: list[str] = field(default_factory=list)
-    player_inventory: list[str] = field(default_factory=list)
+    # INVENTARIO-SEM-ESTADO-1 (10/08): era `list[str]` — nomes soltos que só o
+    # LLM interpretava. A engine não sabia com que ARMA o jogador atacava (o
+    # Mestre pediu Força a um Ranger de arco) e "duas poções" era literalmente
+    # uma string. Agora a lista ESTRUTURADA é a fonte única, e `player_inventory`
+    # continua existindo como vista derivada — meio sistema consulta posse com
+    # `"Poção de Cura" in wm.player_inventory`, e isso segue funcionando.
+    inventario: list[ItemInventario] = field(default_factory=list)
     active_quest_hooks: list[str] = field(default_factory=list)
     quest_stages: dict[str, str] = field(default_factory=dict)
 
@@ -143,15 +159,41 @@ class PlayerCharacter:
 
     # ── Operações ────────────────────────────────────────────────────────────
 
-    def adicionar_item(self, item_id: str) -> None:
-        """Adiciona item se ainda não estiver presente."""
-        if item_id not in self.player_inventory:
-            self.player_inventory.append(item_id)
+    @property
+    def player_inventory(self) -> list[str]:
+        """Vista `list[str]` do inventário — nomes planos, sem decoração.
 
-    def remover_item(self, item_id: str) -> None:
-        """Remove item se presente."""
-        if item_id in self.player_inventory:
-            self.player_inventory.remove(item_id)
+        Derivada de `inventario`, que é a fonte única. Escrever nesta lista NÃO
+        muda o estado (ela é uma cópia): use `adicionar_item`/`remover_item`, ou
+        atribua a lista inteira (o setter reconstrói a estrutura).
+        """
+        return para_strings(self.inventario)
+
+    @player_inventory.setter
+    def player_inventory(self, nomes: list[str]) -> None:
+        """Aceita o formato antigo — é por aqui que sessão e banco antigos entram.
+
+        Faz MERGE, não substituição: o frontend sincroniza a ficha mandando só
+        nomes, e reconstruir do zero apagaria o que a engine sabe e o cliente não
+        (arma equipada, quantidade) toda vez que o jogador abrisse a ficha.
+        """
+        self.inventario = sincronizar(self.inventario, list(nomes or []))
+
+    def adicionar_item(self, item_id: str, quantidade: int = 1) -> None:
+        """Adiciona o item, empilhando quantidade quando já existe."""
+        adicionar(self.inventario, item_id, quantidade)
+
+    def remover_item(self, item_id: str, quantidade: int = 1) -> None:
+        """Tira `quantidade`; o item some da lista quando zera."""
+        remover(self.inventario, item_id, quantidade)
+
+    def equipar_item(self, item_id: str) -> bool:
+        """Equipa arma/armadura, desequipando o que ocupava o mesmo slot."""
+        return equipar(self.inventario, item_id)
+
+    def arma_equipada(self) -> str:
+        """Índice SRD da arma equipada; "" quando nenhuma."""
+        return arma_equipada(self.inventario)
 
     # DANO-SEM-CAUSA-1 (playtest 26/07): a engine aplicava [DANO] e o motivo era
     # descartado por `strip_marcadores` antes do texto chegar ao jogador — sobrava

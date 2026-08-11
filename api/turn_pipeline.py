@@ -47,6 +47,7 @@ from engine.memory.quest_detector import strip_marcadores
 from engine.memory.trust_detector import detectar_mudancas_trust
 from engine.memory.working_memory import WorkingMemory
 from engine.npc.identity import parece_nome_proprio, registrar_npc, resolver_falado
+from engine.state.inventario import buscar
 
 log = structlog.get_logger()
 
@@ -1483,23 +1484,25 @@ def aplicar_pos_turno(
     # O sync_inventory do WebSocket já aplica esses limites para edições manuais;
     # este bloco espelha a mesma política para itens adicionados pelo LLM via [LOOT:].
     _MAX_INVENTARIO = 50
+    # INVENTARIO-SEM-ESTADO-1: `player_inventory` virou vista DERIVADA — mutar a
+    # lista devolvida por ela não muda mais nada (é uma cópia). O caminho é a API
+    # do personagem, que empilha quantidade e classifica o tipo do item.
     for m in _RE_LOOT.finditer(resposta_completa):
         item = m.group(1).strip()[:80]  # trunca nomes extravagantes do LLM
-        if item and item.lower() not in (i.lower() for i in working_mem.player_inventory):
-            if len(working_mem.player_inventory) >= _MAX_INVENTARIO:
+        if item:
+            if len(working_mem.character.inventario) >= _MAX_INVENTARIO:
                 log.warning("loot_ignorado_inventario_cheio", item=item[:60],
-                            total=len(working_mem.player_inventory))
+                            total=len(working_mem.character.inventario))
                 continue
-            working_mem.player_inventory.append(item)
+            # Repetido deixou de ser ignorado: ganhar a segunda poção agora SOMA.
+            working_mem.character.adicionar_item(item)
             log.info("loot_adicionado", item=item[:60])
 
     for m in _RE_PERDEU.finditer(resposta_completa):
-        item_alvo = m.group(1).strip().lower()
-        for i, item_existente in enumerate(working_mem.player_inventory):
-            if item_existente.lower() == item_alvo:
-                removido = working_mem.player_inventory.pop(i)
-                log.info("item_removido", item=removido[:60])
-                break
+        item_alvo = m.group(1).strip()
+        if buscar(working_mem.character.inventario, item_alvo) is not None:
+            working_mem.character.remover_item(item_alvo)
+            log.info("item_removido", item=item_alvo[:60])
 
     if _RE_MERCADO.search(resposta_completa):
         working_mem.em_mercado = True

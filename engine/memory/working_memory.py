@@ -892,7 +892,19 @@ class WorkingMemory:
         self.character.inspiration = getattr(state, "inspiration", False)
         self.character.hp_current = getattr(state, "hp_current", self.character.hp_current)
         self.character.hp_max = getattr(state, "hp_max", self.character.hp_max)
-        self.character.player_inventory = list(getattr(state, "inventory", self.character.player_inventory))
+        # INVENTARIO-SEM-ESTADO-1: prefere a coluna ESTRUTURADA; banco anterior a
+        # 10/08 não a tem, e aí a lista de nomes reconstrói a estrutura — nenhum
+        # item se perde na virada, só a quantidade/equipado que nunca existiu.
+        _inv_estruturado = list(getattr(state, "inventario", []) or [])
+        if _inv_estruturado:
+            from engine.state.inventario import ItemInventario
+            self.character.inventario = [
+                ItemInventario.de_dict(d) for d in _inv_estruturado if isinstance(d, dict)
+            ]
+        else:
+            self.character.player_inventory = list(
+                getattr(state, "inventory", self.character.player_inventory)
+            )
         self.character.player_conditions = list(getattr(state, "conditions", self.character.player_conditions))
         persisted_level = getattr(state, "player_level", self.character.player_level)
         if persisted_level and persisted_level > self.character.player_level:
