@@ -459,7 +459,8 @@ def _resolver_ataque_engine(
         dano=_res.get("dano"), dano_inimigos=_res.get("dano_inimigos"),
         fim=_res.get("fim_combate"),
     )
-    if _res.get("fim_combate"):
+    _fim = bool(_res.get("fim_combate"))
+    if _fim:
         sessao.working_mem.sair_combate()
     # O resultado da engine vira instrução de NARRAÇÃO. Task 8 (prosa em
     # camadas): tier explícito POR TURNO — antes o Mestre tinha só o lembrete
@@ -471,6 +472,21 @@ def _resolver_ataque_engine(
         if _res.get("tier") == "epico" else
         "Ação trivial — 1-2 frases secas e mecânicas, sem florear."
     )
+    # COMBATE-NAO-TERMINA-1 (playtest 11/08): a engine encerrou o combate neste
+    # mesmo golpe (`sair_combate()` acima), e a instrução seguia dizendo "narre
+    # este turno de combate". O modelo não tinha COMO saber que a luta acabou —
+    # o histórico inteiro é de briga — então continuou narrando luta, turno após
+    # turno, até o jogador escrever "Desisto, vou morrer". Estado que muda sem
+    # virar FATO para o modelo é estado que não existe do lado de lá.
+    if _fim:
+        return (
+            "(O COMBATE ACABOU neste golpe — não sobrou inimigo de pé. Narre o "
+            "desfecho da luta e devolva a cena ao normal: nada de próximo turno, "
+            "de iniciativa, nem de inimigo agindo. NÃO invente nem repita "
+            "números crus de rolagem/CA/HP — são finais. 2-4 frases, deixe o "
+            "silêncio depois da briga pesar.)\n"
+            + str(_res.get("contexto", ""))
+        )
     return (
         "(Narre este turno de combate dando corpo às decisões da "
         "ENGINE abaixo. NÃO invente nem repita números crus de "
