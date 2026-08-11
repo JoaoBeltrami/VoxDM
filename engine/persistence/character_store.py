@@ -98,6 +98,15 @@ _MIGRATE_ASI_PENDENTE = "ALTER TABLE character_state ADD COLUMN asi_pendente TEX
 # Bug narrativo grave: companion some entre sessões sem persistência.
 _MIGRATE_COMPANIONS = "ALTER TABLE character_state ADD COLUMN companions TEXT NOT NULL DEFAULT '{}'"
 
+# INVENTARIO-SEM-ESTADO-1 (10/08): a coluna `inventory` guarda só NOMES. O
+# inventário estruturado (tipo, quantidade, equipado) precisa de coluna própria —
+# reaproveitar `inventory` quebraria toda sessão salva antes de hoje. As duas
+# convivem: `inventory` continua sendo a vista de nomes, e é dela que um banco
+# antigo é migrado na primeira leitura.
+_MIGRATE_INVENTARIO = (
+    "ALTER TABLE character_state ADD COLUMN inventario TEXT NOT NULL DEFAULT '[]'"
+)
+
 # Migração idempotente — identidade completa do personagem.
 # Salva numa única coluna JSON para não precisar de ~18 ALTER TABLE separados.
 # Campos: player_name, player_class, player_race, player_background, player_subclass,
@@ -135,6 +144,9 @@ class CharacterState:
     hp_current: int = 30
     hp_max: int = 30
     inventory: list[str] = field(default_factory=list)
+    # Inventário ESTRUTURADO (tipo, quantidade, equipado). `inventory` continua
+    # sendo a vista de nomes, e é dela que um banco antigo é migrado na leitura.
+    inventario: list[dict] = field(default_factory=list)
     conditions: list[str] = field(default_factory=list)
     # Magias selecionadas na criação do personagem — lista de nomes PT-BR
     # Ordem preservada: truques primeiro, depois magias por nível crescente.
@@ -186,6 +198,7 @@ class CharacterStore:
             await _aplicar_migracao_idempotente(conn, _MIGRATE_CLASS_FEATURES, "class_features")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_ASI_PENDENTE, "asi_pendente")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_COMPANIONS, "companions")
+            await _aplicar_migracao_idempotente(conn, _MIGRATE_INVENTARIO, "inventario")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_PERSONAGEM_CONFIG, "personagem_config")
             await _aplicar_migracao_idempotente(conn, _MIGRATE_DM_STATE, "dm_state")
             await conn.commit()
@@ -202,9 +215,9 @@ class CharacterStore:
                     (session_id, owner_email, spell_slots, hit_dice_current, hit_dice_max,
                      hit_dice_type, death_saves_successes, death_saves_failures,
                      death_saves_stable, gold, xp, inspiration, hp_current, hp_max,
-                     inventory, conditions, spells_conhecidas, player_level,
+                     inventory, inventario, conditions, spells_conhecidas, player_level,
                      class_features, asi_pendente, companions, personagem_config, dm_state, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch())
                 ON CONFLICT(session_id) DO UPDATE SET
                     owner_email=excluded.owner_email,
                     spell_slots=excluded.spell_slots,
@@ -220,6 +233,7 @@ class CharacterStore:
                     hp_current=excluded.hp_current,
                     hp_max=excluded.hp_max,
                     inventory=excluded.inventory,
+                    inventario=excluded.inventario,
                     conditions=excluded.conditions,
                     spells_conhecidas=excluded.spells_conhecidas,
                     player_level=excluded.player_level,
@@ -246,6 +260,7 @@ class CharacterStore:
                     state.hp_current,
                     state.hp_max,
                     json.dumps(state.inventory),
+                    json.dumps(state.inventario, ensure_ascii=False),
                     json.dumps(state.conditions),
                     json.dumps(state.spells_conhecidas),
                     state.player_level,
@@ -290,6 +305,9 @@ class CharacterStore:
             hp_current=row["hp_current"],
             hp_max=row["hp_max"],
             inventory=json.loads(row["inventory"]),
+            # Banco anterior a 10/08 não tem a coluna preenchida — cai em [] e o
+            # caller reconstrói a estrutura a partir dos NOMES, sem perder itens.
+            inventario=json.loads(row["inventario"] or "[]") if "inventario" in row.keys() else [],
             conditions=json.loads(row["conditions"]),
             spells_conhecidas=json.loads(row["spells_conhecidas"] or "[]"),
             player_level=int(row["player_level"] or 3),

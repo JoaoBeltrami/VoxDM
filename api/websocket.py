@@ -2435,6 +2435,14 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                 texto_jogador,
                                 list(getattr(sessao.working_mem, "player_inventory", []) or []),
                             )
+                            # INVENTARIO-SEM-ESTADO-1: o que o jogador está
+                            # SEGURANDO vence a busca por nome. "Ataco o goblin",
+                            # sem dizer com quê, agora usa a arma equipada em vez
+                            # de cair no melhor atributo genérico — é o ponto do
+                            # inventário estar atrelado ao personagem.
+                            if not _arma_idx:
+                                _arma_idx = sessao.working_mem.character.arma_equipada()
+                                _arma_termo = _arma_idx
                             sessao.combate_pendente = {
                                 "tipo": "ataque", "alvo": _alvo,
                                 "arma": _arma_idx, "arma_termo": _arma_termo,
