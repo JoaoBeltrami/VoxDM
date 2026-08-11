@@ -34,9 +34,23 @@ Tipo = Literal["arma", "armadura", "consumivel", "misc"]
 # honesto, ao contrário de chutar "consumivel" e deixar a engine beber um anel.
 _TIPOS: frozenset[str] = frozenset({"arma", "armadura", "consumivel", "misc"})
 
-# Palavras que denunciam um consumível em PT-BR. Lista curta de propósito: o
-# custo de errar aqui é a engine achar que pode GASTAR algo que não se gasta.
-_CONSUMIVEL = ("pocao", "elixir", "pergaminho", "racao", "antidoto", "frasco", "ampola")
+# Radicais que denunciam um consumível em PT-BR. **Lista canônica do projeto.**
+#
+# CONSUMIVEL-DUPLICADO-1 (varredura 11/08): existiam DUAS — esta, com 7 formas, e
+# `item_authority._ITENS_CONSUMIVEIS`, com 17 — e elas discordavam: "frasco" e
+# "ração" só existiam aqui, "tônico", "bálsamo", "kit de cura" e "scroll" só lá.
+# O efeito era um item classificado como consumível pela ficha e não reconhecido
+# na hora de beber, ou o contrário. Mora na camada de ESTADO de propósito: a
+# autoridade depende do estado, nunca o inverso.
+#
+# O custo de errar para MAIS aqui é a engine achar que pode GASTAR algo que não
+# se gasta — por isso a lista cresce por evidência, não por imaginação.
+RADICAIS_CONSUMIVEL: tuple[str, ...] = (
+    "pocao", "potion", "elixir", "pergaminho", "scroll", "racao",
+    "antidoto", "antitoxina", "frasco", "ampola", "tonico", "unguento",
+    "balsamo", "reagente", "granada", "kit de cura", "kit medico",
+)
+_CONSUMIVEL = RADICAIS_CONSUMIVEL
 _ARMADURA = ("armadura", "cota", "escudo", "brunea", "gibao", "couraca", "malha")
 
 

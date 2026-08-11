@@ -319,7 +319,11 @@ from engine.combat.morte import (
 from engine.combat.turn_control import avaliar_acao_jogador
 from engine.magic.casting import detectar_conjuracao
 from engine.magic.economia import gastar_recurso_da_magia
-from engine.magic.resolucao import consumir_slot_da_magia, mecanica_da_magia
+from engine.magic.resolucao import (
+    bloco_mecanico_local,
+    consumir_slot_da_magia,
+    mecanica_da_magia,
+)
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
 
@@ -2548,7 +2552,6 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                     # descrição de personagem, não um cast.
                     from engine.magic.spell_detector import (
                         _RE_CASTING,
-                        buscar_dados_magia,
                         extrair_nome_magia,
                         formatar_bloco_magia,
                     )
@@ -2588,7 +2591,18 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                     session_id=session_id,
                                 )
                             else:
-                                dados_magia = await buscar_dados_magia(nome_magia)
+                                # QDRANT-NO-CAMINHO-DA-MAGIA-1 (varredura 11/08):
+                                # era `await buscar_dados_magia(...)` — uma ida à
+                                # rede por turno de conjuração, buscando com o
+                                # nome em PORTUGUÊS numa coleção indexada em
+                                # INGLÊS. Custava latência e praticamente nunca
+                                # respondia; foi o mesmo lookup que deixou o slot
+                                # sem ser cobrado (SLOT-SEM-CONSUMO-1). A tabela
+                                # local tem os mesmos campos e mais a CD REAL do
+                                # conjurador, que a versão do Qdrant nunca teve.
+                                dados_magia = bloco_mecanico_local(
+                                    nome_magia, sessao.working_mem
+                                )
                                 if dados_magia:
                                     bloco = formatar_bloco_magia(dados_magia)
                                     # Insere no topo de chunks_regras para ter prioridade no prompt

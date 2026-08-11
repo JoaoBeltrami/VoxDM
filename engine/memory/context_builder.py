@@ -30,6 +30,7 @@ from engine.llm.types import ContextoMontado, SecretVisivel, e_turno_de_rolagem
 from engine.memory.neo4j_client import Neo4jMemoryClient
 from engine.memory.qdrant_client import QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory
+from engine.npc.afeto import aplicar_afeto
 
 log = structlog.get_logger()
 
@@ -611,6 +612,31 @@ class ContextBuilder:
             )
             for rels in resultados_neo4j:
                 relacoes.extend(rels)
+
+            # AFETO-NUNCA-LIDO-1 (varredura 11/08): `buscar_afeto_npc` existia
+            # desde que o sistema de relações entrou e NUNCA foi chamado — a
+            # engine gravava afeto/medo/respeito/rancor no Neo4j e nunca lia de
+            # volta. Dava pra atacar um NPC, voltar na sessão seguinte e ser
+            # recebido como um estranho simpático. Vai no MESMO gather (não é
+            # round-trip novo por turno) e só para os presentes, porque é o
+            # dossiê deles que o rótulo alimenta. Falha silenciosa por design:
+            # afeto é tempero, e nunca pode custar um turno.
+            if presentes_no_grafo and not self._circuito_neo4j_aberto():
+                try:
+                    afetos = await asyncio.wait_for(
+                        asyncio.gather(
+                            *(self._neo4j.buscar_afeto_npc(n) for n in presentes_no_grafo),
+                            return_exceptions=True,
+                        ),
+                        timeout=2.0,
+                    )
+                    for npc_id, afeto in zip(presentes_no_grafo, afetos, strict=False):
+                        if isinstance(afeto, dict) and afeto:
+                            rotulo = aplicar_afeto(working_mem, npc_id, afeto)
+                            if rotulo:
+                                log.info("afeto_npc_aplicado", npc=npc_id, rotulo=rotulo)
+                except (TimeoutError, Exception) as e:  # noqa: B014
+                    log.warning("afeto_npc_falhou", erro=str(e)[:80])
 
         # ── Avaliação de secrets ──────────────────────────────────────────────
         secrets = await self._avaliar_secrets(working_mem)

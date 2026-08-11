@@ -21,6 +21,7 @@ from engine.state.inventario import (
     adicionar,
     arma_equipada,
     equipar,
+    para_exibicao,
     para_strings,
     remover,
     sincronizar,
@@ -445,10 +446,14 @@ class PlayerCharacter:
             linhas.append(f"Condições: {', '.join(self.player_conditions)}")
 
         # Inventário (cap 20 no prompt)
-        if self.player_inventory:
-            inv_exibido = self.player_inventory[:20]
-            sufixo = f" … e {len(self.player_inventory) - 20} mais" if len(self.player_inventory) > 20 else ""
-            linhas.append(f"Inventário: {', '.join(inv_exibido)}{sufixo}")
+        if self.inventario:
+            # `para_exibicao`, não `player_inventory`: o Mestre precisa saber que
+            # sobrou UMA poção e qual arma está na mão. A vista plana existe pra
+            # CHECAGEM de posse (`"Poção" in inventario`) e mostrá-la aqui era
+            # jogar fora justamente o que o inventário estruturado passou a saber.
+            itens = para_exibicao(self.inventario)
+            sufixo = f" … e {len(itens) - 20} mais" if len(itens) > 20 else ""
+            linhas.append(f"Inventário: {', '.join(itens[:20])}{sufixo}")
 
         # Quests ativas (5 mais recentes)
         if self.active_quest_hooks:

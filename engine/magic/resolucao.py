@@ -21,6 +21,7 @@ Exemplo:
 from __future__ import annotations
 
 import random
+import re
 import unicodedata
 from typing import Any
 
@@ -217,3 +218,92 @@ def consumir_slot_da_magia(wm: Any, nome_pt: str, nome_en: str = "") -> int:
     from engine.magic.slot_tracker import decrementar_slot
 
     return nivel if decrementar_slot(wm, nivel) else 0
+
+
+def bloco_mecanico_local(nome_pt: str, wm: Any = None) -> dict[str, Any] | None:
+    """Dados mecânicos da magia no formato que `formatar_bloco_magia` consome.
+
+    QDRANT-NO-CAMINHO-DA-MAGIA-1 (varredura 11/08): o bloco que vai pro prompt
+    era montado com `buscar_dados_magia`, uma chamada de REDE por turno de
+    conjuração — e que busca com o nome em português numa coleção indexada em
+    inglês, então na prática nunca respondia. Custava latência e não entregava
+    nada. O ADR-007 já dizia que resolução não depende de rede; faltava o bloco
+    do prompt obedecer a mesma regra.
+
+    `wm` é opcional e serve pra CD: com o personagem em mãos, a CD é a REAL
+    (`8 + proficiência + mod`), não um número transcrito de texto. Sem ele, o
+    campo sai só com o atributo do save — é melhor omitir o número do que
+    inventá-lo (mesma regra do "silêncio é melhor que número inventado").
+    """
+    mecanica = mecanica_da_magia(nome_pt)
+    if not mecanica:
+        return None
+
+    dados: dict[str, Any] = {
+        "nome": nome_pt,
+        "nivel": int(mecanica.get("nivel", 0) or 0),
+        "escola": _ESCOLA_PT.get(str(mecanica.get("escola") or "").lower(),
+                                 str(mecanica.get("escola") or "")),
+        "alcance": _traduzir_medida(str(mecanica.get("alcance") or "")),
+        "duracao": _traduzir_medida(str(mecanica.get("duracao") or "")),
+        "area": str(mecanica.get("area") or ""),
+    }
+
+    dano = mecanica.get("dano") or {}
+    por = dano.get("por") or {}
+    if por:
+        # A entrada do nível base é a que o Mestre precisa ver; a escala por slot
+        # é da engine, e mostrá-la inteira no prompt seria a tabela de volta.
+        chave = str(dados["nivel"] or min(por, key=lambda k: int(k)))
+        formula = por.get(chave) or next(iter(por.values()))
+        _t = str(dano.get("tipo") or "")
+        dados["dano"] = f"{formula} {_TIPO_DANO_PT.get(_t.lower(), _t)}".strip()
+
+    atributo = str(mecanica.get("save_atributo") or "")
+    if atributo:
+        rotulo = _ATRIBUTO_SAVE_PT.get(atributo, atributo)
+        if wm is not None:
+            from engine.magic.salvaguarda import cd_de_magia
+            dados["cd_save"] = f"{rotulo} CD {cd_de_magia(wm)}"
+        else:
+            dados["cd_save"] = rotulo
+    return dados
+
+
+# Códigos do SRD → o rótulo que o Mestre lê em PT-BR.
+_ATRIBUTO_SAVE_PT: dict[str, str] = {
+    "STR": "FOR", "DEX": "DES", "CON": "CON",
+    "INT": "INT", "WIS": "SAB", "CHA": "CAR",
+}
+
+
+_ESCOLA_PT: dict[str, str] = {
+    "abjuration": "Abjuração", "conjuration": "Conjuração",
+    "divination": "Adivinhação", "enchantment": "Encantamento",
+    "evocation": "Evocação", "illusion": "Ilusão",
+    "necromancy": "Necromancia", "transmutation": "Transmutação",
+}
+
+# O SRD escreve alcance e duração em prosa curta e repetitiva ("150 feet",
+# "Instantaneous", "Up to 1 hour"). Substituição por termo, não tradução de
+# frase: a lista é fechada e o que não casar passa intacto — texto em inglês no
+# prompt é feio, texto INVENTADO é pior.
+_MEDIDA_PT: tuple[tuple[str, str], ...] = (
+    ("instantaneous", "instantânea"), ("up to", "até"),
+    ("concentration", "concentração"),
+    ("rounds", "rodadas"), ("round", "rodada"),
+    ("minutes", "minutos"), ("minute", "minuto"),
+    ("hours", "horas"), ("hour", "hora"),
+    ("days", "dias"), ("day", "dia"),
+    ("feet", "pés"), ("foot", "pé"), ("mile", "milha"),
+    ("touch", "toque"), ("self", "pessoal"), ("sight", "à vista"),
+    ("special", "especial"), ("unlimited", "ilimitado"),
+)
+
+
+def _traduzir_medida(texto: str) -> str:
+    """Alcance/duração do SRD em PT-BR. Termo desconhecido passa intacto."""
+    saida = str(texto or "")
+    for en, pt in _MEDIDA_PT:
+        saida = re.sub(rf"\b{en}\b", pt, saida, flags=re.IGNORECASE)
+    return saida[:1].upper() + saida[1:] if saida else ""
