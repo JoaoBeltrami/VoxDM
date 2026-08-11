@@ -89,7 +89,27 @@ def extrair(magia: dict[str, Any]) -> dict[str, Any]:
         # São 14 magias de bônus e 4 de reação no SRD — a diferença entre poder
         # marcar E atacar na mesma rodada, ou não poder.
         "tempo_conjuracao": _tempo_conjuracao(magia),
+        # QDRANT-NO-CAMINHO-DA-MAGIA-1 (varredura 11/08): o bloco mecânico que
+        # vai pro prompt era montado com dados do QDRANT — uma chamada de rede
+        # por turno de conjuração que, com nome em português numa coleção
+        # indexada em inglês, praticamente nunca respondia. Alcance e duração
+        # entraram aqui pra que o bloco saia INTEIRO da tabela local, sem rede,
+        # como o ADR-007 manda.
+        "alcance": str(magia.get("range") or ""),
+        "duracao": str(magia.get("duration") or ""),
+        "area": _area(magia),
     }
+
+
+def _area(magia: dict[str, Any]) -> str:
+    """"esfera 20ft" — vazio quando a magia não tem área."""
+    a = magia.get("area_of_effect") or {}
+    tipo, tamanho = a.get("type"), a.get("size")
+    if not tipo or not tamanho:
+        return ""
+    traducao = {"sphere": "esfera", "cone": "cone", "line": "linha",
+                "cube": "cubo", "cylinder": "cilindro"}
+    return f"{traducao.get(str(tipo), str(tipo))} {tamanho}ft"
 
 
 def _tempo_conjuracao(magia: dict[str, Any]) -> str:

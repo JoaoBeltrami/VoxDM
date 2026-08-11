@@ -272,7 +272,17 @@ class SceneState:
                     # Dossiê de personalidade (decisão 12/07): traços DISTINTOS
                     # inline — é o que impede todo NPC de convergir pro tom do
                     # Mestre. Gerados no 1º encontro (engine/npc/dossie.py).
-                    tracos = entrada.get("tracos") or []
+                    tracos = list(entrada.get("tracos") or [])
+                    # AFETO-NUNCA-LIDO-1 (varredura 11/08): a engine gravava
+                    # afeto/medo/respeito/rancor no Neo4j desde sempre e NUNCA
+                    # lia de volta — dava pra atacar um NPC, voltar na sessão
+                    # seguinte e ser recebido como um estranho simpático. O
+                    # rótulo entra junto dos traços porque é a mesma pergunta
+                    # ("quem é esta pessoa pra mim agora"), e sem NÚMERO: a
+                    # autoridade social do projeto é discreta por decisão.
+                    afeto = str(entrada.get("afeto_rotulo") or "")
+                    if afeto:
+                        tracos = [*tracos[:2], afeto]
                     if tracos:
                         return f"{n} [{'; '.join(tracos[:3])}]"
                     return n

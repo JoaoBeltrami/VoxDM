@@ -24,16 +24,23 @@ from typing import Any
 
 import structlog
 
+from engine.state.inventario import RADICAIS_CONSUMIVEL
+
 log = structlog.get_logger()
 
 # Radicais de itens CONSUMÍVEIS — whitelist ESTREITA de propósito: só coisas que
 # o jogador "usa/bebe/aplica" e que têm provisão limitada. Inclui o inglês que o
 # STT às vezes transcreve ("potion", "scroll"). Nada de FOR/charme/magia aqui.
+# CONSUMIVEL-DUPLICADO-1 (varredura 11/08): esta lista era escrita à mão e era a
+# SEGUNDA do projeto — a outra vive em `engine/state/inventario.py`, que é quem
+# classifica o item na ficha. Elas discordavam ("frasco" e "ração" só lá;
+# "tônico", "bálsamo" e "kit de cura" só aqui), e o efeito era um item que a
+# ficha chamava de consumível e a autoridade não reconhecia na hora de beber.
+# Agora deriva da canônica; as formas ACENTUADAS e o plural ficam aqui porque só
+# este caminho compara contra a fala crua do jogador, que vem com acento.
 _ITENS_CONSUMIVEIS: tuple[str, ...] = (
-    "poção", "poções", "pocao", "potion", "elixir", "pergaminho", "scroll", "antídoto",
-    "antidoto", "antitoxina", "tônico", "tonico", "ampola", "unguento",
-    "bálsamo", "balsamo", "reagente", "granada", "kit de cura", "kit médico",
-    "kit medico",
+    *RADICAIS_CONSUMIVEL,
+    "poção", "poções", "antídoto", "tônico", "bálsamo", "kit médico",
 )
 
 # Verbo de uso/consumo na mesma fala — sem ele, "tem uma poção na mesa" não dispara.
