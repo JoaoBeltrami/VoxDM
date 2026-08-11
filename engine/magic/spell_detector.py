@@ -28,11 +28,32 @@ log = structlog.get_logger()
 # se não extrair um nome de magia válido, nenhum slot é decrementado.
 # Os sufixos genéricos ".{1,30}" foram removidos pois não adicionavam valor
 # e tornavam o regex verboso sem benefício de filtragem.
-_RE_CASTING = re.compile(
-    r"\b(lanço|conjuro|uso a magia|uso o feitiço|lanço a magia|lanço o feitiço|"
-    r"conjuro a magia|conjuro o feitiço|casto|castando)\b",
-    re.IGNORECASE,
+# VERBO-DUPLICADO-1 (varredura 10/08): esta lista era escrita à mão, tinha 9
+# formas, e era a SEGUNDA lista de verbos de conjuração do projeto — a canônica é
+# `casting._VERBOS_CASTING`, com 40+. Duas listas que precisam concordar e não
+# concordam é a mesma armadilha do "prompt e código que derivam em silêncio", em
+# forma de código: acrescentar `utilizar` numa (o fix do playtest de 10/08) não
+# acrescentava na outra, e o caminho de REFORÇO continuava cego pro verbo novo.
+# Agora é DERIVADA: a canônica manda, e as formas compostas ("uso a magia") ficam
+# aqui porque só existem neste caminho.
+_COMPOSTOS: tuple[str, ...] = (
+    "uso a magia", "uso o feitiço", "lanço a magia", "lanço o feitiço",
+    "conjuro a magia", "conjuro o feitiço",
 )
+
+
+def _padrao_de_casting() -> re.Pattern[str]:
+    from engine.magic.casting import _VERBOS_CASTING
+
+    # Compostos primeiro: "uso a magia" tem que vencer o "uso" solto.
+    formas = sorted({*_COMPOSTOS, *_VERBOS_CASTING, "lanço", "conjuro"},
+                    key=len, reverse=True)
+    return re.compile(
+        r"\b(" + "|".join(re.escape(f) for f in formas) + r")\b", re.IGNORECASE
+    )
+
+
+_RE_CASTING = _padrao_de_casting()
 
 # Extrai o nome da magia após o verbo de casting.
 # Grupo 1 captura o nome: 3–30 chars após o verbo, terminando em pontuação ou fim.
