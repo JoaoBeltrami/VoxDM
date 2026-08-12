@@ -649,6 +649,14 @@ export default function Home() {
     return { esperandoRolagem: true, motivoRolagem: motivo, atributoRolagem: atributo };
   }, [historico, respostaAtual, checkPedido]);
 
+  // DADO-SEM-ANIMACAO-1: o `onTerminou` do dado só limpa quando NÃO há resposta
+  // em voo (ver o call-site). Este efeito é a outra metade: quando o Mestre
+  // finalmente começa a falar, o dado sai. Sem ele o número ficaria preso na
+  // tela até a rolagem seguinte.
+  useEffect(() => {
+    if (!isProcessing && respostaAtual) setDadoJogadorAtivo(null);
+  }, [isProcessing, respostaAtual]);
+
   // Revela o texto do mestre em sincronia com o áudio (karaokê reverso).
   // textoSincronizado é usado onde antes exibiríamos respostaAtual diretamente.
   //
@@ -1644,7 +1652,15 @@ export default function Home() {
               tipo={dadoJogadorAtivo.tipo}
               resultado={dadoJogadorAtivo.resultado}
               visivel
-              onTerminou={() => setDadoJogadorAtivo(null)}
+              // DADO-SEM-ANIMACAO-1 (playtest 11/08): *"poderíamos usar até pra
+              // ganhar tempo de latência no sentido de percepção do jogador"*.
+              // O dado sumia no próprio timer (~1,5s) e sobravam ~2,5s de tela
+              // parada até o primeiro token — que é quando o jogo PARECE ter
+              // travado. Segurar o resultado enquanto a resposta não começa não
+              // economiza um milissegundo e muda a percepção inteira: o número
+              // fica na tela sendo lido, em vez de o jogador encarar o nada.
+              // Some assim que o Mestre começa a falar.
+              onTerminou={() => { if (!isProcessing) setDadoJogadorAtivo(null); }}
               descartado={dadoJogadorAtivo.descartado}
               modo={dadoJogadorAtivo.modo}
             />

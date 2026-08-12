@@ -515,7 +515,20 @@ async def iniciar_sessao(
             log.warning("spells_conhecidas_save_falhou", session_id=config.session_id, erro=str(e))
 
     sessions[config.session_id] = sessao
-    log.info("sessao_criada", session_id=config.session_id, location=config.location_id)
+    # RESTAURACAO-LOG-MENTIROSO-1 (playtest 11/08): logava `config.location_id`,
+    # mas a restauração de personagem já tinha MOVIDO a WorkingMemory para o
+    # último local do jogador. O log dizia "drevamor" enquanto o jogo rodava em
+    # "tharnvik", e isso me fez diagnosticar um bug de estado que não existia —
+    # o jogador foi restaurado exatamente onde parou. Loga o estado REAL, e
+    # `location_config` fica ao lado pra que a divergência (que é normal numa
+    # restauração) apareça em vez de enganar quem lê depois.
+    log.info(
+        "sessao_criada",
+        session_id=config.session_id,
+        location=working_mem.location_id,
+        location_config=config.location_id,
+        restaurada=bool(config.session_anterior_id),
+    )
 
     return _serializar_info(sessao)
 
