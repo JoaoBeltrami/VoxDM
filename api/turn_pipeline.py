@@ -1638,6 +1638,13 @@ def aplicar_pos_turno(
     # 16b. Gasto de class feature — [FEATURE_GASTA: id] decrementa usos_atual.
     # Só features com usos finitos (usos_max > 0); ilimitadas (-1) são noop.
     for m in _RE_FEATURE_GASTA.finditer(resposta_completa):
+        # FEATURE-DEPENDE-DO-LLM-1: a engine já cobrou esta feature neste turno,
+        # detectando a declaração na FALA do jogador. O marcador continua válido
+        # (é assim que o Mestre reporta uso que a fala não declarou), mas cobrar
+        # de novo pela mesma ativação faria a fúria sumir em dobro.
+        if m.group(1) in getattr(working_mem, "features_gastas_no_turno", set()):
+            log.info("feature_marcador_ja_cobrada_na_fala", feature=m.group(1))
+            continue
         fid = m.group(1).strip().lower()
         feat = working_mem.class_features.get(fid)
         if feat and feat.get("usos_max", 0) > 0 and feat.get("usos_atual", 0) > 0:

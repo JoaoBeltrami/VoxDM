@@ -326,6 +326,11 @@ from engine.magic.resolucao import (
 )
 from engine.memory.item_authority import resolver_consumo
 from engine.npc.identity import npcs_visiveis as _npcs_visiveis
+from engine.state.feature_uso import (
+    detectar_features,
+    gastar_feature,
+    linha_de_feature,
+)
 
 # Prosody alterada do Lampejo — lento, grave, ressoa como visão/flashback.
 # Edge TTS aceita ranges padrão: rate -50%..+200%, pitch -50Hz..+50Hz.
@@ -2314,6 +2319,31 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                         _linha_item = None
                     if _linha_item:
                         _fatos_engine.append(_linha_item)
+
+                # ── Feature de classe declarada na FALA ───────────────────────
+                # FEATURE-DEPENDE-DO-LLM-1 (playtest 11/08): o jogador disse "vou
+                # aproveitar pra usar Fúria e usar Reckless Attack" e o evento
+                # `feature_gasta` não apareceu NENHUMA vez na sessão — gastar
+                # dependia de o modelo lembrar de emitir `[FEATURE_GASTA: rage]`.
+                # Ele terminou a luta com as três fúrias intactas depois de usar
+                # duas. Recurso que só some quando o modelo lembra é decoração.
+                #
+                # O marcador CONTINUA valendo (responde "o que aconteceu", não
+                # "quanto"). Esta detecção SOMA a ele; `_features_deste_turno`
+                # impede a cobrança dupla quando os dois disparam no mesmo turno.
+                sessao.working_mem.features_gastas_no_turno.clear()
+                try:
+                    for _fid in detectar_features(
+                        texto_jogador, sessao.working_mem.class_features
+                    ):
+                        _f_fato = gastar_feature(sessao.working_mem.class_features, _fid)
+                        _fatos_engine.append(linha_de_feature(_f_fato))
+                        sessao.working_mem.features_gastas_no_turno.add(_fid)
+                        log.info("feature_detectada_na_fala", session_id=session_id,
+                                 feature=_fid, gastou=_f_fato["gastou"],
+                                 restantes=_f_fato["restantes"])
+                except Exception as _e:   # nunca derruba o turno
+                    log.warning("feature_deteccao_falhou", erro=str(_e)[:120])
 
                 # ── Combate engine-autoritativo (task 7, kill-switch COMBATE_ENGINE_ATIVO) ─
                 # Aditivo: quando ligado e em combate, a ENGINE resolve a rolagem de
