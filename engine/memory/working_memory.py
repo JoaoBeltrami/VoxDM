@@ -71,6 +71,14 @@ class WorkingMemory:
 
     # ── Metadados de sessão (vivem aqui mesmo — não é domínio) ───────────────
     session_id: str = ""
+    # FEATURE-DEPENDE-DO-LLM-1 (11/08): ids de feature de classe já cobrados
+    # NESTE turno pela detecção da fala. Existe pra que o `[FEATURE_GASTA:]` do
+    # modelo, que continua válido, não cobre a MESMA fúria uma segunda vez — o
+    # jogador declara na fala, o Mestre narra e emite o marcador, e sem este
+    # guard o recurso sumiria em dobro. Vive aqui (e não na sessão) porque os
+    # dois lados — websocket e turn_pipeline — enxergam a WorkingMemory.
+    # Esvaziado no começo de cada turno; NÃO persiste.
+    features_gastas_no_turno: set[str] = field(default_factory=set)
     tts_voice: str = "pt-BR-FranciscaNeural"
     dm_profile: str = "equilibrado"
     roll_visibility: str = "result_only"
