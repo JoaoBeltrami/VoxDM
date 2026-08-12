@@ -2208,7 +2208,23 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             # jogador), com o bônus já somado pra ele não ter que
                             # fazer conta.
                             _p = sessao.check_pendente
-                            _b = int(_p.get("bonus") or 0)
+                            # CHECK-BONUS-TUPLA-1 (playtest 12/08 — CRASH):
+                            # `bonus_de_check` devolve `(bônus, explicação)`, e a
+                            # pendência guarda a TUPLA inteira (é o contrato: o
+                            # teste do websocket já a constrói assim). Aqui fazia
+                            # `int(tupla)` e derrubava o turno com "int() argument
+                            # must be ... not 'tuple'" — o jogo simplesmente
+                            # parava de responder no momento em que a engine ia
+                            # entrar. Latente desde 09/08: precisa do Mestre pedir
+                            # o teste E do jogador não rolar no turno seguinte,
+                            # que é justamente quando a cobrança dispara.
+                            _bruto = _p.get("bonus")
+                            if isinstance(_bruto, (tuple, list)):
+                                _bruto = _bruto[0] if _bruto else 0
+                            try:
+                                _b = int(_bruto or 0)
+                            except (TypeError, ValueError):
+                                _b = 0
                             _fatos_engine.append(
                                 f"ENGINE: o teste de {_p['pericia']} que você pediu "
                                 f"continua ABERTO (bônus do personagem "

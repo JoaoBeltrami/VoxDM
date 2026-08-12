@@ -16,7 +16,6 @@ Exemplo:
     uv run pytest tests/test_check_cobertura.py -q
 """
 
-import re
 from pathlib import Path
 
 from engine.combat.intent import eh_teste_pericia
@@ -90,16 +89,27 @@ def test_cobranca_vai_pelo_canal_de_fatos_e_nao_pelo_texto_do_jogador():
 
 
 def test_cobranca_leva_o_bonus_ja_calculado():
+    """⚠️ REESCRITO em 12/08: a versão anterior assertava a linha
+    `_b = int(_p.get("bonus")` — ou seja, FIXAVA O BUG. `bonus_de_check` devolve
+    uma TUPLA `(número, explicação)`, e aquele `int()` derrubou o turno inteiro
+    no playtest com "int() argument must be ... not 'tuple'". Um teste que trava
+    a implementação em vez do comportamento vira cúmplice do defeito.
+    """
     i = _WS.index("check_pendente_cobrado")
-    bloco = _WS[max(0, i - 1200):i]
-    assert re.search(r"_b\s*=\s*int\(_p\.get\(\"bonus\"\)", bloco)
+    bloco = _WS[max(0, i - 2200):i]
+    assert "isinstance(_bruto, (tuple, list))" in bloco, (
+        "a pendência guarda a tupla de `bonus_de_check` — desempacotar, não converter"
+    )
     assert "{_b:+d}" in bloco, "o sinal explícito (+3/-1) evita o Mestre inverter"
 
 
 def test_a_pendencia_ainda_expira():
     """Cobrar pra sempre seria pior que não cobrar: o dado ficaria aberto na
     perícia errada (o bug que criou o _MAX_TURNOS_CHECK)."""
+    # Janela larga de propósito: comentário novo entre a expiração e a cobrança
+    # empurra a âncora pra fora e o teste falha sem nada ter regredido — foi o
+    # que aconteceu em 12/08. Se você precisa da janela, deixe folga.
     i = _WS.index("check_pendente_cobrado")
-    bloco = _WS[max(0, i - 1600):i]
+    bloco = _WS[max(0, i - 3000):i]
     assert "_MAX_TURNOS_CHECK" in bloco
     assert "check_pendente_expirado" in bloco
