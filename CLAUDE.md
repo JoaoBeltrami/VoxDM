@@ -1,6 +1,6 @@
 # VoxDM — Instruções para Claude Code
 
-> Atualizado: 10 de agosto de 2026 (passada de `/docs` após o Bloco 3 e o P16 — magia na engine).
+> Atualizado: 12 de agosto de 2026 (fila do playtest de 11/08 — combate, features e restauração).
 > Este arquivo responde UMA pergunta: **como se escreve código aqui.**
 > Onde estamos agora → `.internal/ESTADO.md`. O que vem pela frente e em que ordem
 > → `.internal/VOXDM_FILA.md`. Como o sistema é desenhado → `ARCHITECTURE.md`.
@@ -340,6 +340,52 @@ NÃO escrever regex dentro de heredoc do shell → `\b` vira o byte 0x08 literal
 NÃO usar `json.dumps` em GERADOR de módulo Python → escreve `false`/`null`/`true`, que não
                             são literais de Python: o artefato gerado explode no import.
                             Usar `pprint.pformat`. Mordeu no gerador da tabela de magias.
+
+# ⚠️ A FAMÍLIA QUE MAIS CUSTOU: lista de sinônimos que falha em SILÊNCIO
+# Quatro gates queimados em três dias, sempre o mesmo formato — uma lista de
+# palavras decide se a engine VÊ a ação do jogador, e a palavra que falta não
+# gera erro: gera um jogo que parece burro.
+#   `utilizar` (magia)   → 26 turnos, ZERO conjurações. A magia estava na ficha.
+#   `clerigo` sem acento → clérigo nasceu com ZERO espaços de magia.
+#   ataque em prosa      → 6 trocas de combate, UMA rolagem. "ele rolou por mim".
+#   `cabeça` ausente     → "arrancar a cabeça dele" não era ataque.
+NÃO adicionar item a lista de reconhecimento sem escrever o teste com a FALA REAL
+                            → o teste tem que citar a frase que o jogador disse
+                            no playtest, não um exemplo inventado. Exemplo limpo
+                            passa; "eu vou tentar arrancar a cabeça dele" é o que
+                            quebra. Todo módulo de detecção deste projeto nasceu
+                            de uma frase real e é assim que continua vivo.
+NÃO tratar lista de sinônimos como conteúdo secundário → ela É a interface. O
+                            jogador fala por voz e não conhece o vocabulário da
+                            ficha: diz "utilizar" e não "usar", "reckless" e não
+                            "Ataque Imprudente", "esmago a cabeça" e não "ataco".
+                            Cada forma ausente é uma ação que a engine jura que
+                            não aconteceu.
+NÃO confiar em marcador do LLM para gastar RECURSO → `[FEATURE_GASTA]` existia,
+                            estava na lista que o modelo conhece, e ele não
+                            emitiu: 3 fúrias intactas depois de usar 2. Recurso
+                            que só some quando o modelo lembra é decoração. A
+                            engine detecta pela FALA; o marcador vira reforço, e
+                            aí precisa de guard contra cobrança DUPLA.
+
+# Estado que muda sem virar FATO para o modelo é estado que não existe
+NÃO mudar estado de cena sem dizer ao Mestre, em palavras, o que mudou → a engine
+                            encerrou o combate (`fim=True`, `sair_combate()`, e
+                            `em_combate=False` no estado) e a instrução daquele
+                            turno continuava dizendo "narre este turno de
+                            combate". O modelo seguiu narrando luta até o jogador
+                            escrever "Desisto, vou morrer". `em_combate=False`
+                            conserta o turno SEGUINTE; o turno da virada precisa
+                            da frase. Mesma família do ENGINE-COMO-INTERLOCUTOR-1
+                            e do `arc_fase="concluida"` que congelava a cena.
+
+# Ler chave AUSENTE como valor vazio (12/08)
+NÃO concluir "o campo está vazio" a partir de um endpoint de debug → `/debug/
+                            working-memory` NÃO expõe `class_features` nem
+                            `inventory`. Li a ausência como `{}` e quase reportei
+                            que o Bárbaro nascia sem Fúria — ele nasce com ela. A
+                            pergunta certa é `'campo' in payload`, não
+                            `payload.get('campo')`.
 
 # Lookup que devolve vazio em vez de levantar (a família silenciosa)
 NÃO chavear dict de regra por string quando o consumidor usa int → `spell_slots` é chaveado
