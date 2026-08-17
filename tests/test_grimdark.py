@@ -173,11 +173,41 @@ def test_cascata_grim_tem_ollama_grim():
 
 
 def test_cascata_grim_ordem():
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GEMINI, PROV_GROQ_70B, PROV_OLLAMA_GRIM, TaskType
+    """Gemini primeiro, uncensored local como garantia final.
+
+    REESCRITO em 17/08 (GRIM-SEM-DONO-1): assertava `cascata[0] == PROV_GROQ_70B`.
+    Esse slot lê `settings.GROQ_MODEL`, então o primeiro degrau da rota que
+    existe pra GARANTIR ficção sombria era escolhido por uma linha de .env —
+    sem que nada exigisse recusa medida do modelo que entrasse ali. Somado a
+    isso, o Groq desligou o `llama-3.3-70b-versatile` em 16/08 e o degrau virou
+    404: quem já atendia de fato era o Gemini. O slot volta ao topo no dia em
+    que houver um primário Groq com recusa medida — e aí este teste muda junto,
+    de propósito.
+    """
+    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GEMINI, PROV_OLLAMA_GRIM, TaskType
     cascata = CASCATA_DEFAULT[TaskType.NARRATIVE_GRIM]
-    assert cascata[0] == PROV_GROQ_70B
-    assert cascata[1] == PROV_GEMINI
-    assert cascata[2] == PROV_OLLAMA_GRIM
+    assert cascata[0] == PROV_GEMINI
+    assert cascata[-1] == PROV_OLLAMA_GRIM
+
+
+def test_cascata_grim_nao_aceita_modelo_com_recusa_nao_medida():
+    """A trava que faltava: olha o MODELO, não o nome do slot.
+
+    `test_cascata_grim_exclui_8b` proíbe o SLOT `groq-leve` — e é por isso que
+    o furo passou sete meses aberto: trocar o modelo de um slot JÁ PRESENTE na
+    cascata não mexe em nome nenhum. O `tasks.py` proíbe o gpt-oss aqui em
+    letras maiúsculas desde 24/07 (safety próprio, recusa nunca medida), e essa
+    proibição não tinha quem a cobrasse.
+    """
+    from engine.llm.tasks import CASCATA_DEFAULT, TaskType, modelo_do_slot
+
+    for slot in CASCATA_DEFAULT[TaskType.NARRATIVE_GRIM]:
+        modelo = modelo_do_slot(slot)  # "" em gemini/ollama — variam por chave/host
+        assert "gpt-oss" not in modelo, (
+            f"o slot {slot!r} roda {modelo!r} na rota grimdark, que existe pra "
+            "GARANTIR narração de ficção sombria. Meça a recusa antes de pôr um "
+            "modelo com safety training próprio aqui (ver tasks.py, 24/07)."
+        )
 
 
 # ── escolher_task_type_narrativo ────────────────────────────────────────────────
@@ -579,12 +609,19 @@ async def test_reframe_destrava_o_mesmo_provider():
 @pytest.mark.asyncio
 async def test_reframe_so_uma_vez_por_chamada():
     """Provider amarela SEMPRE (com e sem reframe) → 2 tentativas no primário,
-    depois a cascata desce normalmente (sem loop de reframes)."""
+    depois a cascata desce normalmente (sem loop de reframes).
+
+    O fake primário se chamava "groq-70b" até 17/08, quando esse slot saiu da
+    cascata grim (GRIM-SEM-DONO-1). Sem o rename ele deixaria de ser chamado e
+    o teste passaria a provar NADA — o assunto aqui é o orçamento de reframe
+    (um por chamada), não qual slot está no topo. Fake nomeado como o primeiro
+    degrau REAL da cascata, seja ele qual for.
+    """
     from engine.llm.providers.base import BaseLLMProvider
     from engine.llm.tasks import TaskType
 
     class _AmarelaSempre(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "gemini-flash"
         disponivel = True
         def __init__(self):
             self.n = 0
@@ -603,7 +640,7 @@ async def test_reframe_so_uma_vez_por_chamada():
             yield ""
 
     p = _AmarelaSempre()
-    router = _router_com({"groq-70b": p, "ollama-grim": _Grim()})
+    router = _router_com({"gemini-flash": p, "ollama-grim": _Grim()})
     # NARRATIVE_GRIM: a única cascata que inclui o ollama-grim como garantia.
     texto = await router.completar(
         [{"role": "user", "content": "x"}], task=TaskType.NARRATIVE_GRIM

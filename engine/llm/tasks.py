@@ -130,13 +130,23 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     ],
     # Grim: ficção sombria (massacre, tortura, horror de fantasia) — pula 8B
     # (amarelea mais) e termina no modelo uncensored como GARANTIA.
-    # groq-70b → gemini (BLOCK_NONE já configurado) → ollama-grim (abliterated).
+    # gemini (BLOCK_NONE já configurado) → ollama-grim (abliterated).
     # NÃO inserir o gpt-oss-120b aqui sem TESTAR recusa antes (24/07): esta
     # cascata existe pra GARANTIR que ficção sombria seja narrada, e ela pula o
     # 8B porque ele amarela. O gpt-oss tem safety training próprio, não medido —
     # o ganho de TPD não vale arriscar a garantia que é o motivo desta rota.
+    #
+    # GRIM-SEM-DONO-1 (17/08): esta lista começava com PROV_GROQ_70B, e o slot
+    # lê `settings.GROQ_MODEL`. Ou seja, a proibição do parágrafo acima era
+    # burlável por UMA LINHA DE .ENV: apontar o primário pro gpt-oss punha o
+    # gpt-oss na frente da rota que existe pra garantir o oposto — e nenhum
+    # teste pegava, porque `test_cascata_grim_exclui_8b` olha o SLOT, não o
+    # MODELO. O 70B foi desligado pelo Groq em 16/08 e o slot ficou apontando
+    # pra um modelo morto, então tirá-lo daqui não perde degrau nenhum: o
+    # Gemini já era quem atendia de fato. Quando houver um primário Groq com
+    # recusa MEDIDA, ele volta pro topo — e o teste novo abaixo é quem cobra a
+    # medição, olhando o modelo em vez do nome do slot.
     TaskType.NARRATIVE_GRIM: [
-        PROV_GROQ_70B,
         PROV_GEMINI,
         PROV_OLLAMA_GRIM,
     ],
