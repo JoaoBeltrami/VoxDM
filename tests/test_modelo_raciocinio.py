@@ -292,3 +292,62 @@ def test_categoria_modelo_nao_e_amarelada_nem_cooldown():
     from engine.llm.router import _CATEGORIAS_AMARELADA
 
     assert "modelo" not in _CATEGORIAS_AMARELADA
+
+
+# ── MODELO-DESLIGADO-1 (pré-voo de 17/08/2026) ────────────────────────────────
+#
+# A previsão do topo deste arquivo se cumpriu, e maior do que o previsto: em
+# 16/08/26 o Groq não desligou só o `llama-3.1-8b-instant` — levou a família
+# Llama de chat inteira, e com ela o PRIMÁRIO `llama-3.3-70b-versatile`. O
+# projeto tinha migrado o fallback e deixado o primário para trás.
+#
+# O 404 resultante não casava com quota nem com a tool-fantasma, então caía no
+# `raise` e MATAVA todo turno — com o `gpt-oss-120b` vivo, disponível e a duas
+# linhas na cascata. Medido na sonda real daquele dia: o router nem chegou ao
+# segundo degrau.
+#
+# A string abaixo é a resposta LITERAL do Groq naquela chamada, não um exemplo
+# inventado — exemplo limpo passaria e não é isso que quebra.
+_MSG_404_REAL = (
+    "Error code: 404 - {'error': {'message': 'The model "
+    "`llama-3.3-70b-versatile` does not exist or you do not have access to it.', "
+    "'type': 'invalid_request_error', 'code': 'model_not_found'}}"
+)
+
+# Como o Groq anuncia o desligamento programado — a forma que virá da próxima vez.
+_MSG_DECOMMISSIONED = (
+    "The model `llama-3.1-8b-instant` has been decommissioned and is no longer "
+    "supported. Please refer to https://console.groq.com/docs/deprecations"
+)
+
+
+def test_modelo_desligado_e_falha_do_modelo():
+    """Modelo que não existe é fallback-able: o degrau seguinte atende igual."""
+    assert _e_falha_do_modelo(_api_error(_MSG_404_REAL)) is True
+
+
+def test_aviso_de_decommission_tambem():
+    assert _e_falha_do_modelo(_api_error(_MSG_DECOMMISSIONED)) is True
+
+
+def _provider_404() -> GroqProvider:
+    """Provider cujo modelo o Groq não conhece mais — o caminho SÍNCRONO."""
+    p = GroqProvider(nome="teste", modelo="llama-3.3-70b-versatile")
+
+    class _Completions:
+        async def create(self, **_):
+            raise _api_error(_MSG_404_REAL)
+
+    p._get_client = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        chat=SimpleNamespace(completions=_Completions())
+    )
+    return p
+
+
+@pytest.mark.asyncio
+async def test_modelo_desligado_vira_retriable_e_cascateia():
+    """O turno tem que sobreviver a um modelo desligado, não morrer nele."""
+    p = _provider_404()
+    with pytest.raises(LLMRetriable) as exc:
+        await p.completar([{"role": "user", "content": "oi"}], 0.7, 100)
+    assert exc.value.categoria == "modelo"

@@ -115,14 +115,41 @@ def _e_quota_disfarcada(exc: BaseException) -> bool:
 #
 # Não reproduzido em 12 chamadas com o mesmo prompt (6 no 20b, 6 no 120b) — é
 # intermitente. Frequência baixa não muda o desenho: turno morto é turno morto.
+#
+# MODELO-DESLIGADO-1 (pré-voo de 17/08): a MESMA porta deixou passar uma falha
+# muito pior, e por meses ela seria fatal. O Groq desligou a família Llama de
+# chat em 16/08/26 — o projeto rastreava só o `llama-3.1-8b-instant` e migrou o
+# fallback, mas o PRIMÁRIO (`llama-3.3-70b-versatile`) foi junto. A partir daí
+# TODA chamada devolvia 404 `model_not_found`; o 404 não casava com quota nem
+# com a tool-fantasma, caía no `raise`, e o `gpt-oss-120b` — vivo, disponível e
+# a duas linhas de distância na cascata — nunca era tentado. Cascata de cinco
+# degraus servindo de nada porque o primeiro degrau evaporou em silêncio.
+#
+# Modelo que não existe é a definição de falha DO MODELO: é fallback-able, e a
+# categoria "modelo" está certa aqui (não é quota, então não penaliza o provider
+# com cooldown — os OUTROS slots Groq seguem saudáveis).
+#
+# As três frases abaixo são as do Groq LITERAIS, não exemplos inventados:
+# "does not exist or you do not have access to it" é a de hoje; "decommissioned"
+# é a que ele usa no aviso de desligamento; `model_not_found` é o code do JSON.
 _PALAVRAS_FALHA_MODELO = (
     "tool choice is none",
     "model called a tool",
+    "does not exist or you do not have access",
+    "model_not_found",
+    "decommissioned",
+    "has been deprecated",
 )
 
 
 def _e_falha_do_modelo(exc: BaseException) -> bool:
-    """True quando o 400 é comportamento errático do modelo, não pedido inválido."""
+    """True quando o erro é do MODELO (errático ou inexistente), não do pedido.
+
+    Cobre duas famílias que têm o mesmo desfecho correto — cair pro próximo
+    degrau: comportamento errático (TOOL-FANTASMA-1) e modelo desligado pelo
+    provider (MODELO-DESLIGADO-1). Ambas são 4xx que NÃO são culpa do payload,
+    então propagá-las mata um turno que o degrau seguinte atenderia sem esforço.
+    """
     corpo = str(exc).lower()
     return any(kw in corpo for kw in _PALAVRAS_FALHA_MODELO)
 
