@@ -125,7 +125,7 @@ consequência das mãos do modelo**.
 - Uma criatura lendária do módulo recebia ficha genérica de warlock e lutava como tal.
 
 ### Infra
-- 2648 testes automatizados (eram 919 na 0.1.0).
+- 2787 testes automatizados (eram 919 na 0.1.0).
 
 ## [0.1.0] - 2026-06-05
 
