@@ -445,6 +445,31 @@ export interface EquipamentoDaClasse {
   escolhas: EscolhaEquipamento[];
 }
 
+/** Uma arma que a ficha pode OFERECER quando a escolha do SRD é aberta
+ *  ("uma arma marcial"). `nome` já vem em PT-BR capitalizado — é a mesma forma
+ *  que o caminho de VOZ produz, e os dois precisam bater porque o inventário é
+ *  comparado por nome. */
+export interface ArmaOpcao {
+  id: string;
+  nome: string;
+  categoria: "simples" | "marcial";
+  dado: string;
+  atributo: string;
+  distancia: boolean;
+}
+
+export async function listarArmas(): Promise<ArmaOpcao[]> {
+  try {
+    const r = await fetch(`${API_BASE}/session/armas`);
+    if (!r.ok) return [];
+    return (await r.json()) as ArmaOpcao[];
+  } catch {
+    // Mesma postura do equipamento: sem a lista, a ficha cai no campo de texto
+    // livre em vez de impedir a criação do personagem.
+    return [];
+  }
+}
+
 export async function obterEquipamentoInicial(
   classe: string,
 ): Promise<EquipamentoDaClasse | null> {

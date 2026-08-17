@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { obterEquipamentoInicial, type PersonagemConfig } from "@/lib/api";
+import {
+  listarArmas, obterEquipamentoInicial,
+  type ArmaOpcao, type PersonagemConfig,
+} from "@/lib/api";
 import {
   spellsDaClasse, spellsPorNivel, limiteProgressao,
   type SpellEntry,
@@ -12,6 +15,40 @@ const CLASSES_DND = [
   "Bárbaro", "Bardo", "Clérigo", "Druida", "Guerreiro",
   "Monge", "Paladino", "Ranger", "Ladino", "Feiticeiro", "Bruxo", "Mago",
 ];
+
+/** Atributo do ataque, em palavra de mesa. "MELHOR" é a licença de `finesse`:
+ *  o SRD deixa o jogador ESCOLHER, e mostrar a sigla crua faria a ficha parecer
+ *  um dump de tabela. */
+const ATRIBUTO_ARMA: Record<string, string> = {
+  FOR: "Força",
+  DES: "Destreza",
+  MELHOR: "Força ou Destreza",
+};
+
+/** Sugestões para as categorias abertas que NÃO são arma (foco, símbolo,
+ *  instrumento). A engine só resolve ARMA mecanicamente — nestas o campo segue
+ *  LIVRE de propósito, e a lista é conforto de digitação, não trilho. */
+const SUGESTOES_ABERTAS: Record<string, string[]> = {
+  "um foco arcano": ["Orbe", "Cajado", "Varinha", "Cristal"],
+  "um foco druídico": ["Bastão de teixo", "Ramo de azevinho", "Totem"],
+  "um símbolo sagrado": ["Amuleto", "Emblema", "Relicário"],
+  "um instrumento musical": ["Alaúde", "Flauta", "Tambor", "Lira"],
+};
+
+/** As armas válidas para uma categoria aberta do SRD.
+ *
+ *  "uma arma marcial corpo a corpo" → marciais que não são de distância. A
+ *  filtragem vive aqui e não no backend porque a lista inteira tem 37 itens:
+ *  uma busca só, e a ficha responde sem ida e volta a cada clique. */
+function armasPara(categoria: string, todas: ArmaOpcao[]): ArmaOpcao[] {
+  const cat = (categoria || "").toLowerCase();
+  if (!cat.includes("arma")) return [];
+  const querida = cat.includes("marcial") ? "marcial" : "simples";
+  const soCorpoACorpo = cat.includes("corpo a corpo");
+  return todas.filter(
+    a => a.categoria === querida && (!soCorpoACorpo || !a.distancia),
+  );
+}
 
 // Subclasses disponíveis por classe (nível 3, SRD 5e)
 /** Os nove da tabela clássica, na ordem de leitura da grade 3×3.
@@ -226,6 +263,10 @@ export function CharacterForm({ onChange }: Props) {
   const [equipEscolhas, setEquipEscolhas] = useState<number[]>([]);
   // texto livre das opções ABERTAS ("uma arma marcial"), por índice de pergunta
   const [equipAbertas, setEquipAbertas] = useState<Record<number, string>>({});
+  // Catálogo de armas para as escolhas ABERTAS. Buscado uma vez: são 37 itens,
+  // e refazer a chamada a cada clique deixaria o seletor com lag visível.
+  const [armas, setArmas] = useState<ArmaOpcao[]>([]);
+  const [filtroArma, setFiltroArma] = useState<Record<number, string>>({});
 
   // Magias selecionadas no CharacterForm — sincronizadas no onChange
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
@@ -383,9 +424,17 @@ export function CharacterForm({ onChange }: Props) {
       setEquipDaClasse(dados);
       setEquipEscolhas((dados?.escolhas ?? []).map(() => -1));
       setEquipAbertas({});
+      setFiltroArma({});
     });
     return () => { vivo = false; };
   }, [classe]);
+
+  // Catálogo de armas — uma vez por montagem, independente da classe.
+  useEffect(() => {
+    let vivo = true;
+    listarArmas().then(lista => { if (vivo) setArmas(lista); });
+    return () => { vivo = false; };
+  }, []);
 
   // Itens que a escolha produziu — é isto que vai no payload da sessão. A opção
   // ABERTA vira o texto que o jogador digitou; vazio simplesmente não entra,
@@ -399,7 +448,30 @@ export function CharacterForm({ onChange }: Props) {
     return opcao.categoria && aberto ? [...itens, aberto] : itens;
   });
 
-  const faltamEscolhas = (equipDaClasse?.escolhas ?? []).some((_, i) => (equipEscolhas[i] ?? -1) < 0);
+  // Uma escolha só conta como FEITA quando também tem o nome, se a opção era
+  // aberta. Antes bastava marcar o botão: dava pra escolher "uma arma marcial",
+  // não dizer qual, e sair com um Guerreiro sem arma nenhuma — o buraco exato
+  // que o P17 (cobrar posse de item) espera fechar.
+  const totalEscolhas = equipDaClasse?.escolhas.length ?? 0;
+  const escolhasFeitas = (equipDaClasse?.escolhas ?? []).filter((esc, i) => {
+    const j = equipEscolhas[i] ?? -1;
+    if (j < 0 || j >= esc.opcoes.length) return false;
+    const categoria = esc.opcoes[j]?.categoria ?? "";
+    return !categoria || (equipAbertas[i] ?? "").trim().length > 0;
+  }).length;
+  const faltamEscolhas = escolhasFeitas < totalEscolhas;
+
+  // O que o personagem VAI carregar, já somado: fixos + escolhidos, com
+  // contagem. É o "nascimento visível" da ficha — o jogador vê a mochila encher
+  // enquanto decide, em vez de descobrir o inventário no primeiro combate.
+  const mochila: { nome: string; qtd: number }[] = (() => {
+    const contagem = new Map<string, number>();
+    for (const nome of [...(equipDaClasse?.fixos ?? []), ...itensEscolhidos]) {
+      contagem.set(nome, (contagem.get(nome) ?? 0) + 1);
+    }
+    // Array.from, não spread: o target do tsconfig não itera MapIterator.
+    return Array.from(contagem.entries()).map(([nome, qtd]) => ({ nome, qtd }));
+  })();
 
   return (
     <div className="w-full space-y-4 text-left">
@@ -508,56 +580,248 @@ export function CharacterForm({ onChange }: Props) {
       {/* P18 frente A — Equipamento inicial (SRD). O bloco só aparece quando a
           classe tem algo a mostrar: classe sem dados não deixa um vazio na tela. */}
       {equipDaClasse && (equipDaClasse.fixos.length > 0 || equipDaClasse.escolhas.length > 0) && (
-        <div className="space-y-2 rounded-lg border border-vox-border-soft bg-vox-bg-elevated/40 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-vox-accent-glow">
-            Equipamento
-            {faltamEscolhas && (
-              <span className="ml-2 rounded bg-amber-900/50 px-1.5 py-0.5 text-[9px] normal-case tracking-normal text-amber-300">
-                falta escolher
+        <div className="space-y-3 rounded-lg border border-vox-border-soft bg-vox-bg-elevated/40 p-3">
+          {/* O progresso é a informação mais importante do bloco: sem ele o
+              jogador não descobre que PRECISA escolher — e sai de mãos abanando,
+              que é literalmente como o Guerreiro nasce (fixos = []). */}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-vox-accent-glow">
+              Equipamento
+            </p>
+            {totalEscolhas > 0 && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                  faltamEscolhas
+                    ? "bg-amber-900/40 text-amber-300"
+                    : "bg-emerald-900/40 text-emerald-300"
+                }`}
+              >
+                {faltamEscolhas ? `${escolhasFeitas} de ${totalEscolhas}` : "tudo escolhido"}
               </span>
             )}
-          </p>
+          </div>
 
-          {equipDaClasse.fixos.length > 0 && (
-            <p className="text-xs text-vox-text-muted">
-              Já vem com você: {Array.from(new Set(equipDaClasse.fixos)).join(", ")}
-            </p>
+          {totalEscolhas > 0 && (
+            <div className="h-0.5 w-full overflow-hidden rounded-full bg-vox-bg-base/60">
+              <div
+                className="h-full rounded-full bg-vox-accent-primary transition-all duration-300"
+                style={{ width: `${(escolhasFeitas / totalEscolhas) * 100}%` }}
+              />
+            </div>
           )}
 
-          {equipDaClasse.escolhas.map((esc, i) => (
-            <div key={i} className="space-y-1">
-              <div className="flex flex-wrap gap-1.5">
-                {esc.opcoes.map((opcao, j) => {
-                  const ativa = equipEscolhas[i] === j;
+          {equipDaClasse.fixos.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-vox-text-muted">
+                Já vem com você
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(new Set(equipDaClasse.fixos)).map(nome => {
+                  const qtd = equipDaClasse.fixos.filter(f => f === nome).length;
                   return (
-                    <button
-                      key={j}
-                      type="button"
-                      onClick={() => setEquipEscolhas(a => a.map((v, k) => (k === i ? j : v)))}
-                      className={`rounded border px-2 py-1 text-[11px] transition ${
-                        ativa
-                          ? "border-violet-500 bg-violet-900/40 text-violet-100"
-                          : "border-vox-border-soft bg-vox-bg-elevated text-vox-text-secondary hover:border-violet-500/60 hover:text-violet-300"
-                      }`}
+                    <span
+                      key={nome}
+                      className="rounded border border-vox-border-soft bg-vox-bg-elevated px-1.5 py-0.5 text-[10px] text-vox-text-secondary"
                     >
-                      {opcao.rotulo}
-                    </button>
+                      {nome}
+                      {qtd > 1 && <span className="text-vox-text-muted"> ×{qtd}</span>}
+                    </span>
                   );
                 })}
               </div>
-              {/* Opção ABERTA: o SRD diz "uma arma marcial" e quem escolhe qual é
-                  o jogador — preencher por ele seria decidir a build dele. */}
-              {equipEscolhas[i] >= 0 && esc.opcoes[equipEscolhas[i]]?.categoria && (
-                <input
-                  value={equipAbertas[i] ?? ""}
-                  onChange={e => setEquipAbertas(a => ({ ...a, [i]: e.target.value }))}
-                  placeholder={`Qual? (${esc.opcoes[equipEscolhas[i]].categoria})`}
-                  maxLength={40}
-                  className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-violet-500"
-                />
-              )}
             </div>
-          ))}
+          )}
+
+          {equipDaClasse.escolhas.map((esc, i) => {
+            const j = equipEscolhas[i] ?? -1;
+            const categoria = (j >= 0 ? esc.opcoes[j]?.categoria : "") ?? "";
+            const nomeAberto = (equipAbertas[i] ?? "").trim();
+            const pendente = j < 0 || (!!categoria && !nomeAberto);
+            const opcoesArma = categoria ? armasPara(categoria, armas) : [];
+            const filtro = (filtroArma[i] ?? "").toLowerCase().trim();
+            const armasVisiveis = filtro
+              ? opcoesArma.filter(a => a.nome.toLowerCase().includes(filtro))
+              : opcoesArma;
+            const sugestoes = SUGESTOES_ABERTAS[categoria.toLowerCase()] ?? [];
+
+            return (
+              <div key={i} className="space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-vox-text-muted">
+                  Escolha {i + 1}
+                  {pendente && <span className="ml-1 text-amber-400/80">— falta decidir</span>}
+                </p>
+
+                {/* Cartão por opção, mostrando os ITENS que ela dá em vez da
+                    frase corrida do SRD. "Armadura de couro, Arco longo, Flecha
+                    ×20" numa linha só é uma etiqueta; em peças, é uma escolha. */}
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {esc.opcoes.map((opcao, k) => {
+                    const ativa = j === k;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setEquipEscolhas(a => a.map((v, idx) => (idx === i ? k : v)));
+                          // Trocar de opção limpa o nome antigo: a arma marcial
+                          // escolhida não faz sentido sob a opção do escudo.
+                          setEquipAbertas(a => ({ ...a, [i]: "" }));
+                          setFiltroArma(a => ({ ...a, [i]: "" }));
+                        }}
+                        className={`rounded-md border p-2 text-left transition ${
+                          ativa
+                            ? "border-vox-accent-primary bg-vox-accent-primary/20"
+                            : "border-vox-border-soft bg-vox-bg-elevated hover:border-vox-accent-primary/60"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span
+                            className={`text-[10px] leading-none ${
+                              ativa ? "text-vox-accent-glow" : "text-vox-text-muted"
+                            }`}
+                          >
+                            {ativa ? "◉" : "○"}
+                          </span>
+                          {opcao.itens.map((it, n) => (
+                            <span
+                              key={n}
+                              className="rounded bg-vox-bg-base/60 px-1.5 py-0.5 text-[10px] text-vox-text-primary"
+                            >
+                              {it.nome}
+                              {it.quantidade > 1 && (
+                                <span className="text-vox-text-muted"> ×{it.quantidade}</span>
+                              )}
+                            </span>
+                          ))}
+                          {opcao.categoria && (
+                            <span className="rounded border border-dashed border-vox-border-soft px-1.5 py-0.5 text-[10px] italic text-vox-text-secondary">
+                              {opcao.categoria}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Categoria ABERTA. Era um <input> de texto livre cujo conteúdo
+                    virava NOME DE ITEM — e "espada" não é "Espada longa" para
+                    `identificar_arma`, então a arma sumia na hora do ataque.
+                    Agora a ficha OFERECE as armas válidas da categoria, com dado
+                    e atributo à vista: escolher deixa de ser adivinhar. */}
+                {categoria && (
+                  <div className="rounded-md border border-vox-accent-primary/30 bg-vox-bg-base/30 p-2">
+                    <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                      <p className="text-[10px] uppercase tracking-wide text-vox-text-muted">
+                        Qual {categoria.replace(/^umas?\s+|^um\s+/i, "")}?
+                      </p>
+                      {nomeAberto && (
+                        <span className="truncate text-[10px] font-semibold text-vox-accent-glow">
+                          {nomeAberto}
+                        </span>
+                      )}
+                    </div>
+
+                    {opcoesArma.length > 0 ? (
+                      <>
+                        {opcoesArma.length > 8 && (
+                          <input
+                            value={filtroArma[i] ?? ""}
+                            onChange={e => setFiltroArma(a => ({ ...a, [i]: e.target.value }))}
+                            placeholder={`filtrar ${opcoesArma.length} armas…`}
+                            className="mb-1.5 w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-[11px] text-vox-text-primary outline-none focus:border-vox-accent-primary"
+                          />
+                        )}
+                        <div className="grid max-h-36 grid-cols-2 gap-1 overflow-y-auto pr-0.5 sm:grid-cols-3">
+                          {armasVisiveis.map(a => {
+                            const escolhida = nomeAberto === a.nome;
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => setEquipAbertas(prev => ({ ...prev, [i]: a.nome }))}
+                                className={`rounded border px-1.5 py-1 text-left transition ${
+                                  escolhida
+                                    ? "border-vox-accent-primary bg-vox-accent-primary/25"
+                                    : "border-vox-border-soft bg-vox-bg-elevated hover:border-vox-accent-primary/60"
+                                }`}
+                              >
+                                <span className="block truncate text-[11px] leading-tight text-vox-text-primary">
+                                  {a.nome}
+                                </span>
+                                <span className="block truncate text-[9px] leading-tight text-vox-text-muted">
+                                  {a.dado} · {ATRIBUTO_ARMA[a.atributo] ?? a.atributo}
+                                  {a.distancia && " · à distância"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {armasVisiveis.length === 0 && (
+                            <p className="col-span-full py-1 text-[10px] text-vox-text-muted">
+                              Nenhuma arma com esse nome.
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Foco, símbolo e instrumento: a engine não resolve isso
+                            mecanicamente, então o campo continua LIVRE. As
+                            sugestões são conforto de digitação, não trilho. */}
+                        <input
+                          value={equipAbertas[i] ?? ""}
+                          onChange={e => setEquipAbertas(a => ({ ...a, [i]: e.target.value }))}
+                          placeholder="escreva o que você carrega"
+                          maxLength={40}
+                          className="w-full rounded border border-vox-border-soft bg-vox-bg-elevated px-2 py-1 text-xs text-vox-text-primary outline-none focus:border-vox-accent-primary"
+                        />
+                        {sugestoes.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {sugestoes.map(s => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setEquipAbertas(a => ({ ...a, [i]: s }))}
+                                className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                                  nomeAberto === s
+                                    ? "border-vox-accent-primary bg-vox-accent-primary/25 text-vox-accent-glow"
+                                    : "border-vox-border-soft text-vox-text-muted hover:border-vox-accent-primary/60 hover:text-vox-text-primary"
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* A mochila enchendo enquanto ele decide. É o mesmo dado que vai no
+              payload — o jogador confere o que vai carregar ANTES de jogar, em
+              vez de descobrir o inventário no primeiro combate. */}
+          {mochila.length > 0 && (
+            <div className="rounded-md border border-vox-border-soft/60 bg-vox-bg-base/30 p-2">
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-vox-text-muted">
+                Você começa com
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {mochila.map(it => (
+                  <span
+                    key={it.nome}
+                    className="rounded bg-vox-accent-primary/15 px-1.5 py-0.5 text-[10px] text-vox-text-primary"
+                  >
+                    {it.nome}
+                    {it.qtd > 1 && <span className="text-vox-text-muted"> ×{it.qtd}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
