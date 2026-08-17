@@ -136,6 +136,44 @@ async def equipamento_inicial_da_classe(
     }
 
 
+@router.get("/armas")
+async def armas_do_sistema(
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> list[dict[str, Any]]:
+    """As armas que a ficha pode OFERECER numa escolha aberta do SRD.
+
+    P18 frente A (17/08). A escolha do SRD diz "uma arma marcial" e quem nomeia
+    é o jogador — até aqui a ficha resolvia isso com um campo de texto livre, e
+    o que ele digitasse virava NOME DE ITEM no inventário. "espada" e "Espada
+    Longa" não são a mesma coisa para `identificar_arma`, então o campo livre
+    produzia armas que a engine não reconhece na hora do ataque (e o MOD-ARMA-1
+    volta a errar o atributo, que foi o bug que criou a tabela de armas).
+
+    O `nome` sai em PT-BR capitalizado quando existe ponte — a MESMA forma que
+    `resolver_categoria` devolve no caminho de VOZ. Os dois caminhos de criação
+    precisam produzir a string idêntica, senão o inventário fica bilíngue e a
+    comparação por nome falha em metade das fichas.
+
+    Sem `session_id` de propósito: a criação de personagem acontece ANTES de
+    existir sessão. Fica atrás de auth como todo o resto, mas não de ownership.
+    """
+    from engine.combat.weapon_table import ARMAS
+
+    saida: list[dict[str, Any]] = []
+    for idx, arma in ARMAS.items():
+        pt = list(arma.get("nomes_pt") or [])
+        saida.append({
+            "id": idx,
+            "nome": (pt[0].capitalize() if pt else str(arma.get("nome_en") or "")),
+            "categoria": str(arma.get("categoria") or "simples"),
+            "dado": str(arma.get("dado") or ""),
+            "atributo": str(arma.get("atributo") or ""),
+            "distancia": bool(arma.get("distancia")),
+        })
+    saida.sort(key=lambda a: a["nome"])
+    return saida
+
+
 @router.get("/list", response_model=list[SessaoListaItem])
 async def listar_sessoes_salvas(
     owner: Annotated[Owner, Depends(get_owner)],

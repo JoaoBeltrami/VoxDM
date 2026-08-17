@@ -31,9 +31,16 @@ _DESTINO = _RAIZ / "engine" / "combat" / "weapon_table.py"
 _PT: dict[str, tuple[str, ...]] = {
     "longbow": ("arco longo", "arco"),
     "shortbow": ("arco curto",),
-    "light-crossbow": ("besta leve", "besta"),
-    "heavy-crossbow": ("besta pesada",),
-    "hand-crossbow": ("besta de mão",),
+    # BESTA-SEM-NOME-1 (17/08): estas três chaves eram "light-crossbow",
+    # "heavy-crossbow" e "hand-crossbow" — e o índice do SRD é "crossbow-light",
+    # "crossbow-heavy", "crossbow-hand". `_PT.get(idx, ())` devolvia vazio e as
+    # três bestas ficaram SEM nome em português na tabela, caladas, desde que o
+    # gerador nasceu. "Besta leve" é equipamento inicial de Clérigo, Bruxo e
+    # Guerreiro: o jogador dizia "atiro com a besta" e a engine não achava a arma.
+    # Mesma família do `utilizar` que não conjurava e do `clerigo` sem acento.
+    "crossbow-light": ("besta leve", "besta"),
+    "crossbow-heavy": ("besta pesada",),
+    "crossbow-hand": ("besta de mão",),
     "dagger": ("adaga", "punhal"),
     "rapier": ("rapieira", "florete"),
     "shortsword": ("espada curta",),
@@ -57,6 +64,20 @@ _PT: dict[str, tuple[str, ...]] = {
     "pike": ("pique",),
     "sickle": ("foice",),
     "flail": ("mangual",),
+    # NOME-EM-INGLES-1 (17/08): estas nove nunca tiveram ponte e apareciam em
+    # INGLÊS na ficha assim que o seletor de arma passou a listá-las — "Blowgun"
+    # e "Morningstar" no meio de uma ficha em português. Pior que feio: sem nome
+    # PT, `identificar_arma` não casa a fala do jogador ("jogo a rede nele") e a
+    # arma não existe para a engine.
+    "blowgun": ("zarabatana",),
+    "dart": ("dardo",),
+    "greatclub": ("clava grande",),
+    "lance": ("lança montada", "lança de cavalaria"),
+    "light-hammer": ("martelo leve",),
+    "maul": ("malho", "marreta"),
+    "morningstar": ("estrela matinal",),
+    "net": ("rede",),
+    "war-pick": ("picareta de guerra", "picareta"),
 }
 
 
@@ -79,6 +100,21 @@ def _dado(arma: dict[str, Any]) -> str:
     return str(((arma.get("damage") or {}).get("damage_dice")) or "1d4")
 
 
+def _categoria(arma: dict[str, Any]) -> str:
+    """"simples" | "marcial" — o vocabulário é FECHADO, como o de `_atributo`.
+
+    Por que existe (P18 frente A, 17/08): as escolhas de equipamento do SRD dizem
+    "uma arma marcial" e deixam o jogador nomear qual. Sem esta classificação, a
+    ficha só podia oferecer um campo de texto livre — e texto livre num campo que
+    vira NOME DE ITEM é como o inventário ganha "espada" que nenhuma tabela acha
+    depois. Com ela, a ficha oferece exatamente as armas válidas.
+
+    Fonte é o `weapon_category` do SRD (Simple/Martial), não uma lista à mão: a
+    lista à mão é a duplicação que este projeto já pagou caro várias vezes.
+    """
+    return "marcial" if str(arma.get("weapon_category") or "").lower() == "martial" else "simples"
+
+
 def main() -> None:
     dados = json.loads(_FONTE.read_text(encoding="utf-8"))
     armas = [
@@ -91,6 +127,7 @@ def main() -> None:
         tabela[idx] = {
             "nome_en": str(a.get("name") or ""),
             "atributo": _atributo(a),
+            "categoria": _categoria(a),
             "dado": _dado(a),
             "distancia": str(a.get("weapon_range") or "").lower() == "ranged",
             "nomes_pt": list(_PT.get(idx, ())),
@@ -100,7 +137,10 @@ def main() -> None:
         "GERADO por `ingestor/gerar_tabela_armas.py` — NÃO editar à mão.\n"
         "Existe porque a ficha não tinha conceito de arma, e sem ele o Mestre\n"
         "anunciava o atributo do ataque por vibe (playtest 10/08: pediu Força a\n"
-        'um Ranger de arco).\n"""\n\n'
+        "um Ranger de arco).\n\n"
+        "`categoria` (simples/marcial) entrou em 17/08 para a ficha poder OFERECER\n"
+        "as armas válidas de uma escolha do SRD em vez de pedir texto livre.\n"
+        '"""\n\n'
         "from typing import Any\n\n"
         "ARMAS: dict[str, dict[str, Any]] = "
         + pprint.pformat(tabela, width=100, sort_dicts=True)
