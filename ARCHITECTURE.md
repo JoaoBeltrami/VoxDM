@@ -103,19 +103,31 @@ autoridade.
 ### 3. LLM (`engine/llm/`)
 - **Router** (`router.py`): cascata automática por `TaskType` (`tasks.py`), com cooldown
   em escada por rate-limit (75s → 240s → 900s, reset em qualquer sucesso).
-  **Slot nomeia PAPEL, não tamanho de modelo** (`groq-leve`, não `groq-8b`): o slot leve
-  rodou `gpt-oss-20b` sob o nome `groq-8b` por semanas e o log mentia sobre qual modelo
-  falhara. Papel não envelhece na troca. `modelo_do_slot()` responde "qual modelo é esse?"
-  lendo o settings — uma fonte, nunca um literal — e o router loga `modelo=` junto de
-  `provider=`. `tests/test_slot_honesto.py` fecha a porta: nome que promete tamanho tem
-  que bater com o modelo configurado. Disciplina não escala; teste sim.
+  **Slot nomeia PAPEL, não tamanho de modelo** (`groq-principal` / `groq-leve`, não
+  `groq-70b` / `groq-8b`): o slot leve rodou `gpt-oss-20b` sob o nome `groq-8b` por
+  semanas e o log mentia sobre qual modelo falhara. Papel não envelhece na troca.
+  `modelo_do_slot()` responde "qual modelo é esse?" lendo o settings — uma fonte, nunca
+  um literal — e o router loga `modelo=` junto de `provider=`.
+  `tests/test_slot_honesto.py` fecha a porta: nome que promete tamanho tem que bater com
+  o modelo configurado. Disciplina não escala; teste sim — e a trava **já cobrou duas
+  vezes**: a segunda em 17/08/26, quando o Groq desligou o `llama-3.3-70b-versatile` e o
+  slot `groq-70b` passaria a rodar um `gpt-oss-120b`. O teste ficou vermelho antes de
+  qualquer sessão. Os nomes antigos seguem aceitos como alias: o valor viaja até o
+  `localStorage` do navegador, então quebrar o wire apagaria a preferência do jogador.
 - **Providers** (`providers/`): `groq.py`, `gemini.py` (multi-key + multi-model), `ollama.py`.
   Cada provider lança `LLMRetriable` em 429/5xx/timeout/refusal → o router cascateia.
   Streaming só cascateia até o 1º token emitido (trocar mid-frase quebraria a narrativa).
-- **Cascatas:** `NARRATIVE` (70B → gpt-oss-120b → gpt-oss-20b → Gemini → Ollama), `SUMMARIZATION`
+- **Cascatas:** `NARRATIVE` (gpt-oss-120b → gpt-oss-20b → Gemini → Ollama), `SUMMARIZATION`
   (Gemini-first), `CLASSIFICATION` (modelo pequeno primeiro), e variantes contextuais
-  `NARRATIVE_LIGHT/CLIMAX/GRIM`. O degrau do meio existe por **TPD**, não por qualidade:
-  no free tier o `llama-3.3-70b` tem 100K tokens/dia — menos que uma sessão.
+  `NARRATIVE_LIGHT/CLIMAX/GRIM`. O critério que ordena a cascata é **TPD**, não
+  qualidade: no free tier o `llama-3.3-70b` tinha 100K tokens/dia — menos que uma
+  sessão — e por isso existia um degrau intermediário de 200K abaixo dele. Em 16/08/26 o
+  Groq desligou a família Llama de chat inteira; o amortecedor virou o primário e o
+  degrau do meio deixou de existir, porque dois slots com o mesmo modelo não são dois
+  degraus (`test_nenhuma_cascata_repete_o_mesmo_modelo` guarda isso).
+  **Falha de modelo é fallback-able por desenho:** 404 de modelo desligado, como 400 de
+  modelo errático, vira `LLMRetriable(categoria="modelo")` — sem isso, um desligamento
+  do provider mata todo turno com o degrau seguinte vivo a duas linhas de distância.
 - **Rota grimdark** (`amarelada.py` + `NARRATIVE_GRIM`): cena sombria (keywords de
   atrocidade ou perfil "sombrio") roteia uma cascata que garante um modelo local
   uncensored (`ollama-grim`) no fim; detecção de "amarelada" (recusa/moralização)

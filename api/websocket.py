@@ -3614,15 +3614,20 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
 
                 # Dashboard admin: enriquece ultimo_turno com routing info e
                 # registra entry no histórico para os gráficos de sessão.
+                # O fallback era o literal "groq-70b" e sobreviveu ao slot: nome
+                # de provider escrito à mão volta a mentir na próxima troca de
+                # modelo (SLOT-MENTE-1). Vem da constante.
+                from engine.llm.tasks import PROV_GROQ_PRINCIPAL
+
                 sessao.ultimo_turno["task_type"] = _task_turno.value
-                sessao.ultimo_turno["provider_usado"] = _ultimo_prov or "groq-70b"
+                sessao.ultimo_turno["provider_usado"] = _ultimo_prov or PROV_GROQ_PRINCIPAL
                 _hist_entry: dict[str, Any] = {
                     "turno": sessao.iteracoes,
                     "pacing": round(sessao.working_mem.pacing_nivel, 1),
                     "hp": sessao.working_mem.player_hp,
                     "hp_max": sessao.working_mem.player_hp_max,
                     "em_combate": sessao.working_mem.em_combate,
-                    "provider": _ultimo_prov or "groq-70b",
+                    "provider": _ultimo_prov or PROV_GROQ_PRINCIPAL,
                     "task_type": _task_turno.value,
                     "latencia_ms": latencia_ms,
                     "erros": len(erros_turno),

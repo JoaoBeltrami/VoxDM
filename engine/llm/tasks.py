@@ -2,17 +2,21 @@
 Tipos de tarefa LLM e cascatas de fallback default.
 
 Por que existe: o router precisa saber qual cascata aplicar para cada tipo de
-    chamada. Narrativa quer 70B → 120B → leve → Gemini → Ollama. Resumo quer
-    Gemini (cota grande, qualidade alta em síntese) → 70B → Ollama.
+    chamada. Narrativa quer principal → leve → Gemini → Ollama. Resumo quer
+    Gemini (cota grande, qualidade alta em síntese) → principal → Ollama.
 Dependências: nenhuma — só enum + constantes.
 Armadilha: as cascatas referenciam NOMES de provider que devem existir em
     LLMRouter._providers. Adicionar provider novo aqui sem registrá-lo no
     router faz o item da cascata ser silenciosamente pulado.
+Armadilha 2: os slots nomeiam PAPEL (principal / leve), nunca tamanho de
+    modelo. Comentário antigo neste arquivo ainda diz "70B" e "8B" como apelido
+    do modelo grande e do pequeno — é vocabulário herdado de 2026-06/07 e não
+    descreve o que roda hoje. Quem manda é `modelo_do_slot()`.
 
 Exemplo:
     from engine.llm.tasks import TaskType, CASCATA_DEFAULT
     cascata = CASCATA_DEFAULT[TaskType.NARRATIVE]
-    # → ["groq-70b", "groq-120b", "groq-leve", "gemini-flash", "ollama-local"]
+    # → ["groq-principal", "groq-leve", "gemini-flash", "ollama-local"]
 """
 
 from enum import Enum
@@ -41,7 +45,17 @@ class TaskType(str, Enum):  # noqa: UP042 — manter (str, Enum); StrEnum muda s
 
 # Nomes canônicos de provider — devem casar com LLMRouter._providers.
 # Mantemos como constantes pra evitar typos espalhados.
-PROV_GROQ_70B:    Final[str] = "groq-70b"
+#
+# SLOT-MENTE-1, cobrado uma segunda vez (17/08): este slot se chamava
+# "groq-70b" e roda, por definição, o que `settings.GROQ_MODEL` mandar. Quando
+# o Groq desligou o `llama-3.3-70b-versatile` (16/08/26) e o primário passou a
+# ser `openai/gpt-oss-120b`, o nome ia mentir exatamente como o antigo
+# "groq-8b" mentiu por sete dias — e desta vez quem barrou foi
+# `tests/test_slot_honesto.py`, ANTES de chegar a um playtest. Foi a trava
+# funcionando como projetada: o pedido do Beltrami em 01/08 era "refletindo
+# sempre o modelo real, ATÉ QUANDO TROCARMOS", e nome de PAPEL é o que não
+# envelhece na troca seguinte.
+PROV_GROQ_PRINCIPAL: Final[str] = "groq-principal"
 # SLOT-MENTE-1 (pedido do Beltrami, 01/08): este slot se chamava "groq-8b" e
 # rodava `openai/gpt-oss-20b` desde 25/07 — o nome mentia. Custou tempo de
 # diagnóstico AO VIVO no TOOL-FANTASMA-1: o log dizia `provider=groq-8b` e foi
@@ -55,11 +69,18 @@ PROV_GROQ_70B:    Final[str] = "groq-70b"
 # `modelo=` junto de `provider=`. O teste em test_slot_honesto.py fecha a porta.
 PROV_GROQ_LEVE:   Final[str] = "groq-leve"
 # FREE-TIER-TPD (auditoria 24/07): degrau novo entre o 70B e o 8B. No free tier
-# o limite que MORDE não é o TPM — é o TPD. O 70B tem 100K tokens/dia, o que dá
-# ~19-27 turnos (medido: 3,6k tok/turno em exploração, 5,2k em combate/social) —
-# MENOS que uma sessão. Ou seja: o primário estoura no meio de toda partida e a
-# queda ia direto pro modelo pequeno. O gpt-oss-120b tem 200K TPD (o dobro) e é
-# mais rápido no 1º token, então vira o amortecedor natural.
+# o limite que MORDE não é o TPM — é o TPD. O 70B tinha 100K tokens/dia, o que
+# dava ~19-27 turnos (medido: 3,6k tok/turno em exploração, 5,2k em combate) —
+# MENOS que uma sessão. Ou seja: o primário estourava no meio de toda partida e
+# a queda ia direto pro modelo pequeno. O gpt-oss-120b tem 200K TPD (o dobro) e
+# é mais rápido no 1º token, então virou o amortecedor natural.
+#
+# 17/08: o amortecedor VIROU o primário — o Groq desligou o 70B e `GROQ_MODEL`
+# passou a apontar pra cá. O slot continua registrado no router (é o que permite
+# forçá-lo pelo toggle das Opções e pelo A/B do benchmark), mas saiu das
+# cascatas: dois slots com o MESMO modelo não são dois degraus, são uma chamada
+# desperdiçada quando o primeiro toma 429. Se um dia houver um Groq maior, ele
+# entra em `GROQ_MODEL` e este volta a ser o degrau do meio de verdade.
 PROV_GROQ_120B:   Final[str] = "groq-120b"
 PROV_GEMINI:      Final[str] = "gemini-flash"
 PROV_OLLAMA:      Final[str] = "ollama-local"
@@ -69,8 +90,9 @@ PROV_OLLAMA_GRIM: Final[str] = "ollama-grim"   # modelo uncensored para ficção
 # localStorage de quem já usou o menu Opções antes de 01/08. Renomear slot sem
 # isto deixa preferência gravada apontando pra provider inexistente.
 ALIASES_SLOT: Final[dict[str, str]] = {
-    "groq-8b": PROV_GROQ_LEVE,   # legado — o slot nunca rodou um 8B desde 25/07
-    "groq":    PROV_GROQ_70B,    # legado anterior
+    "groq-8b":  PROV_GROQ_LEVE,        # legado — o slot nunca rodou um 8B desde 25/07
+    "groq-70b": PROV_GROQ_PRINCIPAL,   # legado — nome do slot até 17/08/26
+    "groq":     PROV_GROQ_PRINCIPAL,   # legado anterior
 }
 
 
@@ -85,7 +107,7 @@ def modelo_do_slot(slot: str) -> str:
     from config import settings
 
     return {
-        PROV_GROQ_70B:  settings.GROQ_MODEL,
+        PROV_GROQ_PRINCIPAL:  settings.GROQ_MODEL,
         PROV_GROQ_120B: settings.GROQ_MODEL_MEIO,
         PROV_GROQ_LEVE: settings.GROQ_MODEL_FALLBACK,
     }.get(ALIASES_SLOT.get(slot, slot), "")
@@ -93,7 +115,7 @@ def modelo_do_slot(slot: str) -> str:
 
 # Cascata aplicada quando o TaskType não tem entrada explícita aqui.
 _DEFAULT: Final[list[str]] = [
-    PROV_GROQ_70B,
+    PROV_GROQ_PRINCIPAL,
     PROV_GROQ_LEVE,
     PROV_GEMINI,
     PROV_OLLAMA,
@@ -103,10 +125,17 @@ _DEFAULT: Final[list[str]] = [
 # Cascatas específicas por tarefa. Ordem = prioridade. Provider indisponível
 # (sem API key, sem serviço local) é pulado pelo router.
 CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
-    # Narrativa: qualidade > velocidade. 70B primeiro, Gemini é par.
+    # Narrativa: qualidade > velocidade. Principal primeiro, Gemini é par.
+    #
+    # O DEGRAU DO MEIO SUMIU (17/08) e não é esquecimento: o `groq-120b` existia
+    # como amortecedor de TPD ABAIXO do 70B (100K TPD, ~19-27 turnos). Com o 70B
+    # desligado, o amortecedor virou o próprio primário — os dois slots passariam
+    # a rodar `openai/gpt-oss-120b`, e dois slots com o mesmo modelo na mesma
+    # cascata só rendem uma chamada desperdiçada: quando o primeiro toma 429 por
+    # quota, o segundo toma o MESMO 429. O slot segue registrado no router (dá
+    # pra forçá-lo pelo toggle e pelo benchmark); ele só não é mais um degrau.
     TaskType.NARRATIVE: [
-        PROV_GROQ_70B,
-        PROV_GROQ_120B,     # amortecedor de TPD — ver FREE-TIER-TPD acima
+        PROV_GROQ_PRINCIPAL,
         PROV_GROQ_LEVE,
         PROV_GEMINI,
         PROV_OLLAMA,
@@ -114,18 +143,17 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # Climax: combate denso, cliffhanger, momento chave — qualidade é tudo.
     # Mesma cascata da default mas explicita a intenção (telemetria).
     TaskType.NARRATIVE_CLIMAX: [
-        PROV_GROQ_70B,
-        PROV_GROQ_120B,     # no clímax, o degrau grande vem antes do Gemini
-        PROV_GEMINI,        # pular 8B em climax: queremos qualidade
+        PROV_GROQ_PRINCIPAL,
+        PROV_GEMINI,        # pular o leve em climax: queremos qualidade
         PROV_GROQ_LEVE,
         PROV_OLLAMA,
     ],
-    # Light: exploração filler, transição rápida — 8B é suficiente e barato.
-    # Economiza TPM do 70B para os momentos que importam.
+    # Light: exploração filler, transição rápida — o leve é suficiente e barato.
+    # Economiza TPM do principal para os momentos que importam.
     TaskType.NARRATIVE_LIGHT: [
         PROV_GROQ_LEVE,
         PROV_GEMINI,
-        PROV_GROQ_70B,      # 70B só como último recurso aqui
+        PROV_GROQ_PRINCIPAL,   # o principal só como último recurso aqui
         PROV_OLLAMA,
     ],
     # Grim: ficção sombria (massacre, tortura, horror de fantasia) — pula 8B
@@ -136,7 +164,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # 8B porque ele amarela. O gpt-oss tem safety training próprio, não medido —
     # o ganho de TPD não vale arriscar a garantia que é o motivo desta rota.
     #
-    # GRIM-SEM-DONO-1 (17/08): esta lista começava com PROV_GROQ_70B, e o slot
+    # GRIM-SEM-DONO-1 (17/08): esta lista começava com PROV_GROQ_PRINCIPAL, e o slot
     # lê `settings.GROQ_MODEL`. Ou seja, a proibição do parágrafo acima era
     # burlável por UMA LINHA DE .ENV: apontar o primário pro gpt-oss punha o
     # gpt-oss na frente da rota que existe pra garantir o oposto — e nenhum
@@ -154,7 +182,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # primário evita estourar a quota do Groq com tarefas não-narrativas.
     TaskType.SUMMARIZATION: [
         PROV_GEMINI,
-        PROV_GROQ_70B,
+        PROV_GROQ_PRINCIPAL,
         PROV_GROQ_LEVE,
         PROV_OLLAMA,
     ],
@@ -173,7 +201,7 @@ CASCATA_DEFAULT: Final[dict[TaskType, list[str]]] = {
     # Compressão de memória: igual a resumo.
     TaskType.MEMORY_COMPRESSION: [
         PROV_GEMINI,
-        PROV_GROQ_70B,
+        PROV_GROQ_PRINCIPAL,
         PROV_OLLAMA,
     ],
 }
@@ -184,10 +212,10 @@ def cascata_para(task: TaskType) -> list[str]:
     return CASCATA_DEFAULT.get(task, _DEFAULT)
 
 
-# Máximo de turnos LIGHT (8B) consecutivos antes de forçar um 70B para
-# "resetar" o estilo. O 8B encadeado repete estruturas ("X diz", clichês de
-# ambientação); um 70B periódico quebra o loop. 2 = no máx. 2 turnos fracos
-# seguidos antes de um turno forte obrigatório.
+# Máximo de turnos LIGHT (modelo leve) consecutivos antes de forçar um turno no
+# principal para "resetar" o estilo. O leve encadeado repete estruturas ("X
+# diz", clichês de ambientação); um turno forte periódico quebra o loop.
+# 2 = no máx. 2 turnos fracos seguidos antes de um turno forte obrigatório.
 MAX_LIGHT_CONSECUTIVOS: Final[int] = 2
 
 
@@ -207,8 +235,8 @@ def escolher_task_type_narrativo(
 
     Lógica (híbrida — calibração 02/06 pós teste ao vivo):
       0. Grim: dm_profile="sombrio" + GRIMDARK_ATIVO → NARRATIVE_GRIM
-         (groq-70b → gemini → ollama-grim, pula 8B). Tem prioridade pra
-         garantir o fallback uncensored independente do estado de combate.
+         (gemini → ollama-grim, pula o leve). Tem prioridade pra garantir o
+         fallback uncensored independente do estado de combate.
       0.5. Idle nudge → LIGHT sempre (playtest 10/07): "[IDLE]" é um empurrão
          atmosférico de 1-2 frases que EXPLICITAMENTE não avança a história
          ("pacing/estilo/arco intocados" — api/websocket.py). A regra 2 (NPC
@@ -239,9 +267,9 @@ def escolher_task_type_narrativo(
     `cena_sombria` (GRIM-ROTA-1, 07/07): o gatilho (a)+(c) do roadmap — keywords
     de atrocidade no turno OU escalação reativa (amarelada detectada na cena).
     Antes, keywords ligavam só o FRAGMENTO e a DETECÇÃO, mas a cascata seguia a
-    NARRATIVE comum (70b→8b→gemini→ollama-local) — o ollama-grim nunca era a
-    garantia fora do dm_profile="sombrio". Agora cena sombria roteia a cascata
-    grim de verdade.
+    NARRATIVE comum (principal→leve→gemini→ollama-local) — o ollama-grim nunca
+    era a garantia fora do dm_profile="sombrio". Agora cena sombria roteia a
+    cascata grim de verdade.
     """
     # Grim tem prioridade: kill-switch ativo E (perfil sombrio OU cena sombria
     # por keywords/escalação reativa).

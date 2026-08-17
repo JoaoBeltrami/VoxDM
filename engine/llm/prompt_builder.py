@@ -182,8 +182,9 @@ _TETO_PALAVRAS: dict[str, int] = {"curto": 30, "medio": 80, "longo": 110}
 
 # Teto do system prompt no caminho de PRODUÇÃO (brief). É o número do roadmap —
 # o legado usa 20k, frouxo demais pra servir de alarme. O custo de estourar não é
-# latência (prefill é barato): é TPD. A 19KB/turno o groq-70b (100K TPD) morre em
-# ~14 turnos, que foi exatamente o que aconteceu no playtest 26/07.
+# latência (prefill é barato): é TPD. A 19KB/turno o antigo primário (100K TPD)
+# morria em ~14 turnos, que foi exatamente o que aconteceu no playtest 26/07. O
+# primário de hoje tem 200K, o que dobra a folga — não a elimina.
 _BUDGET_SYSTEM_BRIEF = 15_000
 
 

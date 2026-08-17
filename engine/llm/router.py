@@ -34,9 +34,9 @@ from engine.llm.providers.ollama import OllamaProvider
 from engine.llm.providers.ollama_grim import OllamaGrimProvider
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_70B,
     PROV_GROQ_120B,
     PROV_GROQ_LEVE,
+    PROV_GROQ_PRINCIPAL,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
@@ -82,7 +82,10 @@ class LLMRouter:
         # Registrados uma vez por processo. Compartilham sem race condition
         # porque cada provider usa httpx.AsyncClient *por chamada*.
         self._providers: dict[str, BaseLLMProvider] = {
-            PROV_GROQ_70B:    GroqProvider(nome=PROV_GROQ_70B, modelo=settings.GROQ_MODEL),
+            PROV_GROQ_PRINCIPAL: GroqProvider(nome=PROV_GROQ_PRINCIPAL, modelo=settings.GROQ_MODEL),
+            # Fora das cascatas desde 17/08 (roda o mesmo modelo do principal),
+            # mas REGISTRADO de propósito: é o que permite forçá-lo pelo toggle
+            # das Opções e pelo A/B do benchmark.
             PROV_GROQ_120B:   GroqProvider(nome=PROV_GROQ_120B, modelo=settings.GROQ_MODEL_MEIO),
             PROV_GROQ_LEVE:     GroqProvider(nome=PROV_GROQ_LEVE,  modelo=settings.GROQ_MODEL_FALLBACK),
             PROV_GEMINI:      GeminiProvider(),

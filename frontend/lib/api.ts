@@ -394,10 +394,14 @@ export function wsUrl(session_id: string): string {
 /** SLOT-MENTE-1 (01/08): `groq-leve` substituiu `groq-8b` — o slot rodava
  *  gpt-oss-20b, não um 8B. Nome de PAPEL não envelhece na próxima troca de
  *  modelo. Os valores legados seguem aceitos pelo backend porque estão
- *  gravados no localStorage de quem já usou o menu Opções. */
+ *  gravados no localStorage de quem já usou o menu Opções.
+ *
+ *  Segunda parcela (17/08): `groq-principal` substituiu `groq-70b` pelo mesmo
+ *  motivo — o Groq desligou o llama-3.3-70b e o slot passou a rodar
+ *  gpt-oss-120b. "groq-70b" continua na lista como legado, não é oferecido. */
 export type LlmBackend =
-  | "auto" | "groq-70b" | "groq-120b" | "groq-leve" | "gemini" | "ollama"
-  | "groq" | "groq-8b";   // legado — aceito, não oferecido
+  | "auto" | "groq-principal" | "groq-120b" | "groq-leve" | "gemini" | "ollama"
+  | "groq" | "groq-8b" | "groq-70b";   // legado — aceito, não oferecido
 
 export async function trocarLlmBackend(session_id: string, backend: LlmBackend): Promise<boolean> {
   try {

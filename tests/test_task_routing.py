@@ -175,11 +175,12 @@ class TestCascataPara:
         assert cascata[0] == PROV_GROQ_LEVE
 
     def test_narrative_climax_pula_o_leve(self):
-        from engine.llm.tasks import PROV_GEMINI, PROV_GROQ_70B, PROV_GROQ_LEVE
+        from engine.llm.tasks import PROV_GEMINI, PROV_GROQ_LEVE, PROV_GROQ_PRINCIPAL
 
         cascata = cascata_para(TaskType.NARRATIVE_CLIMAX)
-        # 70B primeiro, Gemini antes do leve — no clímax queremos qualidade
-        assert cascata[0] == PROV_GROQ_70B
+        # Principal primeiro, Gemini antes do leve — no clímax queremos qualidade.
+        # O slot se chamava PROV_GROQ_70B até 17/08 (ver test_slot_honesto).
+        assert cascata[0] == PROV_GROQ_PRINCIPAL
         assert cascata.index(PROV_GEMINI) < cascata.index(PROV_GROQ_LEVE)
 
     def test_task_desconhecida_cai_em_default(self):

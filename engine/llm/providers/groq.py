@@ -1,17 +1,17 @@
 """
 Provider Groq — encapsula a chamada ao Groq SDK com modelo configurável.
 
-Por que existe: o Groq tem cotas TPD separadas por modelo. Quando o 70B
-    estoura, o 8B normalmente ainda tem quota. Cada instância dessa classe
-    representa um modelo (ex: 70B versatile, 8B instant), e o router cascateia.
+Por que existe: o Groq tem cotas TPD separadas por modelo. Quando o principal
+    estoura, o leve normalmente ainda tem quota. Cada instância dessa classe
+    representa um modelo, e o router cascateia entre elas.
 Dependências: groq SDK, structlog, config.
 Armadilha: refusal do safety layer chega como 200 OK com texto começando por
     "não posso", "desculpe-me", etc. Detectamos e lançamos LLMRetriable
     com categoria=refusal para que o router caia pro próximo provider.
 
 Exemplo:
-    p70 = GroqProvider(nome="groq-70b", modelo="llama-3.3-70b-versatile")
-    p8  = GroqProvider(nome="groq-8b",  modelo="llama-3.1-8b-instant")
+    p1 = GroqProvider(nome="groq-principal", modelo="openai/gpt-oss-120b")
+    p2 = GroqProvider(nome="groq-leve",      modelo="openai/gpt-oss-20b")
     # Router as cascateia automaticamente.
 """
 

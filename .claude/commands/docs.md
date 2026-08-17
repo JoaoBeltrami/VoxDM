@@ -84,9 +84,14 @@ Cada fato abaixo tem **um dono**. Grepe, compare com o dono, corrija os espelhos
 
 ```bash
 # ponto de partida da varredura — ajuste os termos ao que mudou na rodada
-grep -rn "large-v3-turbo\|faster-whisper\|llama-3.3-70b\|gpt-oss\|TPD\|p50" \
+grep -rn "large-v3-turbo\|faster-whisper\|llama-3\|gpt-oss\|groq-70b\|TPD\|p50" \
   --include=*.md . | grep -v node_modules | grep -v .venv
 ```
+
+⚠️ **Nome de modelo depreciado é a classe de drift mais cara desta lista.** Em 17/08 o
+`llama-3.3-70b-versatile` aparecia em 8 docs e em 3 arquivos de código depois de o Groq
+já tê-lo desligado. Ao trocar um modelo, grepe o nome ANTIGO (não o novo) e confira
+também os nomes de SLOT — `groq-70b` viajava até o `localStorage` do navegador.
 
 **Regra:** número sem dono é número que vai drifar. Se um fato novo passar a aparecer em
 mais de um doc nesta rodada, ele entra nesta tabela junto — senão a próxima passada

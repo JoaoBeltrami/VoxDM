@@ -18,7 +18,24 @@ class Settings(BaseSettings):
     # uma conexão "defunct" do pool e a query estoura (ConnectionResetError 10054,
     # crash do playtest #6). Ping pré-uso quando a conexão ficou ociosa > N s.
     NEO4J_LIVENESS_TIMEOUT: float = 30.0
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"  # centralizado aqui conforme DIRETRIZES
+    # MODELO-DESLIGADO-1 (17/08/26): este campo era `llama-3.3-70b-versatile`.
+    # O Groq desligou a família Llama de CHAT em 16/08/26 e levou junto o
+    # primário — o projeto rastreava só o `llama-3.1-8b-instant`, migrou o
+    # fallback e deixou o topo da cascata para trás. A conta passou a receber
+    # 404 `model_not_found` em toda chamada; até o fix de 17/08 isso MATAVA o
+    # turno em vez de cascatear (ver engine/llm/providers/groq.py).
+    #
+    # O substituto não é uma aposta: é o degrau que já atendia a maioria dos
+    # turnos reais desde 25/07 (25 de 58 no playtest de 01/08). Ganhos medidos
+    # contra o que saiu — 200K TPD contra 100K, prompt cache que o 70B nunca
+    # teve (0% em 100% das chamadas), e primeiro token mais rápido.
+    #
+    # Ressalvas VIVAS, não resolvidas pela troca: produziu anacronismo em teste
+    # ("homem de terno" em taverna medieval), escorrega de registro ("a tua
+    # força" no lugar de "a sua"), e a recusa dele NUNCA foi medida — por isso
+    # segue proibido na rota grimdark (NARRATIVE_GRIM em engine/llm/tasks.py,
+    # com teste que cobra pelo modelo).
+    GROQ_MODEL: str = "openai/gpt-oss-120b"  # centralizado aqui conforme DIRETRIZES
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"  # fallback local quando Groq indisponível
     # "groq" = Groq como primário (default); "ollama" = Ollama direto (sem filtros)
@@ -26,8 +43,11 @@ class Settings(BaseSettings):
 
     # ── Narração grimdark (ficção sombria sem filtro) ─────────────────────
     # Kill-switch global: False = grimdark desabilitado, roteamento normal.
-    # True = dm_profile="sombrio" roteia para NARRATIVE_GRIM (groq-70b →
-    # gemini → ollama-grim), e fragmento de contrato de ficção é injetado.
+    # True = dm_profile="sombrio" roteia para NARRATIVE_GRIM (gemini →
+    # ollama-grim), e fragmento de contrato de ficção é injetado.
+    # O degrau Groq saiu desta rota em 17/08 (GRIM-SEM-DONO-1): ele lia
+    # GROQ_MODEL, então a garantia de ficção sombria dependia de uma linha de
+    # configuração em vez de um modelo com recusa medida.
     GRIMDARK_ATIVO: bool = False
     # Regra de multiclasse. "livre" = BG3 (decisão Beltrami 29/07): sem
     # pré-requisito de atributo, qualquer classe a qualquer momento. "estrito" =
@@ -56,14 +76,19 @@ class Settings(BaseSettings):
     BRIEF_ATIVO: bool = True
 
     # Multi-provider LLM — chaves vazias = provider desabilitado (router pula).
-    # Modelo secundário Groq usado quando o 70B estoura TPD (quota separada).
-    # DESLIGA em 16/08/2026 (console.groq.com/docs/deprecations) — substituto
-    # oficial. É modelo de RACIOCÍNIO: o provider passa reasoning_effort="low"
+    #
+    # Este era o degrau do MEIO (FREE-TIER-TPD): existia porque o 70B tinha só
+    # 100K TPD — ~19-27 turnos, menos que uma sessão — e a queda ia direto no
+    # modelo pequeno. Com o 70B desligado em 16/08/26, o amortecedor VIROU o
+    # primário: `GROQ_MODEL` aponta pro mesmo modelo, e o meio deixou de ser um
+    # degrau distinto (dois slots com o mesmo modelo só rendem uma chamada
+    # desperdiçada quando o primeiro toma 429 — tem teste impedindo).
+    #
+    # O slot `groq-120b` continua REGISTRADO no router de propósito: é o que
+    # permite forçá-lo pelo toggle das Opções e pelo A/B do benchmark. Ele só
+    # não é mais citado nas cascatas.
+    # É modelo de RACIOCÍNIO: o provider passa reasoning_effort="low"
     # automaticamente, senão o content volta VAZIO em max_tokens baixo.
-    # ~1000 tok/s vs 560 do llama-3.1-8b-instant.
-    # Degrau do MEIO da cascata (FREE-TIER-TPD): o 70B tem só 100K tokens/dia
-    # no free tier — ~19-27 turnos, menos que uma sessão. Este segura o resto da
-    # partida com qualidade, em vez de despencar direto no modelo pequeno.
     GROQ_MODEL_MEIO: str = "openai/gpt-oss-120b"
     GROQ_MODEL_FALLBACK: str = "openai/gpt-oss-20b"
     GEMINI_API_KEY_V2: str = ""           # 1 chave (legado, usado se KEYS vazio)

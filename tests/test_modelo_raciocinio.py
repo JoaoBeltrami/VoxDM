@@ -54,32 +54,80 @@ def test_fallback_de_raciocinio_tem_tratamento():
 #   llama-3.3-70b   100K TPD → ~19-27 turnos/dia (3,6k tok em exploração,
 #                              5,2k em combate/social) = MENOS que uma sessão
 #   gpt-oss-120b    200K TPD → ~38-55 turnos/dia (o dobro)
-# Ou seja: o primário estoura no MEIO de toda partida (aconteceu ao vivo durante
-# a própria auditoria: 429 em llama-3.3-70b). Sem um degrau grande no meio, a
-# queda ia direto pro modelo pequeno e a segunda metade da sessão perdia
+# Ou seja: o primário estourava no MEIO de toda partida (aconteceu ao vivo
+# durante a própria auditoria: 429 em llama-3.3-70b). Sem um degrau grande no
+# meio, a queda ia direto pro modelo pequeno e a segunda metade da sessão perdia
 # qualidade sem ninguém perceber.
+#
+# 17/08: o 70B foi DESLIGADO pelo Groq e o amortecedor virou o primário — os
+# dois slots passaram a apontar pro mesmo `openai/gpt-oss-120b`. O teste que
+# exigia o degrau do meio ENTRE eles deixou de fazer sentido: não existe mais um
+# "entre". O que sobrevive da lição, e é o que os dois testes abaixo guardam, é
+# a forma geral dela — degrau grande antes do pequeno, e nenhum degrau que seja
+# só uma repetição do anterior.
 
-def test_cascata_narrativa_tem_amortecedor_entre_70b_e_8b():
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_70B, PROV_GROQ_120B, PROV_GROQ_LEVE, TaskType
+def test_cascata_narrativa_vai_do_grande_pro_pequeno():
+    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_LEVE, PROV_GROQ_PRINCIPAL, TaskType
 
     casc = CASCATA_DEFAULT[TaskType.NARRATIVE]
-    assert casc.index(PROV_GROQ_70B) < casc.index(PROV_GROQ_120B) < casc.index(PROV_GROQ_LEVE), (
-        f"o degrau de TPD tem que ficar ENTRE o 70B e o 8B: {casc}"
+    assert casc.index(PROV_GROQ_PRINCIPAL) < casc.index(PROV_GROQ_LEVE), (
+        f"o principal tem que vir antes do leve: {casc}"
     )
 
 
-def test_climax_cai_no_degrau_grande_antes_do_gemini():
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GEMINI, PROV_GROQ_120B, TaskType
+def test_nenhuma_cascata_repete_o_mesmo_modelo():
+    """Dois slots com o mesmo modelo não são dois degraus — são uma chamada
+    desperdiçada.
+
+    É a generalização do que aconteceu em 17/08: com o 70B desligado,
+    `GROQ_MODEL` e `GROQ_MODEL_MEIO` passaram a apontar pro MESMO modelo, e
+    manter os dois na cascata significaria que, ao tomar 429 por quota no
+    primeiro, o router tentaria o segundo e tomaria o MESMO 429 — pagando
+    latência por uma tentativa que já se sabe perdida. Vale pra qualquer troca
+    futura de configuração, não só pra esta.
+    """
+    from engine.llm.tasks import CASCATA_DEFAULT, modelo_do_slot
+
+    for task, casc in CASCATA_DEFAULT.items():
+        modelos = [m for m in (modelo_do_slot(s) for s in casc) if m]
+        assert len(modelos) == len(set(modelos)), (
+            f"a cascata de {task.value} tem dois slots rodando o mesmo modelo: "
+            f"{modelos}. Tire um — ou aponte um deles pra outro modelo."
+        )
+
+
+def test_climax_cai_no_groq_antes_do_gemini():
+    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GEMINI, PROV_GROQ_PRINCIPAL, TaskType
 
     casc = CASCATA_DEFAULT[TaskType.NARRATIVE_CLIMAX]
-    assert casc.index(PROV_GROQ_120B) < casc.index(PROV_GEMINI)
+    assert casc.index(PROV_GROQ_PRINCIPAL) < casc.index(PROV_GEMINI)
 
 
-def test_light_nao_paga_o_modelo_grande():
-    """LIGHT existe pra POUPAR cota — não pode escalar pro 120B."""
-    from engine.llm.tasks import CASCATA_DEFAULT, PROV_GROQ_120B, TaskType
+def test_light_comeca_no_leve_e_so_escala_depois_do_gemini():
+    """LIGHT existe pra POUPAR cota: filler começa no barato.
 
-    assert PROV_GROQ_120B not in CASCATA_DEFAULT[TaskType.NARRATIVE_LIGHT]
+    REESCRITO em 17/08. Antes assertava `PROV_GROQ_120B not in LIGHT` — e a
+    partir da troca de modelo esse assert continuaria VERDE provando nada: o
+    slot `groq-principal` passou a rodar exatamente o `openai/gpt-oss-120b` que
+    a ausência do outro slot queria manter fora. Um teste que fica verde porque
+    olha o nome errado é pior que teste faltando, porque parece cobertura.
+    O que de fato importa: o turno filler COMEÇA no leve e só toca no caro
+    depois do Gemini.
+    """
+    from engine.llm.tasks import (
+        CASCATA_DEFAULT,
+        PROV_GEMINI,
+        PROV_GROQ_LEVE,
+        PROV_GROQ_PRINCIPAL,
+        TaskType,
+    )
+
+    casc = CASCATA_DEFAULT[TaskType.NARRATIVE_LIGHT]
+    assert casc[0] == PROV_GROQ_LEVE, f"filler tem que começar no barato: {casc}"
+    if PROV_GROQ_PRINCIPAL in casc:
+        assert casc.index(PROV_GEMINI) < casc.index(PROV_GROQ_PRINCIPAL), (
+            f"em filler, o caro só depois do Gemini: {casc}"
+        )
 
 
 def test_degrau_do_meio_esta_registrado_no_router():

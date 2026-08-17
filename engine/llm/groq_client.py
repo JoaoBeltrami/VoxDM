@@ -28,9 +28,9 @@ import structlog
 from engine.llm.router import LLMRouter
 from engine.llm.tasks import (
     PROV_GEMINI,
-    PROV_GROQ_70B,
     PROV_GROQ_120B,
     PROV_GROQ_LEVE,
+    PROV_GROQ_PRINCIPAL,
     PROV_OLLAMA,
     PROV_OLLAMA_GRIM,
     TaskType,
@@ -42,8 +42,12 @@ log = structlog.get_logger(__name__)
 # Mapa backend (legado) → nome de provider canônico.
 # "auto" remove o override e deixa o router usar a cascata default.
 _BACKEND_PARA_PROVIDER: dict[str, str | None] = {
-    "groq":    PROV_GROQ_70B,   # legado — equivale a "groq-70b"
-    "groq-70b": PROV_GROQ_70B,
+    "groq-principal": PROV_GROQ_PRINCIPAL,
+    # Legados aceitos: "groq" é o wire de antes de 01/08 e "groq-70b" o de antes
+    # de 17/08 (o slot passou a nomear PAPEL quando o Groq desligou o 70B).
+    # Ambos continuam gravados no localStorage de quem já mexeu nas Opções.
+    "groq":     PROV_GROQ_PRINCIPAL,
+    "groq-70b": PROV_GROQ_PRINCIPAL,
     # 26/07: faltava. O 120b serve a MAIORIA dos turnos reais (é o degrau
     # seguinte quando o TPD do 70b fecha, ~turno 14), mas não havia como
     # forçá-lo — nem pelo toggle das Opções, nem por benchmark A/B.

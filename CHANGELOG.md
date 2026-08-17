@@ -11,6 +11,30 @@ Validação ao vivo do pacote 0.1.0 em andamento. As mudanças abaixo saíram de
 playtests (58 e 36 turnos, 01/08 e 07/08) e seguem a mesma tese: **tirar decisão de
 consequência das mãos do modelo**.
 
+### Corrigido — desligamento do LLM primário (17/08/2026)
+
+- **O Groq desligou a família Llama de chat em 16/08/26**, e com ela o primário do
+  projeto (`llama-3.3-70b-versatile`). A deprecation do `llama-3.1-8b-instant` estava
+  rastreada e o fallback já tinha migrado; ninguém tinha olhado o topo da cascata.
+  Toda chamada passou a devolver 404 `model_not_found`.
+- **O 404 matava o turno em vez de cascatear.** Ele não casava com "quota" nem com a
+  falha errática de modelo já tratada, caía no `raise` e derrubava a narração inteira —
+  com o degrau seguinte vivo e disponível. Agora modelo desligado é
+  `LLMRetriable(categoria="modelo")`: cascateia sem penalizar o provider com cooldown de
+  quota, e grita um aviso por turno para que a configuração podre não apodreça calada.
+- **Primário passou a ser `openai/gpt-oss-120b`** — não por escolha de qualidade, mas
+  por desligamento. As ressalvas que o mantinham fora do topo continuam válidas
+  (anacronismo em teste, deslize de registro em PT-BR) e estão registradas no `CLAUDE.md`.
+- **O slot `groq-70b` virou `groq-principal`.** Nome de slot que cita tamanho de modelo
+  mente na primeira troca; `tests/test_slot_honesto.py` barrou a mentira antes de ela
+  chegar a uma sessão. Os wires antigos (`groq`, `groq-70b`, `groq-8b`) seguem aceitos —
+  estão gravados no `localStorage` de quem já usou o menu Opções.
+- **A rota grimdark deixou de depender de uma linha de `.env`.** Ela começava no slot
+  primário, que lê `GROQ_MODEL` — ou seja, a proibição de usar um modelo com recusa não
+  medida na rota que existe para *garantir* ficção sombria era burlável por configuração,
+  e nenhum teste pegava (o que existia olhava o nome do slot, não o modelo). Agora a
+  cascata é Gemini → Ollama uncensored, e o teste cobra pelo modelo.
+
 ### Adicionado
 - **Magia deixou de ser prosa** — a engine passou a ver, resolver e cobrar conjuração.
   As 319 magias do SRD viram uma tabela local (artefato de build), e nenhum número de
