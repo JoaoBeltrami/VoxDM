@@ -5,7 +5,7 @@ Loop completo de voz: STT → ContextBuilder → Groq → TTS → reprodução.
 Pipeline real (sem mocks):
   - STT: RealtimeSTT + Faster-Whisper tiny (GPU)
   - Contexto: ContextBuilder — 3 camadas (lore + episódico + regras)
-  - LLM: Groq llama-3.3-70b-versatile em modo streaming
+  - LLM: Groq openai/gpt-oss-120b em modo streaming
   - TTS: Edge TTS PT-BR com SSML + Kokoro fallback
   - Latência alvo: < 2000ms total, < 1200ms até primeiro áudio
   - Ao encerrar (Ctrl+C): salva resumo da sessão no Qdrant (memória episódica)

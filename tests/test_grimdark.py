@@ -330,7 +330,7 @@ async def test_router_seta_ultima_chamada_amarelou_em_cena_sombria():
     from engine.llm.tasks import TaskType
 
     class _Amarela(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         async def completar(self, mensagens, temperatura, max_tokens):
             raise LLMRetriable("filtrou", categoria="amarelada")
@@ -347,7 +347,7 @@ async def test_router_seta_ultima_chamada_amarelou_em_cena_sombria():
             yield "O sangue seca nas pedras."
 
     router = LLMRouter.__new__(LLMRouter)
-    router._providers = {"groq-70b": _Amarela(), "gemini-flash": _Integro()}
+    router._providers = {"groq-principal": _Amarela(), "gemini-flash": _Integro()}
     router._cena_sombria = True
     router._override_primario = None
     router.ultimo_provider_stream = None
@@ -365,7 +365,7 @@ async def test_router_flag_reseta_em_chamada_limpa():
     from engine.llm.tasks import TaskType
 
     class _Integro(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         async def completar(self, mensagens, temperatura, max_tokens):
             return "A taverna está quieta."
@@ -373,7 +373,7 @@ async def test_router_flag_reseta_em_chamada_limpa():
             yield "A taverna está quieta."
 
     router = LLMRouter.__new__(LLMRouter)
-    router._providers = {"groq-70b": _Integro()}
+    router._providers = {"groq-principal": _Integro()}
     router._cena_sombria = True
     router._override_primario = None
     router.ultimo_provider_stream = None
@@ -392,7 +392,7 @@ async def test_router_fora_de_cena_sombria_nao_gruda():
     from engine.llm.tasks import TaskType
 
     class _Recusa(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         async def completar(self, mensagens, temperatura, max_tokens):
             raise LLMRetriable("recusou", categoria="refusal")
@@ -409,7 +409,7 @@ async def test_router_fora_de_cena_sombria_nao_gruda():
             yield "Tudo bem."
 
     router = LLMRouter.__new__(LLMRouter)
-    router._providers = {"groq-70b": _Recusa(), "gemini-flash": _Integro()}
+    router._providers = {"groq-principal": _Recusa(), "gemini-flash": _Integro()}
     router._cena_sombria = False
     router._override_primario = None
     router.ultimo_provider_stream = None
@@ -576,7 +576,7 @@ async def test_reframe_destrava_o_mesmo_provider():
     from engine.llm.tasks import TaskType
 
     class _AmarelaSemReframe(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         def __init__(self):
             self.chamadas: list[list[dict]] = []
@@ -597,7 +597,7 @@ async def test_reframe_destrava_o_mesmo_provider():
             yield ""
 
     p = _AmarelaSemReframe()
-    router = _router_com({"groq-70b": p, "gemini-flash": _NuncaChamado()})
+    router = _router_com({"groq-principal": p, "gemini-flash": _NuncaChamado()})
     texto = await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
     assert "crônica" in texto
     assert len(p.chamadas) == 2  # original + reframed
@@ -658,7 +658,7 @@ async def test_reframe_nao_dispara_fora_de_cena_sombria():
     from engine.llm.tasks import TaskType
 
     class _P(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         def __init__(self):
             self.n = 0
@@ -669,7 +669,7 @@ async def test_reframe_nao_dispara_fora_de_cena_sombria():
             yield ""
 
     p = _P()
-    router = _router_com({"groq-70b": p}, cena_sombria=False)
+    router = _router_com({"groq-principal": p}, cena_sombria=False)
     texto = await router.completar([{"role": "user", "content": "x"}], task=TaskType.NARRATIVE)
     assert "velho" in texto
     assert p.n == 1  # sem retry
@@ -709,7 +709,7 @@ async def test_reframe_no_stream_pre_emissao():
     from engine.llm.tasks import TaskType
 
     class _RecusaSemReframe(BaseLLMProvider):
-        nome = "groq-70b"
+        nome = "groq-principal"
         disponivel = True
         def __init__(self):
             self.chamadas: list[list[dict]] = []
@@ -722,7 +722,7 @@ async def test_reframe_no_stream_pre_emissao():
             yield "A crônica registra o massacre em detalhe."
 
     p = _RecusaSemReframe()
-    router = _router_com({"groq-70b": p})
+    router = _router_com({"groq-principal": p})
     tokens = [
         t async for t in router.completar_stream(
             [{"role": "user", "content": "x"}], task=TaskType.NARRATIVE

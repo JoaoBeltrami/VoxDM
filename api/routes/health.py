@@ -17,7 +17,7 @@ Exemplo:
       "deps": {
         "qdrant": {"status": "ok",   "latency_ms": 124, "detalhe": "2 coleções"},
         "neo4j":  {"status": "ok",   "latency_ms":  98, "detalhe": "n.id index ok"},
-        "groq":   {"status": "ok",   "latency_ms": 210, "detalhe": "llama-3.3-70b-versatile"}
+        "groq":   {"status": "ok",   "latency_ms": 210, "detalhe": "openai/gpt-oss-120b"}
       }
     }
 """

@@ -11,6 +11,13 @@ Por que existe (SLOT-MENTE-1, pedido do Beltrami em 01/08): o slot `groq-8b`
     O pedido dele foi "refletindo sempre o modelo real, ATÉ QUANDO TROCARMOS" —
     ou seja, não adianta rebatizar de "groq-20b" hoje; tem que ser impossível
     mentir amanhã. Este arquivo é o mecanismo: disciplina não escala, teste sim.
+Cobrança #2 (17/08/26): o mecanismo funcionou. O Groq desligou o
+    `llama-3.3-70b-versatile` e, ao apontar `GROQ_MODEL` pro
+    `openai/gpt-oss-120b`, o slot `groq-70b` passaria a mentir igualzinho ao
+    `groq-8b` de julho. Este teste ficou VERMELHO na hora, antes de qualquer
+    playtest, e o slot virou `groq-principal` — nome de papel. É a diferença
+    entre descobrir agora e descobrir com o Beltrami esperando na frente do
+    microfone.
 Dependências: nenhuma — lê as constantes e o settings, sem tocar rede.
 Armadilha: se um slot novo citar tamanho de modelo no nome ("groq-405b"), este
     teste passa a exigir que o settings realmente aponte pra um 405b. É de
@@ -24,16 +31,16 @@ from config import settings
 from engine.llm.tasks import (
     ALIASES_SLOT,
     CASCATA_DEFAULT,
-    PROV_GROQ_70B,
     PROV_GROQ_120B,
     PROV_GROQ_LEVE,
+    PROV_GROQ_PRINCIPAL,
     modelo_do_slot,
 )
 
 # "70b", "120b", "8b" — o que um nome de slot promete sobre o tamanho do modelo.
 _RE_TAMANHO = re.compile(r"\d+\s*b\b")
 
-_SLOTS_GROQ = (PROV_GROQ_70B, PROV_GROQ_120B, PROV_GROQ_LEVE)
+_SLOTS_GROQ = (PROV_GROQ_PRINCIPAL, PROV_GROQ_120B, PROV_GROQ_LEVE)
 
 
 def test_nome_de_slot_que_promete_tamanho_cumpre_a_promessa():
@@ -63,7 +70,7 @@ def test_o_slot_leve_nao_promete_tamanho_nenhum():
 
 def test_modelo_do_slot_vem_do_settings_nao_de_literal():
     """A fonte da verdade é a configuração — senão volta a divergir."""
-    assert modelo_do_slot(PROV_GROQ_70B) == settings.GROQ_MODEL
+    assert modelo_do_slot(PROV_GROQ_PRINCIPAL) == settings.GROQ_MODEL
     assert modelo_do_slot(PROV_GROQ_120B) == settings.GROQ_MODEL_MEIO
     assert modelo_do_slot(PROV_GROQ_LEVE) == settings.GROQ_MODEL_FALLBACK
 
@@ -73,6 +80,20 @@ def test_alias_legado_do_localstorage_continua_resolvendo():
     preferência gravada apontando pra provider inexistente."""
     assert ALIASES_SLOT["groq-8b"] == PROV_GROQ_LEVE
     assert modelo_do_slot("groq-8b") == settings.GROQ_MODEL_FALLBACK
+
+
+def test_alias_do_slot_renomeado_em_17_08_continua_resolvendo():
+    """Mesma dívida, segunda parcela: quem escolheu "Groq grande" nas Opções
+    antes de 17/08 tem "groq-70b" gravado no localStorage. O slot virou
+    `groq-principal`; sem o alias, a preferência salva aponta pra um provider
+    que não existe mais e o override é descartado em silêncio."""
+    assert ALIASES_SLOT["groq-70b"] == PROV_GROQ_PRINCIPAL
+    assert modelo_do_slot("groq-70b") == settings.GROQ_MODEL
+
+    from engine.llm.groq_client import _BACKEND_PARA_PROVIDER
+
+    assert _BACKEND_PARA_PROVIDER["groq-70b"] == PROV_GROQ_PRINCIPAL
+    assert _BACKEND_PARA_PROVIDER["groq-principal"] == PROV_GROQ_PRINCIPAL
 
 
 def test_toggle_do_frontend_aceita_o_nome_novo_e_o_antigo():

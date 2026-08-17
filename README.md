@@ -25,7 +25,7 @@ Você fala no microfone, o Mestre fala de volta — narração rica em pt-BR, re
           ↓
 📚  RAG 3 camadas (Qdrant lore + Qdrant regras SRD + Neo4j relações)
           ↓
-🧠  Multi-provider LLM (cascata: Groq 70B → gpt-oss-120b → gpt-oss-20b → Gemini → Ollama)
+🧠  Multi-provider LLM (cascata: Groq gpt-oss-120b → gpt-oss-20b → Gemini → Ollama)
           ↓
 🔊  Edge TTS Microsoft (voz natural pt-BR, perfil por NPC)
           ↓
@@ -100,7 +100,7 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 - **Recap dispensável**: bolha âmbar com botão × para fechar antes dos 30s
 - **Condições D&D detectadas**: 14 regex em pt-BR, chips aguardam confirmação (substituídos por turno, sem acumulação)
 - **Cinema mode**: Ctrl+Shift+C esconde UI técnica, deixa só narração
-- **Toggle LLM ao vivo**: menu Opções → Auto/Groq 70B/gpt-oss-120b/gpt-oss-20b/Gemini/Ollama sem reiniciar
+- **Toggle LLM ao vivo**: menu Opções → Auto/Groq grande/Groq leve/Gemini/Ollama sem reiniciar
 
 ---
 
@@ -108,11 +108,10 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 
 | Camada | Tecnologia |
 |---|---|
-| **LLM principal** | Groq — `llama-3.3-70b-versatile` |
-| **Fallback 1** | Groq — `openai/gpt-oss-120b` (degrau de TPD) |
-| **Fallback 2** | Groq — `openai/gpt-oss-20b` (substituiu `llama-3.1-8b-instant`, desligado pelo Groq em 16/08/26) |
-| **Fallback 3** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
-| **Fallback 4** | Ollama local |
+| **LLM principal** | Groq — `openai/gpt-oss-120b` (substituiu `llama-3.3-70b-versatile`, desligado pelo Groq em 16/08/26 junto com a família Llama de chat) |
+| **Fallback 1** | Groq — `openai/gpt-oss-20b` (substituiu `llama-3.1-8b-instant`, desligado na mesma data) |
+| **Fallback 2** | Gemini — `gemini-2.5-flash-lite` + `gemini-3.1-flash-lite` (multi-key) |
+| **Fallback 3** | Ollama local |
 | STT | Faster-Whisper `large-v3-turbo` (GPU CUDA) |
 | TTS | Edge TTS Microsoft (voz por NPC) + Kokoro-82M fallback |
 | Memória vetorial | Qdrant Cloud free tier |
@@ -128,14 +127,19 @@ Latência alvo: **<5s ponta a ponta**. Atual: ~5-8s por turno (p50 medido em pla
 ## Cascata de LLM
 
 ```
-NARRATIVE    : Groq 70B → gpt-oss-120b → gpt-oss-20b → Gemini (6 combos) → Ollama
-SUMMARIZATION: Gemini → Groq 70B → Groq 8B → Ollama
-CLASSIFICATION: Groq 8B → Gemini → Ollama
+NARRATIVE    : Groq principal → Groq leve → Gemini (6 combos) → Ollama
+SUMMARIZATION: Gemini → Groq principal → Groq leve → Ollama
+CLASSIFICATION: Groq leve → Gemini → Ollama
 ```
+
+Os slots nomeiam **papel**, nunca tamanho de modelo — `modelo_do_slot()` responde qual
+modelo cada um roda, lendo a configuração. Isso não é preciosismo: quando o Groq desligou
+a família Llama em 16/08/26, a troca de modelo foi de uma linha e o log continuou dizendo
+a verdade sobre quem falhou.
 
 **Gemini multi-key:** cada chave de um projeto Google Cloud distinto tem 1500 RPD próprios. 3 chaves × 2 modelos = **6 combos internos** antes de cascatear.
 
-**Toggle ao vivo:** menu Opções → 🤖 Auto / 🌩 Groq 70B / ⚡ Groq 8B / 🌟 Gemini / 🏠 Ollama.
+**Toggle ao vivo:** menu Opções → 🤖 Auto / 🌩 Groq grande / ⚡ Groq leve / 🌟 Gemini / 🏠 Ollama.
 
 ---
 
@@ -306,7 +310,7 @@ cd frontend && npx tsc --noEmit  # type check
 
 ## Decisões travadas
 
-- **LLM primário:** Groq `llama-3.3-70b-versatile`
+- **LLM primário:** Groq `openai/gpt-oss-120b` — o `llama-3.3-70b-versatile` foi o primário até o Groq desligar a família Llama de chat em 16/08/26
 - **STT:** Faster-Whisper `large-v3-turbo` GPU (medido 21/07: WER 3,67% e 0,58s/fala — mais rápido *e* mais correto que o `small`)
 - **TTS:** Edge TTS Microsoft (`pt-BR-FranciscaNeural` default)
 - **Schema:** VoxDM v1.2 — companions/entities separados de npcs, top-level edges[]

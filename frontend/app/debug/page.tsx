@@ -25,8 +25,16 @@ const C = {
   tooltip:   "#18181b",
 };
 
+// "Cascata ativa" = o turno NÃO foi atendido pelo primeiro degrau. Isto era uma
+// comparação com o literal "groq-70b"; quando o slot virou "groq-principal"
+// (17/08), o badge passaria a acender em 100% dos turnos e o sinal — que existe
+// pra mostrar quando o primário falhou — viraria ruído constante. Conjunto
+// porque sessão arquivada antes do rename guarda o nome antigo.
+const PROVIDERS_PRIMARIOS = new Set(["groq-principal", "groq-70b"]);
+
 const PROVIDER_COLOR: Record<string, string> = {
-  "groq-70b":  "#7c3aed",
+  "groq-principal": "#7c3aed",
+  "groq-70b":  "#7c3aed",   // legado — sessão arquivada antes de 17/08
   "groq-leve": "#3b82f6",
   "groq-8b":   "#3b82f6",   // legado — sessão arquivada antes de 01/08
   "gemini":    "#f59e0b",
@@ -362,7 +370,8 @@ function CompanionCard({ data }: { data: CompanionData }) {
 
 function ProviderBadge({ provider }: { provider: string }) {
   const color = PROVIDER_COLOR[provider] ?? "#a1a1aa";
-  const label = provider === "groq-70b"  ? "Groq grande" :
+  const label = provider === "groq-principal" ? "Groq grande" :
+                provider === "groq-70b"  ? "Groq grande" :  // legado pré-17/08
                 provider === "groq-120b" ? "Groq médio"  :
                 provider === "groq-leve" ? "Groq leve"   :
                 provider === "groq-8b"   ? "Groq leve"   :  // legado pré-01/08
@@ -901,7 +910,7 @@ function Tab2UltimoTurno({ turno, historico }: {
           <div className="flex flex-wrap items-center gap-3">
             {turno.provider_usado && <ProviderBadge provider={turno.provider_usado} />}
             {turno.task_type && <TaskBadge task={turno.task_type} />}
-            {turno.provider_usado && turno.provider_usado !== "groq-70b" && (
+            {turno.provider_usado && !PROVIDERS_PRIMARIOS.has(turno.provider_usado) && (
               <span className="rounded border border-amber-800/60 bg-amber-950/20 px-2 py-0.5 text-[10px] text-amber-400">
                 ⚡ Cascata ativa
               </span>

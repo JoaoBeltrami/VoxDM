@@ -161,12 +161,12 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 
 | Componente | Decisão |
 |---|---|
-| LLM de jogo (primário) | Groq — `llama-3.3-70b-versatile` |
-| LLM cascata interna | Groq 70B → **gpt-oss-120b** → **gpt-oss-20b** → Gemini (multi-key/model) → Ollama — via `LLMRouter` em `engine/llm/router.py`. O degrau do meio entrou em `dd4c0a2` (25/07) porque o 70B só tem 100K TPD ≈ 19-27 turnos/dia — menos que UMA sessão; o `20b` substituiu `llama-3.1-8b-instant`, que o Groq desliga em 16/08/26. O primário NÃO mudou de propósito: o gpt-oss produziu anacronismo em teste ("homem de terno" em taverna medieval). `NARRATIVE_GRIM` fica fora da migração — safety do gpt-oss não medido. |
+| LLM de jogo (primário) | Groq — **`openai/gpt-oss-120b`** (era `llama-3.3-70b-versatile` até 17/08/26). ⚠️ **Não foi escolha: foi desligamento.** O Groq tirou a família Llama de CHAT do ar em 16/08/26 e a conta passou a devolver 404 `model_not_found`. As ressalvas que mantinham o 70B no topo continuam VIVAS e não resolvidas — anacronismo em teste ("homem de terno" em taverna medieval) e deslize de registro ("a tua força" no lugar de "a sua"). Se a qualidade cair em playtest, desconfie disto antes do resto |
+| LLM cascata interna | Groq principal → **gpt-oss-20b** → Gemini (multi-key/model) → Ollama — via `LLMRouter` em `engine/llm/router.py`. O degrau do meio (`groq-120b`) SAIU das cascatas em 17/08 porque virou o próprio primário: dois slots com o mesmo modelo não são dois degraus, são uma chamada desperdiçada quando o primeiro toma 429. O slot segue registrado no router — dá pra forçá-lo pelo toggle e pelo benchmark. `NARRATIVE_GRIM` continua fora do gpt-oss: safety não medido |
 | Cooldown por rate_limit | escada 75s → 240s → 900s, reset em qualquer sucesso. Cooldown fixo de 900s derrubou os 3 providers em 97s (26/07) |
 | Modelos Gemini válidos | `gemini-2.5-flash-lite`, `gemini-3.1-flash-lite` (sem thinking budget) |
-| LLM de conversão | Groq — `llama-3.3-70b-versatile` |
-| Nome de slot de LLM | Nomeia **papel**, não tamanho (`groq-leve`). `modelo_do_slot()` lê o settings; `tests/test_slot_honesto.py` impede o nome de mentir. Pedido explícito do Beltrami (01/08): *"refletindo sempre o modelo real, ATÉ QUANDO TROCARMOS"* |
+| LLM de conversão | Groq — `openai/gpt-oss-120b` (mesma troca forçada do primário) |
+| Nome de slot de LLM | Nomeia **papel**, não tamanho (`groq-principal`, `groq-leve`). `modelo_do_slot()` lê o settings; `tests/test_slot_honesto.py` impede o nome de mentir. Pedido explícito do Beltrami (01/08): *"refletindo sempre o modelo real, ATÉ QUANDO TROCARMOS"*. **A trava já cobrou duas vezes:** `groq-8b` rodando gpt-oss-20b (01/08) e `groq-70b` rodando gpt-oss-120b (17/08) — nesta segunda o teste ficou vermelho ANTES de qualquer playtest. Wire legado (`groq`, `groq-8b`, `groq-70b`) continua aceito: está gravado no localStorage |
 | Autoridade sobre o resultado de check | Da **engine**: CD por tabela do SRD 5.1 (padrão Médio 15), engine compara e entrega veredito. O modelo narra o desfecho, não decide se passou |
 | Conceder × consumir item | **Conceder** continua com o Mestre. **Consumir** é da engine — fórmula do SRD, teto de HP, frasco sai do inventário |
 | Posse de item é COBRADA, menos em rule-of-cool | Refinamento do Beltrami em 11/08: *"o jogador só deve conseguir utilizar itens que estão no seu inventário… o Mestre só deve deixar o jogador fazer o que quiser no perfil rule of cool"*. Antes, item ausente gerava só AVISO em todo perfil. A cobrança passa a depender do `dm_profile`: `rule_of_cool` continua permissivo; `rigoroso`/`equilibrado`/`tranquilo`/`sombrio` proíbem. ⚠️ **Metade IMPLEMENTADA** (equipamento inicial do SRD na criação, `engine/state/equipamento_inicial.py`); a **cobrança está PENDENTE de propósito** — o Guerreiro tem todo o equipamento nas *opções* de escolha do SRD, então ligá-la antes da UI de escolha o faria nascer de mãos abanando. Ver P17 na fila |
@@ -214,14 +214,50 @@ NÃO usar pykokoro           → nome incorreto
 NÃO usar faster_whisper==latest → fixar: faster-whisper==1.2.1
 
 # Quotas do free tier — o que MORDE é o TPD, não o TPM (medido 25/07)
-NÃO otimizar só pra TPM   → llama-3.3-70b tem 12K TPM mas só 100K TPD:
-                            ~19-27 turnos POR DIA (3,6k tok/turno em exploração,
-                            5,2k em combate). MENOS QUE UMA SESSÃO — o primário
-                            estoura no meio da partida, todo dia.
+NÃO otimizar só pra TPM   → o TPD é o teto que fecha a sessão. O 70B tinha 100K
+                            TPD ≈ 19-27 turnos/dia (3,6k tok/turno em exploração,
+                            5,2k em combate) — MENOS QUE UMA SESSÃO. O gpt-oss
+                            tem 200K, o que dobra a folga mas não a torna infinita.
 NÃO assumir que a doc está certa → a doc dizia "6K TPM" (dobrou pra 12K sem aviso).
                             Conferir console.groq.com/docs/rate-limits a cada /estado.
-Cascata atual: 70B (100K TPD) → gpt-oss-120b (200K) → gpt-oss-20b (200K) → Gemini → Ollama.
-                            O degrau do meio existe SÓ por causa disso.
+                            Medido no header em 17/08: 8K TPM no gpt-oss-120b —
+                            a 5,2k tok/turno de combate, DOIS turnos no mesmo
+                            minuto tomam 429. Por voz não se chega lá; digitando
+                            rápido, sim.
+Cascata atual: gpt-oss-120b (200K TPD) → gpt-oss-20b (200K) → Gemini → Ollama.
+                            O degrau do meio sumiu em 17/08 — ele era o
+                            amortecedor ABAIXO do 70B e virou o próprio topo.
+
+# ⚠️ Deprecation do provider mata turno em SILÊNCIO (16-17/08/26)
+NÃO rastrear a deprecation de UM modelo e achar que rastreou a da FAMÍLIA → o
+                            projeto sabia que o `llama-3.1-8b-instant` desligava
+                            em 16/08/26, migrou o fallback pro `gpt-oss-20b` e
+                            deu o assunto por encerrado. No dia, o Groq levou a
+                            família Llama de CHAT inteira — inclusive o PRIMÁRIO
+                            `llama-3.3-70b-versatile`, que ninguém tinha olhado.
+                            Toda chamada virou 404 `model_not_found`.
+NÃO confiar que a cascata te salva sem CONFERIR a classificação do erro → o 404
+                            não casava com quota nem com a tool-fantasma, caía no
+                            `raise` do `except APIError` e MATAVA o turno, com o
+                            gpt-oss-120b vivo a duas linhas de distância. Cinco
+                            degraus servindo de nada porque o primeiro evaporou.
+                            Hoje `_PALAVRAS_FALHA_MODELO` cobre "does not exist
+                            or you do not have access", "model_not_found",
+                            "decommissioned" e "has been deprecated" → categoria
+                            "modelo", que cascateia sem penalizar o provider.
+NÃO deixar a troca de modelo virar mentira de slot → o slot `groq-70b` passaria a
+                            rodar um gpt-oss. Quem barrou foi `test_slot_honesto`,
+                            ANTES do playtest — segunda cobrança da mesma trava.
+                            Renomear é a metade FÁCIL: o nome do slot viaja até o
+                            localStorage do navegador, então o valor antigo tem
+                            que continuar aceito como alias nos DOIS lados.
+NÃO comparar provider com literal na UI → o badge "Cascata ativa" do /debug era
+                            `provider !== "groq-70b"`. Depois do rename ele
+                            acenderia em 100% dos turnos: o sinal que existe pra
+                            avisar que o primário falhou viraria decoração.
+Hábito: conferir console.groq.com/docs/deprecations a cada /estado, e olhar a
+                            lista INTEIRA de modelos da conta (GET /v1/models),
+                            não só o que você já sabe que vai sair.
 NÃO pôr modelo novo em NARRATIVE_LIGHT → essa rota existe pra POUPAR cota.
 NÃO pôr modelo não-testado em NARRATIVE_GRIM → essa rota existe pra GARANTIR que
                             ficção sombria não seja recusada; safety não medido = risco.
@@ -427,8 +463,12 @@ NÃO usar acumulador de sessão como sinal de "está acontecendo" → `npcs_apre
 # Nome de slot / de modelo
 NÃO nomear slot pelo TAMANHO do modelo → `groq-8b` rodou `gpt-oss-20b` por semanas e o
                             log mentia sobre qual modelo falhou. Slot nomeia PAPEL
-                            (`groq-leve`); `modelo_do_slot()` lê o settings, nunca um
-                            literal; o router loga `modelo=` junto de `provider=`.
+                            (`groq-principal`, `groq-leve`); `modelo_do_slot()` lê o
+                            settings, nunca um literal; o router loga `modelo=` junto
+                            de `provider=`. Cobrado DE NOVO em 17/08, quando o
+                            `groq-70b` ia passar a rodar gpt-oss-120b — desta vez o
+                            teste pegou antes. A regra não é "renomeie quando lembrar":
+                            é que o nome nunca cite tamanho, porque a troca sempre vem.
 
 # Autoridade: quem decide o quê
 NÃO mandar total de check sem CD → "N" sozinho não diz nada contra o quê, e quem decidia
@@ -469,13 +509,27 @@ NÃO pôr no caminho fixo o que não é necessário em TODO turno → vai pra fr
                             condicional ou pro RAG. O prompt não tem folga estrutural.
 
 # Modelos depreciados / problemáticos
-NÃO usar Gemini para conversão → free tier extinto (quota=0). Usar: Groq llama-3.3-70b-versatile
+NÃO usar NENHUM Llama de chat no Groq → a família inteira saiu do ar em 16/08/26
+                            (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`).
+                            Sobraram na conta: openai/gpt-oss-120b / 20b /
+                            safeguard-20b, qwen/qwen3.6-27b, groq/compound(-mini).
+NÃO usar qwen/qwen3.6-27b sem tratar o `<think>` → medido em 17/08 com o system
+                            prompt do projeto: despejou o raciocínio EM INGLÊS
+                            dentro do `content` e a narração nem começou em 220
+                            tokens. Diferente do gpt-oss, que isola o raciocínio
+                            em campo próprio. No caminho de stream isso vai pro TTS.
+NÃO usar groq/compound nem compound-mini → são sistemas AGÊNTICOS com ferramentas
+                            embutidas. O projeto já perdeu turno por modelo chamando
+                            ferramenta que ninguém ofereceu (TOOL-FANTASMA-1).
+NÃO usar Gemini para conversão → free tier extinto (quota=0). Usar: Groq gpt-oss-120b
 NÃO usar gemini-1.5-pro     → DESCONTINUADO, retorna 404
 NÃO usar gemini-2.0-flash   → quota free baixa por padrão, esgota rápido
 NÃO usar gemini-2.5-flash "full"  → thinking budget consome max_tokens antes do output visível.
                                      A max=400, devolve só ~40 chars (finish=length).
 NÃO usar gemini-flash-latest → alias rotativo que aponta pro 2.5-flash full (mesmo bug)
-NÃO usar llama-3.1-70b      → DEPRECIADO pelo Groq. Usar: llama-3.3-70b-versatile
+NÃO usar llama-3.1-70b      → DEPRECIADO pelo Groq (e o sucessor `llama-3.3-70b`
+                            também morreu, em 16/08/26 — ver o bloco de deprecation
+                            acima). Não existe Llama de chat no Groq hoje.
 
 # Infraestrutura
 NÃO usar Ngrok              → Cloudflare Tunnel

@@ -87,17 +87,20 @@ function lerDmProfileStorage(): DmProfile {
 // SLOT-MENTE-1 (01/08): o slot "groq-8b" rodava gpt-oss-20b desde 25/07 — o
 // rótulo mentia junto com o backend. Os nomes agora dizem o PAPEL, não o
 // tamanho do modelo: papel não envelhece quando a gente troca de modelo.
-type LlmBackendPref = "auto" | "groq-70b" | "groq-leve" | "gemini" | "ollama";
+// Segunda parcela da mesma dívida (17/08): "groq-70b" virou "groq-principal"
+// quando o Groq desligou o llama-3.3-70b e o slot passou a rodar gpt-oss-120b.
+type LlmBackendPref = "auto" | "groq-principal" | "groq-leve" | "gemini" | "ollama";
 const LS_LLM_BACKEND_KEY = "voxdm_llm_backend";
 // Preferências gravadas antes do rename — sem isto, quem já mexeu no menu volta
 // a "auto" em silêncio na primeira carga.
 const LLM_BACKEND_LEGADO: Record<string, LlmBackendPref> = {
   "groq-8b": "groq-leve",
-  "groq": "groq-70b",
+  "groq": "groq-principal",
+  "groq-70b": "groq-principal",
 };
 const LLM_BACKENDS: { id: LlmBackendPref; label: string; descricao: string }[] = [
-  { id: "auto",      label: "🤖 Auto",        descricao: "Cascata default: 70B → 120B → leve → Gemini → Ollama." },
-  { id: "groq-70b",  label: "🌩 Groq grande", descricao: "Qualidade máxima. Tem limite diário (TPD) apertado." },
+  { id: "auto",           label: "🤖 Auto",        descricao: "Cascata default: principal → leve → Gemini → Ollama." },
+  { id: "groq-principal", label: "🌩 Groq grande", descricao: "Qualidade máxima. Tem limite diário (TPD) apertado." },
   { id: "groq-leve", label: "⚡ Groq leve",   descricao: "Mais rápido, quota separada da grande. Qualidade menor." },
   { id: "gemini",    label: "🌟 Gemini",      descricao: "Cota fresca, 4M tokens/dia. Excelente PT-BR." },
   { id: "ollama",    label: "🏠 Ollama",      descricao: "Local, ilimitado. Precisa de 'ollama serve' rodando." },
