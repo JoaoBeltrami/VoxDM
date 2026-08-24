@@ -11,6 +11,26 @@ Validação ao vivo do pacote 0.1.0 em andamento. As mudanças abaixo saíram de
 playtests (58 e 36 turnos, 01/08 e 07/08) e seguem a mesma tese: **tirar decisão de
 consequência das mãos do modelo**.
 
+### Segurança — admin-por-padrão (M1, 17/08/2026)
+
+- **`DEV_USER_EMAIL` e `ADMIN_EMAILS` nasciam com o mesmo valor** (`admin@localhost`),
+  no código e no `.env.example`. Em `DEBUG=True`, toda requisição sem header do
+  Cloudflare vira `DEV_USER_EMAIL` — e como esse email estava na lista de admins,
+  qualquer um que alcançasse a URL (um túnel aberto basta) era admin e lia `/debug/*`:
+  prompt inteiro, estado de sessão, memória episódica. O comentário no `config.py`
+  ainda afirmava que "o default genérico não dá acesso admin".
+- Agora ambos nascem **vazios**: `is_admin()` já tratava lista vazia como "ninguém é
+  admin", e `auth.py` já recusava 401 com `DEV_USER_EMAIL` vazio — faltava parar de
+  entregar a combinação pronta. Identidade é configuração de ambiente, não default de
+  repositório.
+- O `.env.example` deixou de trazer `ADMIN_EMAILS` preenchido, porque trocar só o
+  default do código adiantaria pouco: quem clona copia o exemplo.
+- O 401 em DEBUG passou a **nomear o que configurar** em vez de falar de um header do
+  Cloudflare que nunca vai chegar numa máquina local.
+- Achado na auditoria de segurança de 28/06, que estava numa branch órfã e nunca chegou
+  na `main`. Os outros achados dela seguem abertos (Next.js 14.2.35 com advisories
+  ALTOS, ausência de CSP) e estão registrados em `.internal/`.
+
 ### Corrigido — desligamento do LLM primário (17/08/2026)
 
 - **O Groq desligou a família Llama de chat em 16/08/26**, e com ela o primário do

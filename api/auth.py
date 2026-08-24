@@ -61,6 +61,22 @@ async def _resolver_email_via_jwt(jwt_token: str) -> str:
     return str(email).strip().lower()
 
 
+def _detalhe_identidade_ausente(base: str) -> str:
+    """Mensagem de 401 que diz o que CONFIGURAR quando o dev está em DEBUG.
+
+    M1 (17/08): com `DEV_USER_EMAIL` nascendo vazio, um clone novo rodando
+    local cai no 401 e via só "header Cf-Access-Jwt-Assertion não presente" —
+    inútil numa máquina que nunca vai receber header do Cloudflare. Mesma
+    doutrina do P11 parte 3: falhar dizendo o que falta é melhor que falhar mudo.
+    """
+    if settings.DEBUG and not settings.DEV_USER_EMAIL:
+        return (
+            f"{base}. Em DEBUG, defina DEV_USER_EMAIL no .env para ter "
+            "identidade local (e ADMIN_EMAILS só se precisar de /debug/*)."
+        )
+    return base
+
+
 async def get_owner(
     request: Request,
     cf_jwt: Annotated[str | None, Header(alias=_HEADER_JWT)] = None,
@@ -106,7 +122,9 @@ async def get_owner(
         else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Identidade ausente — header Cf-Access-Jwt-Assertion não presente",
+                detail=_detalhe_identidade_ausente(
+                    "Identidade ausente — header Cf-Access-Jwt-Assertion não presente"
+                ),
             )
 
     owner = Owner(email=email, is_admin=is_admin(email, settings.ADMIN_EMAILS))
@@ -133,7 +151,7 @@ async def get_owner_ws(websocket_headers: dict[str, str]) -> Owner:
         else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Identidade ausente no WebSocket",
+                detail=_detalhe_identidade_ausente("Identidade ausente no WebSocket"),
             )
 
     return Owner(email=email, is_admin=is_admin(email, settings.ADMIN_EMAILS))
