@@ -35,7 +35,21 @@ consequência das mãos do modelo**.
   e nenhum teste pegava (o que existia olhava o nome do slot, não o modelo). Agora a
   cascata é Gemini → Ollama uncensored, e o teste cobra pelo modelo.
 
+- **O hábito de conferir deprecation virou script.** `scripts/checar_modelos.py`
+  compara os modelos configurados com a lista que a conta Groq realmente enxerga e
+  devolve exit 1 se algum sumiu — plugado no protocolo do `/estado`. O CLAUDE.md já
+  mandava conferir a cada fechamento, e isso não impediu nada: frase escrita não roda.
+  Ele lê os slots de `modelo_do_slot()`, então não vira mais uma cópia da configuração.
+
 ### Adicionado
+- **Escolher equipamento na ficha deixou de ser digitar o nome e torcer.** As opções do
+  SRD viram cartões com os itens em peças; a escolha aberta ("uma arma marcial") virou
+  seletor das armas válidas, com dado e atributo à vista. O campo de texto livre era um
+  bug: o que o jogador digitasse virava nome de item, e "espada" não é "Espada longa"
+  para a engine — a arma sumia na hora do ataque. O progresso só conta a escolha como
+  feita quando a arma foi nomeada, e a mochila mostra ao vivo o que o personagem carrega.
+- **Armas ganharam categoria (simples/marcial)**, vinda do SRD dentro do gerador da
+  tabela — é o que permite a ficha oferecer só as armas válidas de cada escolha.
 - **Magia deixou de ser prosa** — a engine passou a ver, resolver e cobrar conjuração.
   As 319 magias do SRD viram uma tabela local (artefato de build), e nenhum número de
   magia depende mais de rede. O jogador **declara** o lançamento ("eu uso Hex", "casto
@@ -111,6 +125,13 @@ consequência das mãos do modelo**.
 - Statblocks autorais ignoravam `entities` e `companions` do módulo, e ids de instância
   numerados (`vyrmathax-1`) não achavam a própria ficha.
 - Extractor criava NPC a partir da classe do próprio jogador.
+- **As três bestas não tinham nome em português na tabela de armas** — a ponte PT do
+  gerador usava `light-crossbow` e o índice do SRD é `crossbow-light`. `_PT.get(idx, ())`
+  devolvia vazio, calado, e "Besta leve" é equipamento inicial de três classes: o
+  jogador dizia "atiro com a besta" e a engine não achava a arma.
+- **Nove armas nunca tiveram nome em português** (rede, zarabatana, estrela matinal,
+  malho…). Invisível enquanto a tabela só identificava fala; virou "Blowgun" numa ficha
+  em português no instante em que a ficha passou a listá-las.
 - `stream_options` como kwarg direto quebrava o SDK `groq==1.1.2` no caminho de stream.
 - Duas conexões WebSocket na mesma sessão mutavam o mesmo estado em paralelo.
 - Um teste de combate dependia da rolagem de iniciativa e passava por sorte (flaky).
@@ -125,7 +146,7 @@ consequência das mãos do modelo**.
 - Uma criatura lendária do módulo recebia ficha genérica de warlock e lutava como tal.
 
 ### Infra
-- 2787 testes automatizados (eram 919 na 0.1.0).
+- 2800 testes automatizados (eram 919 na 0.1.0).
 
 ## [0.1.0] - 2026-06-05
 

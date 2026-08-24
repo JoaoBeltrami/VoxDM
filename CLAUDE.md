@@ -255,9 +255,14 @@ NÃO comparar provider com literal na UI → o badge "Cascata ativa" do /debug e
                             `provider !== "groq-70b"`. Depois do rename ele
                             acenderia em 100% dos turnos: o sinal que existe pra
                             avisar que o primário falhou viraria decoração.
-Hábito: conferir console.groq.com/docs/deprecations a cada /estado, e olhar a
-                            lista INTEIRA de modelos da conta (GET /v1/models),
-                            não só o que você já sabe que vai sair.
+Hábito: isso virou SCRIPT em 17/08, porque hábito escrito não roda —
+                            `uv run python scripts/checar_modelos.py` (ou
+                            `scripts/exec/modelos.ps1`) compara o que está
+                            configurado com a lista INTEIRA de modelos da conta
+                            e devolve exit 1 se algum sumiu. Rodar a cada
+                            /estado e SEMPRE antes de um playtest. Ele lê os
+                            slots de `modelo_do_slot()`, então não vira a quarta
+                            cópia da configuração.
 NÃO pôr modelo novo em NARRATIVE_LIGHT → essa rota existe pra POUPAR cota.
 NÃO pôr modelo não-testado em NARRATIVE_GRIM → essa rota existe pra GARANTIR que
                             ficção sombria não seja recusada; safety não medido = risco.

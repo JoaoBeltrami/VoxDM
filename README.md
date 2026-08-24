@@ -167,7 +167,7 @@ a verdade sobre quem falhou.
 | — | Frontend "BG1 híbrido" (launcher de painéis, FichaViva, retratos, dock slim) | ✅ |
 | 4.7 | Cloudflare Tunnel + Access (expor a amigos) | 🟡 pendente |
 
-**Cobertura de testes:** 2787/2787 passam (+2 xfail intencionais).
+**Cobertura de testes:** 2800/2800 passam (+2 xfail intencionais).
 
 ---
 
@@ -291,7 +291,7 @@ voxdm/
 │                           useCombatSounds, useSceneMood
 ├── ingestor/               PDF → schema v1.2 → Qdrant + Neo4j
 ├── modulo_teste/           "Os Filhos de Valdrek" (schema v1.2, módulo original)
-└── tests/                  2787 testes (pytest)
+└── tests/                  2800 testes (pytest)
 ```
 
 ---
@@ -299,7 +299,7 @@ voxdm/
 ## Desenvolvimento
 
 ```bash
-uv run pytest tests/ -q   # 2787 testes
+uv run pytest tests/ -q   # 2800 testes
 make ingest
 make run-api
 make debug

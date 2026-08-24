@@ -75,6 +75,11 @@ git worktree list
 # Branches locais não-mergeadas
 git branch --no-merged main
 
+# Modelo configurado ainda existe na conta? (MODELO-DESLIGADO-1, 16/08/26)
+# Exit 1 = algum modelo sumiu. Isto era um "hábito" escrito e não impediu o
+# desligamento que matou todo turno por um dia — virou script para RODAR.
+uv run python scripts/checar_modelos.py
+
 # Test count (se mudou recentemente)
 uv run pytest tests/ -q --tb=no 2>&1 | tail -2
 
