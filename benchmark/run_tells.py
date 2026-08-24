@@ -26,6 +26,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Console do Windows abre em cp1252 e o "✓" do progresso derruba a corrida INTEIRA
+# com UnicodeEncodeError — depois de já ter gasto cota de LLM. Mesmo remédio que
+# `demo/query_demo.py` usa. (Mordeu em 17/08, na 1ª tentativa de medir.)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from engine.quality.tells import avaliar_sessao  # noqa: E402
 
 API = "http://127.0.0.1:8000"
