@@ -235,13 +235,24 @@ class Settings(BaseSettings):
     #   Validar `aud` claim no JWT EVITA que JWT de outra app sua seja aceito.
     # DEV_USER_EMAIL: email usado em DEBUG=True quando o header CF não chega
     #   (rodando localhost direto, sem Tunnel). NUNCA é fallback em prod.
-    #   SEMPRE configure no .env — o default genérico não dá acesso admin.
     # ADMIN_EMAILS: lista CSV de emails que podem ver tudo + acessar /debug/*.
-    #   Outras pessoas só veem o que possuem. Configure via .env.
+    #   Outras pessoas só veem o que possuem.
+    #
+    # M1 (auditoria de 28/06, corrigido em 17/08): os dois nasciam com
+    # "admin@localhost". O comentário aqui dizia que "o default genérico não dá
+    # acesso admin" — e dava, porque os DOIS eram a mesma string: em DEBUG,
+    # qualquer requisição sem header virava `admin@localhost`, que estava na
+    # lista de admins. Com um túnel aberto, quem achasse a URL era admin e via
+    # `/debug/*` (prompt inteiro, estado de sessão, memória).
+    #
+    # Agora ambos nascem VAZIOS: `is_admin()` já trata lista vazia como
+    # "ninguém é admin", e `auth.py` já recusa 401 quando DEBUG está ligado mas
+    # DEV_USER_EMAIL está vazio. Identidade é configuração de AMBIENTE — quem
+    # define é o `.env` da máquina, não um default do repositório.
     CF_TEAM_DOMAIN: str = ""
     CF_ACCESS_AUD: str = ""
-    DEV_USER_EMAIL: str = "admin@localhost"
-    ADMIN_EMAILS: str = "admin@localhost"
+    DEV_USER_EMAIL: str = ""
+    ADMIN_EMAILS: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
