@@ -215,24 +215,34 @@ def test_local_novo_pede_ar():
 
 def test_ritmo_rotaciona_e_nao_repete_tres_vezes():
     """A alternância é o ponto: três turnos comuns seguidos não podem sair
-    todos com o mesmo fôlego."""
+    todos com o mesmo fôlego.
+
+    REESCRITO em 17/08 (RITMO-MORTO-1). Este teste fazia `wm.iteracoes = i` — e
+    a WorkingMemory aceita atributo novo, então o próprio teste CRIAVA o campo
+    cuja ausência era o bug. Ele passou verde por semanas enquanto a produção
+    saía "medio" em 100% dos turnos, porque lá o campo não existe e o `getattr`
+    caía no default 0. Teste que fabrica a condição que testa é cúmplice, não
+    trava — mesma família do teste que fixava `int(_p.get("bonus"))` e guardou o
+    crash do playtest de 12/08. Agora usa o contador REAL.
+    """
     from engine.llm.prompt_builder import _ritmo_do_turno
     wm = WorkingMemory.nova_sessao("k", "K", "s")
     fala = "Converso com o ferreiro sobre o preço do aço nesta temporada"
     vistos = []
     for i in range(3):
-        wm.iteracoes = i
+        wm.narrative.turnos_total = i
         vistos.append(_ritmo_do_turno(wm, fala))
     assert len(set(vistos)) == 3, f"ritmo não variou: {vistos}"
 
 
 def test_instrucao_de_ritmo_chega_ao_prompt():
     wm = WorkingMemory.nova_sessao("k", "K", "s")
-    wm.iteracoes = 1          # → curto
+    # `narrative.turnos_total`, não `iteracoes`: ver RITMO-MORTO-1 acima.
+    wm.narrative.turnos_total = 1          # → curto
     s = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
     assert "responda e PARE" in s.lower() or "responda e pare" in s.lower()
     assert "nada de gancho" in s          # o slot removido é o que encurta
-    wm.iteracoes = 2          # → longo
+    wm.narrative.turnos_total = 2          # → longo
     s2 = _system(wm, "Converso com o ferreiro sobre o preço do aço nesta temporada")
     assert "RESPIRAR" in s2
 
