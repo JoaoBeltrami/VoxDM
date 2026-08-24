@@ -16,6 +16,8 @@ dev com parâmetros nomeados.
 | `ingest.ps1` | Mesma ingestão com params nomeados: `-DryRun`, `-SkipNeo4j`, `-SkipQdrant`, `-Input <path>` | Ingestão controlada (dev) |
 | `check.ps1` | Testa conectividade com Groq, Qdrant e Neo4j | Diagnóstico rápido |
 | `test.ps1` | Roda a suíte de testes (`pytest tests/ -v`) | Antes de commitar |
+| `modelos.ps1` | Confere se os modelos configurados ainda existem na conta Groq (exit 1 se algum sumiu) | A cada `/estado`, e SEMPRE antes de um playtest — foi o buraco que derrubou 16/08/26 |
+| `limpar_logs.ps1` | Trunca os logs em `.internal\` | Antes de medir qualquer coisa (prova de frescor) |
 | `voice.ps1` | Loop de voz local (STT → LLM mock → TTS) com relatório de latência | Validar o pipeline de voz |
 
 ## Notas
