@@ -337,6 +337,15 @@ def _ritmo_do_turno(wm: Any, transcricao: str) -> str:
     Sinais (nesta ordem): pergunta curta pede resposta curta; local novo pede ar;
     fora isso, rotaciona pelo nº do turno pra nunca repetir três vezes seguidas.
     PURA/testável — sem estado novo, sem I/O.
+
+    RITMO-MORTO-1 (17/08): a rotação lia `wm.iteracoes`, campo que NÃO existe na
+    WorkingMemory — `getattr(..., 0)` devolvia SEMPRE 0, o índice era sempre 0 e
+    TODO turno saía "medio" (80 palavras). O metrônomo que esta função existe
+    para matar estava dentro dela. É a MESMA falha do ABERTURA-SEMPRE-LIGADA-1,
+    consertada 90 linhas abaixo neste arquivo em 07/08 — o fix passou por aqui e
+    não viu. Medido na régua: desvio de ritmo 0.96 e uma corrida com as SEIS
+    aberturas na mesma forma. O contador que existe e incrementa é
+    `narrative.turnos_total`.
     """
     fala = (transcricao or "").strip()
     # Pergunta objetiva / fala curta → o humano responde e cala.
@@ -347,7 +356,40 @@ def _ritmo_do_turno(wm: Any, transcricao: str) -> str:
     # Chegou a um lugar novo → o mundo merece uma respirada.
     if _RE_VIAGEM.search(fala):
         return "longo"
-    return ("medio", "curto", "longo")[int(getattr(wm, "iteracoes", 0) or 0) % 3]
+    return ("medio", "curto", "longo")[_turnos_totais(wm) % 3]
+
+
+def _turnos_totais(wm: Any) -> int:
+    """O contador de turnos que REALMENTE incrementa (`narrative.turnos_total`).
+
+    Existe como função pra que o próximo consumidor não repita o `getattr`
+    aninhado — e pra que exista UM lugar a corrigir se o contador mudar de casa.
+    """
+    return int(getattr(getattr(wm, "narrative", None), "turnos_total", 0) or 0)
+
+
+def _abertura_do_turno(wm: Any, ritmo: str) -> str:
+    """Forma de ABERTURA deste turno: "fala" | "gesto" | "mundo" | "" (sem regra).
+
+    TELL C tem duas metades e a engine só controlava uma. O fôlego (comprimento)
+    já era decidido aqui; a FORMA de abrir não era de ninguém — e o modelo
+    convergia em "O ferreiro olha...", artigo em quase todo turno. A régua mede
+    isso como `formas_distintas` e `dominancia_abertura`.
+
+    Nunca devolve a forma "você": abrir pelo jogador é o TELL A (renarrar a ação
+    dele de volta). Variar o C às custas do A seria trocar um tell por outro.
+
+    Coerência com o fôlego é obrigatória: "mundo" pede ambiente e o TOM "curto"
+    PROÍBE ambiente. Mandar os dois juntos faria o prompt se contradizer —
+    exatamente a falha de 26/07, quando o ramo épico apagava o fôlego e o prompt
+    pedia "narre denso" logo acima de "máximo 30 palavras".
+    """
+    tem_npc = bool(getattr(wm, "npcs_presentes", None))
+    if not tem_npc:
+        # Sem ninguém em cena, só o mundo pode abrir — e nem ele, se for curto.
+        return "" if ritmo == "curto" else "mundo"
+    formas = ("fala", "gesto") if ritmo == "curto" else ("fala", "gesto", "mundo")
+    return formas[_turnos_totais(wm) % len(formas)]
 
 
 def _blocos_de_cena(contexto: Any) -> list[str]:
@@ -815,8 +857,10 @@ def _montar_mensagens_brief(
     from engine.authority.brief import montar_brief  # lazy — evita ciclo em import
     _tier = _tier_do_turno(wm, contexto.transcricao_atual or "")
     _ritmo = _ritmo_do_turno(wm, contexto.transcricao_atual or "")
+    _abertura = _abertura_do_turno(wm, _ritmo)
     brief = montar_brief(
-        wm, contexto.transcricao_atual or "", tier=_tier, ritmo=_ritmo
+        wm, contexto.transcricao_atual or "", tier=_tier, ritmo=_ritmo,
+        abertura=_abertura,
     )
     secoes.append("\n" + brief.to_prompt())
     _marco("brief")

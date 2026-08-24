@@ -57,6 +57,23 @@ _INSTRUCAO_RITMO: dict[str, str] = {
 }
 _RITMOS_VALIDOS = frozenset(_INSTRUCAO_RITMO)
 
+# A outra metade do TELL C: o COMPRIMENTO já era da engine, a FORMA de abrir não
+# era de ninguém — e o modelo convergia em artigo ("O ferreiro olha..."). Medido
+# em 17/08: uma corrida com as SEIS aberturas na mesma forma.
+# Cada instrução manda UMA coisa concreta. "Varie a abertura" seria prompt contra
+# amostragem — o ADR-006 já registra que isso baixa a frequência e não fecha a
+# porta. Quem escolhe a forma do turno é a engine; aqui só mora o texto.
+# Não existe forma "você": abrir pelo jogador é o TELL A.
+_INSTRUCAO_ABERTURA: dict[str, str] = {
+    "fala": "ABERTURA: a primeira coisa do turno é alguém FALANDO — comece pela "
+            "fala, entre aspas.",
+    "gesto": "ABERTURA: comece pelo CORPO de quem está em cena — o gesto antes "
+             "da palavra.",
+    "mundo": "ABERTURA: comece pelo mundo — um som, um cheiro, um objeto. Gente "
+             "só depois.",
+}
+_ABERTURAS_VALIDAS = frozenset(_INSTRUCAO_ABERTURA)
+
 
 @dataclass
 class NarrationBrief:
@@ -75,6 +92,8 @@ class NarrationBrief:
     evento_mundo: str = ""
     tier: str = "seco"
     ritmo: str = "medio"
+    # Forma de abertura decidida pela engine ("" = sem regra neste turno).
+    abertura: str = ""
     rolling_summary: str = ""
     batismo_pendente: str = ""
     # Fios/agenda/cliffhanger em aberto — ver `_em_aberto`.
@@ -111,6 +130,8 @@ class NarrationBrief:
         # então o prompt mandava "narre denso" e, logo abaixo, "máximo 30
         # palavras". Épico agora ACRESCENTA peso; não apaga o fôlego.
         linhas.append(_INSTRUCAO_RITMO.get(self.ritmo, _INSTRUCAO_RITMO["medio"]))
+        if self.abertura in _ABERTURAS_VALIDAS:
+            linhas.append(_INSTRUCAO_ABERTURA[self.abertura])
         if tier == "epico":
             linhas.append("PESO: momento-chave — densidade dramática, sem alongar.")
         if self.em_aberto:
@@ -288,6 +309,7 @@ def montar_brief(
     fatos_resolvidos: list[str] | None = None,
     tier: str = "seco",
     ritmo: str = "medio",
+    abertura: str = "",
 ) -> NarrationBrief:
     """Compõe o NarrationBrief a partir da WM — função PURA (não muta nada).
 
@@ -311,6 +333,7 @@ def montar_brief(
         evento_mundo=_evento_mundo(wm),
         tier=tier if tier in _TIERS_VALIDOS else "seco",
         ritmo=ritmo if ritmo in _RITMOS_VALIDOS else "medio",
+        abertura=abertura if abertura in _ABERTURAS_VALIDAS else "",
         rolling_summary=str(getattr(wm, "resumo_rolling", "") or ""),
         batismo_pendente=_batismo_pendente(wm),
         em_aberto=_em_aberto(wm),
