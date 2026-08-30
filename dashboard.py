@@ -13,6 +13,7 @@ Exemplo:
 """
 
 import asyncio
+import html
 import time
 from typing import Any
 
@@ -108,21 +109,25 @@ with tab_video:
     fa1, fa2 = st.columns([3, 2])
     with fa1:
         st.markdown('<div class="vox-label">Jogador disse</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="vox-fala">{evento.get("texto_jogador", "—")}</div>', unsafe_allow_html=True)
+        # html.escape: texto_jogador vem da fala do jogador (entrada não confiável) e
+        # resposta_mestre vem do LLM (também não confiável — prompt injection pode fazê-lo
+        # emitir HTML). Sem escape, ambos são renderizados como HTML cru no dashboard do
+        # admin via unsafe_allow_html — XSS. O escape só toca o VALOR; o wrapper segue HTML.
+        st.markdown(f'<div class="vox-fala">{html.escape(str(evento.get("texto_jogador", "—")))}</div>', unsafe_allow_html=True)
         st.markdown('<div class="vox-label" style="margin-top:0.8rem">Mestre respondeu</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="vox-fala">{evento.get("resposta_mestre", "—")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="vox-fala">{html.escape(str(evento.get("resposta_mestre", "—")))}</div>', unsafe_allow_html=True)
 
     with fa2:
         st.markdown('<div class="vox-label">Historico</div>', unsafe_allow_html=True)
         anteriores = historico[:-1] if len(historico) > 1 else []
         if anteriores:
             for ev in reversed(anteriores):
-                jogador = ev.get("texto_jogador", "")[:50]
-                mestre = ev.get("resposta_mestre", "")[:80]
+                jogador = html.escape(str(ev.get("texto_jogador", ""))[:50])
+                mestre = html.escape(str(ev.get("resposta_mestre", ""))[:80])
                 t = ev.get("total_ms", 0)
                 st.markdown(
                     f'<div class="vox-chunk" style="opacity:0.65;font-size:0.9rem">'
-                    f'<span style="color:#a78bfa">#{ev.get("iteracao","?")} [{t}ms]</span> '
+                    f'<span style="color:#a78bfa">#{html.escape(str(ev.get("iteracao","?")))} [{t}ms]</span> '
                     f'{jogador} → {mestre}'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -139,22 +144,24 @@ with tab_video:
     with col_r:
         st.markdown('<div class="vox-header">Regras</div>', unsafe_allow_html=True)
         for chunk in evento.get("chunks_regras", []):
-            st.markdown(f'<div class="vox-chunk">{chunk}</div>', unsafe_allow_html=True)
+            # chunks vêm do Qdrant (conteúdo de módulo/regra) — dado externo, escapa antes do HTML.
+            st.markdown(f'<div class="vox-chunk">{html.escape(str(chunk))}</div>', unsafe_allow_html=True)
         if not evento.get("chunks_regras"):
             st.caption("nenhuma regra recuperada")
 
     with col_l:
         st.markdown('<div class="vox-header">Lore</div>', unsafe_allow_html=True)
         for chunk in evento.get("chunks_lore", []):
-            st.markdown(f'<div class="vox-chunk">{chunk}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="vox-chunk">{html.escape(str(chunk))}</div>', unsafe_allow_html=True)
         if not evento.get("chunks_lore"):
             st.caption("nenhum lore recuperado")
 
     with col_g:
         st.markdown('<div class="vox-header">Grafo</div>', unsafe_allow_html=True)
         for rel in evento.get("relacoes_grafo", []):
-            nome = rel.get("alvo_nome", rel.get("destino", "?"))
-            tipo = rel.get("tipo", "?")
+            # nome/tipo vêm de nós do Neo4j (nomes de NPC/relação) — dado externo, escapa.
+            nome = html.escape(str(rel.get("alvo_nome", rel.get("destino", "?"))))
+            tipo = html.escape(str(rel.get("tipo", "?")))
             peso = rel.get("weight", 0)
             st.markdown(
                 f'<div class="vox-chunk">{nome} <span style="color:#6b7280">[{tipo}]</span> w={peso:.1f}</div>',
