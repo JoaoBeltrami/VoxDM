@@ -396,7 +396,6 @@ def test_resume_de_sessao_alheia_negado_404():
     de uma sessão nova sua. 404 deliberado (não 403), igual a _get_sessao, para
     não vazar existência.
     """
-    from api.auth import get_owner
     from api.main import app
     from api.state import sessions
     from engine.auth.identity import Owner
@@ -422,7 +421,6 @@ def test_resume_de_sessao_alheia_negado_404():
 
 def test_resume_da_propria_sessao_permitido():
     """O dono continua a própria sessão anterior normalmente (não é negado)."""
-    from api.auth import get_owner
     from api.main import app
     from api.state import sessions
     from engine.auth.identity import Owner
@@ -445,7 +443,6 @@ def test_resume_da_propria_sessao_permitido():
 
 def test_resume_admin_pode_continuar_qualquer_sessao():
     """Admin pode continuar sessão de qualquer dono (paridade com _get_sessao)."""
-    from api.auth import get_owner
     from api.main import app
     from api.state import sessions
     from engine.auth.identity import Owner
