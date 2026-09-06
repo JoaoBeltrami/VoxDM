@@ -30,7 +30,6 @@ import {
   Card,
   Chip,
   HpBar,
-  OrbIcon,
   Panel,
   Portrait,
   XpBar,
@@ -39,7 +38,6 @@ import { CombatTracker } from "@/components/CombatTracker";
 import { DadoAnimado } from "@/components/DadoAnimado";
 import { NpcsPresentes } from "@/components/NpcsPresentes";
 import { RolagemBanner } from "@/components/RolagemBanner";
-import { TurnoResumo } from "@/components/TurnoResumo";
 import { VoxOrb, type OrbState, type OrbMood } from "@/components/VoxOrb";
 import { EncontroOverlay } from "@/components/EncontroOverlay";
 import { PanelLauncher } from "@/components/PanelLauncher";

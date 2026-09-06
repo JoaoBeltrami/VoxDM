@@ -357,3 +357,90 @@ def test_sqlite_e_restaurado_antes_do_episodico():
         "o bloco do SQLite precisa vir ANTES do episódico, senão o fallback "
         "vence a fonte primária (COMPANION-ORDEM-1)"
     )
+
+
+# ── IDOR na retomada de sessão (auditoria de segurança 02/08) ─────────────────
+
+
+def _char_state_de(owner_email: str, nome: str):
+    """CharacterState mínimo com identidade restaurável e dono explícito."""
+    from engine.persistence.character_store import CharacterState
+
+    return CharacterState(
+        session_id="sess-doanterior01",
+        owner_email=owner_email,
+        personagem_config={
+            "player_name": nome,
+            "player_class": "Guerreiro",
+            "player_race": "Humano",
+        },
+    )
+
+
+def test_idor_retomada_sessao_alheia_nao_restaura():
+    """Usuário comum NÃO pode retomar a sessão de outro via session_anterior_id.
+
+    Sem o guard de ownership, Alice passava o session_anterior_id do Bob e o
+    servidor carregava a ficha + narrativa do Bob numa sessão dela — vazamento
+    cross-tenant do personagem e do resumo falado. O guard deve descartar o
+    char_state alheio: a identidade do Bob NÃO pode aparecer na sessão da Alice.
+    """
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    alice = Owner(email="alice@voxdm.test", is_admin=False)
+
+    store_mock = MagicMock()
+    store_mock.carregar = AsyncMock(return_value=_char_state_de("bob@voxdm.test", "Herói do Bob"))
+    epi_mock = MagicMock()
+    epi_mock.buscar_por_session_id = AsyncMock(return_value=None)
+
+    p1, p2 = _client_com_override(alice)
+    with p1, p2, \
+         patch("api.routes.session.CharacterStore", return_value=store_mock), \
+         patch("api.routes.session.EpisodicMemory", return_value=epi_mock):
+        with TestClient(app) as cl:
+            resp = cl.post("/session/start", json={"session_anterior_id": "sess-doanterior01"})
+            assert resp.status_code == 201, resp.text
+            sid = resp.json()["session_id"]
+            wm = sessions[sid].working_mem
+            assert wm.player_name != "Herói do Bob", \
+                "IDOR: identidade do Bob vazou pra sessão da Alice via session_anterior_id"
+            assert sessions[sid].personagem_restaurado is None, \
+                "IDOR: personagem_restaurado do Bob exposto pra Alice"
+
+    app.dependency_overrides.clear()
+    sessions.clear()
+
+
+def test_retomada_da_propria_sessao_restaura():
+    """O dono legítimo (e admin) ainda retoma sua sessão normalmente.
+
+    Garante que o guard de ownership não quebrou o caminho feliz: quando o
+    owner_email do char_state bate com o solicitante, a identidade é restaurada.
+    """
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    bob = Owner(email="bob@voxdm.test", is_admin=False)
+
+    store_mock = MagicMock()
+    store_mock.carregar = AsyncMock(return_value=_char_state_de("bob@voxdm.test", "Herói do Bob"))
+    epi_mock = MagicMock()
+    epi_mock.buscar_por_session_id = AsyncMock(return_value=None)
+
+    p1, p2 = _client_com_override(bob)
+    with p1, p2, \
+         patch("api.routes.session.CharacterStore", return_value=store_mock), \
+         patch("api.routes.session.EpisodicMemory", return_value=epi_mock):
+        with TestClient(app) as cl:
+            resp = cl.post("/session/start", json={"session_anterior_id": "sess-doanterior01"})
+            assert resp.status_code == 201, resp.text
+            sid = resp.json()["session_id"]
+            assert sessions[sid].working_mem.player_name == "Herói do Bob", \
+                "o dono legítimo deveria ter a identidade restaurada"
+
+    app.dependency_overrides.clear()
+    sessions.clear()
