@@ -357,3 +357,110 @@ def test_sqlite_e_restaurado_antes_do_episodico():
         "o bloco do SQLite precisa vir ANTES do episódico, senão o fallback "
         "vence a fonte primária (COMPANION-ORDEM-1)"
     )
+
+
+# ── IDOR-RESUME-1 (auditoria de segurança) ────────────────────────────────────
+
+
+def _patch_stores_para_resume(owner_email_anterior: str):
+    """Patcha CharacterStore/EpisodicMemory em session.py para simular uma sessão
+    anterior cujo dono é `owner_email_anterior`.
+
+    A ficha volta em `carregar`; o episódico fica neutro (None) para não tocar
+    a rede. Retorna os context managers de patch.
+    """
+    from engine.persistence.character_store import CharacterState
+
+    char = CharacterState(
+        session_id="sess-vitima-0001",
+        owner_email=owner_email_anterior,
+    )
+    store = MagicMock()
+    store.carregar = AsyncMock(return_value=char)
+    store.salvar = AsyncMock(return_value=None)
+
+    epi = MagicMock()
+    epi.buscar_por_session_id = AsyncMock(return_value=None)
+
+    return (
+        patch("api.routes.session.CharacterStore", return_value=store),
+        patch("api.routes.session.EpisodicMemory", return_value=epi),
+    )
+
+
+def test_resume_de_sessao_alheia_negado_404():
+    """Bob não pode continuar (session_anterior_id) a sessão de Alice.
+
+    Sem a trava IDOR-RESUME-1, qualquer autenticado que soubesse o session_id
+    alheio restauraria a ficha + histórico narrativo de outra pessoa para dentro
+    de uma sessão nova sua. 404 deliberado (não 403), igual a _get_sessao, para
+    não vazar existência.
+    """
+    from api.auth import get_owner
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    owner_b = Owner(email="bob@voxdm.test", is_admin=False)
+
+    p1, p2 = _client_com_override(owner_b)
+    ps, pe = _patch_stores_para_resume("alice@voxdm.test")
+    with p1, p2, ps, pe:
+        with TestClient(app) as cl:
+            resp = cl.post(
+                "/session/start",
+                json={"session_anterior_id": "sess-vitima-0001"},
+            )
+            assert resp.status_code == 404, (
+                "Bob continuou a sessão de Alice via session_anterior_id — "
+                f"IDOR de restauração (status: {resp.status_code})"
+            )
+
+    app.dependency_overrides.clear()
+    sessions.clear()
+
+
+def test_resume_da_propria_sessao_permitido():
+    """O dono continua a própria sessão anterior normalmente (não é negado)."""
+    from api.auth import get_owner
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    owner_a = Owner(email="alice@voxdm.test", is_admin=False)
+
+    p1, p2 = _client_com_override(owner_a)
+    ps, pe = _patch_stores_para_resume("alice@voxdm.test")
+    with p1, p2, ps, pe:
+        with TestClient(app) as cl:
+            resp = cl.post(
+                "/session/start",
+                json={"session_anterior_id": "sess-vitima-0001"},
+            )
+            assert resp.status_code == 201, resp.text
+
+    app.dependency_overrides.clear()
+    sessions.clear()
+
+
+def test_resume_admin_pode_continuar_qualquer_sessao():
+    """Admin pode continuar sessão de qualquer dono (paridade com _get_sessao)."""
+    from api.auth import get_owner
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    owner_admin = Owner(email="admin@voxdm.test", is_admin=True)
+
+    p1, p2 = _client_com_override(owner_admin)
+    ps, pe = _patch_stores_para_resume("alice@voxdm.test")
+    with p1, p2, ps, pe:
+        with TestClient(app) as cl:
+            resp = cl.post(
+                "/session/start",
+                json={"session_anterior_id": "sess-vitima-0001"},
+            )
+            assert resp.status_code == 201, resp.text
+
+    app.dependency_overrides.clear()
+    sessions.clear()
