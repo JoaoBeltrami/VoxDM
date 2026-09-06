@@ -357,6 +357,44 @@ async def iniciar_sessao(
                 voice_manager.registrar_npc(npc_id, reconstruir_regex=False)
             voice_manager._reconstruir_regex()
 
+    # IDOR-RESUME-1 (auditoria de segurança): continuar uma sessão anterior só é
+    # permitido se ela pertencer ao MESMO owner (ou se o requisitante for admin).
+    # Sem esta trava, qualquer usuário autenticado que soubesse (ou obtivesse por
+    # vazamento — logs, tela durante gravação, URL compartilhada) o session_id
+    # alheio poderia passá-lo em `session_anterior_id` e restaurar a FICHA inteira
+    # (nome, classe, atributos, ouro, XP, magias, local, inventário) MAIS o
+    # histórico narrativo (resumo episódico, trust, quests, companions, dm_state)
+    # de outra pessoa — para dentro de uma sessão nova que passaria a ser DELE.
+    # É o mesmo furo de ownership que `_get_sessao` e o handshake WS já barram no
+    # acesso direto; o caminho de restauração era o único que não checava. A fonte
+    # da verdade do dono é o SQLite (character_state.owner_email); se não houver
+    # registro no SQLite, cai no episódico (payload Qdrant carrega owner_email).
+    # 404 deliberado (não 403), igual a `_get_sessao`, para não vazar existência.
+    if config.session_anterior_id:
+        _prev_owner: str | None = None
+        _prev_char = await CharacterStore().carregar(config.session_anterior_id)
+        if _prev_char is not None:
+            _prev_owner = _prev_char.owner_email
+        else:
+            _prev_ep = await EpisodicMemory().buscar_por_session_id(
+                config.session_anterior_id
+            )
+            if _prev_ep is not None:
+                _prev_owner = str(_prev_ep.get("owner_email", ""))
+        # `_prev_owner is None` = não há NADA a restaurar → segue como sessão nova.
+        # `owner.pode_ver` já trata owner vazio (legado pré-auth) como admin-only.
+        if _prev_owner is not None and not owner.pode_ver(_prev_owner):
+            log.warning(
+                "resume_ownership_negado",
+                session_anterior_id=config.session_anterior_id,
+                owner_req=owner.email,
+                owner_prev=_prev_owner,
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Sessão '{config.session_anterior_id}' não encontrada",
+            )
+
     # Restaurar trust_levels, quest_stages e estado do personagem de sessão anterior
     #
     # COMPANION-ORDEM-1 (auditoria 27/07): o SQLite vem PRIMEIRO de propósito.
