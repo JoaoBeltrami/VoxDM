@@ -7,7 +7,8 @@ Por que existe: o `/health` simples só confirma que o processo subiu. Antes de
     sem segredos no payload.
 Dependências: asyncio, httpx, qdrant-client, neo4j (todos já no requirements)
 Armadilha: timeout curto (3s) por dependência para o endpoint não virar gargalo.
-    Em caso de timeout, retornamos "down" — não estouramos exceção.
+    Em caso de timeout, retornamos "down" — não estouramos exceção. A rota exige
+    admin (`exige_admin`): o `/health` simples continua aberto, este não.
 
 Exemplo:
     GET /health/deps →
@@ -24,12 +25,14 @@ Exemplo:
 
 import asyncio
 import time
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
+from api.auth import exige_admin
 from config import settings
+from engine.auth.identity import Owner
 
 log = structlog.get_logger()
 router = APIRouter(tags=["infra"])
@@ -132,8 +135,16 @@ async def _check_groq() -> dict[str, Any]:
 
 
 @router.get("/health/deps")
-async def health_deps() -> dict[str, Any]:
-    """Pinga Qdrant, Neo4j e Groq em paralelo e retorna estado de cada um."""
+async def health_deps(
+    _owner: Annotated[Owner, Depends(exige_admin)],
+) -> dict[str, Any]:
+    """Pinga Qdrant, Neo4j e Groq em paralelo e retorna estado de cada um.
+
+    Admin-only, como o `/debug/*` (varredura de vitrine, 07/10/26): aberto, o
+    endpoint deixava qualquer um disparar três chamadas externas por request e
+    lia de volta até 160 chars do erro de cada serviço — que pode trazer host e
+    porta. Diagnóstico de infra é coisa de quem opera, não de quem joga.
+    """
     t0 = time.perf_counter()
     qdrant_r, neo4j_r, groq_r = await asyncio.gather(
         _check_qdrant(),

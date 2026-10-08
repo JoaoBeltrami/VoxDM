@@ -15,7 +15,7 @@ numpy==2.4.4
 PyMuPDF==1.27.2.2
 google-genai==1.69.0
 groq==1.1.2
-sentence-transformers==5.4.0
+sentence-transformers==5.6.0  # security: CVE-2026-68770 (bypass de controle no load de modelo; era 5.4.0)
 qdrant-client==1.17.1
 neo4j==6.1.0
 aiosqlite==0.22.1
@@ -43,7 +43,7 @@ python-multipart==0.0.31  # security: CVE-2026-53538/53539/53540 (era 0.0.27)
 passlib[bcrypt]==1.7.4
 bcrypt==5.0.0          # pin explicito — passlib 1.7.4 + bcrypt 5.x tem warning de versao, mas funciona
 slowapi==0.1.9         # rate limiting in-memory pra /transcribe, /session/start, /turn
-pyjwt[crypto]==2.13.0  # security: PYSEC-2026-175..179 (alg-confusion/DoS hardening; era 2.12.1)
+pyjwt[crypto]==2.15.0  # security: 14 advisories de 2.13.0 (PYSEC-2026-4140..4152, 4183 — alg-confusion, JWKS redirect, base64 frouxo, ReDoS)
 
 # ─── Dev ────────────────────────────────────────────────────────────────────────
 pytest==9.0.3  # security: CVE-2025-71176 (tmp dir perms; era 9.0.2)
