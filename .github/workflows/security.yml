@@ -21,7 +21,7 @@ jobs:
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # historico completo — gitleaks varre todos os commits
 
@@ -35,7 +35,7 @@ jobs:
     name: Audit de deps (pip-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@v5
