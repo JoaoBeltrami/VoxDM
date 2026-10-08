@@ -4,20 +4,20 @@
 # Stack ML (faster-whisper/torch/ctranslate2) e fragil — nao floatar essas.
 
 # ─── Core ─────────────────────────────────────────────────────────────────────
-pydantic-settings==2.14.2  # security: GHSA-4xgf-cpjx-pc3j (era 2.13.1)
+pydantic-settings==2.15.0  # security: GHSA-4xgf-cpjx-pc3j (era 2.13.1)
 structlog==25.5.0
 tenacity==9.1.4
-python-dotenv==1.2.2
+python-dotenv==1.2.4
 httpx==0.28.1
-numpy==2.4.4
+numpy==2.5.3
 
 # ─── Fase 1 — Ingestão ───────────────────────────────────────────────────────
-PyMuPDF==1.27.2.2
+PyMuPDF==1.28.2
 google-genai==1.69.0
-groq==1.1.2
+groq==1.7.0
 sentence-transformers==5.6.0  # security: CVE-2026-68770 (bypass de controle no load de modelo; era 5.4.0)
-qdrant-client==1.17.1
-neo4j==6.1.0
+qdrant-client==1.19.1
+neo4j==6.3.1
 aiosqlite==0.22.1
 
 # ─── Fase 2 — Voz ──────────────────────────────────────────────────────────────
@@ -29,25 +29,25 @@ kokoro==0.9.4
 pygame==2.6.1
 
 # ─── Fase 3 — LLM e Memória ─────────────────────────────────────────────────────
-langsmith==0.8.18  # security: CVE-2026-45134, GHSA-f4xh-w4cj-qxq8 (era 0.7.37)
-streamlit==1.56.0
+langsmith==0.14.4  # security: CVE-2026-45134, GHSA-f4xh-w4cj-qxq8 (era 0.7.37)
+streamlit==1.65.0
 streamlit-autorefresh==1.0.1
 
 # ─── Fase 4 — API ───────────────────────────────────────────────────────────────
-fastapi==0.136.1
-uvicorn[standard]==0.46.0
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
 websockets==15.0.1
-python-multipart==0.0.31  # security: CVE-2026-53538/53539/53540 (era 0.0.27)
+python-multipart==0.0.32  # security: CVE-2026-53538/53539/53540 (era 0.0.27)
 
 # ─── Segurança ──────────────────────────────────────────────────────────────────
 passlib[bcrypt]==1.7.4
 bcrypt==5.0.0          # pin explicito — passlib 1.7.4 + bcrypt 5.x tem warning de versao, mas funciona
-slowapi==0.1.9         # rate limiting in-memory pra /transcribe, /session/start, /turn
-pyjwt[crypto]==2.15.0  # security: 14 advisories de 2.13.0 (PYSEC-2026-4140..4152, 4183 — alg-confusion, JWKS redirect, base64 frouxo, ReDoS)
+slowapi==0.1.10         # rate limiting in-memory pra /transcribe, /session/start, /turn
+pyjwt[crypto]==2.15.1  # security: 14 advisories de 2.13.0 (PYSEC-2026-4140..4152, 4183 — alg-confusion, JWKS redirect, base64 frouxo, ReDoS)
 
 # ─── Dev ────────────────────────────────────────────────────────────────────────
-pytest==9.0.3  # security: CVE-2025-71176 (tmp dir perms; era 9.0.2)
-pytest-asyncio==1.3.0
+pytest==9.1.1  # security: CVE-2025-71176 (tmp dir perms; era 9.0.2)
+pytest-asyncio==1.4.0
 
 # ─── Nota: torch instalado separadamente com CUDA ────────────────────────────────
 # uv pip install torch --index-url https://download.pytorch.org/whl/cu124
