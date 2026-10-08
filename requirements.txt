@@ -5,7 +5,7 @@
 
 # ─── Core ─────────────────────────────────────────────────────────────────────
 pydantic-settings==2.14.2  # security: GHSA-4xgf-cpjx-pc3j (era 2.13.1)
-structlog==25.5.0
+structlog==26.1.0
 tenacity==9.1.4
 python-dotenv==1.2.2
 httpx==0.28.1
