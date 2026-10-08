@@ -26,6 +26,7 @@ from rich.console import Console
 from rich.table import Table
 
 from config import settings
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
 console = Console()
@@ -134,8 +135,7 @@ async def main() -> None:
     edges: list[dict[str, Any]] = raw.get("edges", [])
 
     driver = AsyncGraphDatabase.driver(
-        settings.NEO4J_URI,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+        **argumentos_driver_neo4j(),
     )
 
     try:

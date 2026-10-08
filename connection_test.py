@@ -26,6 +26,7 @@ structlog.configure(
 log = structlog.get_logger("connection-test")
 
 from config import settings
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 
 async def _testar_groq() -> bool:
@@ -71,8 +72,7 @@ async def _testar_neo4j() -> bool:
         from neo4j import AsyncGraphDatabase
 
         driver = AsyncGraphDatabase.driver(
-            settings.NEO4J_URI,
-            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+            **argumentos_driver_neo4j(),
         )
         async with driver.session() as sessao:
             resultado = await sessao.run("RETURN 1 AS ok")

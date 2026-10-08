@@ -34,6 +34,7 @@ async def _query_legacy(texto: str, top_k: int = TOP_K) -> dict[str, Any]:
     from qdrant_client import QdrantClient
 
     from config import settings
+    from engine.memory.neo4j_tls import argumentos_driver_neo4j
     from ingestor.embedder import Embedder
 
     t0 = time.perf_counter()
@@ -58,7 +59,7 @@ async def _query_legacy(texto: str, top_k: int = TOP_K) -> dict[str, Any]:
 
     source_ids = list({c["source_id"] for c in chunks})
     t0 = time.perf_counter()
-    driver = AsyncGraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
+    driver = AsyncGraphDatabase.driver(**argumentos_driver_neo4j())
     relacoes: list[dict[str, Any]] = []
     try:
         async with driver.session() as session:

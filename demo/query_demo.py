@@ -46,6 +46,7 @@ transformers.logging.set_verbosity_error()
 from sentence_transformers import SentenceTransformer
 
 from config import settings
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
 console = Console(force_terminal=True)
@@ -155,8 +156,7 @@ async def main() -> None:
     # ── Etapa 4: Traversal Neo4j ──────────────────────────────────────────────
     t = time.perf_counter()
     driver = AsyncGraphDatabase.driver(
-        settings.NEO4J_URI,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+        **argumentos_driver_neo4j(),
     )
     try:
         relacoes = await _buscar_relacoes(driver, source_ids)
