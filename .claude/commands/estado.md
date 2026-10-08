@@ -43,8 +43,8 @@ Consequências práticas:
 
 ## Caminhos canônicos
 
-- **Source of truth (versionado mentalmente, gitignored):** `C:\Users\Beltrami\Projetos\VoxDM\VoxDM\.internal\ESTADO.md`
-- **Cópia pra upload em claude.ai/Cowork:** `C:\Users\Beltrami\Downloads\voxdm_estado.md`
+- **Source of truth (versionado mentalmente, gitignored):** `.internal\ESTADO.md` (na raiz do repo)
+- **Cópia pra upload em claude.ai/Cowork:** `~\Downloads\voxdm_estado.md`
 
 Toda invocação de `/estado` escreve no primeiro E copia pro segundo. Sem exceção. Nunca crie arquivo com data no nome — sobrescreve em cima.
 
@@ -257,10 +257,10 @@ Inclui reversões (migração de embedding, piso mecânico de quest), becos sem 
 Após escrever o `.internal/ESTADO.md`:
 
 ```powershell
-Copy-Item "C:\Users\Beltrami\Projetos\VoxDM\VoxDM\.internal\ESTADO.md" "C:\Users\Beltrami\Downloads\voxdm_estado.md" -Force
+Copy-Item ".internal\ESTADO.md" "$env:USERPROFILE\Downloads\voxdm_estado.md" -Force
 ```
 
-(Ou via Bash: `cp ".internal/ESTADO.md" "/c/Users/Beltrami/Downloads/voxdm_estado.md"`)
+(Ou via Bash: `cp ".internal/ESTADO.md" "$HOME/Downloads/voxdm_estado.md"`)
 
 ### 4. Reportar ao Beltrami em ≤3 linhas
 

@@ -168,7 +168,7 @@ O ESTADO é **documento derivado**: as seções 10 e 11 espelham o `CLAUDE.md` e
 cemitério do `VOXDM_LOG.md`, e a 6 resume a `VOXDM_FILA.md`. Rodá-lo antes de as fontes
 estarem certas produz um espelho errado com cara de fonte. Executar o protocolo
 `/estado` inteiro: coletar git/testes, reescrever `.internal/ESTADO.md` com a estrutura
-fixa, copiar pra `C:\Users\Beltrami\Downloads\voxdm_estado.md`.
+fixa, copiar pra `~\Downloads\voxdm_estado.md`.
 
 Duas coisas que só o `/docs` sabe e que o ESTADO deve receber prontas: o **placar de
 gates** (§0.2) e o bullet de **"desde a última passada"** (§1.1) — você acabou de

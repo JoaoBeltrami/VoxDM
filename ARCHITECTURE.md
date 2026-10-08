@@ -646,7 +646,7 @@ e uma corrida isolada mente nas duas direções.
 | Animações | `frontend/tailwind.config.ts` | +4 keyframes/animations: `fade-in` (SceneHeader), `slide-in-right` (NpcsPresentes chips), `slide-down` (InitiativeBar), `stream-pulse` (extra disponível para VoxOrb) |
 | **Total testes** | | **293/293 passed** (283 baseline + 10 iniciativa); `tsc --noEmit` clean |
 
-### Multi-Provider LLM + Feedback Filipe (Sessões 13–14/05)
+### Multi-Provider LLM + feedback do 1º playtester externo (Sessões 13–14/05)
 
 > Maior refactor da engine de inferência. VoxDM deixa de ser "app que usa Groq" pra ser **engine narrativa agnóstica de inferência** com fallback automático em cascata.
 

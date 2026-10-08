@@ -11,6 +11,23 @@ Validação ao vivo do pacote 0.1.0 em andamento. As mudanças abaixo saíram de
 playtests (58 e 36 turnos, 01/08 e 07/08) e seguem a mesma tese: **tirar decisão de
 consequência das mãos do modelo**.
 
+### Segurança — varredura de vitrine (07/10/2026)
+
+- **Retomar sessão alheia**: `session_anterior_id` restaurava ficha e histórico de
+  qualquer sessão cujo id o usuário conhecesse, sem conferir o dono. Agora confere
+  (SQLite primeiro, episódico como reserva) e responde 404, como o resto das rotas.
+- **Next.js 14.2.35 → 15.5.27** com React 19: a linha 14 passou a ter uma execução
+  remota de código sem autenticação em servidor hospedado no Windows, sem correção
+  disponível no 14. Auditoria de produção do frontend: 0 vulnerabilidades. O gate do
+  CI voltou de `critical` pra `high`.
+- **pyjwt 2.15.0** (14 advisories na 2.13, a lib que valida o JWT do Cloudflare) e
+  **sentence-transformers 5.6.0** (CVE-2026-68770), com o mesmo modelo de embedding.
+- `/health/deps` passou a exigir admin; o dashboard de debug escapa o conteúdo antes
+  de renderizar HTML.
+- Secret scanning, push protection, alertas e correções do Dependabot e reporte
+  privado de vulnerabilidade ligados no repositório; `.github/dependabot.yml` novo.
+- O CI da `main` estava vermelho desde 24/08 por dois imports mortos no frontend.
+
 ### Segurança — admin-por-padrão (M1, 17/08/2026)
 
 - **`DEV_USER_EMAIL` e `ADMIN_EMAILS` nasciam com o mesmo valor** (`admin@localhost`),

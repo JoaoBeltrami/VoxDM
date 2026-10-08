@@ -68,20 +68,17 @@ jobs:
         run: npm ci
 
       - name: Auditoria de dependências (npm audit)
-        # F0 do Palco: o CI já roda pip-audit no backend (security.yml); o
-        # frontend não tinha nada. Gate em CRITICAL (não high): o next@14 —
-        # versão TRAVADA por decisão de projeto (CLAUDE.md) — carrega 1 high
-        # conhecida cujo único fix é next@16 (breaking). São vulns de servidor
-        # Next exposto (DoS/cache-poisoning/SSRF em middleware); o VoxDM serve
-        # localhost/export estático, superfície que não existe aqui. Revisar o
-        # gate de volta pra high quando o upgrade Next 14→15/16 passar pelo
-        # stack-compatibility-guard.
+        # Gate em HIGH desde 07/10/26. Ficou em critical enquanto o next@14
+        # carregava highs sem fix na linha 14 — até aparecer um CRÍTICO (RCE
+        # sem autenticação em Next hospedado no Windows) e o gate não ter onde
+        # recuar. Com o 15.5.27 + override de postcss, produção audita 0.
+        # Só dependências de runtime (--omit=dev): as de dev pedem Tailwind 4.
         working-directory: frontend
-        run: npm audit --omit=dev --audit-level=critical
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build (tsc + lint + compile)
         # next build inclui tsc + ESLint + compilacao. Pega rules-of-hooks que
         # o `tsc --noEmit` sozinho NAO pega (foi o debito que quebrou producao
-        # sem ninguem ver — ver memory/debito_next_build_lint.md). Agora bloqueia.
+        # sem ninguem ver). Agora bloqueia.
         working-directory: frontend
         run: npm run build

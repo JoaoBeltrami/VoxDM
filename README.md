@@ -4,7 +4,7 @@
 > in Brazilian Portuguese, for people who have no GM and no group. A deterministic engine
 > owns the rules (combat, damage, initiative, spell slots, NPC trust); the LLM only
 > narrates. Work in progress, single player, runs locally on a consumer GPU.
-> 2,813 automated tests. Designed and playtested by me, implemented with Claude Code as
+> 2,818 automated tests. Designed and playtested by me, implemented with Claude Code as
 > a coding agent.
 
 Mestre de RPG de mesa por voz, com IA, todo em português. Pra quem quer jogar D&D e não
@@ -23,7 +23,7 @@ pensar em multiplayer ou app. Medido em 07/10/2026:
 
 | | |
 |---|---|
-| Testes automatizados | **2.813 passando**, 2 `xfail` intencionais, 0 falhando (`pytest`, ~2,5 min) |
+| Testes automatizados | **2.818 passando**, 2 `xfail` intencionais, 0 falhando (`pytest`, ~2,5 min) |
 | Lint | `ruff` limpo |
 | Código | ~40 mil linhas de Python (engine + API + ingestão), ~30 mil de teste, ~16 mil de TypeScript no frontend |
 | Histórico | 884 commits na `main` desde 24/03/2026, 239 merges de branch |
@@ -94,7 +94,7 @@ antes de virar áudio. O desenho completo está em [ARCHITECTURE.md](./ARCHITECT
 | TTS | Edge TTS, com Kokoro-82M local como reserva | Voz natural em pt-BR sem custo; voz e ritmo diferentes por NPC |
 | Memória | De trabalho (estado da sessão), episódica (Qdrant) e semântica (Qdrant + grafo Neo4j) | O Mestre lembra do que aconteceu e de quem conhece quem |
 | Persistência | SQLite (aiosqlite) | Ficha, inventário e progresso entre sessões |
-| Frontend | Next.js 14 + Tailwind | Ficha, combate, dados e a fala do Mestre |
+| Frontend | Next.js 15 + React 19 + Tailwind | Ficha, combate, dados e a fala do Mestre |
 | Acesso remoto | Cloudflare Tunnel + Access (JWT) | Pensado pra abrir pra amigos sem expor porta |
 
 Custo de operação hoje: zero. Tudo roda em free tier ou na máquina local.
@@ -110,7 +110,7 @@ no repositório.
 Não é "pedi pro chat e colei". O processo tem regras, e elas estão versionadas:
 
 - **Cada mudança numa branch própria**, com teste e `ruff` antes do merge. A suíte cresceu
-  junto com o código; hoje são 2.813 testes.
+  junto com o código; hoje são 2.818 testes.
 - **Um documento de convenções pro agente** ([CLAUDE.md](./CLAUDE.md)) com as decisões
   travadas e, principalmente, as armadilhas que já custaram caro — cada uma com o
   sintoma e o porquê.

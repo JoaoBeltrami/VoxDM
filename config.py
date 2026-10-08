@@ -230,7 +230,7 @@ class Settings(BaseSettings):
     # Fase 4.6 — Auth multi-tenant via Cloudflare Access
     # ------------------------------------------------------------------
     # CF_TEAM_DOMAIN: subdomínio Zero Trust do seu team (sem https://, sem path)
-    #   Ex: "beltrami" → certs em https://beltrami.cloudflareaccess.com/cdn-cgi/access/certs
+    #   Ex: "meu-time" → certs em https://meu-time.cloudflareaccess.com/cdn-cgi/access/certs
     # CF_ACCESS_AUD: AUD tag da Access App (encontra em Zero Trust → Access → Apps → Overview)
     #   Validar `aud` claim no JWT EVITA que JWT de outra app sua seja aceito.
     # DEV_USER_EMAIL: email usado em DEBUG=True quando o header CF não chega

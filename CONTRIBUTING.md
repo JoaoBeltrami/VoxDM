@@ -28,7 +28,7 @@ Estas convenções valem para todo o backend Python:
 - Arquivo Python novo começa com um **docstring de módulo** (o que faz / por que existe /
   armadilha / exemplo).
 
-Frontend: TypeScript estrito (`tsc --noEmit` precisa passar), Next.js 14 + Tailwind.
+Frontend: TypeScript estrito (`tsc --noEmit` precisa passar), Next.js 15 + React 19 + Tailwind.
 
 ## Testes
 

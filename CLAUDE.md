@@ -190,7 +190,7 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Banco estruturado | SQLite local via aiosqlite |
 | Embeddings | sentence-transformers `paraphrase-multilingual-MiniLM-L12-v2`. A migração pro e5-large foi medida e REVERTIDA (88,9% → 83,3%) |
 | Backend | FastAPI + WebSocket |
-| Frontend | Next.js 14 |
+| Frontend | Next.js 15 (15.5.27, versão exata) + React 19. Saiu do 14 em 07/10/26 por RCE crítico sem fix na linha 14 |
 | Exposição de rede | Cloudflare Tunnel + Access (JWT RS256) |
 | Schema do módulo | Arquivo em disco é **v1.2** (`schema_version: "1.2"`), já com os blocos `arc`/`endings` do Diretor de Arco. `engine/schema/v2.py` é o modelo Pydantic forward-compatible do formato futuro — **ainda não consumido pela ingestão** |
 | Módulo de trabalho | `modulo_teste/modulo_teste_v1.2.json` — "Os Filhos de Valdrek" (original) — único módulo usado até engine funcionar |

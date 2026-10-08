@@ -1,0 +1,39 @@
+# Dependabot — PRs semanais de atualização.
+# Os alertas e as correções de segurança automáticas estão ligados nas
+# configurações do repositório; este arquivo cobre as atualizações de versão.
+# Atualização de dependência NÃO é merge automático: passa pelo CI (ruff,
+# pytest, next build, npm audit) e, se mexer em LLM/STT/TTS/embedding, pelo
+# stack-compatibility-guard — ver as decisões travadas no CLAUDE.md.
+
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Next fica em versão exata; salto de major é decisão de projeto.
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-config-next
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
