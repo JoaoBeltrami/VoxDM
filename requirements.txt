@@ -21,7 +21,7 @@ neo4j==6.1.0
 aiosqlite==0.22.1
 
 # ─── Fase 2 — Voz ──────────────────────────────────────────────────────────────
-RealtimeSTT==0.1.7
+RealtimeSTT==1.0.4
 faster-whisper==1.2.1
 av==17.0.1             # PyAV — decoder WebM/Opus para faster-whisper (necessario no Windows)
 edge-tts==7.2.8
