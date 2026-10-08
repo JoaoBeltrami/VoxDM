@@ -1,14 +1,13 @@
 # Contribuindo com o VoxDM
 
-Obrigado pelo interesse! O VoxDM é um projeto pessoal desenvolvido **ao vivo no
-[YouTube](https://www.youtube.com/@Beltramidev)**. Contribuições são bem-vindas, mas
-o ritmo e a direção são guiados pelo mantenedor e pelo conteúdo do canal — então
-**abra uma issue para discutir antes de um PR grande**.
+Obrigado pelo interesse! O VoxDM é um projeto pessoal, mantido por uma pessoa.
+Contribuições são bem-vindas, mas o ritmo e a direção são guiados pelo mantenedor —
+então **abra uma issue para discutir antes de um PR grande**.
 
 ## Antes de começar
 
 1. Leia a [ARCHITECTURE.md](./ARCHITECTURE.md) para entender os subsistemas.
-2. Rode o projeto seguindo o [Quickstart do README](./README.md#quickstart).
+2. Rode o projeto seguindo o [QUICKSTART.md](./QUICKSTART.md).
 3. Confirme que a suíte passa: `uv run pytest tests/ -q` e `cd frontend && npx tsc --noEmit`.
 
 ## Convenções de código (obrigatórias)
