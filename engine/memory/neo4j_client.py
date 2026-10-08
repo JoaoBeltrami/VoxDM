@@ -26,6 +26,7 @@ from tenacity import (
 )
 
 from config import settings
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
 
@@ -51,8 +52,7 @@ class Neo4jMemoryClient:
             # AuraDB Free entrega conexões mortas após idle e a query estoura
             # (ConnectionResetError 10054 — crash do playtest #6).
             self._driver = AsyncGraphDatabase.driver(
-                settings.NEO4J_URI,
-                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                **argumentos_driver_neo4j(),
                 liveness_check_timeout=settings.NEO4J_LIVENESS_TIMEOUT,
             )
         return self._driver

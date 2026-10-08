@@ -17,6 +17,7 @@ dev com parâmetros nomeados.
 | `check.ps1` | Testa conectividade com Groq, Qdrant e Neo4j | Diagnóstico rápido |
 | `test.ps1` | Roda a suíte de testes (`pytest tests/ -v`) | Antes de commitar |
 | `modelos.ps1` | Confere se os modelos configurados ainda existem na conta Groq (exit 1 se algum sumiu) | A cada `/estado`, e SEMPRE antes de um playtest — foi o buraco que derrubou 16/08/26 |
+| `manter_vivo.ps1` | Uma escrita sem rastro no Neo4j + uma leitura no Qdrant; log em `.internal\manter_vivo.log`, exit 1 se algum não respondeu | Roda sozinho todo dia às 20h pela tarefa agendada "VoxDM - manter bancos vivos" — o Aura Free pausa com 72h sem escrita e os dois bancos foram APAGADOS por inatividade em 07/10/26 |
 | `limpar_logs.ps1` | Trunca os logs em `.internal\` | Antes de medir qualquer coisa (prova de frescor) |
 | `voice.ps1` | Loop de voz local (STT → LLM mock → TTS) com relatório de latência | Validar o pipeline de voz |
 

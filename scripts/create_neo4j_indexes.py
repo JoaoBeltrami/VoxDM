@@ -8,7 +8,7 @@ Armadilha: índices levam alguns segundos para popular no AuraDB Free —
     rodar antes de benchmarks, não durante.
 
 Exemplo:
-    python scripts/create_neo4j_indexes.py
+    uv run python -m scripts.create_neo4j_indexes   # da raiz do repo (importa config e engine)
     # → 16 indexes criados (idempotente — IF NOT EXISTS)
 """
 
@@ -17,7 +17,7 @@ import asyncio
 import structlog
 from neo4j import AsyncGraphDatabase
 
-from config import settings
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
 
@@ -45,8 +45,7 @@ _INDEXES: list[tuple[str, str]] = [
 async def criar_indexes() -> int:
     """Cria todos os indexes. Retorna quantos foram criados/confirmados."""
     driver = AsyncGraphDatabase.driver(
-        settings.NEO4J_URI,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+        **argumentos_driver_neo4j(),
     )
     criados = 0
     try:

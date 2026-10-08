@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from api.auth import exige_admin
 from config import settings
 from engine.auth.identity import Owner
+from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
 router = APIRouter(tags=["infra"])
@@ -79,8 +80,7 @@ async def _check_neo4j() -> dict[str, Any]:
         from neo4j import AsyncGraphDatabase
 
         driver = AsyncGraphDatabase.driver(
-            settings.NEO4J_URI,
-            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+            **argumentos_driver_neo4j(),
         )
         try:
             async def _run() -> int:
