@@ -43,7 +43,7 @@ python-multipart==0.0.31  # security: CVE-2026-53538/53539/53540 (era 0.0.27)
 passlib[bcrypt]==1.7.4
 bcrypt==5.0.0          # pin explicito — passlib 1.7.4 + bcrypt 5.x tem warning de versao, mas funciona
 slowapi==0.1.9         # rate limiting in-memory pra /transcribe, /session/start, /turn
-pyjwt[crypto]==2.13.0  # security: PYSEC-2026-175..179 (alg-confusion/DoS hardening; era 2.12.1)
+pyjwt[crypto]==2.15.0  # security: PYSEC-2026-175..179 (alg-confusion/DoS hardening; era 2.12.1)
 
 # ─── Dev ────────────────────────────────────────────────────────────────────────
 pytest==9.0.3  # security: CVE-2025-71176 (tmp dir perms; era 9.0.2)
