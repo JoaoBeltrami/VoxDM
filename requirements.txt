@@ -36,7 +36,7 @@ streamlit-autorefresh==1.0.1
 # ─── Fase 4 — API ───────────────────────────────────────────────────────────────
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
-websockets==15.0.1
+websockets==17.2
 python-multipart==0.0.31  # security: CVE-2026-53538/53539/53540 (era 0.0.27)
 
 # ─── Segurança ──────────────────────────────────────────────────────────────────
