@@ -30,7 +30,7 @@ Antes de encerrar uma sessão produtiva — especialmente quando:
    - Não criar novos arquivos de memória para bugs/features já cobertos pelo CLAUDE.md
 
 4. **Criar documento de estado**
-   - Arquivo: `C:\Users\Beltrami\Downloads\VoxDM_Estado_DDMMAAAA.md`
+   - Arquivo: `~\Downloads\VoxDM_Estado_DDMMAAAA.md`
    - Formato de data: DDMMAAAA (ex: 20052026)
    - Usar como base o documento anterior em Downloads, atualizando:
      - Data de geração e contagem de testes no cabeçalho

@@ -27,7 +27,7 @@ Isso muda a regra de ouro: itens que eram pendência automática por "precisa jo
 
 1. **Orientar-se** (não pular):
    - Ler `.internal/ESTADO.md` (onde a gente parou) + a memória `roadmap_next_level.md` + o topo do `CLAUDE.md` (fase atual, decisões travadas, armadilhas).
-   - `git -C C:\Users\Beltrami\Projetos\VoxDM\VoxDM log --oneline -8` e `git status` pra confirmar a base e que a árvore está limpa.
+   - `git log --oneline -8` e `git status` pra confirmar a base e que a árvore está limpa.
    - Conferir que a suíte está verde ANTES de mexer: `uv run pytest -q` (baseline).
 
 2. **Escolher 1 item** — o de maior valor que seja **headless + verificável**. Candidatos típicos:
