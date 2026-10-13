@@ -15,16 +15,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from engine.auth.identity import Owner
 from engine.llm.types import e_turno_de_rolagem
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.working_memory import WorkingMemory
 
 
 def _builder_mockado() -> ContextBuilder:
-    b = ContextBuilder()
+    b = ContextBuilder(Owner(email="teste@voxdm.test"))
     b._qdrant = MagicMock()
     b._qdrant.buscar_modulo = AsyncMock(return_value=[])
-    b._qdrant.buscar = AsyncMock(return_value=[])
+    b._qdrant.buscar_memoria = AsyncMock(return_value=[])
     b._qdrant.buscar_regras = AsyncMock(return_value=[])
     b._neo4j = MagicMock()
     b._neo4j.buscar_relacionamentos = AsyncMock(return_value=[])
@@ -50,7 +51,7 @@ async def test_turno_so_de_rolagem_nao_bate_no_qdrant():
     b = _builder_mockado()
     await b.montar("[Rolagem: d20 = 5]", _wm())
     b._qdrant.buscar_modulo.assert_not_awaited()
-    b._qdrant.buscar.assert_not_awaited()
+    b._qdrant.buscar_memoria.assert_not_awaited()
     b._qdrant.buscar_regras.assert_not_awaited()
 
 

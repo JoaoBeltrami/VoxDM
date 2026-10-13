@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from engine.auth.identity import Owner
 from engine.memory.context_builder import (
     _QUERY_CURTA_LIMITE,
     ContextBuilder,
@@ -59,7 +60,7 @@ def builder_com_schema(tmp_path, schema_simples) -> ContextBuilder:
 
     with patch("engine.memory.context_builder.settings") as mock_settings:
         mock_settings.DEFAULT_MODULE_PATH = str(arquivo)
-        b = ContextBuilder()
+        b = ContextBuilder(Owner(email="teste@voxdm.test"))
         b._schema_cache = schema_simples  # injetar diretamente para evitar I/O
     return b
 
@@ -201,7 +202,7 @@ async def test_query_curta_adiciona_localizacao(builder_com_schema, working_mem)
         return []
 
     builder_com_schema._qdrant.buscar_modulo = mock_buscar_modulo
-    builder_com_schema._qdrant.buscar = AsyncMock(return_value=[])
+    builder_com_schema._qdrant.buscar_memoria = AsyncMock(return_value=[])
     builder_com_schema._qdrant.buscar_regras = AsyncMock(return_value=[])
     builder_com_schema._neo4j.buscar_relacionamentos = AsyncMock(return_value=[])
 
@@ -221,7 +222,7 @@ async def test_query_longa_nao_adiciona_localizacao(builder_com_schema, working_
         return []
 
     builder_com_schema._qdrant.buscar_modulo = mock_buscar_modulo
-    builder_com_schema._qdrant.buscar = AsyncMock(return_value=[])
+    builder_com_schema._qdrant.buscar_memoria = AsyncMock(return_value=[])
     builder_com_schema._qdrant.buscar_regras = AsyncMock(return_value=[])
     builder_com_schema._neo4j.buscar_relacionamentos = AsyncMock(return_value=[])
 

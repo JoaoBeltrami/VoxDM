@@ -44,6 +44,16 @@ os.environ.setdefault("BRIEF_ATIVO", "false")
 # vazia e os warmups rodam normalmente.
 os.environ["VOXDM_SKIP_WARMUP"] = "1"
 
+# Ordem de import no Windows (medido em 13/10): se o pacote `qdrant_client` é
+# importado ANTES do driver `neo4j`, o import seguinte do `pyarrow` (puxado por
+# sentence-transformers → sklearn → pandas) morre na COLETA com
+# `OSError: [WinError 6714]` ao listar o diretório do repo. Nunca apareceu
+# porque todo teste antigo chegava no Qdrant via context_builder, que importa o
+# neo4j primeiro; o primeiro teste a importar `engine.memory.qdrant_client`
+# direto quebrou sozinho e passou acompanhado. Fixar a ordem aqui tira a sorte
+# da equação. Precisa vir DEPOIS dos os.environ acima (o import lê settings).
+import engine.memory.neo4j_client  # noqa: E402, F401
+
 
 # Desabilita rate limiter durante testes — TestClient dispara N requests em
 # sequência, estouraria o limite mesmo em uso legítimo. O limiter continua

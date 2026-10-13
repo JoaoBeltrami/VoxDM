@@ -142,6 +142,7 @@ async def _loop_completo(
     from engine.voice.stt import STTEngine
     from engine.voice.tts import TTSEngine
     from engine.memory.working_memory import WorkingMemory
+    from engine.auth.local import owner_local
     from engine.memory.context_builder import ContextBuilder
     from engine.memory.session_writer import SessionWriter
     from engine.llm.prompt_builder import montar_mensagens
@@ -149,7 +150,7 @@ async def _loop_completo(
 
     tts = TTSEngine()
     groq = GroqClient()
-    context_builder = ContextBuilder()
+    context_builder = ContextBuilder(owner_local())
     session_id = f"voz-{int(time.time())}"
     working_mem = WorkingMemory.nova_sessao(
         location_id=location_id,
@@ -313,7 +314,7 @@ async def _loop_completo(
                 log.info("Salvando memória episódica...", session_id=session_id)
                 try:
                     writer = SessionWriter()
-                    await writer.fechar_sessao(working_mem, session_id=session_id)
+                    await writer.fechar_sessao(owner_local(), working_mem, session_id=session_id)
                     log.info("Memória episódica salva", session_id=session_id)
                 except Exception as e:
                     log.warning("Falha ao salvar memória episódica", erro=str(e))

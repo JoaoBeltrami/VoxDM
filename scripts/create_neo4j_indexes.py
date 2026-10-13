@@ -9,7 +9,7 @@ Armadilha: índices levam alguns segundos para popular no AuraDB Free —
 
 Exemplo:
     uv run python -m scripts.create_neo4j_indexes   # da raiz do repo (importa config e engine)
-    # → 16 indexes criados (idempotente — IF NOT EXISTS)
+    # → 18 indexes criados (idempotente — IF NOT EXISTS)
 """
 
 import asyncio
@@ -39,6 +39,10 @@ _INDEXES: list[tuple[str, str]] = [
     ("Quest", "name"),
     ("Secret", "id"),
     ("Secret", "name"),
+    # Estado de NPC por dono (memória de jogo). Toda leitura filtra por dono e
+    # por NPC — sem estes índices o filtro varre todos os estados de todo mundo.
+    ("EstadoNPC", "owner_email"),
+    ("EstadoNPC", "npc_id"),
 ]
 
 

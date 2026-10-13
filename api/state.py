@@ -23,6 +23,7 @@ import structlog
 
 _log = structlog.get_logger()
 
+from engine.auth.identity import Owner
 from engine.llm.groq_client import GroqClient
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.working_memory import WorkingMemory
@@ -108,6 +109,17 @@ class SessaoAtiva:
     # loop rodando (POST /session/start em thread de teste, por exemplo) e o
     # Lock ficaria preso ao loop errado. Por isso é lazy, na property abaixo.
     _lock_turno: Any = None
+
+    @property
+    def owner(self) -> Owner:
+        """Dono da sessão como `Owner`, para as camadas de memória de jogo.
+
+        `is_admin=False` de propósito: dentro do turno a sessão lê e grava a
+        memória DO DONO DELA. Privilégio de admin é da request (quem está
+        pedindo), não do dado, e não pode vazar para dentro da narração.
+        Sessão sem dono devolve email vazio, que `exigir_dono` recusa.
+        """
+        return Owner(email=self.owner_email)
 
     @property
     def lock_turno(self) -> "asyncio.Lock":

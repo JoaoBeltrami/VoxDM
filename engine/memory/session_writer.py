@@ -8,10 +8,14 @@ Dependências: engine/llm/groq_client, engine/memory/{working_memory,qdrant_clie
     ingestor/embedder, structlog, config
 Armadilha: o resumo usa Groq — se indisponível, gravar o diálogo bruto truncado
     em vez de falhar silenciosamente.
+Armadilha: `owner` é o PRIMEIRO argumento e não tem default. Era `owner_email=""`
+    opcional no fim da assinatura — um caller que esquecesse gravava memória
+    sem dono, e memória sem dono é legado admin-only que ninguém reencontra.
 
 Exemplo:
     writer = SessionWriter()
-    resumo = await writer.fechar_sessao(working_mem, session_id="sess-02")
+    dono = Owner(email="jogador@example.com")
+    resumo = await writer.fechar_sessao(dono, working_mem, session_id="sess-02")
     # → {"session_id": "sess-02", "resumo": "O grupo chegou à aldeia...",
     #    "trust_levels": {"fael-valdreksson": 3}, "quest_stages": {...}}
 """
@@ -23,15 +27,13 @@ from typing import Any
 
 import structlog
 
-from config import settings
+from engine.auth.identity import Owner, exigir_dono
 from engine.llm.groq_client import GroqClient
 from engine.llm.tasks import TaskType
-from engine.memory.qdrant_client import QdrantMemoryClient
+from engine.memory.qdrant_client import CAMPO_DONO, QdrantMemoryClient
 from engine.memory.working_memory import WorkingMemory
 
 log = structlog.get_logger()
-
-_COLECAO = "voxdm_episodic"
 
 # Máximo de caracteres do diálogo passado ao Groq para resumo
 _MAX_DIALOGO_CHARS = 6000
@@ -167,15 +169,17 @@ class SessionWriter:
 
     async def fechar_sessao(
         self,
+        owner: Owner,
         working_mem: WorkingMemory,
         session_id: str | None = None,
         npcs_mencionados: list[str] | None = None,
-        owner_email: str = "",
     ) -> dict[str, Any]:
         """
         Resumo + upsert no Qdrant. Retorna o dict de estado persistido.
 
         Args:
+            owner: Dono da sessão — obrigatório. Sem dono válido levanta
+                `DonoObrigatorio` ANTES de gastar a chamada de LLM do resumo.
             working_mem: Estado da sessão ao momento do encerramento.
             session_id: ID da sessão (usa working_mem.session_id se omitido).
             npcs_mencionados: NPCs relevantes para indexação (usa npcs_presentes se omitido).
@@ -183,6 +187,7 @@ class SessionWriter:
         Returns:
             Dict com session_id, resumo, trust_levels, quest_stages e timestamp.
         """
+        email = exigir_dono(owner)
         sid = session_id or working_mem.session_id
         npcs = npcs_mencionados or working_mem.npcs_presentes
 
@@ -190,7 +195,7 @@ class SessionWriter:
 
         payload: dict[str, Any] = {
             "session_id": sid,
-            "owner_email": owner_email,   # isolamento multi-tenant
+            CAMPO_DONO: email,   # chave de tenant — o cliente Qdrant recarimba
             "text": resumo,
             "trust_levels": working_mem.trust_levels,
             "faction_standings": working_mem.faction_standings,
@@ -214,7 +219,10 @@ class SessionWriter:
             },
         }
 
-        await self._fazer_upsert(payload)
+        # ID determinístico por session_id — refechar a mesma sessão sobrescreve
+        # o próprio ponto em vez de empilhar resumos.
+        ponto_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"voxdm-episodic-{sid}"))
+        await self._qdrant.gravar_memoria(owner, ponto_id, resumo, payload)
 
         log.info(
             "sessao_persistida",
@@ -225,60 +233,3 @@ class SessionWriter:
             fios_soltos=len(working_mem.fios_soltos),
         )
         return payload
-
-    async def _fazer_upsert(self, payload: dict[str, Any]) -> None:
-        """Gera embedding do resumo e faz upsert no Qdrant."""
-        import asyncio
-
-        from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, PointStruct, VectorParams
-
-        from ingestor.embedder import Embedder
-
-        embedder = Embedder()
-        vetor_array = embedder.gerar([payload["text"]])
-        vetor: list[float] = vetor_array[0].tolist()
-        dim = len(vetor)
-
-        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY, check_compatibility=False)
-        loop = asyncio.get_running_loop()
-
-        # Garantir que a coleção existe (idempotente)
-        try:
-            await loop.run_in_executor(None, lambda: client.get_collection(_COLECAO))
-        except Exception:
-            await loop.run_in_executor(
-                None,
-                lambda: client.create_collection(
-                    collection_name=_COLECAO,
-                    vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
-                ),
-            )
-            log.info("colecao_episodic_criada", dim=dim)
-
-        # Garantir índice de payload em session_id — sem ele, filtros retornam
-        # 400 "Index required but not found for session_id".
-        # Idempotente: Qdrant retorna erro se já existe, ignoramos silenciosamente.
-        try:
-            from qdrant_client.models import PayloadSchemaType
-            await loop.run_in_executor(
-                None,
-                lambda: client.create_payload_index(
-                    collection_name=_COLECAO,
-                    field_name="session_id",
-                    field_schema=PayloadSchemaType.KEYWORD,
-                ),
-            )
-            log.info("episodic_index_session_id_criado")
-        except Exception:
-            pass  # índice já existe — comportamento esperado em boots subsequentes
-
-        # ID determinístico por session_id
-        ponto_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"voxdm-episodic-{payload['session_id']}"))
-
-        ponto = PointStruct(id=ponto_id, vector=vetor, payload=payload)
-        await loop.run_in_executor(
-            None,
-            lambda: client.upsert(collection_name=_COLECAO, points=[ponto]),
-        )
-        log.info("episodic_upsert_ok", ponto_id=ponto_id, colecao=_COLECAO)

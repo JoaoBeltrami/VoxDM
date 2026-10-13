@@ -20,7 +20,23 @@ Exemplo:
     # → Owner(email="admin@example.com", is_admin=True)
 """
 
-from engine.auth.identity import Owner, is_admin
+from engine.auth.identity import (
+    OWNER_LEGADO,
+    DonoObrigatorio,
+    Owner,
+    emails_visiveis,
+    exigir_dono,
+    is_admin,
+)
 from engine.auth.jwt_validator import JWTInvalido, validar_jwt_cf
 
-__all__ = ["Owner", "is_admin", "validar_jwt_cf", "JWTInvalido"]
+__all__ = [
+    "OWNER_LEGADO",
+    "DonoObrigatorio",
+    "JWTInvalido",
+    "Owner",
+    "emails_visiveis",
+    "exigir_dono",
+    "is_admin",
+    "validar_jwt_cf",
+]

@@ -1,16 +1,28 @@
 """
-Cliente Neo4j para consultas de grafo — relações entre entidades do módulo.
+Cliente Neo4j — lore do módulo (compartilhada) e estado de NPC (por dono).
 
 Por que existe: o context_builder precisa consultar relações (quem conhece quem,
-    qual facção controla o local) de forma assíncrona com retry automático.
+    qual facção controla o local) de forma assíncrona com retry automático, e
+    a engine precisa lembrar como cada NPC se sente em relação a CADA jogador.
 Dependências: neo4j (driver async), tenacity, structlog, config
 Armadilha: NEO4J_USER no AuraDB Free não é "neo4j" — é o ID hex da
     instância (8 caracteres). Verificar Connection Details no painel.
+Armadilha: há DUAS classes de dado neste grafo e elas não se misturam.
+    LORE (labels NPC/Location/Faction/… com propriedade `id`) é acervo: uma
+    cópia serve todo mundo, é imutável em jogo e as leituras não levam dono.
+    ESTADO (`:EstadoNPC`, chaveado por `owner_email` + `npc_id`, SEM `id`) é
+    memória de jogo: toda Cypher que o toca filtra por dono DENTRO da query,
+    nunca na aplicação depois de trazer o resultado. O afeto era gravado
+    direto no nó da lore (achado do P11) — o Bjorn de um jogador mudava de
+    humor por causa da sessão de outro. `tests/test_isolamento_neo4j.py`
+    varre este arquivo e falha se nascer uma query de estado sem dono.
 
 Exemplo:
     cliente = Neo4jMemoryClient()
     relacoes = await cliente.buscar_relacionamentos("fael-valdreksson")
     # → [{"tipo": "CONHECE", "alvo_id": "osmund-ferreiro", "weight": 0.8}]
+    dono = Owner(email="jogador@example.com")
+    await cliente.atualizar_afeto_npc(dono, "bjorn-tharnsson", "rancor", 2)
 """
 
 from typing import Any
@@ -26,9 +38,24 @@ from tenacity import (
 )
 
 from config import settings
+from engine.auth.identity import Owner, emails_visiveis, exigir_dono
 from engine.memory.neo4j_tls import argumentos_driver_neo4j
 
 log = structlog.get_logger()
+
+# Label do nó de ESTADO de NPC por dono. Não tem `id` de propósito: as leituras
+# de lore casam por `{id: ...}` e assim nunca esbarram num nó de estado.
+LABEL_ESTADO_NPC: str = "EstadoNPC"
+
+# Campos afetivos — vivem no :EstadoNPC. Em bancos anteriores ao isolamento
+# ainda existem como propriedade do nó da LORE; as leituras de lore os removem
+# para que o humor deixado por um jogador não vaze como "fato do mundo".
+CAMPOS_AFETO: frozenset[str] = frozenset({"afeto", "medo", "respeito", "rancor"})
+
+
+def _sem_estado_legado(props: dict[str, Any]) -> dict[str, Any]:
+    """Propriedades de um nó de lore sem os campos afetivos legados."""
+    return {k: v for k, v in props.items() if k not in CAMPOS_AFETO}
 
 
 def _logar_tentativa(retry_state: RetryCallState) -> None:
@@ -146,7 +173,7 @@ class Neo4jMemoryClient:
 
         if not registro:
             return None
-        props: dict[str, Any] = dict(registro["props"])
+        props: dict[str, Any] = _sem_estado_legado(dict(registro["props"]))
         log.info("neo4j_entidade_encontrada", id=entidade_id)
         return props
 
@@ -182,7 +209,7 @@ class Neo4jMemoryClient:
             registros = await result.data()
 
         entidades: list[dict[str, Any]] = [
-            dict(r["props"]) for r in registros if r.get("props")
+_sem_estado_legado(dict(r["props"])) for r in registros if r.get("props")
         ]
         log.info("neo4j_batch_ids", total_pedido=len(ids), total_encontrado=len(entidades))
         return entidades
@@ -246,70 +273,88 @@ class Neo4jMemoryClient:
         before_sleep=_logar_tentativa,
         reraise=True,
     )
+    async def _gravar_afeto(
+        self, email: str, npc_id: str, campo: str, delta: int
+    ) -> None:
+        """MERGE do estado deste dono para este NPC + delta clampado em [-10, 10]."""
+        driver = await self._get_driver()
+        async with driver.session() as session:
+            # `campo` vem de CAMPOS_AFETO (lista fechada, validada no caller) —
+            # nunca de texto livre, por isso pode entrar na f-string.
+            await session.run(
+                f"""
+                MERGE (e:{LABEL_ESTADO_NPC} {{owner_email: $owner_email, npc_id: $npc_id}})
+                SET e.{campo} = toInteger(coalesce(e.{campo}, 0) + $delta)
+                SET e.{campo} = CASE
+                    WHEN e.{campo} > 10 THEN 10
+                    WHEN e.{campo} < -10 THEN -10
+                    ELSE e.{campo} END
+                """,
+                {"owner_email": email, "npc_id": npc_id, "delta": delta},
+            )
+
     async def atualizar_afeto_npc(
         self,
+        owner: Owner,
         npc_id: str,
         campo: str,
         delta: int,
     ) -> None:
-        """Incrementa/decrementa um campo afetivo num nó NPC do Neo4j.
+        """Incrementa/decrementa um campo afetivo do NPC NA VISÃO DESTE DONO.
 
         Campos válidos: afeto | medo | respeito | rancor.
         Valor é clampado em [-10, 10] após o delta.
-        Cria o campo com valor=delta se não existir.
+        Grava no nó :EstadoNPC do dono — o nó da lore não é tocado.
 
-        Armadilha: nunca lança — falha silenciosa para não bloquear o turno.
+        Armadilha: falha de REDE é silenciosa (não bloqueia o turno), mas dono
+        ausente NÃO é — `DonoObrigatorio` sobe, porque gravar estado sem dono é
+        bug de programação, não indisponibilidade.
         """
-        campos_validos = {"afeto", "medo", "respeito", "rancor"}
-        if campo not in campos_validos:
+        email = exigir_dono(owner)
+        if campo not in CAMPOS_AFETO:
             log.warning("afeto_campo_invalido", campo=campo, npc_id=npc_id)
             return
         try:
-            driver = await self._get_driver()
-            async with driver.session() as session:
-                await session.run(
-                    f"""
-                    MATCH (n {{id: $npc_id}})
-                    SET n.{campo} = toInteger(
-                        CASE WHEN n.{campo} IS NULL THEN $delta
-                             ELSE n.{campo} + $delta END
-                    )
-                    SET n.{campo} = CASE
-                        WHEN n.{campo} > 10 THEN 10
-                        WHEN n.{campo} < -10 THEN -10
-                        ELSE n.{campo} END
-                    """,
-                    {"npc_id": npc_id, "delta": delta},
-                )
+            await self._gravar_afeto(email, npc_id, campo, delta)
             log.info("afeto_npc_atualizado", npc_id=npc_id, campo=campo, delta=delta)
         except Exception as e:
             log.warning("afeto_npc_falhou", npc_id=npc_id, campo=campo, erro=str(e))
 
-    async def buscar_afeto_npc(self, npc_id: str) -> dict[str, int]:
-        """Retorna o estado afetivo atual de um NPC (campos afeto/medo/respeito/rancor).
+    async def buscar_afeto_npc(self, owner: Owner, npc_id: str) -> dict[str, int]:
+        """Estado afetivo do NPC em relação a ESTE dono.
+
+        Admin enxerga também o estado legado (sem dono), mas o próprio sempre
+        vence: o legado só responde quando o dono ainda não tem estado com o NPC.
 
         Returns:
-            Dict com campos presentes no nó. Campos ausentes retornam 0.
+            Dict com os campos presentes no nó. Sem estado → {}.
         """
+        visiveis = emails_visiveis(owner)
         try:
             driver = await self._get_driver()
             async with driver.session() as session:
                 result = await session.run(
-                    """
-                    MATCH (n {id: $npc_id})
-                    RETURN n.afeto AS afeto, n.medo AS medo,
-                           n.respeito AS respeito, n.rancor AS rancor
+                    f"""
+                    MATCH (e:{LABEL_ESTADO_NPC} {{npc_id: $npc_id}})
+                    WHERE e.owner_email IN $owner_emails
+                    RETURN e.owner_email AS owner_email, e.afeto AS afeto,
+                           e.medo AS medo, e.respeito AS respeito, e.rancor AS rancor
                     """,
-                    {"npc_id": npc_id},
+                    {"npc_id": npc_id, "owner_emails": visiveis},
                 )
                 registros = await result.data()
-            if not registros:
-                return {}
-            r = registros[0]
-            return {k: int(v) for k, v in r.items() if v is not None}
         except Exception as e:
             log.warning("afeto_busca_falhou", npc_id=npc_id, erro=str(e))
             return {}
+        if not registros:
+            return {}
+        # `visiveis[0]` é o próprio email — ele vence o legado.
+        registros.sort(key=lambda r: r.get("owner_email") != visiveis[0])
+        return {
+            k: int(v)
+            for k, v in registros[0].items()
+            if k in CAMPOS_AFETO and v is not None
+        }
 
     @retry(
         retry=retry_if_exception_type(Exception),

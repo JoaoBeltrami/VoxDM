@@ -332,10 +332,11 @@ with tab_debug:
 
     if st.button("Listar sessoes gravadas"):
         try:
+            from engine.auth.local import owner_local
             from engine.memory.episodic_memory import EpisodicMemory
             async def _listar():
                 m = EpisodicMemory()
-                return await m.listar_sessoes()
+                return await m.listar_sessoes(owner_local())
             sessoes = _rodar(_listar())
             if sessoes:
                 st.write(sessoes)

@@ -122,12 +122,13 @@ async def _medir_ciclo(
 
 async def rodar_benchmark() -> dict[str, Any]:
     """Executa N_RUNS por query. Retorna medianas e resultados completos."""
+    from engine.auth.local import owner_local
     from engine.memory.context_builder import ContextBuilder
     from engine.llm.groq_client import GroqClient
     from engine.voice.language import detectar_idioma
     from engine.voice.tts import TTSEngine
 
-    context_builder = ContextBuilder()
+    context_builder = ContextBuilder(owner_local())
     groq = GroqClient()
     tts = TTSEngine()
 
