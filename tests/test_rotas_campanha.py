@@ -137,3 +137,52 @@ def test_save_inexistente_e_alheio_dao_o_mesmo_404(cl: TestClient) -> None:
     b = cl.post(f"/campanhas/{cid}/saves/save-nao-existe/restaurar", json={"session_id": bob_sid})
     assert a.status_code == b.status_code == 404
     assert a.json()["detail"] == b.json()["detail"]
+
+
+def test_gm_adiciona_membro_que_passa_a_ver_e_player_nao_convida(cl: TestClient) -> None:
+    _sid, cid = _sessao_e_campanha(cl, ALICE)
+    r = cl.post(f"/campanhas/{cid}/membros", json={"email": "Bob@VoxDM.test", "papel": "player"})
+    assert r.status_code == 200 and r.json()["email"] == "bob@voxdm.test"
+    assert cl.post(f"/campanhas/{cid}/membros", json={"email": "c@voxdm.test", "papel": "dono"}).status_code == 422
+
+    _como(BOB)
+    assert [c["id"] for c in cl.get("/campanhas").json()] == [cid]
+    membros = {m["email"]: m["papel"] for m in cl.get(f"/campanhas/{cid}/membros").json()}
+    assert membros == {"alice@voxdm.test": "gm", "bob@voxdm.test": "player"}
+    assert cl.post(f"/campanhas/{cid}/membros", json={"email": "c@voxdm.test", "papel": "player"}).status_code == 404
+    assert cl.get(f"/campanhas/{cid}/auditoria").status_code == 404  # player não audita
+
+
+def test_auditoria_do_gm_registra_salvar_e_carregar(cl: TestClient) -> None:
+    sid, cid = _sessao_e_campanha(cl, ALICE)
+    save_id = cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid, "rotulo": "x"}).json()["id"]
+    cl.post(f"/campanhas/{cid}/saves/{save_id}/restaurar", json={"session_id": sid})
+    acoes = [linha["acao"] for linha in cl.get(f"/campanhas/{cid}/auditoria").json()]
+    assert acoes == ["criar_campanha", "salvar", "carregar"]
+
+
+def test_restaurar_empurra_o_snapshot_pelo_websocket_aberto(cl: TestClient) -> None:
+    import json as _json
+
+    sid, cid = _sessao_e_campanha(cl, ALICE)
+    save_id = cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid}).json()["id"]
+    enviados: list[str] = []
+
+    class _WS:
+        async def send_text(self, texto: str) -> None:
+            enviados.append(texto)
+
+    sessions[sid].ws_ativo = _WS()
+    r = cl.post(f"/campanhas/{cid}/saves/{save_id}/restaurar", json={"session_id": sid})
+    assert r.json()["estado_enviado"] is True
+    msg = _json.loads(enviados[0])
+    assert msg["tipo"] == "fim" and "player_hp" in msg
+
+
+def test_admin_metadado_traz_a_lista_de_saves_sem_conteudo(cl: TestClient) -> None:
+    sid, cid = _sessao_e_campanha(cl, BOB)
+    cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid, "rotulo": "antes do dragão"})
+    _como(ADMIN)
+    meta = cl.get("/admin/campanhas").json()[0]
+    assert [s["rotulo"] for s in meta["saves_lista"]] == ["antes do dragão"]
+    assert set(meta["saves_lista"][0]) == {"id", "rotulo", "criado_em", "bytes"}

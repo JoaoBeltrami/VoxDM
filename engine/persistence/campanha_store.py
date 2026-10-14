@@ -276,6 +276,18 @@ class CampanhaStore:
             )
             await self._auditar(conn, email, f"membro:{alvo}:{papel}", campanha_id)
 
+    async def listar_membros(self, owner: Owner, campanha_id: str) -> list[dict[str, str]]:
+        """Membros e papéis — visível para qualquer membro da campanha."""
+        email = exigir_dono(owner)
+        async with self._conn() as conn:
+            if not pode_ler_campanha(await self._papel(conn, campanha_id, email)):
+                raise NaoEncontrado(campanha_id)
+            async with conn.execute(
+                "SELECT email, papel FROM campanha_membro WHERE campanha_id = ? ORDER BY papel, email",
+                (campanha_id,),
+            ) as cur:
+                return [{"email": r["email"], "papel": r["papel"]} for r in await cur.fetchall()]
+
     # ── saves ────────────────────────────────────────────────────────────────
 
     def _arquivo(self, campanha_id: str, save_id: str) -> Path:
@@ -395,12 +407,22 @@ class CampanhaStore:
                 "ON s.campanha_id = c.id GROUP BY c.id ORDER BY c.atualizada_em DESC"
             ) as cur:
                 rows = [dict(r) for r in await cur.fetchall()]
-            async with conn.execute("SELECT campanha_id, manifest FROM save") as cur:
+            async with conn.execute(
+                "SELECT id, campanha_id, rotulo, criado_em, manifest FROM save "
+                "ORDER BY criado_em DESC"
+            ) as cur:
                 manifests = await cur.fetchall()
         tamanho: dict[str, int] = {}
         personagens: dict[str, list[str]] = {}
+        # Rótulo, data e tamanho de cada save são METADADO (decisão de 13/10) —
+        # é o que o admin precisa para apontar um quebra-vidro. O arquivo não abre.
+        lista: dict[str, list[dict[str, Any]]] = {}
         for m in manifests:
             man = json.loads(m["manifest"])
+            lista.setdefault(m["campanha_id"], []).append({
+                "id": m["id"], "rotulo": m["rotulo"],
+                "criado_em": float(m["criado_em"]), "bytes": int(man.get("bytes", 0)),
+            })
             tamanho[m["campanha_id"]] = tamanho.get(m["campanha_id"], 0) + int(man.get("bytes", 0))
             for p in man.get("personagens", []):
                 nomes = personagens.setdefault(m["campanha_id"], [])
@@ -408,7 +430,12 @@ class CampanhaStore:
                     nomes.append(p["nome"])
         log.info("admin_listou_metadados", admin=email, campanhas=len(rows))
         return [
-            {**r, "bytes": tamanho.get(r["id"], 0), "personagens": personagens.get(r["id"], [])}
+            {
+                **r,
+                "bytes": tamanho.get(r["id"], 0),
+                "personagens": personagens.get(r["id"], []),
+                "saves_lista": lista.get(r["id"], []),
+            }
             for r in rows
         ]
 

@@ -336,7 +336,10 @@ proíbe trocá-la — sem essa segunda metade o trilho é decorativo.
   conteúdo dela. Escrita atômica (tmp + fsync + `os.replace`), releitura conferida por
   sha256 antes de indexar, rotação que mantém `SAVES_MANTER` versões e nunca apaga com N
   ou menos. Restaurar copia os campos para dentro da `WorkingMemory` existente, sob o
-  lock de turno.
+  lock de turno, e empurra o snapshot `fim` pelo WebSocket aberto — a ficha atualiza
+  sem recarregar. A tela é o painel **Saves** do launcher (`SavesPanel.tsx`): campanhas,
+  salvar com rótulo, restaurar com confirmação, membros e auditoria (GM), e a aba admin
+  (metadado + quebra-vidro com motivo).
 
 ### 9. Identidade e acesso (`engine/auth/`, `api/auth.py`)
 `Owner(email, is_admin)` é um cross-cutting concern: `jwt_validator.py` valida o JWT

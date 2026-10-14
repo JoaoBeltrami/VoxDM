@@ -61,6 +61,11 @@ class RestaurarSave(BaseModel):
     session_id: str
 
 
+class NovoMembro(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    papel: str
+
+
 class QuebraVidro(BaseModel):
     motivo: str = Field(min_length=5, max_length=500)
 
@@ -103,6 +108,41 @@ async def criar_campanha(
 @router.get("")
 async def listar_campanhas(owner: Annotated[Owner, Depends(get_owner)]) -> list[dict[str, Any]]:
     return [_campanha_json(c) for c in await _store().listar_campanhas(owner)]
+
+
+@router.get("/{campanha_id}/membros")
+async def listar_membros(
+    campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
+) -> list[dict[str, str]]:
+    try:
+        return await _store().listar_membros(owner, campanha_id)
+    except NaoEncontrado as e:
+        raise _404("Campanha") from e
+
+
+@router.post("/{campanha_id}/membros")
+async def adicionar_membro(
+    campanha_id: str, corpo: NovoMembro, owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, str]:
+    """Só o GM da mesa. Papel fora de gm|player → 422."""
+    try:
+        await _store().adicionar_membro(owner, campanha_id, corpo.email, corpo.papel)
+    except NaoEncontrado as e:
+        raise _404("Campanha") from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {"email": corpo.email.strip().lower(), "papel": corpo.papel}
+
+
+@router.get("/{campanha_id}/auditoria")
+async def auditoria(
+    campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
+) -> list[dict[str, Any]]:
+    """Quem salvou, carregou ou quebrou o vidro — para o GM da mesa ou o admin."""
+    try:
+        return await _store().auditoria(owner, campanha_id)
+    except NaoEncontrado as e:
+        raise _404("Campanha") from e
 
 
 @router.get("/{campanha_id}/saves")
@@ -160,7 +200,37 @@ async def restaurar(
         if isinstance(extras.get("spells_conhecidas"), list):
             sessao.spells_conhecidas = [str(s) for s in extras["spells_conhecidas"]]
     log.info("save_restaurado", campanha_id=campanha_id, save_id=save_id, session_id=sessao.session_id)
-    return {"ok": True, "session_id": sessao.session_id, "player_name": alvo.player_name}
+    empurrado = await _empurrar_estado(sessao)
+    return {
+        "ok": True,
+        "session_id": sessao.session_id,
+        "player_name": alvo.player_name,
+        "estado_enviado": empurrado,
+    }
+
+
+async def _empurrar_estado(sessao: SessaoAtiva) -> bool:
+    """Manda o snapshot restaurado pelo WebSocket aberto — o MESMO `fim` da reconexão.
+
+    Sem isto a ficha na tela continuaria mostrando o estado de antes até o
+    próximo turno. Sem conexão aberta não é erro: a próxima conexão já recebe o
+    estado novo, porque o snapshot é lido da WorkingMemory.
+    """
+    ws = getattr(sessao, "ws_ativo", None)
+    if ws is None:
+        return False
+    # Import tardio: api.websocket importa as rotas de sessão; aqui não pode ciclar.
+    from api.models.schemas import MensagemWS
+    from api.websocket import _snapshot_estado
+
+    try:
+        await ws.send_text(
+            MensagemWS(tipo="fim", latencia_ms=0, **_snapshot_estado(sessao.working_mem)).model_dump_json()
+        )
+        return True
+    except Exception as e:
+        log.warning("save_restaurado_ws_falhou", session_id=sessao.session_id, erro=str(e)[:120])
+        return False
 
 
 @router_admin.get("/campanhas")

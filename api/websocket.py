@@ -1812,8 +1812,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
             # seguinte do while readquire. É por isso que o `async with` envolve o
             # corpo inteiro em vez de acquire/release manuais: com 21 saídas, o
             # release manual vazaria o lock em pelo menos uma delas.
+            # `receive_text` FORA do lock: ocioso, ele travava salvar/restaurar save.
+            dados_raw = await websocket.receive_text()
             async with sessao.lock_turno:
-                dados_raw = await websocket.receive_text()
 
                 try:
                     dados: dict[str, Any] = json.loads(dados_raw)

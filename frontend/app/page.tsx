@@ -21,6 +21,7 @@ import { SessionPicker } from "@/components/SessionPicker";
 import { CharacterSheet } from "@/components/CharacterSheet";
 import { FichaViva } from "@/components/FichaViva";
 import { PanelLauncher, type PainelDef } from "@/components/PanelLauncher";
+import { SavesPanel } from "@/components/SavesPanel";
 import { PanelDrawer } from "@/components/PanelDrawer";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
@@ -2179,6 +2180,7 @@ export default function Home() {
       { id: "quests", label: "Quests", badge: activeQuests.length + fiosSoltos.length + Object.keys(relogios).length },
       { id: "cronica", label: "Crônica", badge: cronica.length },
       { id: "mapa", label: "Mapa", badge: locaisVisitados.length },
+      { id: "saves", label: "Saves" },
     ];
     const labelPainel: Record<string, string> = Object.fromEntries(paineisLauncher.map((p) => [p.id, p.label]));
     const mostrarLauncher = !cinemaMode && conectado;
@@ -2217,7 +2219,17 @@ export default function Home() {
         {/* Conteúdo + chrome material BG1 extraídos pra PanelDrawer.tsx
             (rebuild 03/07). "ficha" não usa este drawer — reaproveita a view
             de Detalhes do CharacterSheet (popover próprio, à direita). */}
-        {mostrarLauncher && painelAberto && painelAberto !== "ficha" && (
+        {/* Saves de campanha — drawer próprio (fala com a API, não é presentational). */}
+        {mostrarLauncher && painelAberto === "saves" && (
+          <ErrorBoundary nome="painel de saves">
+            <SavesPanel
+              sessionId={sessionId}
+              isAdmin={ownerAdmin}
+              onFechar={() => setPainelAberto(null)}
+            />
+          </ErrorBoundary>
+        )}
+        {mostrarLauncher && painelAberto && painelAberto !== "ficha" && painelAberto !== "saves" && (
           <ErrorBoundary nome="painel do launcher">
             <PanelDrawer
               painelId={painelAberto}

@@ -455,6 +455,13 @@ NÃO importar o pacote `qdrant_client` antes do driver `neo4j` num teste → o i
                             COLETA com `OSError: [WinError 6714]`. O `conftest.py`
                             fixa a ordem; não remova aquele import "sem uso".
 
+# Lock de turno segurado em ÓCIO (14/10)
+NÃO esperar `websocket.receive_text()` dentro de `async with sessao.lock_turno` →
+                            a conexão parada segurava o lock esperando o jogador
+                            falar, e qualquer rota que pedisse o lock (salvar /
+                            restaurar save) travava até a próxima mensagem. Achado
+                            só no navegador: teste com WS fake não espera fala.
+
 # asyncio dentro de dataclass
 NÃO criar `asyncio.Lock` em `field(default_factory=asyncio.Lock)` → a dataclass é
                             instanciada fora de loop rodando (POST /session/start em

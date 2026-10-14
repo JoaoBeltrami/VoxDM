@@ -486,3 +486,135 @@ export async function obterEquipamentoInicial(
     return null;
   }
 }
+
+
+// ── Campanhas e saves (continuidade solo) ─────────────────────────────────
+// Espelha api/routes/campanha.py. "Não é seu" volta 404 igual a "não existe":
+// a UI trata os dois como "não encontrado" e nunca sugere que o id é real.
+
+export type PapelCampanha = "gm" | "player";
+
+export interface Campanha {
+  id: string;
+  owner_email: string;
+  nome: string;
+  criada_em: number;
+  atualizada_em: number;
+  schema_version: number;
+  papel: PapelCampanha | "";
+}
+
+export interface SaveInfo {
+  id: string;
+  campanha_id: string;
+  rotulo: string;
+  criado_em: number;
+  schema_version: number;
+  manifest: {
+    arquivo: string;
+    sha256: string;
+    bytes: number;
+    personagens: { nome: string; classe: string; nivel: number }[];
+  };
+}
+
+export interface MembroCampanha {
+  email: string;
+  papel: PapelCampanha;
+}
+
+export interface LinhaAuditoria {
+  em: number;
+  email: string;
+  acao: string;
+  save_id: string;
+  motivo: string;
+}
+
+/** Metadado de campanha alheia — o que o admin da instância enxerga. */
+export interface CampanhaMetadado {
+  id: string;
+  owner_email: string;
+  nome: string;
+  criada_em: number;
+  atualizada_em: number;
+  saves: number;
+  bytes: number;
+  personagens: string[];
+  saves_lista: { id: string; rotulo: string; criado_em: number; bytes: number }[];
+}
+
+async function _json<T>(resp: Response): Promise<T> {
+  if (!resp.ok) {
+    let detalhe = `${resp.status}`;
+    try {
+      const corpo = await resp.json();
+      if (typeof corpo?.detail === "string") detalhe = corpo.detail;
+      else if (Array.isArray(corpo?.detail)) detalhe = corpo.detail.map((d: { msg?: string }) => d.msg).join("; ");
+    } catch {
+      // corpo não-JSON: fica o status
+    }
+    throw new Error(detalhe);
+  }
+  return resp.json() as Promise<T>;
+}
+
+function _post(url: string, body: unknown): Promise<Response> {
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listarCampanhas(): Promise<Campanha[]> {
+  return _json(await fetch(`${API_BASE}/campanhas`, { cache: "no-store" }));
+}
+
+export async function criarCampanha(nome: string): Promise<Campanha> {
+  return _json(await _post(`${API_BASE}/campanhas`, { nome }));
+}
+
+export async function listarSavesCampanha(campanhaId: string): Promise<SaveInfo[]> {
+  return _json(await fetch(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves`, { cache: "no-store" }));
+}
+
+export async function salvarNaCampanha(campanhaId: string, sessionId: string, rotulo: string): Promise<SaveInfo> {
+  return _json(await _post(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves`, {
+    session_id: sessionId,
+    rotulo,
+  }));
+}
+
+export async function restaurarSave(
+  campanhaId: string,
+  saveId: string,
+  sessionId: string,
+): Promise<{ ok: boolean; player_name: string; estado_enviado: boolean }> {
+  return _json(await _post(
+    `${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves/${encodeURIComponent(saveId)}/restaurar`,
+    { session_id: sessionId },
+  ));
+}
+
+export async function listarMembros(campanhaId: string): Promise<MembroCampanha[]> {
+  return _json(await fetch(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/membros`, { cache: "no-store" }));
+}
+
+export async function adicionarMembro(campanhaId: string, email: string, papel: PapelCampanha): Promise<MembroCampanha> {
+  return _json(await _post(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/membros`, { email, papel }));
+}
+
+export async function auditoriaCampanha(campanhaId: string): Promise<LinhaAuditoria[]> {
+  return _json(await fetch(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/auditoria`, { cache: "no-store" }));
+}
+
+export async function adminListarCampanhas(): Promise<CampanhaMetadado[]> {
+  return _json(await fetch(`${API_BASE}/admin/campanhas`, { cache: "no-store" }));
+}
+
+/** Quebra-vidro: lê o CONTEÚDO de um save alheio. O backend grava a auditoria
+ *  com o motivo ANTES de devolver — não existe versão silenciosa disto. */
+export async function adminQuebraVidro(saveId: string, motivo: string): Promise<Record<string, unknown>> {
+  return _json(await _post(`${API_BASE}/admin/saves/${encodeURIComponent(saveId)}/quebra-vidro`, { motivo }));
+}
