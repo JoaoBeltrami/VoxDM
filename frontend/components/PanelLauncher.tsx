@@ -49,6 +49,9 @@ const ICONES: Record<string, ReactNode> = {
   cronica: (
     <svg {...SVG}><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H18v15H7.5A2.5 2.5 0 0 0 5 20.5z" /><path d="M5 5.5v15" /><path d="M9 8h5M9 11h5" /></svg>
   ),
+  saves: (
+    <svg {...SVG}><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h7V4" /><rect x="8" y="13" width="8" height="5" rx="1" /></svg>
+  ),
   mapa: (
     <svg {...SVG}><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4z" /><path d="M9 4v14M15 6v14" /></svg>
   ),

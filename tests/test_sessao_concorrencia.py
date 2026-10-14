@@ -128,6 +128,19 @@ def test_o_corpo_do_turno_esta_sob_o_lock():
     assert 0 < i_lock - i_while < 900, "o lock precisa envolver o corpo do while"
 
 
+def test_conexao_ociosa_nao_segura_o_lock():
+    """Esperar a fala do jogador NÃO pode acontecer com o lock na mão.
+
+    Dentro do lock, salvar/restaurar save (rotas que pedem o mesmo lock)
+    travava até o jogador mandar a próxima mensagem — achado ao verificar o
+    painel de saves no navegador, 14/10.
+    """
+    fonte = _fonte_ws()
+    i_lock = fonte.index("async with sessao.lock_turno:")
+    i_receive = fonte.index("dados_raw = await websocket.receive_text()")
+    assert i_receive < i_lock
+
+
 # ── Checkpoint em transição ──────────────────────────────────────────────────
 
 
