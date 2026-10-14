@@ -316,6 +316,9 @@ def test_permissoes_metadado_conteudo() -> None:
     assert pode_ver_conteudo(ADMIN, BOB.email, quebra_vidro=True)
     assert not pode_ver_conteudo(ALICE, BOB.email, quebra_vidro=True)
     assert not pode_ver_conteudo(ALICE, "")
+    # Legado sem dono: admin-only, como no `pode_ver`.
+    assert pode_ver_conteudo(ADMIN, "") and pode_ver_conteudo(ADMIN, "__legado__")
+    assert not pode_ver_conteudo(ALICE, "__legado__")
 
 
 def test_pode_ver_nao_mudou_de_semantica() -> None:
@@ -338,3 +341,62 @@ def test_papeis_validos() -> None:
 def test_admin_da_instancia_nao_e_gm_da_mesa() -> None:
     assert dataclasses.fields(Owner)  # Owner não carrega papel — papel é por campanha
     assert "papel" not in {f.name for f in dataclasses.fields(Owner)}
+
+
+# ── arquivar (o "apagar" que não apaga) ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_arquivar_some_das_listas_e_nao_apaga_nada(store: CampanhaStore) -> None:
+    camp = await store.criar_campanha(ALICE, "Valdrek")
+    info = await store.salvar(ALICE, camp.id, "x", _envelope(_wm_rica(), camp.id))
+    await store.arquivar_campanha(ALICE, camp.id)
+
+    assert await store.listar_campanhas(ALICE) == []
+    with pytest.raises(NaoEncontrado):
+        await store.listar_saves(ALICE, camp.id)
+    with pytest.raises(NaoEncontrado):
+        await store.salvar(ALICE, camp.id, "depois", _envelope(_wm_rica(), camp.id))
+    # O arquivo continua em disco e o admin ainda vê o metadado e abre por quebra-vidro.
+    assert (store.dir_saves / info.manifest["arquivo"]).exists()
+    meta = await store.listar_metadados_admin(ADMIN)
+    assert meta[0]["arquivada_em"] > 0 and meta[0]["saves"] == 1
+    env = await store.carregar_quebra_vidro(ADMIN, info.id, "recuperar save arquivado")
+    assert env["campanha_id"] == camp.id
+    acoes = [linha["acao"] for linha in await store.auditoria(ADMIN, camp.id)]
+    assert "arquivar_campanha" in acoes
+
+
+@pytest.mark.asyncio
+async def test_so_o_gm_arquiva(store: CampanhaStore) -> None:
+    camp = await store.criar_campanha(ALICE, "Valdrek")
+    await store.adicionar_membro(ALICE, camp.id, BOB.email, PAPEL_PLAYER)
+    with pytest.raises(NaoEncontrado):
+        await store.arquivar_campanha(BOB, camp.id)
+    with pytest.raises(NaoEncontrado):
+        await store.arquivar_campanha(ADMIN, camp.id)  # admin da instância ≠ GM
+
+
+@pytest.mark.asyncio
+async def test_banco_de_antes_do_arquivamento_ganha_a_coluna(tmp_path: Path) -> None:
+    """Banco criado sem `arquivada_em` (13/10) migra sozinho e continua listando."""
+    import aiosqlite
+
+    db = tmp_path / "velho.db"
+    async with aiosqlite.connect(db) as conn:
+        await conn.execute(
+            "CREATE TABLE campanha (id TEXT PRIMARY KEY, owner_email TEXT NOT NULL, nome TEXT NOT NULL, "
+            "criada_em REAL NOT NULL, atualizada_em REAL NOT NULL, schema_version INTEGER NOT NULL)"
+        )
+        await conn.execute("INSERT INTO campanha VALUES ('c-velha','alice@voxdm.test','Velha',1,1,1)")
+        await conn.execute(
+            "CREATE TABLE campanha_membro (campanha_id TEXT NOT NULL, email TEXT NOT NULL, "
+            "papel TEXT NOT NULL, PRIMARY KEY (campanha_id, email))"
+        )
+        await conn.execute("INSERT INTO campanha_membro VALUES ('c-velha','alice@voxdm.test','gm')")
+        await conn.commit()
+
+    store = CampanhaStore(db_path=db, dir_saves=tmp_path / "s")
+    assert [c.id for c in await store.listar_campanhas(ALICE)] == ["c-velha"]
+    nova = await store.criar_campanha(ALICE, "Nova")
+    assert {c.id for c in await store.listar_campanhas(ALICE)} == {"c-velha", nova.id}

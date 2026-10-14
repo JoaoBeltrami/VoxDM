@@ -118,6 +118,8 @@ export interface MensagemWS {
   conteudo_b64?: string;
   sequencia?: number;
   narrativo?: boolean;  // CRIT-2: false em chunks de thinking audio (não calibra karaokê)
+  /** `fim` que só reenvia estado (reconexão, save restaurado) — não é turno, não gera diff. */
+  sincronizacao?: boolean;
   latencia_ms?: number;
   chunks_lore?: string[];
   chunks_regras?: string[];
@@ -538,6 +540,8 @@ export interface CampanhaMetadado {
   nome: string;
   criada_em: number;
   atualizada_em: number;
+  /** 0 = ativa; > 0 = timestamp do arquivamento. */
+  arquivada_em: number;
   saves: number;
   bytes: number;
   personagens: string[];
@@ -595,6 +599,11 @@ export async function restaurarSave(
     `${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves/${encodeURIComponent(saveId)}/restaurar`,
     { session_id: sessionId },
   ));
+}
+
+/** Só o GM. A campanha some das listas; nada é apagado no servidor. */
+export async function arquivarCampanha(campanhaId: string): Promise<void> {
+  await _json(await _post(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/arquivar`, {}));
 }
 
 export async function listarMembros(campanhaId: string): Promise<MembroCampanha[]> {

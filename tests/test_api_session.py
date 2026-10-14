@@ -279,8 +279,12 @@ def test_isolamento_usuario_comum_nao_ve_sessao_de_outro():
     sessions.clear()
 
 
-def test_isolamento_admin_ve_qualquer_sessao():
-    """Admin (is_admin=True) pode ver sessões de qualquer usuário."""
+def test_isolamento_admin_nao_entra_na_sessao_de_outro():
+    """Admin da instância vê metadado, não conteúdo (decisão de 13/10).
+
+    Antes valia "admin vê qualquer sessão". A sessão ativa de outro jogador
+    é narrativa dele — para o admin ela é 404, igual a "não existe".
+    """
     from api.auth import get_owner
     from api.main import app
     from api.state import sessions
@@ -296,10 +300,16 @@ def test_isolamento_admin_ve_qualquer_sessao():
             assert resp.status_code == 201, resp.text
             sid = resp.json()["session_id"]
 
-            # Admin acessa — deve funcionar
             app.dependency_overrides[get_owner] = lambda: owner_admin
-            resp = cl.get(f"/session/{sid}/status")
-            assert resp.status_code == 200, "Admin não conseguiu ver sessão de outro usuário"
+            assert cl.get(f"/session/{sid}/status").status_code == 404
+            assert cl.get(f"/session/{sid}/character").status_code == 404
+            assert cl.delete(f"/session/{sid}").status_code == 404
+            assert sid in sessions
+
+            # A própria sessão do admin continua aberta pra ele.
+            resp = cl.post("/session/start", json={})
+            sid_admin = resp.json()["session_id"]
+            assert cl.get(f"/session/{sid_admin}/status").status_code == 200
 
     app.dependency_overrides.clear()
     sessions.clear()
@@ -441,8 +451,8 @@ def test_resume_da_propria_sessao_permitido():
     sessions.clear()
 
 
-def test_resume_admin_pode_continuar_qualquer_sessao():
-    """Admin pode continuar sessão de qualquer dono (paridade com _get_sessao)."""
+def test_resume_admin_nao_continua_sessao_alheia():
+    """Restaurar a sessão de outra pessoa é ler o conteúdo dela — nem admin."""
     from api.main import app
     from api.state import sessions
     from engine.auth.identity import Owner
@@ -451,6 +461,28 @@ def test_resume_admin_pode_continuar_qualquer_sessao():
 
     p1, p2 = _client_com_override(owner_admin)
     ps, pe = _patch_stores_para_resume("alice@voxdm.test")
+    with p1, p2, ps, pe:
+        with TestClient(app) as cl:
+            resp = cl.post(
+                "/session/start",
+                json={"session_anterior_id": "sess-vitima-0001"},
+            )
+            assert resp.status_code == 404, resp.text
+
+    app.dependency_overrides.clear()
+    sessions.clear()
+
+
+def test_resume_admin_continua_sessao_legada_sem_dono():
+    """Legado sem dono segue admin-only (decisão travada) — o admin restaura."""
+    from api.main import app
+    from api.state import sessions
+    from engine.auth.identity import Owner
+
+    owner_admin = Owner(email="admin@voxdm.test", is_admin=True)
+
+    p1, p2 = _client_com_override(owner_admin)
+    ps, pe = _patch_stores_para_resume("")
     with p1, p2, ps, pe:
         with TestClient(app) as cl:
             resp = cl.post(

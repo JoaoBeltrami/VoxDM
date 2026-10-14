@@ -134,6 +134,18 @@ async def adicionar_membro(
     return {"email": corpo.email.strip().lower(), "papel": corpo.papel}
 
 
+@router.post("/{campanha_id}/arquivar")
+async def arquivar(
+    campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, Any]:
+    """Só o GM. Some das listas; saves e auditoria ficam (nada é apagado)."""
+    try:
+        await _store().arquivar_campanha(owner, campanha_id)
+    except NaoEncontrado as e:
+        raise _404("Campanha") from e
+    return {"ok": True, "campanha_id": campanha_id}
+
+
 @router.get("/{campanha_id}/auditoria")
 async def auditoria(
     campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
@@ -225,7 +237,10 @@ async def _empurrar_estado(sessao: SessaoAtiva) -> bool:
 
     try:
         await ws.send_text(
-            MensagemWS(tipo="fim", latencia_ms=0, **_snapshot_estado(sessao.working_mem)).model_dump_json()
+            MensagemWS(
+                tipo="fim", latencia_ms=0, sincronizacao=True,
+                **_snapshot_estado(sessao.working_mem),
+            ).model_dump_json()
         )
         return True
     except Exception as e:

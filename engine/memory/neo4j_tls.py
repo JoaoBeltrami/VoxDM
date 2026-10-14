@@ -26,7 +26,7 @@ Exemplo:
 from typing import Any
 
 import certifi
-from neo4j import TrustCustomCAs
+from neo4j import NotificationDisabledClassification, TrustCustomCAs
 
 # Esquemas que pedem TLS com verificação completa → esquema base equivalente.
 _ESQUEMAS_VERIFICADOS: dict[str, str] = {
@@ -61,4 +61,16 @@ def argumentos_driver_neo4j() -> dict[str, Any]:
     from config import settings
 
     uri, tls = config_tls_neo4j(settings.NEO4J_URI)
-    return {"uri": uri, "auth": (settings.NEO4J_USER, settings.NEO4J_PASSWORD), **tls}
+    return {
+        "uri": uri,
+        "auth": (settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+        # UNRECOGNIZED = "label/propriedade não existe no banco" (01N50/01N52).
+        # Num grafo sem schema isso é o estado NORMAL: o `:EstadoNPC` só nasce no
+        # primeiro afeto gravado, e até lá cada turno lia o afeto e despejava um
+        # warning de várias linhas no log (14/10). Mesmo ruído que o
+        # `properties(n)` de `buscar_dados_npcs` já contornava na mão.
+        "notifications_disabled_classifications": [
+            NotificationDisabledClassification.UNRECOGNIZED,
+        ],
+        **tls,
+    }

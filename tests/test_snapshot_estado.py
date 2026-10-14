@@ -98,3 +98,21 @@ def test_relogios_visiveis_fora_da_session_zero():
     snap = _snapshot_estado(wm)
     assert "guerra" in snap["relogios"]
     assert snap["relogios"]["guerra"]["atual"] == 1
+
+
+def test_fim_que_so_reenvia_estado_vem_marcado_como_sincronizacao():
+    """Abertura, reconexão e equipar mandam ESTADO, não consequência de turno.
+
+    Sem `sincronizacao=True`, o frontend comparava a tela vazia com o
+    inventário real e pendurava "+Escudo +Maça…" na abertura (14/10). Ancorado
+    no texto do fonte: os três sítios ficam no websocket e não têm teste de
+    integração barato.
+    """
+    import inspect
+
+    import api.websocket as ws
+
+    fonte = inspect.getsource(ws)
+    assert fonte.count("sincronizacao=True") >= 3
+    abertura = fonte[fonte.index('log.info("ws_abertura_enviada"') - 1200:fonte.index('log.info("ws_abertura_enviada"')]
+    assert "sincronizacao=True" in abertura

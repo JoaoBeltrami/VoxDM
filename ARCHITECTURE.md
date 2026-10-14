@@ -350,12 +350,15 @@ gerado no servidor; ownership divergente responde 404, não 403, para não permi
 enumeração. Rate limit é por **email autenticado**, não por IP — atrás de um Tunnel
 todo mundo compartilha o mesmo endereço.
 
-`Owner.pode_ver` (admin vê tudo) segue valendo para sessão ativa e `/debug/*`. Para
-campanha e save, `engine/auth/permissoes.py` separa **metadado** (admin vê: existe, de
-quem, quando, personagens, tamanho) de **conteúdo** (só o membro; admin apenas por
-quebra-vidro, `POST /admin/saves/{id}/quebra-vidro`, com motivo gravado em `save_audit`
-ANTES do conteúdo sair). Admin da instância (`ADMIN_EMAILS`) ≠ GM da mesa (`papel`), e
-papel desconhecido é sem acesso.
+`engine/auth/permissoes.py` separa **metadado** (admin vê: existe, de quem, quando,
+personagens, tamanho) de **conteúdo** (só o dono/membro; legado sem dono é admin-only;
+narrativa alheia só por quebra-vidro, `POST /admin/saves/{id}/quebra-vidro`, com motivo
+gravado em `save_audit` ANTES do conteúdo sair). Desde 14/10 a regra vale em TODO
+lugar: rotas de sessão, WebSocket, resume, `/debug/*` (inclusive o arquivo de sessão
+encerrada, que agora grava o dono) e saves. `Owner.pode_ver` (admin vê tudo) continua
+existindo com a semântica antiga, mas nenhuma porta de conteúdo usa mais. Admin da
+instância (`ADMIN_EMAILS`) ≠ GM da mesa (`papel`), e papel desconhecido é sem acesso.
+Campanha não se apaga: **arquiva** (some das listas, saves e auditoria ficam).
 
 ### 10. Régua de qualidade narrativa (`engine/quality/tells.py`)
 Detector puro dos três "tells de máquina" que quebram a Camada 1 do ADR-005: emoção

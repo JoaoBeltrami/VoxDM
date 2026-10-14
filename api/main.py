@@ -64,6 +64,33 @@ async def _tarefa_limpeza() -> None:
         limpar_sessoes_inativas()
 
 
+def identidade_mal_configurada(
+    debug: bool, cf_team_domain: str, cf_access_aud: str
+) -> str | None:
+    """Motivo para RECUSAR subir, ou None se a identidade está utilizável.
+
+    P11 parte 3: com DEBUG=false não existe fallback de DEV_USER_EMAIL, então
+    sem CF_TEAM_DOMAIN/CF_ACCESS_AUD nenhum JWT valida e TODA requisição vira
+    401 — a API "sobe", o health responde, e ninguém entende por que nada
+    funciona. Falhar no boot dizendo o que configurar é melhor.
+    """
+    if debug:
+        return None
+    faltando = [
+        nome for nome, valor in (
+            ("CF_TEAM_DOMAIN", cf_team_domain), ("CF_ACCESS_AUD", cf_access_aud),
+        ) if not valor.strip()
+    ]
+    if not faltando:
+        return None
+    return (
+        f"DEBUG=false e {', '.join(faltando)} vazio(s) no .env: sem eles nenhum JWT "
+        "do Cloudflare Access valida e toda requisição seria 401. Preencha com os "
+        "valores da Access App no painel Zero Trust, ou use DEBUG=true com "
+        "DEV_USER_EMAIL para rodar local."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup e shutdown controlados pela engine.
@@ -75,6 +102,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     só descobre na primeira chamada.
     """
     log.info("voxdm_api_iniciando", versao=_VERSAO, debug=settings.DEBUG)
+    motivo = identidade_mal_configurada(
+        settings.DEBUG, settings.CF_TEAM_DOMAIN, settings.CF_ACCESS_AUD
+    )
+    if motivo:
+        log.error("voxdm_api_recusou_subir", motivo=motivo)
+        raise RuntimeError(motivo)
     # VOXDM_SKIP_WARMUP=1 desliga todos os warmups (embedder, whisper, tts,
     # thinking_cache, ollama). Usado em testes (conftest.py seta automaticamente)
     # para evitar downloads de modelo Whisper + 20 sínteses Edge TTS que

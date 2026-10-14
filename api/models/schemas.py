@@ -210,6 +210,10 @@ class MensagemWS(BaseModel):
     # reverso. Default true preserva comportamento de TTS real.
     narrativo: bool = True
     latencia_ms: int = 0
+    # `fim` que NÃO fecha um turno — reenvio de estado na reconexão ou depois de
+    # restaurar um save. O frontend aplica o estado mas não calcula diff: sem o
+    # sinal, restaurar mostrava "+Cota de malha" como se o item acabasse de cair.
+    sincronizacao: bool = False
     chunks_lore: list[str] = Field(default_factory=list)
     chunks_regras: list[str] = Field(default_factory=list)
     relacoes_grafo: list[dict[str, Any]] = Field(default_factory=list)

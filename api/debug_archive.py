@@ -11,7 +11,7 @@ Armadilha: I/O roda em thread (asyncio.to_thread) pra não bloquear o event loop
     falha é silenciosa — dado de debug nunca deve quebrar o Encerrar nem o polling.
 
 Exemplo:
-    await arquivar_debug_sessao("sess-abc", historico, ultimo_turno)
+    await arquivar_debug_sessao("sess-abc", historico, ultimo_turno, owner_email="a@x.com")
     dados = await carregar_debug_sessao("sess-abc")  # → {"historico": [...], ...} ou None
 """
 
@@ -47,7 +47,11 @@ def _ler(caminho: Path) -> dict[str, Any] | None:
 
 
 async def arquivar_debug_sessao(
-    session_id: str, historico_turnos: list[dict], ultimo_turno: dict
+    session_id: str,
+    historico_turnos: list[dict],
+    ultimo_turno: dict,
+    *,
+    owner_email: str,
 ) -> bool:
     """Arquiva histórico + último turno de uma sessão no Encerrar.
 
@@ -59,6 +63,9 @@ async def arquivar_debug_sessao(
         return False
     dados = {
         "session_id": session_id,
+        # Dono gravado no arquivo: o /debug de sessão encerrada aplica a mesma
+        # regra de conteúdo da sessão viva. Arquivo antigo sem o campo é legado.
+        "owner_email": owner_email,
         "arquivada_em": time.time(),
         "total_turnos": len(historico_turnos),
         "historico": list(historico_turnos),

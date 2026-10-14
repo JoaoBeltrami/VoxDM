@@ -38,6 +38,23 @@ const RE_STRIP = new RegExp(
   "gi",
 );
 
+// Marcador ainda ABERTO no fim do stream: "[RELOG", "[RELOGIO: carn". Só
+// colchete seguido de MAIÚSCULA — prosa do Mestre não abre colchete assim.
+const RE_MARCADOR_PARCIAL = /\[(?:TAG:\s*)?[A-ZÀ-Ý_]*(?:[:=][^\]]*)?$/;
+
+/** Versão de STREAMING: tudo que `stripMarcadoresExibicao` tira, mais o
+ *  marcador que ainda está chegando (sem `]`). Não colapsa quebra de linha —
+ *  o texto ainda está crescendo e o `fim` faz a limpeza final. */
+export function stripMarcadoresStreaming(texto: string): string {
+  if (!texto) return texto;
+  return texto
+    .replace(RE_STRIP, "")
+    .replace(RE_MARCADOR_PARCIAL, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trimStart()
+    .trimEnd();
+}
+
 /** Remove marcadores técnicos do texto exibido; colapsa o espaço que sobra. */
 export function stripMarcadoresExibicao(texto: string): string {
   if (!texto) return texto;
