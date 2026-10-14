@@ -594,7 +594,7 @@ export async function restaurarSave(
   campanhaId: string,
   saveId: string,
   sessionId: string,
-): Promise<{ ok: boolean; player_name: string; estado_enviado: boolean }> {
+): Promise<{ ok: boolean; player_name: string; estado_enviado: boolean; personagem: PersonagemConfig }> {
   return _json(await _post(
     `${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves/${encodeURIComponent(saveId)}/restaurar`,
     { session_id: sessionId },
@@ -604,6 +604,30 @@ export async function restaurarSave(
 /** Só o GM. A campanha some das listas; nada é apagado no servidor. */
 export async function arquivarCampanha(campanhaId: string): Promise<void> {
   await _json(await _post(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/arquivar`, {}));
+}
+
+/** O "carregar" do menu: sessão NOVA criada direto do save. Devolve o mesmo
+ *  SessaoInfo do /session/start, já com `personagem_restaurado`. */
+export async function iniciarDeSave(campanhaId: string, saveId: string): Promise<SessaoInfo> {
+  return _json(await _post(
+    `${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/saves/${encodeURIComponent(saveId)}/iniciar`,
+    {},
+  ));
+}
+
+export async function removerMembro(campanhaId: string, email: string): Promise<void> {
+  await _json(await fetch(
+    `${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/membros/${encodeURIComponent(email)}`,
+    { method: "DELETE" },
+  ));
+}
+
+export async function listarArquivadas(): Promise<Campanha[]> {
+  return _json(await fetch(`${API_BASE}/campanhas/arquivadas/lista`, { cache: "no-store" }));
+}
+
+export async function desarquivarCampanha(campanhaId: string): Promise<void> {
+  await _json(await _post(`${API_BASE}/campanhas/${encodeURIComponent(campanhaId)}/desarquivar`, {}));
 }
 
 export async function listarMembros(campanhaId: string): Promise<MembroCampanha[]> {

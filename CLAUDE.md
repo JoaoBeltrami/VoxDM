@@ -183,8 +183,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Iniciativa e rodada | Todo mundo rola d20 (inimigo sem DES rola puro). **Rodada = a volta completa da ordem**, não o turno do jogador. Empate é aceito: o desempate de `calcular_ordem_iniciativa` já é determinístico, e com d20 a colisão é inevitável por casa-dos-pombos |
 | Conexão dupla na mesma sessão | Chaveada pelo par **(sessão, dono)** — nunca pela sessão sozinha. Conexão nova do mesmo dono fecha a antiga com 1012. Dono diferente segue recusado pelo ownership: é ali que o multiplayer pluga |
 | STT | Faster-Whisper `large-v3-turbo` em GPU (`settings.STT_MODEL`). Medido 21/07: WER 3,67% e 0,58s/fala — mais rápido **e** mais correto que o `small` |
-| TTS principal | Edge TTS Microsoft. Nuance por **pontuação** — SSML foi tentado e é impossível no endpoint gratuito |
-| TTS fallback | Kokoro-82M local (`pip install kokoro` — NÃO kokoro-tts) |
+| TTS — voz padrão do narrador | **Kokoro-82M local, `pf_dora`** (`settings.TTS_PRINCIPAL="kokoro"`, desde 14/10). Mudou de OUVIDO: o Edge passou a levar 403 (edge-tts 7.2.8 velho), tudo caiu no Kokoro, e o Beltrami achou *"mil vezes menos robótico"*. Edge é o fallback, e `TTS_PRINCIPAL=edge` volta ao arranjo antigo para A/B. `pip install kokoro` — NÃO kokoro-tts |
+| TTS — voz escolhida (seletor, NPC) | **Edge TTS** (edge-tts **7.3.1** — a 7.2.8 leva 403 da Microsoft). Voz que não é a padrão é escolha explícita e não pode ser ignorada calada. Nuance por **pontuação** — SSML é impossível no endpoint gratuito. ⚠️ Edge **morre em silêncio**: o fallback esconde o 403 e só se vê no log (`Edge TTS falhou`) |
 | Banco vetorial | Qdrant Cloud free tier — `voxdm_modules`, `voxdm_rules`, `voxdm_bestiary`, `voxdm_episodic` |
 | Banco de grafos | Neo4j AuraDB free tier |
 | Banco estruturado | SQLite local via aiosqlite |
@@ -432,6 +432,12 @@ NÃO concluir "o campo está vazio" a partir de um endpoint de debug → `/debug
                             `payload.get('campo')`.
 
 # Lookup que devolve vazio em vez de levantar (a família silenciosa)
+NÃO gravar estado de NPC com o id que o MODELO escreveu → `[AFETO: bjorn|…]`
+                            vem com o primeiro nome; o grafo chama `bjorn-tharnsson`,
+                            e a LEITURA do afeto só consulta ids do grafo. O rancor
+                            era gravado e nunca lido (AFETO-ID-CURTO-1, achado pelo
+                            smoke de 14/10). `_id_da_lore` resolve antes do MERGE:
+                            id exato → prefixo único `id-…` → original + aviso.
 NÃO chavear dict de regra por string quando o consumidor usa int → `spell_slots` é chaveado
                             por INT; `decrementar_slot` faz `.get(nivel)` e devolve False
                             CALADO se não achar. Chave string faria TODA conjuração sair de

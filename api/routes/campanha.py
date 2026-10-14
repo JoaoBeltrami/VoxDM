@@ -23,7 +23,7 @@ import dataclasses
 from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from api.auth import exige_admin, get_owner
@@ -146,6 +146,37 @@ async def arquivar(
     return {"ok": True, "campanha_id": campanha_id}
 
 
+@router.delete("/{campanha_id}/membros/{email}")
+async def remover_membro(
+    campanha_id: str, email: str, owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, Any]:
+    """Só o GM. Não remove o último GM — a mesa nunca fica sem dono."""
+    try:
+        await _store().remover_membro(owner, campanha_id, email)
+    except NaoEncontrado as e:
+        raise _404("Membro") from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return {"ok": True}
+
+
+@router.get("/arquivadas/lista")
+async def listar_arquivadas(owner: Annotated[Owner, Depends(get_owner)]) -> list[dict[str, Any]]:
+    """Campanhas arquivadas em que este dono é GM — para desarquivar."""
+    return [_campanha_json(c) for c in await _store().listar_arquivadas(owner)]
+
+
+@router.post("/{campanha_id}/desarquivar")
+async def desarquivar(
+    campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, Any]:
+    try:
+        await _store().desarquivar_campanha(owner, campanha_id)
+    except NaoEncontrado as e:
+        raise _404("Campanha") from e
+    return {"ok": True, "campanha_id": campanha_id}
+
+
 @router.get("/{campanha_id}/auditoria")
 async def auditoria(
     campanha_id: str, owner: Annotated[Owner, Depends(get_owner)],
@@ -203,22 +234,113 @@ async def restaurar(
         raise HTTPException(status_code=409, detail=str(e)) from e
 
     async with sessao.lock_turno:
-        alvo = sessao.working_mem
-        for campo in dataclasses.fields(nova):
-            if campo.name == "session_id":
-                continue  # a sessão ativa continua sendo ela mesma
-            setattr(alvo, campo.name, getattr(nova, campo.name))
-        extras = envelope.get("extras") or {}
-        if isinstance(extras.get("spells_conhecidas"), list):
-            sessao.spells_conhecidas = [str(s) for s in extras["spells_conhecidas"]]
+        await _aplicar_save(sessao, nova, envelope)
     log.info("save_restaurado", campanha_id=campanha_id, save_id=save_id, session_id=sessao.session_id)
     empurrado = await _empurrar_estado(sessao)
     return {
         "ok": True,
         "session_id": sessao.session_id,
-        "player_name": alvo.player_name,
+        "player_name": sessao.working_mem.player_name,
         "estado_enviado": empurrado,
+        # A ficha restaurada: o frontend troca nome, retrato e atributos do
+        # cabeçalho — sem isto, restaurar OUTRO personagem deixava a tela
+        # mostrando o anterior até recarregar.
+        "personagem": _personagem_config(sessao),
     }
+
+
+def _personagem_config(sessao: SessaoAtiva) -> dict[str, Any]:
+    """Ficha da sessão no formato do `PersonagemConfig` do frontend."""
+    from api.routes.session import _wm_para_personagem_config
+
+    cfg = _wm_para_personagem_config(sessao.working_mem)
+    cfg["player_spells"] = list(sessao.spells_conhecidas)
+    return cfg
+
+
+async def _aplicar_save(sessao: SessaoAtiva, nova: Any, envelope: dict[str, Any]) -> None:
+    """Copia o save para DENTRO da WorkingMemory existente e grava o checkpoint.
+
+    Mesmo objeto (o WebSocket aberto segura a referência) e checkpoint NA HORA:
+    sem ele, o "Continuar como…" do menu mostrava o personagem de ANTES do
+    restore até o próximo checkpoint (5 turnos) ou o Encerrar. Quem chama
+    segura o `lock_turno`.
+    """
+    from api.routes.session import salvar_checkpoint_sessao
+
+    alvo = sessao.working_mem
+    for campo in dataclasses.fields(nova):
+        if campo.name == "session_id":
+            continue  # a sessão ativa continua sendo ela mesma
+        setattr(alvo, campo.name, getattr(nova, campo.name))
+    extras = envelope.get("extras") or {}
+    if isinstance(extras.get("spells_conhecidas"), list):
+        sessao.spells_conhecidas = [str(s) for s in extras["spells_conhecidas"]]
+    try:
+        await salvar_checkpoint_sessao(sessao)
+    except Exception as e:
+        # O restore em memória já valeu; o checkpoint é a rede de segurança.
+        log.warning("save_restaurado_checkpoint_falhou", session_id=sessao.session_id, erro=str(e)[:120])
+
+
+@router.post("/{campanha_id}/saves/{save_id}/iniciar", status_code=201)
+async def iniciar_de_save(
+    campanha_id: str, save_id: str, request: Request,
+    owner: Annotated[Owner, Depends(get_owner)],
+) -> dict[str, Any]:
+    """Começa uma sessão NOVA direto de um save — o "carregar" do menu.
+
+    Cria a sessão pelo MESMO caminho do `POST /session/start` (contexto, voz,
+    quests do módulo, dono), com a ficha que está no save, e só então aplica o
+    save por cima. Quem chama conecta o WebSocket depois, e a abertura já
+    narra o personagem restaurado.
+    """
+    from pydantic import ValidationError
+
+    from api.models.schemas import SessaoConfig
+    from api.routes.session import iniciar_sessao
+
+    try:
+        envelope = await _store().carregar(owner, campanha_id, save_id)
+        nova = restaurar_working_memory(envelope)
+    except NaoEncontrado as e:
+        raise _404("Save") from e
+    except (SaveIncompativel, SaveCorrompido) as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    ficha = _ficha_do_save(nova, envelope)
+    try:
+        config = SessaoConfig.model_validate(ficha)
+    except ValidationError as e:
+        # Campo fora da faixa do formulário (ex.: voz que saiu da allowlist):
+        # entra só com o essencial e o save por cima devolve o resto.
+        log.warning("iniciar_de_save_ficha_invalida", erro=str(e)[:200])
+        config = SessaoConfig(player_name=nova.player_name[:80], player_class=nova.player_class[:60])
+    info = await iniciar_sessao(request, config, owner)
+
+    sessao = sessions[info.session_id]
+    async with sessao.lock_turno:
+        await _aplicar_save(sessao, nova, envelope)
+    log.info("sessao_iniciada_de_save", campanha_id=campanha_id, save_id=save_id, session_id=sessao.session_id)
+    return {
+        **info.model_dump(),
+        "personagem_restaurado": _personagem_config(sessao),
+        "location_id": sessao.working_mem.location_id,
+        "location_nome": sessao.working_mem.location_nome,
+    }
+
+
+def _ficha_do_save(nova: Any, envelope: dict[str, Any]) -> dict[str, Any]:
+    """Campos do save que o `SessaoConfig` conhece — o resto vem no overlay."""
+    from api.models.schemas import SessaoConfig
+    from api.routes.session import _wm_para_personagem_config
+
+    cfg = _wm_para_personagem_config(nova)
+    extras = envelope.get("extras") or {}
+    if isinstance(extras.get("spells_conhecidas"), list):
+        cfg["player_spells"] = [str(s) for s in extras["spells_conhecidas"]]
+    conhecidos = set(SessaoConfig.model_fields)
+    return {k: v for k, v in cfg.items() if k in conhecidos and v not in (None, "")}
 
 
 async def _empurrar_estado(sessao: SessaoAtiva) -> bool:

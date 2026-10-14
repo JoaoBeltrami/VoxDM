@@ -22,6 +22,7 @@ import { CharacterSheet } from "@/components/CharacterSheet";
 import { FichaViva } from "@/components/FichaViva";
 import { PanelLauncher, type PainelDef } from "@/components/PanelLauncher";
 import { SavesPanel } from "@/components/SavesPanel";
+import { CarregarDeSave } from "@/components/CarregarDeSave";
 import { PanelDrawer } from "@/components/PanelDrawer";
 import { PlayerJournal } from "@/components/PlayerJournal";
 import { CombatTracker } from "@/components/CombatTracker";
@@ -35,7 +36,7 @@ import { useCombatSounds, lerSomCriticoAtivo, salvarSomCritico } from "@/hooks/u
 import { useSyncTextoVoz } from "@/hooks/useSyncTextoVoz";
 import { VolumeControl } from "@/components/VolumeControl";
 import type { PersonagemConfig, SessaoListaItem, PersonagemSalvoItem } from "@/lib/api";
-import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos, urlAmostraVoz } from "@/lib/api";
+import { trocarLlmBackend, obterIdentidade, checkpointSessao, listarPersonagensSalvos, urlAmostraVoz, iniciarDeSave } from "@/lib/api";
 
 // Vozes do Mestre — curada manualmente (ADR-004, 20/07).
 // O Edge TTS só tem TRÊS vozes pt-BR nativas, e são de geração antiga — é daí
@@ -566,7 +567,7 @@ export default function Home() {
     dadoAtivo, limparDadoAtivo,
     textoRecap, limparRecap, retocarRecap,
     levelUp, dismissLevelUp,
-    conectar, enviarComando, enviarIdle, desconectar, sincronizarEstado,
+    conectar, aplicarPersonagemRestaurado, enviarComando, enviarIdle, desconectar, sincronizarEstado,
     dispensarCondicaoDetectada, pararAudio, setVolume,
     questNotificacao, dispensarQuestNotificacao,
     rolagens, registrarRolagem,
@@ -1378,6 +1379,18 @@ export default function Home() {
       death_policy: deathPolicy,
       modo_episodio: modoEpisodio,
     });
+  }, [conectar, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
+
+  // "Carregar" de save de campanha: o backend cria a sessão NOVA direto do save;
+  // o resto (WS, nome, ficha restaurada, reconexão) é o mesmo `conectar`.
+  const handleIniciarDeSave = useCallback((campanhaId: string, saveId: string) => {
+    conectar("", {
+      tts_voice: vozSelecionada,
+      dm_profile: dmProfile,
+      roll_visibility: rollVisibility,
+      death_policy: deathPolicy,
+      modo_episodio: modoEpisodio,
+    }, () => iniciarDeSave(campanhaId, saveId));
   }, [conectar, vozSelecionada, dmProfile, rollVisibility, deathPolicy, modoEpisodio]);
 
   const handleConectar = useCallback(() => {
@@ -2226,6 +2239,7 @@ export default function Home() {
               sessionId={sessionId}
               isAdmin={ownerAdmin}
               onFechar={() => setPainelAberto(null)}
+              onRestaurado={aplicarPersonagemRestaurado}
             />
           </ErrorBoundary>
         )}
@@ -2674,6 +2688,8 @@ export default function Home() {
             </button>
             <h2 className="font-display text-lg uppercase tracking-[0.12em] text-vox-gold-bright">Carregar Sessão</h2>
           </div>
+
+          <CarregarDeSave onIniciar={handleIniciarDeSave} desabilitado={carregando} />
 
           <SessionPicker
             onContinuar={handleContinuarSessao}

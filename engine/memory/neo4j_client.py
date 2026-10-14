@@ -315,10 +315,40 @@ _sem_estado_legado(dict(r["props"])) for r in registros if r.get("props")
             log.warning("afeto_campo_invalido", campo=campo, npc_id=npc_id)
             return
         try:
-            await self._gravar_afeto(email, npc_id, campo, delta)
-            log.info("afeto_npc_atualizado", npc_id=npc_id, campo=campo, delta=delta)
+            canonico = await self._id_da_lore(npc_id)
+            await self._gravar_afeto(email, canonico, campo, delta)
+            log.info("afeto_npc_atualizado", npc_id=canonico, recebido=npc_id, campo=campo, delta=delta)
         except Exception as e:
             log.warning("afeto_npc_falhou", npc_id=npc_id, campo=campo, erro=str(e))
+
+    async def _id_da_lore(self, npc_id: str) -> str:
+        """Id canônico do NPC no grafo para o id que o turno trouxe.
+
+        AFETO-ID-CURTO-1 (smoke de 14/10): o modelo emite `[AFETO: bjorn|…]`
+        com o primeiro nome, o grafo chama o NPC de `bjorn-tharnsson`, e a
+        LEITURA do afeto só consulta ids do grafo. O rancor era gravado num nó
+        que ninguém lia — o Bjorn esquecia a ofensa entre sessões, calado.
+        Regra: id exato existe → ele; um único `id-…` → o completo; nenhum ou
+        ambíguo → o original (NPC de runtime, fora do grafo) e um aviso.
+        """
+        alvo = npc_id.strip().lower()
+        driver = await self._get_driver()
+        async with driver.session() as session:
+            result = await session.run(
+                "MATCH (n) WHERE n.id = $id OR n.id STARTS WITH $prefixo "
+                "RETURN DISTINCT n.id AS id",
+                {"id": alvo, "prefixo": f"{alvo}-"},
+            )
+            ids = [str(r["id"]) for r in await result.data() if r.get("id")]
+        if alvo in ids:
+            return alvo
+        if len(ids) == 1:
+            return ids[0]
+        if ids:
+            log.warning("afeto_id_ambiguo", recebido=npc_id, candidatos=ids[:5])
+        else:
+            log.info("afeto_npc_fora_do_grafo", npc_id=npc_id)
+        return alvo
 
     async def buscar_afeto_npc(self, owner: Owner, npc_id: str) -> dict[str, int]:
         """Estado afetivo do NPC em relação a ESTE dono.

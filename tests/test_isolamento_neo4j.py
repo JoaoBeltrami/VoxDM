@@ -63,6 +63,11 @@ class _GrafoFalso:
 
     async def run(self, cypher: str, params: dict[str, Any]) -> _Resultado:
         self.queries.append((cypher, params))
+        if "STARTS WITH" in cypher:
+            return _Resultado([
+                {"id": i} for i in self.lore
+                if i == params["id"] or i.startswith(params["prefixo"])
+            ])
         if LABEL_ESTADO_NPC in cypher and "MERGE" in cypher:
             chave = (params["owner_email"], params["npc_id"])
             estado = self.estados.setdefault(chave, {})
@@ -213,3 +218,33 @@ def test_leitura_de_lore_nunca_casa_no_de_estado() -> None:
     fonte = inspect.getsource(Neo4jMemoryClient._gravar_afeto)
     assert "npc_id: $npc_id" in fonte
     assert "{id:" not in fonte.replace("{{", "{")
+
+
+# ── AFETO-ID-CURTO-1: o modelo fala "bjorn", o grafo chama "bjorn-tharnsson" ──
+
+
+@pytest.mark.asyncio
+async def test_afeto_com_primeiro_nome_grava_no_id_do_grafo(cliente) -> None:
+    """Achado no smoke de 14/10: `[AFETO: bjorn|rancor|-1]` gravava em `bjorn`,
+    e a leitura (só ids do grafo) nunca encontrava — o NPC esquecia a ofensa."""
+    c, grafo = cliente
+    grafo.lore = {"bjorn-tharnsson": {"id": "bjorn-tharnsson", "name": "Bjorn"}}
+    await c.atualizar_afeto_npc(ALICE, "bjorn", "rancor", -1)
+    assert set(grafo.estados) == {("alice@voxdm.test", "bjorn-tharnsson")}
+    assert await c.buscar_afeto_npc(ALICE, "bjorn-tharnsson") == {"rancor": -1}
+
+
+@pytest.mark.asyncio
+async def test_prefixo_ambiguo_nao_chuta(cliente) -> None:
+    c, grafo = cliente
+    grafo.lore = {"bjorn-tharnsson": {}, "bjorn-velho": {}}
+    await c.atualizar_afeto_npc(ALICE, "bjorn", "afeto", 1)
+    assert set(grafo.estados) == {("alice@voxdm.test", "bjorn")}
+
+
+@pytest.mark.asyncio
+async def test_npc_fora_do_grafo_mantem_o_id(cliente) -> None:
+    c, grafo = cliente
+    grafo.lore = {}
+    await c.atualizar_afeto_npc(ALICE, "taverneiro-improvisado", "afeto", 2)
+    assert set(grafo.estados) == {("alice@voxdm.test", "taverneiro-improvisado")}

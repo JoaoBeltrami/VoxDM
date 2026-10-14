@@ -7,6 +7,7 @@ import {
   checkpointSessao,
   wsUrl,
   type PersonagemConfig,
+  type SessaoInfo,
   type SpellSlot,
   type TokenIniciativa,
   type EventoVital,
@@ -62,7 +63,7 @@ export interface TurnoHistorico {
   latencia_ms: number;
   chunks_lore: string[];
   chunks_regras: string[];
-  tipo?: "normal" | "recap" | "lampejo";
+  tipo?: "normal" | "recap" | "lampejo" | "sistema";
   /** Diff do turno: XP/ouro/HP/itens/condições. Calculado no flush. */
   diff?: TurnoDiff;
 }
@@ -967,6 +968,9 @@ export function useGameSession() {
   const conectar = useCallback(async (
     _sessionIdIgnorado: string,  // mantido por compat de chamada; servidor gera o ID
     personagem?: PersonagemConfig,
+    /** Cria a sessão por outro caminho que devolve o mesmo SessaoInfo — hoje,
+     *  "começar de um save". Sem ele, é o POST /session/start de sempre. */
+    criador?: () => Promise<SessaoInfo>,
   ) => {
     intentionalCloseRef.current = false;
     reconnectCountRef.current = 0;
@@ -976,7 +980,7 @@ export function useGameSession() {
     setEstado(s => ({ ...s, carregando: true, erro: null, personagemRestaurado: null }));
     try {
       // Servidor gera o session_id — retornado em SessaoInfo.session_id
-      const info = await criarSessao(personagem);
+      const info = criador ? await criador() : await criarSessao(personagem);
       const sessaoId = info.session_id;
       sessionIdRef.current = sessaoId;
 
@@ -998,6 +1002,32 @@ export function useGameSession() {
       setEstado(s => ({ ...s, carregando: false, erro: String(e) }));
     }
   }, [_conectarWS]);
+
+  /** Save restaurado DENTRO da sessão: troca nome e ficha na tela. O estado
+   *  mecânico (HP, inventário…) já chega pelo `fim` de sincronização. */
+  const aplicarPersonagemRestaurado = useCallback((cfg: PersonagemConfig, rotulo?: string) => {
+    personagemRef.current = { ...personagemRef.current, ...cfg };
+    setEstado(s => {
+      // QA 14/10: depois de restaurar, o chat seguia mostrando os turnos que o
+      // save desfez, sem nada separando. A linha de sistema marca o corte.
+      const marca = {
+        id: Date.now(),
+        jogador: "",
+        mestre: `⟲ Save restaurado${rotulo ? `: “${rotulo}”` : ""} — o que veio acima disto foi desfeito`,
+        latencia_ms: 0,
+        chunks_lore: [],
+        chunks_regras: [],
+        tipo: "sistema" as const,
+      };
+      const historico = [...s.historico, marca];
+      return {
+        ...s,
+        playerName: cfg.player_name?.trim() || s.playerName,
+        personagemRestaurado: cfg,
+        historico: historico.length > 40 ? historico.slice(-40) : historico,
+      };
+    });
+  }, []);
 
   const enviarComando = useCallback((texto: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -1236,6 +1266,7 @@ export function useGameSession() {
   return {
     ...estado,
     conectar,
+    aplicarPersonagemRestaurado,
     enviarComando,
     enviarIdle,
     desconectar,
