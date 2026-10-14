@@ -229,6 +229,10 @@ def main(argv: list[str] | None = None) -> int:
     modo.add_argument("--dry-run", action="store_true", help="simula (é o padrão)")
     modo.add_argument("--aplicar", action="store_true", help="escreve de verdade")
     args = parser.parse_args(argv)
+    # Console do Windows é cp1252 e não tem "→": sem isto o relatório morre no
+    # print DEPOIS da migração ter rodado — e o --aplicar pareceria ter falhado.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     relatorios = asyncio.run(_rodar(aplicar=args.aplicar))
     cabecalho = "APLICADO" if args.aplicar else "SIMULAÇÃO — nada foi escrito"

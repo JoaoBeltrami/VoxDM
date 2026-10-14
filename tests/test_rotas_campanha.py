@@ -177,6 +177,8 @@ def test_restaurar_empurra_o_snapshot_pelo_websocket_aberto(cl: TestClient) -> N
     assert r.json()["estado_enviado"] is True
     msg = _json.loads(enviados[0])
     assert msg["tipo"] == "fim" and "player_hp" in msg
+    # Sem o sinal, o frontend pendurava o estado restaurado como diff do último turno.
+    assert msg["sincronizacao"] is True
 
 
 def test_admin_metadado_traz_a_lista_de_saves_sem_conteudo(cl: TestClient) -> None:
@@ -186,3 +188,12 @@ def test_admin_metadado_traz_a_lista_de_saves_sem_conteudo(cl: TestClient) -> No
     meta = cl.get("/admin/campanhas").json()[0]
     assert [s["rotulo"] for s in meta["saves_lista"]] == ["antes do dragão"]
     assert set(meta["saves_lista"][0]) == {"id", "rotulo", "criado_em", "bytes"}
+
+
+def test_arquivar_pela_rota(cl: TestClient) -> None:
+    _sid, cid = _sessao_e_campanha(cl, ALICE)
+    _como(BOB)
+    assert cl.post(f"/campanhas/{cid}/arquivar").status_code == 404
+    _como(ALICE)
+    assert cl.post(f"/campanhas/{cid}/arquivar").status_code == 200
+    assert cl.get("/campanhas").json() == []

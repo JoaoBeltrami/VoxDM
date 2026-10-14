@@ -26,6 +26,7 @@ import {
   adicionarMembro,
   adminListarCampanhas,
   adminQuebraVidro,
+  arquivarCampanha,
   auditoriaCampanha,
   criarCampanha,
   listarCampanhas,
@@ -116,6 +117,7 @@ function DetalheCampanha({
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [emailNovo, setEmailNovo] = useState("");
   const [papelNovo, setPapelNovo] = useState<PapelCampanha>("player");
+  const [arquivando, setArquivando] = useState(false);
 
   const recarregar = useCallback(async () => {
     try {
@@ -175,6 +177,18 @@ function DetalheCampanha({
     } catch (e) {
       onAviso(`Não deu para adicionar: ${(e as Error).message}`, true);
     } finally {
+      setOcupado(false);
+    }
+  };
+
+  const arquivar = async () => {
+    setOcupado(true);
+    try {
+      await arquivarCampanha(campanha.id);
+      onAviso(`Campanha “${campanha.nome}” arquivada. Os saves continuam guardados.`);
+      onVoltar();
+    } catch (e) {
+      onAviso(`Não deu para arquivar: ${(e as Error).message}`, true);
       setOcupado(false);
     }
   };
@@ -315,6 +329,24 @@ function DetalheCampanha({
           )}
         </Secao>
       )}
+
+      {ehGm && (
+        <Secao titulo="Arquivar">
+          {arquivando ? (
+            <div className="flex items-center gap-1.5">
+              <span className="flex-1 text-[10px] text-vox-text-muted">
+                Some das listas. Nada é apagado.
+              </span>
+              <button onClick={() => void arquivar()} disabled={ocupado} className={BOTAO_PRIMARIO}>
+                Arquivar
+              </button>
+              <button onClick={() => setArquivando(false)} className={BOTAO}>Cancelar</button>
+            </div>
+          ) : (
+            <button onClick={() => setArquivando(true)} className={BOTAO}>Arquivar campanha</button>
+          )}
+        </Secao>
+      )}
     </div>
   );
 }
@@ -355,7 +387,12 @@ function AbaAdmin({ onAviso }: { onAviso: (texto: string, erro?: boolean) => voi
       <ul className="mt-3 space-y-2">
         {lista.map((c) => (
           <li key={c.id} className="rounded-md border border-vox-border-subtle bg-vox-bg-elevated p-2">
-            <p className="text-xs text-vox-text-primary">{c.nome}</p>
+            <p className="text-xs text-vox-text-primary">
+              {c.nome}
+              {c.arquivada_em > 0 && (
+                <span className="ml-1.5 text-[9px] uppercase tracking-widest text-vox-text-muted">arquivada</span>
+              )}
+            </p>
             <p className="text-[10px] text-vox-text-muted">
               {c.owner_email} · {c.saves} save(s) · {tamanho(c.bytes)} · {quando(c.atualizada_em)}
             </p>

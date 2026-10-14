@@ -17,7 +17,7 @@ import {
   type CheckResolvido,
 } from "@/lib/api";
 import { parseMensagemWS } from "@/lib/ws-schema";
-import { stripMarcadoresExibicao } from "@/lib/markers";
+import { stripMarcadoresExibicao, stripMarcadoresStreaming } from "@/lib/markers";
 import { useAudio } from "@/hooks/useAudio";
 
 /** Converte erros técnicos vindos do server em frases narrativas pro jogador.
@@ -542,16 +542,14 @@ export function useGameSession() {
         // onclose/erro também — sem risco de travar o jogador.
         if (!isProcessingRef.current) setIsProcessing(true);
         textoAtualRef.current += msg.conteudo;
-        // Strip de marcadores [Q:...], [LAMPEJO:...] e [Rolagem ...] — nunca visíveis
-        // na bolha principal. Lampejos chegam como mensagem própria `tipo: "lampejo"`;
-        // rolagens visíveis chegam como `tipo: "dado_rolado"`. ROLL-AUTHORITY-1: o
-        // mestre às vezes fabrica `[Rolagem: dX = Y]` (formato do jogador) — strip
-        // cobre essa e as variantes visível/interna pra não vazarem no karaokê.
-        const exibicao = textoAtualRef.current
-          .replace(/\[Q:[^\]]*\]/g, "")
-          .replace(/\[LAMPEJO:[^\]]*\]/gi, "")
-          .replace(/\[Rolagem\b[^\]]*\]/gi, "")
-          .trimEnd();
+        // Strip COMPLETO também no streaming (14/10). Antes só [Q:], [LAMPEJO:] e
+        // [Rolagem] saíam aqui e o resto esperava o `fim` — na abertura o áudio
+        // segura o texto em `respostaAtual` e "[RELOGIO: carniçais-cinza|…]"
+        // ficava na tela. Lampejos chegam como `tipo: "lampejo"`; rolagens como
+        // `tipo: "dado_rolado"`; ROLL-AUTHORITY-1 (`[Rolagem: dX = Y]` fabricado
+        // pelo Mestre) segue coberto pelo mesmo RE_STRIP. O marcador ainda
+        // incompleto no fim do stream também some.
+        const exibicao = stripMarcadoresStreaming(textoAtualRef.current);
         setEstado(s => ({ ...s, respostaAtual: exibicao }));
       }
 
@@ -825,7 +823,9 @@ export function useGameSession() {
             const condicoes_novas = novaCondicoes.filter(c => !setCondAntes.has(c));
             const condicoes_removidas = s.playerConditions.filter(c => !setCondNovo.has(c));
 
-            if (turnoPendenteRef.current) {
+            // `sincronizacao`: reconexão ou save restaurado. O estado muda, mas
+            // não por causa do turno — pendurar o diff aqui inventaria "+item".
+            if (turnoPendenteRef.current && !msg.sincronizacao) {
               const diff: TurnoDiff = {};
               if (xp_delta) diff.xp_delta = xp_delta;
               if (gold_delta) diff.gold_delta = gold_delta;

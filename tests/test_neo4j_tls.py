@@ -74,3 +74,14 @@ def test_ninguem_abre_driver_com_a_uri_crua() -> None:
             ):
                 crus.append(f"{arq.relative_to(_RAIZ)}:{no.lineno}")
     assert not crus, f"driver aberto sem argumentos_driver_neo4j(): {crus}"
+
+
+def test_driver_nao_despeja_aviso_de_label_inexistente():
+    """`:EstadoNPC` só existe depois do primeiro afeto gravado. Até lá, cada
+    leitura de afeto (uma por turno) gerava um warning 01N50 no log."""
+    from neo4j import NotificationDisabledClassification
+
+    from engine.memory.neo4j_tls import argumentos_driver_neo4j
+
+    args = argumentos_driver_neo4j()
+    assert NotificationDisabledClassification.UNRECOGNIZED in args["notifications_disabled_classifications"]

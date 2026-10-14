@@ -7,6 +7,11 @@ Dependências: FastAPI, api/state, engine/telemetry, config, api/auth
 Armadilha: registrado APENAS quando settings.DEBUG=True (api/main.py).
     Além disso, cada endpoint exige is_admin(owner) — defense in depth caso
     DEBUG vaze pra produção. Nunca expor a não-admins.
+Armadilha: admin NÃO é passe livre para a sessão de outro jogador (decisão de
+    13/10). A lista `/sessoes` mostra METADADO de todas; as rotas por sessão
+    (estado, working memory, histórico, último turno) só abrem a sessão do
+    próprio admin ou legado sem dono — inclusive o arquivo de sessão encerrada.
+    Narrativa alheia só por quebra-vidro auditado, em /admin.
 
 Exemplo:
     GET /debug/sessoes                  → lista sessões ativas
@@ -21,33 +26,61 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import exige_admin
 from api.debug_archive import carregar_debug_sessao
-from api.state import sessions
+from api.state import SessaoAtiva, sessions
 from engine.auth.identity import Owner
+from engine.auth.permissoes import pode_ver_conteudo
 from engine.telemetry import read_latest
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/debug", tags=["debug"])
 
 
+def _nao_encontrada() -> HTTPException:
+    return HTTPException(status_code=404, detail="Sessão não encontrada")
+
+
+def _sessao_do_admin(session_id: str, owner: Owner) -> SessaoAtiva | None:
+    """Sessão ativa cujo CONTEÚDO este admin pode ler; None se não está ativa.
+
+    Sessão de outro jogador levanta o mesmo 404 de "não existe".
+    """
+    sessao = sessions.get(session_id)
+    if sessao is not None and not pode_ver_conteudo(owner, sessao.owner_email):
+        log.warning("debug_conteudo_alheio_negado", session_id=session_id, admin=owner.email)
+        raise _nao_encontrada()
+    return sessao
+
+
+async def _arquivo_do_admin(session_id: str, owner: Owner) -> dict[str, Any] | None:
+    """Arquivo de sessão encerrada, com a mesma regra. Sem o campo = legado."""
+    arquivo = await carregar_debug_sessao(session_id)
+    if arquivo is not None and not pode_ver_conteudo(owner, arquivo.get("owner_email", "")):
+        log.warning("debug_arquivo_alheio_negado", session_id=session_id, admin=owner.email)
+        return None
+    return arquivo
+
+
 @router.get("/sessoes")
 async def listar_sessoes(
     _owner: Annotated[Owner, Depends(exige_admin)],
 ) -> dict[str, Any]:
-    """Lista todas as sessões ativas com metadados básicos."""
-    return {
-        "total": len(sessions),
-        "sessoes": [
-            {
-                "session_id": s.session_id,
+    """Lista todas as sessões ativas. De outro jogador, só metadado."""
+    def _item(s: SessaoAtiva) -> dict[str, Any]:
+        item: dict[str, Any] = {
+            "session_id": s.session_id,
+            "owner_email": s.owner_email,
+            "iteracoes": s.iteracoes,
+            "criada_em": s.criada_em,
+        }
+        if pode_ver_conteudo(_owner, s.owner_email):
+            item.update({
                 "location": s.working_mem.location_id,
-                "iteracoes": s.iteracoes,
                 "npcs_presentes": s.working_mem.npcs_presentes,
                 "trust_levels": s.working_mem.trust_levels,
-                "criada_em": s.criada_em,
-            }
-            for s in sessions.values()
-        ],
-    }
+            })
+        return item
+
+    return {"total": len(sessions), "sessoes": [_item(s) for s in sessions.values()]}
 
 
 @router.get("/estado/{session_id}")
@@ -56,9 +89,9 @@ async def estado_sessao(
     _owner: Annotated[Owner, Depends(exige_admin)],
 ) -> dict[str, Any]:
     """Retorna a working memory completa e serializada de uma sessão."""
-    sessao = sessions.get(session_id)
+    sessao = _sessao_do_admin(session_id, _owner)
     if not sessao:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+        raise _nao_encontrada()
 
     wm = sessao.working_mem
     return {
@@ -93,9 +126,9 @@ async def working_memory_completo(
     _owner: Annotated[Owner, Depends(exige_admin)],
 ) -> dict[str, Any]:
     """Retorna working memory completa incluindo combate, RPG e flags de narrativa."""
-    sessao = sessions.get(session_id)
+    sessao = _sessao_do_admin(session_id, _owner)
     if not sessao:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+        raise _nao_encontrada()
 
     wm = sessao.working_mem
     return {
@@ -185,11 +218,11 @@ async def historico_sessao(
     Cada entry contém: turno, pacing, hp, hp_max, em_combate, provider,
     task_type, latencia_ms, erros. Populado apenas após turnos bem-sucedidos.
     """
-    sessao = sessions.get(session_id)
+    sessao = _sessao_do_admin(session_id, _owner)
     if not sessao:
         # PLAY5-DEBUGDATA: fallback pro arquivo de uma sessão já encerrada — o
         # /playtest puxa o relatório mesmo depois do Encerrar.
-        arquivo = await carregar_debug_sessao(session_id)
+        arquivo = await _arquivo_do_admin(session_id, _owner)
         if arquivo is not None:
             return {
                 "session_id": session_id,
@@ -221,10 +254,10 @@ async def ultimo_turno(
     _owner: Annotated[Owner, Depends(exige_admin)],
 ) -> dict[str, Any]:
     """Retorna snapshot completo do último turno: prompt enviado ao Groq, RAG scores e breakdown de latência."""
-    sessao = sessions.get(session_id)
+    sessao = _sessao_do_admin(session_id, _owner)
     if not sessao:
         # PLAY5-DEBUGDATA: fallback pro arquivo de uma sessão já encerrada.
-        arquivo = await carregar_debug_sessao(session_id)
+        arquivo = await _arquivo_do_admin(session_id, _owner)
         if arquivo and arquivo.get("ultimo_turno"):
             return arquivo["ultimo_turno"]
         raise HTTPException(status_code=404, detail="Sessão não encontrada")

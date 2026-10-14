@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import structlog
 
-from engine.auth.identity import Owner
+from engine.auth.identity import OWNER_LEGADO, Owner
 
 log = structlog.get_logger()
 
@@ -50,6 +50,11 @@ def pode_ver_conteudo(owner: Owner, dono: str | None, quebra_vidro: bool = False
     """
     if _mesmo_dono(owner, dono):
         return True
+    # Legado sem dono (vazio ou a marca da migração) é admin-only — decisão
+    # travada de 13/10, a mesma do `pode_ver`. Não é narrativa de "outra
+    # pessoa": não há outra pessoa a quem pedir licença.
+    if not dono or str(dono).strip().lower() == OWNER_LEGADO:
+        return owner.is_admin
     if quebra_vidro and owner.is_admin:
         log.warning("quebra_vidro_conteudo_alheio", admin=owner.email, dono=dono)
         return True

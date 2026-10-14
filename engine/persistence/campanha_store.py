@@ -95,9 +95,15 @@ _CREATE: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_campanha_owner ON campanha(owner_email)",
+    # `arquivada_em` NÃO vem no CREATE: entra pela migração idempotente abaixo,
+    # o mesmo caminho para banco novo e banco de antes de 14/10.
     "CREATE INDEX IF NOT EXISTS idx_membro_email ON campanha_membro(email)",
     "CREATE INDEX IF NOT EXISTS idx_save_campanha ON save(campanha_id, criado_em)",
 )
+
+
+# Arquivar é o "apagar" da campanha: some das listas, o dado fica. 0 = ativa.
+_MIGRATE_ARQUIVADA = "ALTER TABLE campanha ADD COLUMN arquivada_em REAL NOT NULL DEFAULT 0"
 
 
 class NaoEncontrado(LookupError):
@@ -165,6 +171,9 @@ class CampanhaStore:
             conn.row_factory = aiosqlite.Row
             for sql in _CREATE:
                 await conn.execute(sql)
+            await character_store._aplicar_migracao_idempotente(
+                conn, _MIGRATE_ARQUIVADA, "arquivada_em"
+            )
             await conn.commit()
             yield conn
 
@@ -199,8 +208,10 @@ class CampanhaStore:
 
     @staticmethod
     async def _papel(conn: aiosqlite.Connection, campanha_id: str, email: str) -> str | None:
+        """Papel de `email` na campanha ATIVA. Arquivada = ninguém tem papel."""
         async with conn.execute(
-            "SELECT papel FROM campanha_membro WHERE campanha_id = ? AND email = ?",
+            "SELECT m.papel FROM campanha_membro m JOIN campanha c ON c.id = m.campanha_id "
+            "WHERE m.campanha_id = ? AND m.email = ? AND c.arquivada_em = 0",
             (campanha_id, email),
         ) as cur:
             row = await cur.fetchone()
@@ -224,7 +235,8 @@ class CampanhaStore:
         cid = f"camp-{uuid.uuid4().hex[:12]}"
         async with self._conn() as conn:
             await conn.execute(
-                "INSERT INTO campanha VALUES (?,?,?,?,?,?)",
+                "INSERT INTO campanha (id, owner_email, nome, criada_em, atualizada_em, schema_version) "
+                "VALUES (?,?,?,?,?,?)",
                 (cid, email, nome, agora, agora, SCHEMA_VERSION),
             )
             await conn.execute(
@@ -240,7 +252,8 @@ class CampanhaStore:
         async with self._conn() as conn:
             async with conn.execute(
                 "SELECT c.*, m.papel FROM campanha c JOIN campanha_membro m "
-                "ON m.campanha_id = c.id WHERE m.email = ? ORDER BY c.atualizada_em DESC",
+                "ON m.campanha_id = c.id WHERE m.email = ? AND c.arquivada_em = 0 "
+                "ORDER BY c.atualizada_em DESC",
                 (email,),
             ) as cur:
                 rows = await cur.fetchall()
@@ -288,6 +301,22 @@ class CampanhaStore:
             ) as cur:
                 return [{"email": r["email"], "papel": r["papel"]} for r in await cur.fetchall()]
 
+    async def arquivar_campanha(self, owner: Owner, campanha_id: str) -> None:
+        """Só o GM. Some das listas e para de aceitar save; nada é apagado.
+
+        Os saves continuam em disco e no índice — o admin ainda vê o metadado
+        e pode abrir por quebra-vidro. Desarquivar é um UPDATE de volta a 0.
+        """
+        email = exigir_dono(owner)
+        async with self._conn() as conn:
+            if await self._papel(conn, campanha_id, email) != PAPEL_GM:
+                raise NaoEncontrado(campanha_id)
+            await conn.execute(
+                "UPDATE campanha SET arquivada_em = ? WHERE id = ?", (time.time(), campanha_id),
+            )
+            await self._auditar(conn, email, "arquivar_campanha", campanha_id)
+        log.info("campanha_arquivada", campanha_id=campanha_id)
+
     # ── saves ────────────────────────────────────────────────────────────────
 
     def _arquivo(self, campanha_id: str, save_id: str) -> Path:
@@ -323,7 +352,8 @@ class CampanhaStore:
             agora = time.time()
             versao = int(envelope.get("schema_version", SCHEMA_VERSION))
             await conn.execute(
-                "INSERT INTO save VALUES (?,?,?,?,?,?)",
+                "INSERT INTO save (id, campanha_id, rotulo, criado_em, schema_version, manifest) "
+                "VALUES (?,?,?,?,?,?)",
                 (sid, campanha_id, rotulo.strip() or "sem rótulo", agora, versao, json.dumps(manifest)),
             )
             await conn.execute(
@@ -402,7 +432,7 @@ class CampanhaStore:
             raise NaoEncontrado("admin")
         async with self._conn() as conn:
             async with conn.execute(
-                "SELECT c.id, c.owner_email, c.nome, c.criada_em, c.atualizada_em, "
+                "SELECT c.id, c.owner_email, c.nome, c.criada_em, c.atualizada_em, c.arquivada_em, "
                 "COUNT(s.id) AS saves FROM campanha c LEFT JOIN save s "
                 "ON s.campanha_id = c.id GROUP BY c.id ORDER BY c.atualizada_em DESC"
             ) as cur:

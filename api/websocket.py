@@ -298,6 +298,7 @@ from api.turn_pipeline import (
 from api.turn_pipeline import (
     sincronizar_inimigos_combate as _sincronizar_inimigos_combate,  # noqa: F401 — reexport p/ tests
 )
+from engine.auth.permissoes import pode_ver_conteudo
 from engine.authority.checks import bonus_de_check, detalhar_check, resolver_check
 from engine.authority.consequencia import (
     classificar_contexto,
@@ -1707,6 +1708,11 @@ async def _enviar_abertura(websocket: WebSocket, sessao: SessaoAtiva) -> None:
         MensagemWS(
             tipo="fim",
             latencia_ms=latencia_ms,
+            # A abertura narra, mas não CAUSA nada no estado: o inventário que
+            # chega aqui é o que o personagem já tinha (equipamento inicial ou
+            # save). Sem o sinal, a tela vazia × estado real virava "+Escudo
+            # +Maça +Cota de malha…" pendurado na abertura (achado em 14/10).
+            sincronizacao=True,
             **_snapshot_estado(wm),
         ).model_dump_json()
     )
@@ -1771,7 +1777,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
         return
 
     # 5. Ownership — 1008 sem mensagem (evita enumeração: intruso não sabe se existe)
-    if not owner.pode_ver(sessao.owner_email):
+    if not pode_ver_conteudo(owner, sessao.owner_email):
         log.warning(
             "ws_ownership_negado",
             session_id=session_id,
@@ -1888,6 +1894,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                             MensagemWS(
                                 tipo="fim",
                                 latencia_ms=0,
+                                sincronizacao=True,
                                 **_snapshot_estado(wm),
                             ).model_dump_json()
                         )
@@ -1929,7 +1936,7 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                                  item=_alvo, ok=_ok,
                                  arma=sessao.working_mem.character.arma_equipada())
                         await _send_text_seguro(websocket,
-                            MensagemWS(tipo="fim", **_snapshot_estado(
+                            MensagemWS(tipo="fim", sincronizacao=True, **_snapshot_estado(
                                 sessao.working_mem)).model_dump_json()
                         )
                     continue

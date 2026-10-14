@@ -37,6 +37,7 @@ from api.rate_limit import limiter
 from api.state import MAX_SESSOES, SessaoAtiva, sessions
 from api.turn_pipeline import aplicar_pos_turno, reinferir_npcs_se_mudou_cena
 from engine.auth.identity import Owner
+from engine.auth.permissoes import pode_ver_conteudo
 from engine.llm.groq_client import _BACKEND_PARA_PROVIDER, GroqClient
 from engine.llm.prompt_builder import montar_mensagens
 from engine.llm.types import RE_COMBATE as _RE_COMBATE
@@ -383,8 +384,9 @@ async def iniciar_sessao(
             if _prev_ep is not None:
                 _prev_owner = str(_prev_ep.get("owner_email", ""))
         # `_prev_owner is None` = não há NADA a restaurar → segue como sessão nova.
-        # `owner.pode_ver` já trata owner vazio (legado pré-auth) como admin-only.
-        if _prev_owner is not None and not owner.pode_ver(_prev_owner):
+        # Restaurar é ler o CONTEÚDO da sessão anterior. Legado vazio segue
+        # admin-only; a sessão de outro jogador não, nem para admin.
+        if _prev_owner is not None and not pode_ver_conteudo(owner, _prev_owner):
             log.warning(
                 "resume_ownership_negado",
                 session_anterior_id=config.session_anterior_id,
@@ -972,7 +974,10 @@ async def encerrar_sessao(
     # PLAY5-DEBUGDATA: arquiva histórico de debug ANTES de destruir a sessão — o
     # /playtest puxa o relatório mesmo após o Encerrar (os endpoints /debug fazem
     # fallback pro arquivo). Internamente silencioso: não quebra o encerramento.
-    await arquivar_debug_sessao(session_id, sessao.historico_turnos, sessao.ultimo_turno)
+    await arquivar_debug_sessao(
+        session_id, sessao.historico_turnos, sessao.ultimo_turno,
+        owner_email=sessao.owner_email,
+    )
 
     del sessions[session_id]
     log.info("sessao_encerrada", session_id=session_id, iteracoes=sessao.iteracoes)
@@ -1066,8 +1071,8 @@ def _wm_para_personagem_config(wm: WorkingMemory) -> dict:
 def _get_sessao(session_id: str, owner: Owner) -> SessaoAtiva:
     """Busca sessão e verifica autorização do owner.
 
-    Política de segurança: se o owner não for admin E não for dono da sessão
-    → 404 (não 403). 404 deliberado evita enumeração: atacante autenticado não
+    Política de segurança: quem não pode ver o CONTEÚDO da sessão (não é o
+    dono; admin só no legado sem dono) → 404 (não 403). 404 deliberado evita enumeração: atacante autenticado não
     consegue distinguir "session_id não existe" de "session_id existe mas é
     de outro user".
 
@@ -1078,7 +1083,10 @@ def _get_sessao(session_id: str, owner: Owner) -> SessaoAtiva:
     sessao = sessions.get(session_id)
     if not sessao:
         raise HTTPException(status_code=404, detail=f"Sessão '{session_id}' não encontrada")
-    if not owner.pode_ver(sessao.owner_email):
+    # Conteúdo da sessão (estado, narrativa, turno) — admin da instância NÃO
+    # entra na sessão de outro jogador (decisão de 13/10: metadado sim,
+    # conteúdo não). Metadado de sessão ativa é a lista do /debug/sessoes.
+    if not pode_ver_conteudo(owner, sessao.owner_email):
         # 404 deliberado — mesmo erro de "não existe", para não vazar existência
         log.warning(
             "sessao_acesso_negado",

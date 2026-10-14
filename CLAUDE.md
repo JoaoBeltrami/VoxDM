@@ -199,7 +199,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Configuração | `pydantic-settings` em `config.py` |
 | Dashboard debug | Streamlit (`dashboard.py`) + rota `/debug` no frontend (admin-only) |
 | Memória de jogo tem dono | Episódico (Qdrant) e estado de NPC (Neo4j `:EstadoNPC`) só se leem e gravam com `Owner` **posicional e obrigatório** — nunca `owner: Owner \| None = None`. Lore, regras e bestiário são acervo, sem dono. Admin não recebe memória de outro jogador no turno; legado sem dono (`__legado__`) é admin-only. Decisão de 13/10 |
-| Unidade do save | **Campanha** (membros `gm\|player`), não personagem. Admin da instância vê metadado de toda campanha; conteúdo alheio só por quebra-vidro auditado. `Owner.pode_ver` não muda de semântica — as regras novas estão em `engine/auth/permissoes.py` |
+| Unidade do save | **Campanha** (membros `gm\|player`), não personagem. Admin da instância vê metadado de toda campanha; conteúdo alheio só por quebra-vidro auditado. `Owner.pode_ver` não muda de semântica — as regras novas estão em `engine/auth/permissoes.py`. Campanha **arquiva**, não apaga |
+| Admin × conteúdo de sessão | Desde 14/10, sessão ativa, WebSocket, resume e `/debug/*` usam `pode_ver_conteudo`: o admin abre a PRÓPRIA sessão e o legado sem dono, nunca a de outro jogador (404). `/debug/sessoes` lista todas, mas da alheia só o metadado. O `/playtest` não muda: o Beltrami olha a sessão dele mesmo |
 | Um personagem por sessão | Não dá pra trocar de personagem no meio. Para outro personagem: encerrar a sessão (DELETE) e criar nova. Comportamento intencional, não bug |
 | Documentação | Docstrings robustos no código + os arquivos vivos da tabela "Documentos de Referência". Histórico não mora no `CLAUDE.md` |
 
@@ -461,6 +462,14 @@ NÃO esperar `websocket.receive_text()` dentro de `async with sessao.lock_turno`
                             falar, e qualquer rota que pedisse o lock (salvar /
                             restaurar save) travava até a próxima mensagem. Achado
                             só no navegador: teste com WS fake não espera fala.
+
+# `fim` que não é turno (14/10)
+NÃO mandar `tipo="fim"` só para reenviar estado sem `sincronizacao=True` → o
+                            frontend calcula diff (XP, ouro, itens) contra a tela e
+                            pendura no último turno. A abertura de personagem salvo
+                            mostrava "+Escudo +Maça +Cota de malha" como se o
+                            equipamento tivesse acabado de cair. Abertura,
+                            reconexão, equipar e save restaurado levam o sinal.
 
 # asyncio dentro de dataclass
 NÃO criar `asyncio.Lock` em `field(default_factory=asyncio.Lock)` → a dataclass é
