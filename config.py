@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -212,6 +214,12 @@ class Settings(BaseSettings):
     STT_DEVICE: str = "cuda"
     STT_LANGUAGE: str = "pt"
     TTS_VOICE_PTBR: str = "pt-BR-FranciscaNeural"
+    # Motor da voz PADRÃO do narrador (14/10). "kokoro" = Kokoro-82M local
+    # (`pf_dora`), Edge como fallback; "edge" = o arranjo antigo. A troca veio de
+    # ouvido: com o Edge fora do ar (403), o jogo caiu no Kokoro e o Beltrami
+    # achou "mil vezes menos robótico". Voz escolhida que NÃO é a padrão
+    # (seletor, NPC) continua indo pro Edge — escolha explícita é respeitada.
+    TTS_PRINCIPAL: Literal["kokoro", "edge"] = "kokoro"
     TTS_VOICE_EN: str = "en-US-GuyNeural"
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"

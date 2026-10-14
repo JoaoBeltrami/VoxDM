@@ -84,3 +84,22 @@ def test_nenhum_nome_de_modelo_escrito_a_mao_no_CODIGO():
     ]
 
     assert not suspeitas, f"nome de modelo escrito à mão no código: {suspeitas}"
+
+
+def test_script_roda_como_arquivo_e_nao_so_como_modulo():
+    """O /estado chama `python scripts/checar_modelos.py`. Como arquivo, o
+    `sys.path[0]` é `scripts/` e o import de `config` morria — a vigia nunca
+    conferiu nada. Roda o arquivo de verdade (só o import: GROQ_API_KEY falsa
+    faz a consulta falhar depois, o que importa é não morrer no import)."""
+    import os
+    import subprocess
+    import sys
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent
+    proc = subprocess.run(
+        [sys.executable, str(raiz / "scripts" / "checar_modelos.py")],
+        cwd=raiz / "scripts",  # cwd fora da raiz: o caso que quebrava
+        capture_output=True, text=True, timeout=120,
+        env={**os.environ, "GROQ_API_KEY": "chave-falsa-de-teste"},
+    )
+    assert "ModuleNotFoundError" not in proc.stderr, proc.stderr[-800:]

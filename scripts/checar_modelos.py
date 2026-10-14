@@ -12,6 +12,11 @@ Dependências: groq (SDK já na stack), config, engine.llm.tasks.
 Armadilha: a lista de slots vem de `modelo_do_slot()`, NUNCA de literais aqui —
     senão este arquivo vira a quarta cópia da configuração de modelo e mente
     junto com as outras na próxima troca.
+Armadilha (14/10): rodado como ARQUIVO, o `sys.path[0]` é `scripts/` e o
+    `from config import settings` morria com ModuleNotFoundError. O comando do
+    `/estado` e do `modelos.ps1` é exatamente esse — a vigia nunca conferiu nada
+    desde que nasceu. A raiz entra no path antes dos imports do projeto, e
+    `tests/test_checar_modelos.py` roda o arquivo de verdade para provar.
 
 Exemplo:
     uv run python scripts/checar_modelos.py
@@ -22,9 +27,15 @@ Exemplo:
 import asyncio
 import sys
 from collections.abc import Iterable
+from pathlib import Path
 
-from config import settings
-from engine.llm.tasks import (
+# Raiz do repo no path: o script é chamado como arquivo pelo /estado.
+_RAIZ = str(Path(__file__).resolve().parent.parent)
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
+
+from config import settings  # noqa: E402
+from engine.llm.tasks import (  # noqa: E402
     PROV_GROQ_120B,
     PROV_GROQ_LEVE,
     PROV_GROQ_PRINCIPAL,

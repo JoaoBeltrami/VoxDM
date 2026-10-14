@@ -453,8 +453,11 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           value={texto}
           onChange={e => { setTexto(e.target.value); ajustarAltura(e.target); }}
           onKeyDown={onKeyDown}
-          placeholder="O que você faz?"
-          disabled={desabilitado}
+          // Nunca `disabled`: campo desabilitado perde o foco e ENGOLE o que o
+          // jogador digita enquanto o Mestre narra (achado pelo QA de 14/10 —
+          // a ação sumia sem aviso). Só o ENVIO espera (`enviarTexto` e o botão).
+          placeholder={desabilitado ? "Escreva — envia quando o Mestre terminar" : "O que você faz?"}
+          aria-describedby={desabilitado ? "composer-espera" : undefined}
           rows={1}
           className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-vox-text-primary placeholder-vox-text-muted outline-none disabled:opacity-40"
         />
@@ -468,6 +471,11 @@ export function VoiceButton({ onEnviar, onOuvindoChange, desabilitado = false, s
           Enviar
         </Button>
       </div>
+      {desabilitado && texto.trim() && (
+        <p id="composer-espera" className="text-[10px] text-vox-text-muted" role="status">
+          O Mestre ainda está narrando — seu texto fica guardado aqui.
+        </p>
+      )}
 
       <p className="text-[10px] tracking-wide text-vox-text-muted/70">
         {!semVoz && (

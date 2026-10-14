@@ -111,6 +111,16 @@ export function MasterResponse({
           className="flex flex-col gap-2 transition-opacity duration-700 animate-fade-in-up"
           style={{ opacity: getOpacity(idx) }}
         >
+          {/* Sistema — fato de mesa, não narração (ex.: save restaurado). Linha
+              discreta: o que veio antes dela no chat "não aconteceu" mais. */}
+          {turno.tipo === "sistema" && turno.mestre && (
+            <div className="flex items-center gap-3 py-1 text-[11px] text-vox-text-muted" role="note">
+              <span className="h-px flex-1 bg-vox-border-subtle" />
+              <span>{turno.mestre}</span>
+              <span className="h-px flex-1 bg-vox-border-subtle" />
+            </div>
+          )}
+
           {/* Lampejo — visão dramática */}
           {turno.tipo === "lampejo" && turno.mestre && (
             <Card
@@ -136,7 +146,7 @@ export function MasterResponse({
               O turno tipo="recap" segue no histórico só para o timeline/jornal. */}
 
           {/* Fala do jogador — roteiro: anotação itálica à direita; Mesa: balão */}
-          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.jogador && (
+          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.tipo !== "sistema" && turno.jogador && (
             modoRoteiro ? (
               <p className="self-end max-w-[80%] text-right font-atmospheric text-[15px] leading-relaxed text-violet-300/90">
                 — {turno.jogador}
@@ -172,7 +182,7 @@ export function MasterResponse({
           )}
 
           {/* Resposta do Mestre — roteiro: prosa serif larga; Mesa: balões + OrbIcon */}
-          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.mestre && (() => {
+          {turno.tipo !== "recap" && turno.tipo !== "lampejo" && turno.tipo !== "sistema" && turno.mestre && (() => {
             const baloes = dividirEmBaloes(turno.mestre);
             if (modoRoteiro) {
               return (

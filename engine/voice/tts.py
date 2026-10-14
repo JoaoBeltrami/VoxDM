@@ -1,6 +1,6 @@
 """
 engine/voice/tts.py
-Síntese de voz: Edge TTS (principal) + Kokoro-82M (fallback offline).
+Síntese de voz: Kokoro-82M (padrão do narrador, local) + Edge TTS — ordem por `settings.TTS_PRINCIPAL`.
 
 Fluxo:
   texto do Mestre → TTSEngine.sintetizar() → bytes de áudio → reprodução
@@ -29,6 +29,7 @@ from typing import Any
 import edge_tts
 import structlog
 
+from config import settings
 from engine.voice.language import Idioma
 
 # Teto de chamadas Edge TTS simultâneas.
@@ -563,7 +564,7 @@ class KokoroTTSEngine:
             pipeline = self._carregar_pipeline(lang_code)
             voz_real = voz
 
-            log.info("Sintetizando (Kokoro fallback)", chars=len(texto), voz=voz_real)
+            log.info("Sintetizando (Kokoro)", chars=len(texto), voz=voz_real)
 
             try:
                 amostras: list[np.ndarray] = []
@@ -627,6 +628,18 @@ class TTSEngine:
         self._edge = EdgeTTSEngine()
         self._kokoro = KokoroTTSEngine()
 
+    @staticmethod
+    def kokoro_primeiro(voice: str | None) -> bool:
+        """True quando o Kokoro deve tentar ANTES do Edge.
+
+        Só para a voz PADRÃO do narrador (None ou a voz PT padrão). Voz
+        escolhida explicitamente — seletor do jogador, voz de NPC — é uma voz
+        Edge pelo nome e vai pro Edge, senão a escolha seria ignorada calada.
+        """
+        if settings.TTS_PRINCIPAL != "kokoro":
+            return False
+        return voice is None or voice == EDGE_VOZ_PTBR
+
     async def sintetizar(
         self,
         texto: str,
@@ -652,6 +665,17 @@ class TTSEngine:
         Returns:
             bytes de áudio (MP3 via Edge TTS ou WAV via Kokoro).
         """
+        if self.kokoro_primeiro(voice):
+            try:
+                return await self._kokoro.sintetizar(texto, idioma)
+            except Exception as e_kokoro:
+                # Kokoro local falhou (modelo ausente, GPU ocupada): o Edge é a
+                # rede — sem nova volta pro Kokoro no fim.
+                log.warning("kokoro_falhou_tentando_edge", erro=str(e_kokoro)[:120])
+                return await self._edge.sintetizar(
+                    texto, idioma, voice_override=voice,
+                    rate_override=rate, pitch_override=pitch,
+                )
         try:
             return await self._edge.sintetizar(
                 texto, idioma,

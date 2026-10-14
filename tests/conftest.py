@@ -66,6 +66,25 @@ def pytest_configure(config):
         pass  # slowapi não instalado — testes de unit fora de api/ ainda rodam
 
 
+@pytest.fixture(autouse=True)
+def _isolar_disco_real(tmp_path, monkeypatch):
+    """Todo teste escreve em `tmp_path`, nunca no disco de jogo de verdade.
+
+    Achado em 14/10: a suíte gravava no `voxdm.db` REAL (1054 linhas de
+    `test@voxdm.test` desde maio, inflando o "Continuar como…" do menu) e no
+    `.internal/playtest_debug/` real (729 arquivos). TestClient → /session/start
+    → CharacterStore → DB_PATH de produção. Teste que precisa de banco próprio
+    continua podendo apontar para outro lugar por cima deste.
+    """
+    from api import debug_archive
+    from config import settings
+    from engine.persistence import character_store
+
+    monkeypatch.setattr(character_store, "DB_PATH", tmp_path / "voxdm_teste.db")
+    monkeypatch.setattr(debug_archive, "_ARQUIVO_DIR", tmp_path / "playtest_debug")
+    monkeypatch.setattr(settings, "SAVES_DIR", str(tmp_path / "saves"))
+
+
 @pytest.fixture
 def settings_mock(monkeypatch):
     """Sobrescreve variáveis de ambiente para testes sem .env real."""

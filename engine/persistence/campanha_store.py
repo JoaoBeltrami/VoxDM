@@ -317,6 +317,65 @@ class CampanhaStore:
             await self._auditar(conn, email, "arquivar_campanha", campanha_id)
         log.info("campanha_arquivada", campanha_id=campanha_id)
 
+    @staticmethod
+    async def _papel_mesmo_arquivada(
+        conn: aiosqlite.Connection, campanha_id: str, email: str,
+    ) -> str | None:
+        """Papel ignorando o arquivamento — só para DESARQUIVAR."""
+        async with conn.execute(
+            "SELECT papel FROM campanha_membro WHERE campanha_id = ? AND email = ?",
+            (campanha_id, email),
+        ) as cur:
+            row = await cur.fetchone()
+        return str(row["papel"]) if row else None
+
+    async def listar_arquivadas(self, owner: Owner) -> list[Campanha]:
+        """Campanhas arquivadas em que este dono é GM."""
+        email = exigir_dono(owner)
+        async with self._conn() as conn:
+            async with conn.execute(
+                "SELECT c.*, m.papel FROM campanha c JOIN campanha_membro m "
+                "ON m.campanha_id = c.id WHERE m.email = ? AND m.papel = ? "
+                "AND c.arquivada_em > 0 ORDER BY c.arquivada_em DESC",
+                (email, PAPEL_GM),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [self._campanha(r, r["papel"]) for r in rows]
+
+    async def desarquivar_campanha(self, owner: Owner, campanha_id: str) -> None:
+        """Só o GM. Volta para as listas com saves e auditoria intactos."""
+        email = exigir_dono(owner)
+        async with self._conn() as conn:
+            if await self._papel_mesmo_arquivada(conn, campanha_id, email) != PAPEL_GM:
+                raise NaoEncontrado(campanha_id)
+            await conn.execute("UPDATE campanha SET arquivada_em = 0 WHERE id = ?", (campanha_id,))
+            await self._auditar(conn, email, "desarquivar_campanha", campanha_id)
+        log.info("campanha_desarquivada", campanha_id=campanha_id)
+
+    async def remover_membro(self, owner: Owner, campanha_id: str, email_membro: str) -> None:
+        """Só o GM remove. Recusa tirar o ÚLTIMO GM — a mesa nunca fica órfã."""
+        email = exigir_dono(owner)
+        alvo = email_membro.strip().lower()
+        async with self._conn() as conn:
+            if await self._papel(conn, campanha_id, email) != PAPEL_GM:
+                raise NaoEncontrado(campanha_id)
+            papel_alvo = await self._papel(conn, campanha_id, alvo)
+            if papel_alvo is None:
+                raise NaoEncontrado(alvo)
+            if papel_alvo == PAPEL_GM:
+                async with conn.execute(
+                    "SELECT COUNT(*) AS n FROM campanha_membro WHERE campanha_id = ? AND papel = ?",
+                    (campanha_id, PAPEL_GM),
+                ) as cur:
+                    row = await cur.fetchone()
+                if int(row["n"]) <= 1:
+                    raise ValueError("não dá para remover o único mestre da mesa")
+            await conn.execute(
+                "DELETE FROM campanha_membro WHERE campanha_id = ? AND email = ?",
+                (campanha_id, alvo),
+            )
+            await self._auditar(conn, email, f"remover:{alvo}", campanha_id)
+
     # ── saves ────────────────────────────────────────────────────────────────
 
     def _arquivo(self, campanha_id: str, save_id: str) -> Path:

@@ -64,9 +64,11 @@ a alavanca de escala é **cache de prefixo**, não poda de estado.
 - **STT:** Faster-Whisper `large-v3-turbo` em GPU (`stt.py`), exposto via `POST /transcribe`.
   Medido em 21/07 na RTX 2060 Super: WER 3,67% e 0,58s/fala — mais rápido *e* mais
   correto que o `small` (decoder destilado). Configurável em `settings.STT_MODEL`.
-- **TTS:** Edge TTS Microsoft (`tts.py`), voz por NPC via `[VOZ:]` e persona determinística;
-  fallback Kokoro. Nuances vêm de **pontuação**, não de SSML — o endpoint gratuito
-  rejeita SSML no body (tentado e descartado em 20/05).
+- **TTS:** a voz padrão do narrador sai no **Kokoro-82M local** (`pf_dora`) desde 14/10 —
+  escolhida de ouvido quando o Edge caiu e o Kokoro soou menos robótico; voz escolhida
+  (seletor, NPC via `[VOZ:]` e persona determinística) sai no **Edge TTS**, e cada um é o
+  fallback do outro (`settings.TTS_PRINCIPAL`). Nuances vêm de **pontuação**, não de SSML
+  — o endpoint gratuito rejeita SSML no body (tentado e descartado em 20/05).
 - **Thinking cache:** 20 frases pré-sintetizadas (`thinking_cache.py`) mascaram latência
   quando o 1º token demora >1,2s.
 

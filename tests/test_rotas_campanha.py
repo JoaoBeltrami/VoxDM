@@ -197,3 +197,71 @@ def test_arquivar_pela_rota(cl: TestClient) -> None:
     _como(ALICE)
     assert cl.post(f"/campanhas/{cid}/arquivar").status_code == 200
     assert cl.get("/campanhas").json() == []
+
+
+def test_iniciar_de_save_cria_sessao_nova_com_o_estado_do_save(cl: TestClient) -> None:
+    """O "carregar" do menu: sessão NOVA, ficha do save, estado do save, já no SQLite."""
+    sid, cid = _sessao_e_campanha(cl, ALICE)
+    wm = sessions[sid].working_mem
+    wm.player_name, wm.player_class, wm.gold = "Kaëla", "Clérigo", 321
+    save_id = cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid}).json()["id"]
+
+    salvos: list[str] = []
+
+    async def _checkpoint(sessao) -> None:  # noqa: ANN001
+        salvos.append(sessao.session_id)
+
+    with patch("api.routes.session.salvar_checkpoint_sessao", _checkpoint):
+        r = cl.post(f"/campanhas/{cid}/saves/{save_id}/iniciar")
+    assert r.status_code == 201, r.text
+    nova = r.json()["session_id"]
+    assert nova != sid
+    assert sessions[nova].working_mem.gold == 321
+    assert sessions[nova].working_mem.session_id == nova
+    assert sessions[nova].owner_email == ALICE.email
+    assert r.json()["personagem_restaurado"]["player_name"] == "Kaëla"
+    assert salvos == [nova]  # checkpoint imediato
+
+
+def test_iniciar_de_save_alheio_e_404(cl: TestClient) -> None:
+    sid, cid = _sessao_e_campanha(cl, ALICE)
+    save_id = cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid}).json()["id"]
+    _como(BOB)
+    assert cl.post(f"/campanhas/{cid}/saves/{save_id}/iniciar").status_code == 404
+    _como(ADMIN)
+    assert cl.post(f"/campanhas/{cid}/saves/{save_id}/iniciar").status_code == 404
+
+
+def test_restaurar_grava_checkpoint_e_devolve_a_ficha(cl: TestClient) -> None:
+    sid, cid = _sessao_e_campanha(cl, ALICE)
+    sessions[sid].working_mem.player_name = "Kaëla"
+    save_id = cl.post(f"/campanhas/{cid}/saves", json={"session_id": sid}).json()["id"]
+    sessions[sid].working_mem.player_name = "Outra"
+    salvos: list[str] = []
+
+    async def _checkpoint(sessao) -> None:  # noqa: ANN001
+        salvos.append(sessao.session_id)
+
+    with patch("api.routes.session.salvar_checkpoint_sessao", _checkpoint):
+        r = cl.post(f"/campanhas/{cid}/saves/{save_id}/restaurar", json={"session_id": sid})
+    assert r.json()["personagem"]["player_name"] == "Kaëla"
+    assert salvos == [sid]
+
+
+def test_remover_membro_e_desarquivar(cl: TestClient) -> None:
+    _sid, cid = _sessao_e_campanha(cl, ALICE)
+    cl.post(f"/campanhas/{cid}/membros", json={"email": BOB.email, "papel": "player"})
+    # O único GM não sai.
+    assert cl.delete(f"/campanhas/{cid}/membros/{ALICE.email}").status_code == 409
+    assert cl.delete(f"/campanhas/{cid}/membros/{BOB.email}").status_code == 200
+    assert [m["email"] for m in cl.get(f"/campanhas/{cid}/membros").json()] == [ALICE.email]
+
+    cl.post(f"/campanhas/{cid}/arquivar")
+    assert [c["id"] for c in cl.get("/campanhas/arquivadas/lista").json()] == [cid]
+    _como(BOB)
+    assert cl.post(f"/campanhas/{cid}/desarquivar").status_code == 404
+    _como(ALICE)
+    assert cl.post(f"/campanhas/{cid}/desarquivar").status_code == 200
+    assert [c["id"] for c in cl.get("/campanhas").json()] == [cid]
+    acoes = [linha["acao"] for linha in cl.get(f"/campanhas/{cid}/auditoria").json()]
+    assert "desarquivar_campanha" in acoes and f"remover:{BOB.email}" in acoes

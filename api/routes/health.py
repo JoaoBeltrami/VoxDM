@@ -230,6 +230,8 @@ async def voice_preview(voice: str) -> Response:
 
     return Response(
         content=_cache_amostras[voice],
-        media_type="audio/mpeg",
+        # Kokoro devolve WAV (cabeçalho RIFF), Edge devolve MP3. Desde que a voz
+        # padrão saiu no Kokoro (14/10), rotular tudo como MP3 mentia o formato.
+        media_type="audio/wav" if _cache_amostras[voice][:4] == b"RIFF" else "audio/mpeg",
         headers={"Cache-Control": "public, max-age=86400"},
     )

@@ -27,6 +27,9 @@ import {
   adminListarCampanhas,
   adminQuebraVidro,
   arquivarCampanha,
+  desarquivarCampanha,
+  listarArquivadas,
+  removerMembro,
   auditoriaCampanha,
   criarCampanha,
   listarCampanhas,
@@ -39,6 +42,7 @@ import {
   type LinhaAuditoria,
   type MembroCampanha,
   type PapelCampanha,
+  type PersonagemConfig,
   type SaveInfo,
 } from "@/lib/api";
 
@@ -46,6 +50,8 @@ interface Props {
   sessionId: string | null;
   isAdmin: boolean;
   onFechar: () => void;
+  /** Save restaurado na sessão: a página troca nome e ficha na tela. */
+  onRestaurado?: (personagem: PersonagemConfig, rotulo?: string) => void;
 }
 
 type Aba = "campanhas" | "admin";
@@ -55,6 +61,8 @@ const ROTULO_ACAO: Record<string, string> = {
   salvar: "salvou",
   carregar: "carregou",
   quebra_vidro: "QUEBRA-VIDRO",
+  arquivar_campanha: "arquivou a campanha",
+  desarquivar_campanha: "desarquivou a campanha",
 };
 
 function quando(ts: number): string {
@@ -72,6 +80,7 @@ function acao(a: string): string {
     const [, email, papel] = a.split(":");
     return `adicionou ${email} como ${papel}`;
   }
+  if (a.startsWith("remover:")) return `removeu ${a.slice("remover:".length)}`;
   return ROTULO_ACAO[a] ?? a;
 }
 
@@ -102,11 +111,13 @@ function DetalheCampanha({
   sessionId,
   onVoltar,
   onAviso,
+  onRestaurado,
 }: {
   campanha: Campanha;
   sessionId: string | null;
   onVoltar: () => void;
   onAviso: (texto: string, erro?: boolean) => void;
+  onRestaurado?: (personagem: PersonagemConfig, rotulo?: string) => void;
 }) {
   const ehGm = campanha.papel === "gm";
   const [saves, setSaves] = useState<SaveInfo[]>([]);
@@ -154,6 +165,7 @@ function DetalheCampanha({
     setOcupado(true);
     try {
       const r = await restaurarSave(campanha.id, save.id, sessionId);
+      if (r.personagem) onRestaurado?.(r.personagem, save.rotulo);
       onAviso(
         r.estado_enviado
           ? `Restaurado: “${save.rotulo}” — ${r.player_name || "personagem"} de volta.`
@@ -189,6 +201,19 @@ function DetalheCampanha({
       onVoltar();
     } catch (e) {
       onAviso(`Não deu para arquivar: ${(e as Error).message}`, true);
+      setOcupado(false);
+    }
+  };
+
+  const remover = async (email: string) => {
+    setOcupado(true);
+    try {
+      await removerMembro(campanha.id, email);
+      onAviso(`${email} saiu da mesa.`);
+      await recarregar();
+    } catch (e) {
+      onAviso(`Não deu para remover: ${(e as Error).message}`, true);
+    } finally {
       setOcupado(false);
     }
   };
@@ -278,9 +303,22 @@ function DetalheCampanha({
       <Secao titulo={`Membros (${membros.length})`}>
         <ul className="space-y-1">
           {membros.map((m) => (
-            <li key={m.email} className="flex justify-between text-xs text-vox-text-secondary">
+            <li key={m.email} className="flex items-center justify-between gap-2 text-xs text-vox-text-secondary">
               <span className="truncate">{m.email}</span>
-              <span className="text-[10px] uppercase tracking-widest text-vox-text-muted">{m.papel}</span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-vox-text-muted">{m.papel}</span>
+                {ehGm && (
+                  <button
+                    onClick={() => void remover(m.email)}
+                    disabled={ocupado}
+                    title={`Remover ${m.email}`}
+                    aria-label={`Remover ${m.email}`}
+                    className="text-[11px] text-vox-text-muted transition hover:text-vox-accent-danger disabled:opacity-40"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
             </li>
           ))}
         </ul>
@@ -453,18 +491,29 @@ function AbaAdmin({ onAviso }: { onAviso: (texto: string, erro?: boolean) => voi
 
 // ── Painel ─────────────────────────────────────────────────────────────────
 
-export function SavesPanel({ sessionId, isAdmin, onFechar }: Props) {
+export function SavesPanel({ sessionId, isAdmin, onFechar, onRestaurado }: Props) {
   const [aba, setAba] = useState<Aba>("campanhas");
   const [campanhas, setCampanhas] = useState<Campanha[] | null>(null);
   const [aberta, setAberta] = useState<Campanha | null>(null);
   const [nomeNova, setNomeNova] = useState("");
   const [aviso, setAviso] = useState<{ texto: string; erro: boolean } | null>(null);
+  const [arquivadas, setArquivadas] = useState<Campanha[]>([]);
 
   const avisar = useCallback((texto: string, erro = false) => setAviso({ texto, erro }), []);
 
+  // QA 14/10: o erro de uma ação ficava grudado no topo enquanto se fazia
+  // OUTRA coisa. Sucesso some em 5s; erro fica até o próximo aviso ou troca de aba.
+  useEffect(() => {
+    if (!aviso || aviso.erro) return;
+    const t = setTimeout(() => setAviso(null), 5000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
   const carregar = useCallback(async () => {
     try {
-      setCampanhas(await listarCampanhas());
+      const [ativas, guardadas] = await Promise.all([listarCampanhas(), listarArquivadas()]);
+      setCampanhas(ativas);
+      setArquivadas(guardadas);
     } catch (e) {
       setCampanhas([]);
       avisar(`Não deu para listar campanhas: ${(e as Error).message}`, true);
@@ -495,8 +544,9 @@ export function SavesPanel({ sessionId, isAdmin, onFechar }: Props) {
       <DetalheCampanha
         campanha={aberta}
         sessionId={sessionId}
-        onVoltar={() => { setAberta(null); void carregar(); }}
+        onVoltar={() => { setAberta(null); setAviso(null); void carregar(); }}
         onAviso={avisar}
+        onRestaurado={onRestaurado}
       />
     );
   } else {
@@ -538,12 +588,37 @@ export function SavesPanel({ sessionId, isAdmin, onFechar }: Props) {
             </ul>
           )}
         </Secao>
+        {arquivadas.length > 0 && (
+          <Secao titulo={`Arquivadas (${arquivadas.length})`}>
+            <ul className="space-y-1">
+              {arquivadas.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2 text-xs text-vox-text-muted">
+                  <span className="truncate">{c.nome}</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await desarquivarCampanha(c.id);
+                        avisar(`“${c.nome}” voltou.`);
+                        await carregar();
+                      } catch (e) {
+                        avisar(`Não deu para desarquivar: ${(e as Error).message}`, true);
+                      }
+                    }}
+                    className={BOTAO}
+                  >
+                    Desarquivar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Secao>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="frame-ornate texture-stone fixed bottom-3 left-16 top-16 z-40 flex w-80 flex-col rounded-xl bg-vox-bg-floating shadow-vox-3 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
+    <div className="frame-ornate texture-stone fixed bottom-3 left-16 top-16 z-40 flex w-80 max-w-[calc(100vw-5rem)] flex-col rounded-xl bg-vox-bg-floating shadow-vox-3 backdrop-blur-md animate-[fade-in_200ms_ease-out]">
       <header className="shrink-0 px-4 pb-2.5 pt-3.5">
         <div className="flex items-center justify-between">
           <span className="font-display text-sm uppercase tracking-[0.14em] text-vox-gold-bright">Saves</span>
@@ -561,7 +636,7 @@ export function SavesPanel({ sessionId, isAdmin, onFechar }: Props) {
             {(["campanhas", "admin"] as const).map((a) => (
               <button
                 key={a}
-                onClick={() => setAba(a)}
+                onClick={() => { setAba(a); setAviso(null); }}
                 className={`rounded px-2 py-0.5 transition ${
                   aba === a ? "bg-vox-gold-faint text-vox-gold-bright" : "text-vox-text-muted hover:text-vox-text-secondary"
                 }`}
