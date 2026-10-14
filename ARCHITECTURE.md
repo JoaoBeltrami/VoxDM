@@ -79,6 +79,16 @@ RAG de **3 camadas**, montadas em paralelo (`context_builder.py` via `asyncio.ga
 - **Episódica** — Qdrant `voxdm_episodic` (resumo de sessões anteriores).
 - **Re-rank de precisão:** dedup por `source_id` + corte de cauda marginal por gap de score.
 
+**Acervo × memória de jogo.** Lore, regras e bestiário são **acervo**: uma cópia serve
+todo mundo e as leituras não levam dono (`buscar_acervo`). O episódico e o estado de NPC
+são **memória de jogo** e não existe método que os consulte sem um `Owner` posicional e
+obrigatório: no Qdrant, uma coleção só com `owner_email` como chave de tenant e o filtro
+montado dentro do cliente (`buscar_memoria`); no Neo4j, o afeto mora em `:EstadoNPC`
+chaveado por (`owner_email`, `npc_id`), separado do nó da lore, que segue imutável em jogo.
+Admin enxerga o próprio dado e o legado sem dono — nunca a memória de outro jogador no
+caminho do turno. Dado anterior ao isolamento é marcado `__legado__` por
+`scripts/migrar_dono_memoria.py` (simula por padrão; nunca apaga).
+
 O **estado da cena** vive em `WorkingMemory` — um *facade* fino sobre 5 substates puros
 em `engine/state/` (`SceneState`, `CombatState`, `PlayerCharacter`, `PartyState`,
 `NarrativeState`). Cada substate tem seu próprio `to_prompt()`. Properties preservam
@@ -319,6 +329,14 @@ proíbe trocá-la — sem essa segunda metade o trilho é decorativo.
   class features, companions, spells conhecidas, `dm_state` — fonte da verdade do PJ entre sessões.
   Toda coluna nova entra por **migração idempotente**.
 - **Qdrant/Neo4j**: memória de longo prazo (episódica + grafo + lore/regras/bestiário).
+- **Saves de campanha** (`campanha_store.py` + `save_envelope.py`): a unidade é a
+  **campanha** (membros com papel `gm|player`), não o personagem. O save é um envelope
+  JSON versionado da `WorkingMemory` inteira — o codec preserva set, chave int e
+  dataclass aninhada, e o round-trip é teste — com **ponteiro** para a memória, nunca o
+  conteúdo dela. Escrita atômica (tmp + fsync + `os.replace`), releitura conferida por
+  sha256 antes de indexar, rotação que mantém `SAVES_MANTER` versões e nunca apaga com N
+  ou menos. Restaurar copia os campos para dentro da `WorkingMemory` existente, sob o
+  lock de turno.
 
 ### 9. Identidade e acesso (`engine/auth/`, `api/auth.py`)
 `Owner(email, is_admin)` é um cross-cutting concern: `jwt_validator.py` valida o JWT
@@ -328,6 +346,13 @@ RS256 do **Cloudflare Access** (cache de certs 1h, rejeita `alg:none`/HS256, con
 gerado no servidor; ownership divergente responde 404, não 403, para não permitir
 enumeração. Rate limit é por **email autenticado**, não por IP — atrás de um Tunnel
 todo mundo compartilha o mesmo endereço.
+
+`Owner.pode_ver` (admin vê tudo) segue valendo para sessão ativa e `/debug/*`. Para
+campanha e save, `engine/auth/permissoes.py` separa **metadado** (admin vê: existe, de
+quem, quando, personagens, tamanho) de **conteúdo** (só o membro; admin apenas por
+quebra-vidro, `POST /admin/saves/{id}/quebra-vidro`, com motivo gravado em `save_audit`
+ANTES do conteúdo sair). Admin da instância (`ADMIN_EMAILS`) ≠ GM da mesa (`papel`), e
+papel desconhecido é sem acesso.
 
 ### 10. Régua de qualidade narrativa (`engine/quality/tells.py`)
 Detector puro dos três "tells de máquina" que quebram a Camada 1 do ADR-005: emoção

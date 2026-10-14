@@ -198,6 +198,8 @@ Não questionar. Não sugerir alternativas. Só reabrir com problema técnico do
 | Multiclasse | Regra do **BG3** (livre), não a do SRD — decisão de produto do Beltrami (29/07) |
 | Configuração | `pydantic-settings` em `config.py` |
 | Dashboard debug | Streamlit (`dashboard.py`) + rota `/debug` no frontend (admin-only) |
+| Memória de jogo tem dono | Episódico (Qdrant) e estado de NPC (Neo4j `:EstadoNPC`) só se leem e gravam com `Owner` **posicional e obrigatório** — nunca `owner: Owner \| None = None`. Lore, regras e bestiário são acervo, sem dono. Admin não recebe memória de outro jogador no turno; legado sem dono (`__legado__`) é admin-only. Decisão de 13/10 |
+| Unidade do save | **Campanha** (membros `gm\|player`), não personagem. Admin da instância vê metadado de toda campanha; conteúdo alheio só por quebra-vidro auditado. `Owner.pode_ver` não muda de semântica — as regras novas estão em `engine/auth/permissoes.py` |
 | Um personagem por sessão | Não dá pra trocar de personagem no meio. Para outro personagem: encerrar a sessão (DELETE) e criar nova. Comportamento intencional, não bug |
 | Documentação | Docstrings robustos no código + os arquivos vivos da tabela "Documentos de Referência". Histórico não mora no `CLAUDE.md` |
 
@@ -446,6 +448,12 @@ NÃO trocar valor determinístico por rolagem sem varrer quem depende dele → a
                             depender de sorte: passou na suíte daquele dia e quebrou dois
                             dias depois. Flaky é PIOR que quebrado — some no CI e volta em
                             jogo. Fixe a rolagem no teste, com a razão escrita.
+
+# Ordem de import no Windows (13/10)
+NÃO importar o pacote `qdrant_client` antes do driver `neo4j` num teste → o import
+                            seguinte do `pyarrow` (via sentence-transformers) morre na
+                            COLETA com `OSError: [WinError 6714]`. O `conftest.py`
+                            fixa a ordem; não remova aquele import "sem uso".
 
 # asyncio dentro de dataclass
 NÃO criar `asyncio.Lock` em `field(default_factory=asyncio.Lock)` → a dataclass é
