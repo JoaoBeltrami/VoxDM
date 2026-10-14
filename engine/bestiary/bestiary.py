@@ -86,7 +86,7 @@ async def buscar_ficha_monstro(srd_index: str = "", nome: str = "") -> str | Non
         cliente = _obter_cliente()
         # query é só pra gerar o vetor exigido pelo query_points; o filtro exato
         # por source_id é quem decide o resultado. score_threshold=0 → não filtra.
-        resultados = await cliente.buscar(
+        resultados = await cliente.buscar_acervo(
             query=indice,
             colecao=settings.QDRANT_COLECAO_BESTIARY,
             top_k=1,

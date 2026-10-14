@@ -30,6 +30,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from api.rate_limit import limiter
+from api.routes import campanha as campanha_router
 from api.routes import debug as debug_router
 from api.routes import health as health_router
 from api.routes import session as session_router
@@ -268,6 +269,8 @@ app.add_middleware(
 
 # Rotas de sessão — sempre ativas
 app.include_router(session_router.router)
+app.include_router(campanha_router.router)
+app.include_router(campanha_router.router_admin)
 
 # Health check profundo — pinga dependências externas em paralelo
 app.include_router(health_router.router)

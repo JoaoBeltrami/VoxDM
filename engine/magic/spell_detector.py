@@ -126,7 +126,7 @@ async def buscar_dados_magia(nome: str) -> dict[str, Any] | None:
         cliente = QdrantMemoryClient()
         # Query em inglês aumenta recall no SRD (indexado em EN + PT)
         query = f"{nome} spell magic"
-        resultados = await cliente.buscar(
+        resultados = await cliente.buscar_acervo(
             query=query,
             colecao="voxdm_rules",
             top_k=1,

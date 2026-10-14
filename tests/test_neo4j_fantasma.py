@@ -15,12 +15,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from engine.auth.identity import Owner
 from engine.memory.context_builder import ContextBuilder
 from engine.memory.working_memory import WorkingMemory
 
 
 def _builder() -> ContextBuilder:
-    b = ContextBuilder()
+    b = ContextBuilder(Owner(email="teste@voxdm.test"))
     b._qdrant = MagicMock()
     b._qdrant.buscar_modulo = AsyncMock(return_value=[])
     b._qdrant.buscar = AsyncMock(return_value=[])

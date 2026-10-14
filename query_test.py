@@ -82,11 +82,12 @@ async def _query_legacy(texto: str, top_k: int = TOP_K) -> dict[str, Any]:
 
 async def _query_context_builder(texto: str) -> dict[str, Any]:
     """Busca via ContextBuilder: regras + módulo + grafo — mesmo caminho do voice_loop."""
+    from engine.auth.local import owner_local
     from engine.memory.context_builder import ContextBuilder
     from engine.memory.working_memory import WorkingMemory
 
     wm = WorkingMemory.nova_sessao("tharnvik", "Tharnvik", "demo-query")
-    cb = ContextBuilder()
+    cb = ContextBuilder(owner_local())
 
     t0 = time.perf_counter()
     contexto = await cb.montar(texto, wm)

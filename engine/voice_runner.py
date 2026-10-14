@@ -95,6 +95,7 @@ class VoiceRunner:
         location_nome: str = "Tharnvik",
         max_iteracoes: int | None = None,
     ) -> None:
+        from engine.auth.local import owner_local
         from engine.llm.groq_client import GroqClient
         from engine.memory.context_builder import ContextBuilder
         from engine.memory.working_memory import WorkingMemory
@@ -102,7 +103,7 @@ class VoiceRunner:
 
         self._tts = TTSEngine()
         self._groq = GroqClient()
-        self._context_builder = ContextBuilder()
+        self._context_builder = ContextBuilder(owner_local())
         self._working_mem = WorkingMemory.nova_sessao(
             location_id=location_id,
             location_nome=location_nome,

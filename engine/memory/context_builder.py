@@ -24,6 +24,7 @@ from typing import Any
 import structlog
 
 from config import settings
+from engine.auth.identity import Owner, exigir_dono
 from engine.llm.types import RE_COMBATE as _RE_COMBATE
 from engine.llm.types import RE_ROLAGEM as _RE_ROLAGEM
 from engine.llm.types import ContextoMontado, SecretVisivel, e_turno_de_rolagem
@@ -98,7 +99,14 @@ class ContextBuilder:
         "em", "no", "na", "para", "por", "com", "entre", "sobre", "ver",
     })
 
-    def __init__(self) -> None:
+    def __init__(self, owner: Owner) -> None:
+        # Dono da sessão — obrigatório e validado AQUI, na construção. Toda
+        # leitura de memória de jogo deste builder (episódico no Qdrant, estado
+        # de NPC no Neo4j) usa este dono; lore e regras são acervo e não usam.
+        # Falhar na construção é melhor que descobrir no turno 12 que a sessão
+        # nasceu sem dono.
+        exigir_dono(owner)
+        self.owner: Owner = owner
         self._qdrant = QdrantMemoryClient()
         self._neo4j = Neo4jMemoryClient()
         self._schema_cache: dict[str, Any] | None = None
@@ -555,8 +563,8 @@ class ContextBuilder:
         async def _talvez_buscar_episodico() -> list[dict[str, Any]]:
             if _so_rolagem:
                 return []
-            return await self._qdrant.buscar(
-                transcricao, colecao="voxdm_episodic", top_k=TOP_K_EPISODICO,
+            return await self._qdrant.buscar_memoria(
+                self.owner, transcricao, top_k=TOP_K_EPISODICO,
             )
 
         chunks_sem, chunks_ep, chunks_reg = await asyncio.gather(
@@ -625,7 +633,10 @@ class ContextBuilder:
                 try:
                     afetos = await asyncio.wait_for(
                         asyncio.gather(
-                            *(self._neo4j.buscar_afeto_npc(n) for n in presentes_no_grafo),
+                            *(
+                                self._neo4j.buscar_afeto_npc(self.owner, n)
+                                for n in presentes_no_grafo
+                            ),
                             return_exceptions=True,
                         ),
                         timeout=2.0,

@@ -7,6 +7,10 @@ Por que existe: a busca pura por vetor retorna chunks de texto mas não sabe
 Dependências: engine/memory/{qdrant_client,neo4j_client}, structlog
 Armadilha: Neo4j pode não ter a entidade (source_id ausente no grafo) — tratar
     silenciosamente, retornando o chunk sem enriquecimento.
+Armadilha: esta camada lê SÓ ACERVO (lore do módulo no Qdrant + relações da
+    lore no Neo4j), que é compartilhado e não tem dono. Por isso não recebe
+    `Owner` — e por isso `buscar_acervo` recusa qualquer coleção de memória de
+    jogo: não dá para apontar a busca híbrida para o episódico de alguém.
 
 Exemplo:
     mem = SemanticMemory()
@@ -62,7 +66,9 @@ class SemanticMemory:
         Returns:
             Lista de chunks com campo adicional "relacoes" (pode ser []).
         """
-        chunks = await self._qdrant.buscar(query, colecao=colecao, top_k=top_k, filtro=filtro)
+        chunks = await self._qdrant.buscar_acervo(
+            query, colecao=colecao, top_k=top_k, filtro=filtro
+        )
 
         enriquecidos: list[dict[str, Any]] = []
         for chunk in chunks:
@@ -96,7 +102,7 @@ class SemanticMemory:
         if not props:
             return None
 
-        chunks = await self._qdrant.buscar(
+        chunks = await self._qdrant.buscar_acervo(
             query=npc_id,
             colecao="voxdm_modules",
             top_k=1,

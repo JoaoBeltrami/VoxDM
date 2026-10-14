@@ -254,6 +254,13 @@ class Settings(BaseSettings):
     DEV_USER_EMAIL: str = ""
     ADMIN_EMAILS: str = ""
 
+    # Saves de campanha (continuidade solo). O índice mora no voxdm.db; o
+    # snapshot de cada save é um JSON em SAVES_DIR/<campanha>/<save>.json.
+    # SAVES_MANTER = quantas versões por campanha sobrevivem à rotação — nunca
+    # menos que 1, e com N ou menos saves a rotação não apaga nada.
+    SAVES_DIR: str = "./saves"
+    SAVES_MANTER: int = 5
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator(

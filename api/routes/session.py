@@ -178,16 +178,14 @@ async def armas_do_sistema(
 async def listar_sessoes_salvas(
     owner: Annotated[Owner, Depends(get_owner)],
 ) -> list[SessaoListaItem]:
-    """Lista sessões disponíveis na memória episódica para exibir no seletor.
+    """Lista as sessões DESTE dono na memória episódica, para o seletor.
 
-    Admin vê todas. Usuário comum vê apenas as próprias (filtro por owner_email).
+    O filtro por dono é feito no Qdrant, não aqui depois de trazer tudo. Admin
+    vê as próprias e o legado sem dono; a narrativa de outro jogador não entra
+    nesta lista (o resumo é conteúdo) — metadado alheio é rota de admin.
     """
     mem = EpisodicMemory()
-    entradas = await mem.listar_com_metadata()
-
-    # Filtro de isolamento: não-admin só vê sessões do próprio email
-    if not owner.is_admin:
-        entradas = [e for e in entradas if e.get("owner_email", "") == owner.email]
+    entradas = await mem.listar_com_metadata(owner)
 
     return [
         SessaoListaItem(
@@ -271,7 +269,7 @@ async def iniciar_sessao(
                  itens=len(config.player_equipamento),
                  arma=working_mem.character.arma_equipada())
 
-    context_builder = ContextBuilder()
+    context_builder = ContextBuilder(owner)
     voice_manager = VoiceManager(narrator_voz=config.tts_voice or "pt-BR-FranciscaNeural")
 
     # DM Feat 4: sorteia 3 Cartas de Improviso para a sessão
@@ -376,8 +374,11 @@ async def iniciar_sessao(
         if _prev_char is not None:
             _prev_owner = _prev_char.owner_email
         else:
+            # A busca já vem filtrada pelo dono: episódico de outra pessoa
+            # devolve None, igual a "não existe" — segue como sessão nova, sem
+            # restaurar nada e sem confirmar que o id alheio é real.
             _prev_ep = await EpisodicMemory().buscar_por_session_id(
-                config.session_anterior_id
+                owner, config.session_anterior_id
             )
             if _prev_ep is not None:
                 _prev_owner = str(_prev_ep.get("owner_email", ""))
@@ -516,7 +517,9 @@ async def iniciar_sessao(
     if config.session_anterior_id:
         try:
             mem_episodica = EpisodicMemory()
-            entrada = await mem_episodica.buscar_por_session_id(config.session_anterior_id)
+            entrada = await mem_episodica.buscar_por_session_id(
+                owner, config.session_anterior_id
+            )
             if entrada:
                 working_mem.trust_levels = {
                     k: int(v) for k, v in entrada.get("trust_levels", {}).items()
@@ -957,7 +960,7 @@ async def encerrar_sessao(
 
     try:
         writer = SessionWriter()
-        await writer.fechar_sessao(wm, session_id=session_id, owner_email=sessao.owner_email)
+        await writer.fechar_sessao(sessao.owner, wm, session_id=session_id)
         log.info("sessao_episodica_salva", session_id=session_id)
     except Exception as e:
         log.warning(
@@ -1060,18 +1063,22 @@ def _wm_para_personagem_config(wm: WorkingMemory) -> dict:
     }
 
 
-def _get_sessao(session_id: str, owner: Owner | None = None) -> SessaoAtiva:
+def _get_sessao(session_id: str, owner: Owner) -> SessaoAtiva:
     """Busca sessão e verifica autorização do owner.
 
-    Política de segurança: SE o owner for fornecido E não for admin E não for
-    dono da sessão → 404 (não 403). 404 deliberado evita enumeração: atacante
-    autenticado não consegue distinguir "session_id não existe" de
-    "session_id existe mas é de outro user".
+    Política de segurança: se o owner não for admin E não for dono da sessão
+    → 404 (não 403). 404 deliberado evita enumeração: atacante autenticado não
+    consegue distinguir "session_id não existe" de "session_id existe mas é
+    de outro user".
+
+    `owner` é OBRIGATÓRIO. Era `Owner | None = None`, e sem ele a checagem
+    simplesmente não rodava — a porta da WorkingMemory de qualquer sessão
+    ficava a um argumento esquecido de distância.
     """
     sessao = sessions.get(session_id)
     if not sessao:
         raise HTTPException(status_code=404, detail=f"Sessão '{session_id}' não encontrada")
-    if owner is not None and not owner.pode_ver(sessao.owner_email):
+    if not owner.pode_ver(sessao.owner_email):
         # 404 deliberado — mesmo erro de "não existe", para não vazar existência
         log.warning(
             "sessao_acesso_negado",

@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from api.models.schemas import MensagemWS
+from engine.auth.identity import Owner
 from engine.memory.episodic_memory import EpisodicMemory
 
 # ── MensagemWS — tipo="recap" ─────────────────────────────────────────────────
@@ -51,6 +52,9 @@ def test_mensagem_ws_tipo_nao_quebra_outros_campos():
 # Nota: a implementação usa QdrantClient.scroll() diretamente (não self._qdrant.buscar)
 # para evitar score_threshold=0.45 que bloquearia UUIDs não-semânticos como queries.
 
+_DONO = Owner(email="teste@voxdm.test")
+
+
 def _ponto_fake(payload: dict):
     """Cria um ponto Qdrant fake com atributos mínimos."""
     p = MagicMock()
@@ -72,14 +76,14 @@ async def test_buscar_por_session_id_retorna_dict_quando_ha_entrada():
     }
     ponto = _ponto_fake(entrada_fake)
 
-    # QdrantClient é importado dentro do método — patchear no módulo qdrant_client
-    with patch("qdrant_client.QdrantClient") as mock_cls:
+    # O scroll passa pelo QdrantMemoryClient — patchear o QdrantClient que ele usa
+    with patch("engine.memory.qdrant_client.QdrantClient") as mock_cls:
         mock_client = MagicMock()
         mock_cls.return_value = mock_client
         mock_client.scroll.return_value = ([ponto], None)
 
         mem = EpisodicMemory()
-        resultado = await mem.buscar_por_session_id("sess-abc123")
+        resultado = await mem.buscar_por_session_id(_DONO, "sess-abc123")
 
     assert resultado is not None
     assert resultado["session_id"] == "sess-abc123"
@@ -89,13 +93,13 @@ async def test_buscar_por_session_id_retorna_dict_quando_ha_entrada():
 @pytest.mark.asyncio
 async def test_buscar_por_session_id_retorna_none_quando_ausente():
     """buscar_por_session_id deve retornar None se não há memória episódica."""
-    with patch("qdrant_client.QdrantClient") as mock_cls:
+    with patch("engine.memory.qdrant_client.QdrantClient") as mock_cls:
         mock_client = MagicMock()
         mock_cls.return_value = mock_client
         mock_client.scroll.return_value = ([], None)
 
         mem = EpisodicMemory()
-        resultado = await mem.buscar_por_session_id("sess-inexistente")
+        resultado = await mem.buscar_por_session_id(_DONO, "sess-inexistente")
 
     assert resultado is None
 
@@ -103,11 +107,11 @@ async def test_buscar_por_session_id_retorna_none_quando_ausente():
 @pytest.mark.asyncio
 async def test_buscar_por_session_id_silencioso_em_excecao():
     """buscar_por_session_id deve retornar None em vez de propagar exceção."""
-    with patch("qdrant_client.QdrantClient") as mock_cls:
+    with patch("engine.memory.qdrant_client.QdrantClient") as mock_cls:
         mock_cls.side_effect = Exception("Qdrant offline")
 
         mem = EpisodicMemory()
-        resultado = await mem.buscar_por_session_id("sess-qualquer")
+        resultado = await mem.buscar_por_session_id(_DONO, "sess-qualquer")
 
     assert resultado is None
 
@@ -118,13 +122,13 @@ async def test_buscar_por_session_id_retorna_ponto_mais_recente():
     antigo = _ponto_fake({"session_id": "s1", "text": "velho", "timestamp": 100.0})
     recente = _ponto_fake({"session_id": "s1", "text": "recente", "timestamp": 500.0})
 
-    with patch("qdrant_client.QdrantClient") as mock_cls:
+    with patch("engine.memory.qdrant_client.QdrantClient") as mock_cls:
         mock_client = MagicMock()
         mock_cls.return_value = mock_client
         mock_client.scroll.return_value = ([antigo, recente], None)
 
         mem = EpisodicMemory()
-        resultado = await mem.buscar_por_session_id("s1")
+        resultado = await mem.buscar_por_session_id(_DONO, "s1")
 
     assert resultado is not None
     assert resultado["text"] == "recente"
@@ -402,17 +406,24 @@ def test_session_writer_payload_inclui_campos_continuidade():
 
 
 def test_buscar_por_session_id_nao_usa_buscar_semantico():
-    """buscar_por_session_id NÃO deve chamar self._qdrant.buscar (usa scroll direto)."""
+    """buscar_por_session_id NÃO faz busca semântica — é listagem com filtro exato."""
+    import ast
     import inspect
+    import textwrap
 
     from engine.memory.episodic_memory import EpisodicMemory
-    src = inspect.getsource(EpisodicMemory.buscar_por_session_id)
-    # Método novo usa scroll, não self.buscar
-    assert "self.buscar(" not in src, (
-        "buscar_por_session_id não deve usar self.buscar() — UUID como query "
-        "nunca passa score_threshold=0.45. Usar scroll com filtro exato."
+    src = textwrap.dedent(inspect.getsource(EpisodicMemory.buscar_por_session_id))
+    # Olha as CHAMADAS (via ast), não o texto: o docstring cita a busca
+    # semântica pra explicar por que ela não serve aqui.
+    chamadas = {
+        n.func.attr for n in ast.walk(ast.parse(src))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+    }
+    assert "buscar_memoria" not in chamadas and "buscar" not in chamadas, (
+        "UUID como query nunca passa score_threshold=0.45. Usar listagem com "
+        "filtro exato."
     )
-    assert "scroll" in src, "buscar_por_session_id deve usar scroll()"
+    assert "listar_memoria" in chamadas
 
 
 def test_iniciar_sessao_le_campo_text_nao_resumo_curto():

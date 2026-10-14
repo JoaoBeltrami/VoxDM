@@ -134,7 +134,7 @@ def test_buscar_ficha_por_index_exato():
     """srd_index → filtro exato por source_id, retorna o texto do chunk."""
     bloco = "Goblin — Pequeno humanoide, CR 1/4. CA 15 | PV 7."
     with patch("engine.memory.qdrant_client.QdrantMemoryClient") as MockCli:
-        MockCli.return_value.buscar = AsyncMock(
+        MockCli.return_value.buscar_acervo = AsyncMock(
             return_value=[{"text": bloco, "source_id": "goblin"}]
         )
         ficha = asyncio.run(buscar_ficha_monstro(srd_index="goblin"))
@@ -144,14 +144,14 @@ def test_buscar_ficha_por_index_exato():
 def test_buscar_ficha_falha_silenciosa():
     """Qdrant fora → None, sem exceção (combate segue improvisado)."""
     with patch("engine.memory.qdrant_client.QdrantMemoryClient") as MockCli:
-        MockCli.return_value.buscar = AsyncMock(side_effect=RuntimeError("rede fora"))
+        MockCli.return_value.buscar_acervo = AsyncMock(side_effect=RuntimeError("rede fora"))
         ficha = asyncio.run(buscar_ficha_monstro(srd_index="goblin"))
     assert ficha is None
 
 
 def test_buscar_ficha_nao_encontrada():
     with patch("engine.memory.qdrant_client.QdrantMemoryClient") as MockCli:
-        MockCli.return_value.buscar = AsyncMock(return_value=[])
+        MockCli.return_value.buscar_acervo = AsyncMock(return_value=[])
         ficha = asyncio.run(buscar_ficha_monstro(srd_index="inexistente-xyz"))
     assert ficha is None
 

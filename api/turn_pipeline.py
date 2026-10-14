@@ -30,6 +30,7 @@ from typing import Any
 import structlog
 
 from config import settings
+from engine.auth.identity import Owner
 from engine.authority.intent import classificar_intent_economia
 from engine.authority.resolve import resolver_custo_ouro
 from engine.llm.extractor import (
@@ -2025,9 +2026,10 @@ async def reinferir_npcs_se_mudou_cena(
 
 async def aplicar_afeto_npcs(
     resposta_completa: str,
+    owner: Owner,
     neo4j_client: Any,
 ) -> None:
-    """Extrai marcadores [AFETO: npc-id|campo|delta] e persiste no Neo4j.
+    """Extrai marcadores [AFETO: npc-id|campo|delta] e persiste no Neo4j, por dono.
 
     Por que existe: estado afetivo de NPC (afeto/medo/respeito/rancor) precisa
         de persistência entre sessões. Neo4j é a fonte verdadeira; WorkingMemory
@@ -2044,7 +2046,7 @@ async def aplicar_afeto_npcs(
         except ValueError:
             continue
         if npc_id and campo and delta != 0:
-            await neo4j_client.atualizar_afeto_npc(npc_id, campo, delta)
+            await neo4j_client.atualizar_afeto_npc(owner, npc_id, campo, delta)
 
 
 def aplicar_xp_e_detectar_level_up(

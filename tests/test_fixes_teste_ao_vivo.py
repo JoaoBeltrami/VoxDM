@@ -118,7 +118,7 @@ async def test_bestiario_placeholder_cai_pro_slug_do_nome(monkeypatch):
     consultas: list[str] = []
 
     class _FakeCliente:
-        async def buscar(self, query, colecao, top_k, filtro, score_threshold):
+        async def buscar_acervo(self, query, colecao, top_k, filtro, score_threshold):
             consultas.append(filtro["source_id"])
             return [{"text": "Goblin — CA 15 | PV 7"}]
 
@@ -137,7 +137,7 @@ async def test_bestiario_miss_e_cacheado(monkeypatch):
     chamadas = {"n": 0}
 
     class _FakeCliente:
-        async def buscar(self, **kw):
+        async def buscar_acervo(self, **kw):
             chamadas["n"] += 1
             return []
 

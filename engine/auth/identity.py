@@ -24,6 +24,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Marca de dado LEGADO — gravado antes de a identidade chegar à camada de
+# memória. É uma marcação, não um email: ninguém autentica com ela, e por isso
+# o dado legado continua admin-only (regra do `pode_ver`). A migração
+# (`scripts/migrar_dono_memoria.py`) escreve esta marca em vez de chutar um dono.
+OWNER_LEGADO: str = "__legado__"
+
+
+class DonoObrigatorio(ValueError):
+    """Tentativa de ler ou gravar memória de jogo sem um dono válido."""
+
 
 @dataclass(frozen=True)
 class Owner:
@@ -59,3 +69,36 @@ def is_admin(email: str, admin_emails_csv: str) -> bool:
     alvo = email.strip().lower()
     admins = [e.strip().lower() for e in admin_emails_csv.split(",") if e.strip()]
     return alvo in admins
+
+
+def exigir_dono(owner: object) -> str:
+    """Devolve o email normalizado do dono, ou levanta `DonoObrigatorio`.
+
+    É o portão único das camadas de memória de jogo (Qdrant, Neo4j, saves):
+    toda leitura e toda escrita passa por aqui antes de montar o filtro. Recusa
+    `None`, string solta, email vazio e a marca de legado — nenhum desses é
+    "alguém", e consultar sem alguém é exatamente o vazamento que se quer
+    tornar impossível.
+    """
+    if not isinstance(owner, Owner):
+        raise DonoObrigatorio(
+            f"memória de jogo exige um Owner; recebi {type(owner).__name__}"
+        )
+    email = owner.email.strip().lower()
+    if not email:
+        raise DonoObrigatorio("memória de jogo exige Owner com email — veio vazio")
+    if email == OWNER_LEGADO:
+        raise DonoObrigatorio("a marca de legado não é uma identidade")
+    return email
+
+
+def emails_visiveis(owner: Owner) -> list[str]:
+    """Donos cujo dado entra numa LEITURA de memória de jogo deste owner.
+
+    Sempre o próprio email. Admin enxerga também o legado sem dono (decisão
+    travada: legado é admin-only). Admin NÃO enxerga o dado de outro jogador
+    aqui — a narrativa alheia só abre por quebra-vidro auditado, e isso mora em
+    `engine/auth/permissoes.py`, não no caminho do turno.
+    """
+    email = exigir_dono(owner)
+    return [email, OWNER_LEGADO] if owner.is_admin else [email]

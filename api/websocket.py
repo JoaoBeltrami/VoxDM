@@ -366,7 +366,9 @@ async def _emitir_eventos_relacao(websocket: WebSocket, sessao: Any) -> None:
             try:
                 for campo, delta in (getattr(ev, "afeto", {}) or {}).items():
                     _criar_background_task(
-                        _neo4j.atualizar_afeto_npc(ev.npc_id, campo, delta)
+                        _neo4j.atualizar_afeto_npc(
+                            sessao.owner, ev.npc_id, campo, delta
+                        )
                     )
             except Exception as e:
                 # Cliente inválido/mockado não pode derrubar o toast nem o turno.
@@ -3517,7 +3519,9 @@ async def handle_game_ws(websocket: WebSocket, session_id: str) -> None:
                 # Não bloqueia o turno; Neo4j pode estar offline sem impacto.
                 # _criar_background_task garante que a task não seja coletada pelo GC.
                 _criar_background_task(
-                    aplicar_afeto_npcs(resposta_limpa, sessao.context_builder._neo4j)
+                    aplicar_afeto_npcs(
+                        resposta_limpa, sessao.owner, sessao.context_builder._neo4j
+                    )
                 )
 
                 # XP e progressão — extrai [XP: +N motivo] e aplica level up se cruzou
