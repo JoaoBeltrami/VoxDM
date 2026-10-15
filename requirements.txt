@@ -1,5 +1,5 @@
 # VoxDM — dependencias pinadas (reproducibilidade).
-# Versoes refletem o conjunto known-good instalado e validado (879 testes verdes).
+# Versoes refletem o conjunto known-good instalado e validado (suíte completa verde; contagem atual no README).
 # Atualizar uma dep: bump aqui, rodar a suite, e so commitar se passar.
 # Stack ML (faster-whisper/torch/ctranslate2) e fragil — nao floatar essas.
 

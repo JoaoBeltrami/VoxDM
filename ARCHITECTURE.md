@@ -12,7 +12,7 @@ Para rodar, veja o [README](./README.md). Para contribuir, veja [CONTRIBUTING](.
              └─► context_builder.montar() ──► RAG 3 camadas + estado da cena
                   └─► prompt_builder ──► NarrationBrief + system prompt + histórico
                        └─► LLMRouter (cascata por TaskType) ──► stream de tokens
-                            └─► TTS por sentença (Edge TTS) ──► audio_chunk (WS)
+                            └─► TTS por sentença (Kokoro / Edge TTS) ──► audio_chunk (WS)
                                  └─► aplicar_pos_turno() ──► marcadores, estado, ticks
 ```
 

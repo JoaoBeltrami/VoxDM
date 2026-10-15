@@ -72,7 +72,7 @@ flowchart LR
     C -->|fatos resolvidos| D[Contexto<br/>memória de trabalho +<br/>Qdrant + Neo4j]
     D --> E[LLM narra<br/>Groq → Gemini → Ollama]
     E -->|marcadores validados| C
-    E --> F[TTS<br/>Edge TTS / Kokoro]
+    E --> F[TTS<br/>Kokoro / Edge TTS]
     F --> G[Voz do Mestre<br/>no navegador]
 ```
 
@@ -91,7 +91,7 @@ antes de virar áudio. O desenho completo está em [ARCHITECTURE.md](./ARCHITECT
 | Backend | FastAPI + WebSocket | Streaming do texto e do áudio turno a turno |
 | STT | faster-whisper `large-v3-turbo` na GPU, com hotwords dos nomes da campanha | Medido: 3,67% de erro de palavra e ~0,6 s por fala |
 | LLM | Cascata Groq (`gpt-oss-120b` → `gpt-oss-20b`) → Gemini → Ollama local | Tudo em free tier; se um provedor cai ou estoura cota, o turno não morre |
-| TTS | Edge TTS, com Kokoro-82M local como reserva | Voz natural em pt-BR sem custo; voz e ritmo diferentes por NPC |
+| TTS | Kokoro-82M local (`pf_dora`) como voz padrão do narrador; Edge TTS para vozes escolhidas (seletor, NPCs) e como reserva | Voz natural em pt-BR sem custo; voz e ritmo diferentes por NPC |
 | Memória | De trabalho (estado da sessão), episódica (Qdrant) e semântica (Qdrant + grafo Neo4j) | O Mestre lembra do que aconteceu e de quem conhece quem |
 | Persistência | SQLite (aiosqlite) | Ficha, inventário e progresso entre sessões |
 | Frontend | Next.js 15 + React 19 + Tailwind | Ficha, combate, dados e a fala do Mestre |
