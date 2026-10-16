@@ -23,6 +23,18 @@
     {
       "fact": "Kaëla era a arquivista — não esposa nem filha: a mulher que copiava a Crônica à mão e portanto a única que via as emendas. Envenenou Valdrek quando percebeu que ele havia reescrito a linhagem inteira de uma família para apagar um herdeiro inconveniente. Viveu mais oito anos, terminou de copiar o volume, escondeu a versão verdadeira, e tomou o mesmo veneno na noite em que acabou.",
       "immutable": true
+    },
+    {
+      "fact": "Cada vila chama a planície de um jeito: Tharnvik diz as Cinzas, Kaëlmund diz o Peso, Drevamor diz o Espaço Entre.",
+      "immutable": true
+    },
+    {
+      "fact": "Cada vila conta a morte de Valdrek do seu jeito: em Tharnvik, morreu lutando contra worgs; em Kaëlmund, dividiu tudo por vontade própria; em Drevamor, confiou os artefatos aos Dreva porque eram os mais sábios.",
+      "immutable": true
+    },
+    {
+      "fact": "O pacto entre Kaëlmund e o clã Grothmar chama-se Pacto de Kaëla. É antigo e é pago em comida, cerveja e trabalho.",
+      "immutable": true
     }
   ],
   "fronts": [
@@ -228,7 +240,9 @@
         "Sabe que Vyrmathax existe e que a dívida pode ser cobrada — mas nunca testou",
         "Sabe que o pacto de Kaëlmund com os gigantes é frágil e custoso",
         "NÃO sabe que Runa troca cartas com Senna de Kaëlmund",
-        "NÃO sabe que Soren encontrou Dalla de Drevamor"
+        "NÃO sabe que Soren encontrou Dalla de Drevamor",
+        "Mandou Soren a Drevamor com um ultimato: entregar o Cajado até a lua nova, ou Tharnvik vem buscar",
+        "Acredita na lenda da família: o bisavô Hakon fez a dragoa ficar devendo a Tharnvik (meia verdade)"
       ],
       "speech_style": "Direto, frases curtas, voz que carrega naturalmente. Metáforas de fogo e combate. Nunca pede — declara. Exemplo: 'Não estou perguntando.' Pausa antes de frases importantes, como se pesando o peso delas.",
       "honesty": 0.4,
@@ -330,7 +344,8 @@
         "Sabe o custo exato do pacto com os Grothmar — e que está ficando insustentável",
         "Troca cartas com Runa de Tharnvik — usa para inteligência, mas há respeito real",
         "Sabe que Bjorn é mais inteligente do que finge",
-        "NÃO sabe da profundidade real da amizade entre Liiv e Mundr"
+        "NÃO sabe da profundidade real da amizade entre Liiv e Mundr",
+        "Mandou Gharen a Drevamor oferecer aluguel do Cajado: algumas noites por lua em Kaëlmund, em troca de ferro e comida"
       ],
       "speech_style": "Precisa, econômica, nunca emotiva em público. Frases completas e bem construídas — pensa antes de falar. Em privado com Liiv, a voz muda completamente — fica suave, quente, quase irreconhecível. Contraste deliberado que o jogador pode testemunhar.",
       "honesty": 0.5,
@@ -406,7 +421,8 @@
       "knowledge": [
         "Conhece genealogias de todas as três vilas — sabe quem é primo de quem",
         "Lembra de histórias que os líderes atuais nunca ouviram sobre os primeiros anos",
-        "Comunica-se com Yrsa de Tharnvik — amigas de juventude, prova viva de que paz é possível"
+        "Comunica-se com Yrsa de Tharnvik — amigas de juventude, prova viva de que paz é possível",
+        "Guarda na memória oral o nome Teggharth, que nenhum registro tem"
       ],
       "speech_style": "Lenta, deliberada, com pausas longas que fazem as pessoas se inclinarem pra ouvir. Conta histórias em vez de dar opiniões. Exemplo: 'Quando eu era criança, minha mãe levava mel pra tia em Tharnvik. O mel era o mesmo. As abelhas não sabiam de fronteiras.'",
       "honesty": 0.9,
@@ -691,7 +707,8 @@
         "Sabe lutar — treinado desde criança",
         "NÃO sabe política nem diplomacia",
         "NÃO sabe que a tia Runa troca cartas com Kaëlmund",
-        "Encontrou Dalla de Drevamor em território neutro duas vezes — sabe que os pais ficariam furiosos"
+        "Encontrou Dalla de Drevamor em território neutro duas vezes — sabe que os pais ficariam furiosos",
+        "Levou a Drevamor o ultimato do pai sobre o Cajado"
       ],
       "speech_style": "Entusiasmado demais. Fala rápido. Interrompe. Usa superlativos constantemente. Exemplo: 'Isso vai ser a maior batalha que essa wasteland já viu.' Insegurança disfarçada de bravata — quando o jogador pressiona, a confiança racha.",
       "honesty": 0.8,
@@ -714,7 +731,8 @@
       "knowledge": [
         "Experiência de mercenário — já lutou em contextos muito piores que essa wasteland",
         "Conhece formações e táticas que as vilas não usam — emboscadas, guerra de atrito",
-        "Sabe que não ter sangue Valdrek é fraqueza e força: sem lealdade familiar, sem ponto cego"
+        "Sabe que não ter sangue Valdrek é fraqueza e força: sem lealdade familiar, sem ponto cego",
+        "Levou a Drevamor a oferta de Senna: alugar o Cajado em troca de ferro e comida"
       ],
       "speech_style": "Seco, prático. Não desperdiça palavras. Humor negro ocasional e inesperado. Exemplo: 'Já vi gente morrer por menos. Também já vi gente viver por menos.' Fala como alguém que calculou os riscos e fez as pazes com eles.",
       "honesty": 0.85,
@@ -737,7 +755,8 @@
       "knowledge": [
         "SABE A VERDADE DO CISMA COMPLETA: Kaëla envenenou Valdrek, forçou a divisão, direcionou os artefatos para Dreva deliberadamente para evitar tirania",
         "Sabe que a Crônica não mente — mostra o que aconteceu sem edição",
-        "Sabe que Brennan quer recrutar ele e que isso o tentou mais do que admite"
+        "Sabe que Brennan quer recrutar ele e que isso o tentou mais do que admite",
+        "Achou no livro-razão da Crônica uma dívida antiga lançada em nome de uma casa sem genealogia, Teggharth, e mandou cartas, escondido do pai, ao descendente dela em outro continente"
       ],
       "speech_style": "Articulado mas nervoso. Começa frases seguro e perde confiança no meio quando percebe as implicações. Exemplo: 'A Crônica mostra que... bem, mostra muitas coisas. Depende de onde você olha.' Pausas frequentes — não é hesitação, é cálculo.",
       "honesty": 0.5,
@@ -757,7 +776,7 @@
       "id": "vyrmathax",
       "name": "Vyrmathax",
       "type": "criatura",
-      "description": "Dragoa vermelha adulta habitando o complexo de cavernas sob as Gargantas Vulcânicas. Não é aliada nem inimiga de Tharnvik — é uma força da natureza com memória. CR 17 — muito acima do nível do jogador. Não aparece diretamente a menos que o conflito escale ao nível nuclear. Presença inferida: calor crescente nas profundezas, cheiro de enxofre intenso, sombra enorme no teto das gargantas.\n\nA DÍVIDA (verdade que ninguém vivo conhece): três gerações atrás um caçador de Tharnvik ROUBOU um ovo das gargantas — a vila passava fome e a lenda dizia que casca de dragão fervida alimenta cem homens. O ovo chocou nas mãos dele no caminho de volta. Ele criou a cria por dois invernos e então a devolveu. Vyrmathax não deve gratidão por um resgate: deve por algo pior. Aquele humano viu a cria dela indefesa e escolheu não usar isso. Um dragão entende poder e entende troca; não entende renúncia. A dívida existe porque ela nunca soube o que aquilo significou — e um dragão não tolera não entender.\n\nO QUE ELA QUER: a Crônica, não o Cajado. É o único registro escrito daquela geração, e nela está o nome do caçador, que ela nunca soube. Três gerações esperando pra saber a quem, exatamente, ela deve. O relógio dela avança quando alguém se aproxima da Crônica.",
+      "description": "Dragoa vermelha adulta habitando o complexo de cavernas sob as Gargantas Vulcânicas. Não é aliada nem inimiga de Tharnvik — é uma força da natureza com memória. CR 17 — muito acima do nível do jogador. Não aparece diretamente a menos que o conflito escale ao nível nuclear. Presença inferida: calor crescente nas profundezas, cheiro de enxofre intenso, sombra enorme no teto das gargantas.\n\nA DÍVIDA (verdade que ninguém vivo conhece): três gerações atrás um caçador de Tharnvik — Hakon Tharnsson, bisavô de Bjorn — ROUBOU um ovo das gargantas — a vila passava fome e a lenda dizia que casca de dragão fervida alimenta cem homens. O ovo chocou nas mãos dele no caminho de volta. Ele criou a cria por dois invernos e então a devolveu. Vyrmathax não deve gratidão por um resgate: deve por algo pior. Aquele humano viu a cria dela indefesa e escolheu não usar isso. Um dragão entende poder e entende troca; não entende renúncia. A dívida existe porque ela nunca soube o que aquilo significou — e um dragão não tolera não entender.\n\nO QUE ELA QUER: a Crônica, não o Cajado. É o único registro escrito daquela geração, e nela está o nome do caçador, que ela nunca soube. Três gerações esperando pra saber a quem, exatamente, ela deve. O relógio dela avança quando alguém se aproxima da Crônica.",
       "abilities": [
         "Adult Red Dragon — CR 17",
         "Memória de três gerações",
@@ -854,7 +873,7 @@
     {
       "id": "cronica-de-valdrek",
       "name": "A Crônica de Valdrek",
-      "description": "Livro grosso, encadernado em couro de criatura não identificada. Quem abre e pensa num evento da história da linhagem Valdrek vê o evento se desenrolar nas páginas como ilusão animada — imagens se movem, vozes sussurram, o cenário se forma. Requer attunement + 1 minuto de concentração por consulta. Não mente — mostra o que aconteceu, sem edição. Não mostra futuro nem presente — apenas passado da linhagem. Quem não tem sangue Valdrek (nem diluído) vê páginas em branco. Uso prolongado (>1 hora contínua) causa exaustão nível 1.",
+      "description": "Livro grosso, encadernado em couro de criatura não identificada. Quem abre e pensa num evento da história da linhagem Valdrek vê o evento se desenrolar nas páginas como ilusão animada — imagens se movem, vozes sussurram, o cenário se forma. Requer attunement + 1 minuto de concentração por consulta. Não mente — mostra o que aconteceu, sem edição. Não mostra futuro nem presente — apenas passado da linhagem. Quem não tem sangue Valdrek (nem diluído) vê páginas em branco. Uso prolongado (>1 hora contínua) causa exaustão nível 1. Camada oculta, escrita por Kaëla: uma parte do livro só se abre para o sangue do herdeiro apagado, e só diante das três casas (Tharnvik, Kaëlmund e Drevamor) reunidas. No livro-razão visível há uma dívida antiga lançada em nome da casa Teggharth, e as visões ficam em branco em volta desse nome.",
       "properties": [
         "requires_attunement",
         "wondrous_item",
@@ -890,11 +909,11 @@
     {
       "id": "combate-inicial",
       "name": "Combate Inicial — Carniçais da Cinza",
-      "description": "Jogador voltando para sua vila encontra 2-3 Carniçais da Cinza na planície rochosa. Aquecer o jogador, testar pipeline de combate, estabelecer que a wasteland é perigosa.",
+      "description": "O forasteiro, a caminho de Drevamor ao entardecer, é atacado por 2 Carniçais da Cinza na planície rochosa; a ronda da periferia (Ilvar e Dalla) chega no fim da segunda rodada. Aquecer o jogador, testar o pipeline de combate, estabelecer que a wasteland é perigosa.",
       "stages": [
         {
           "id": "encontro-carnicais",
-          "description": "Sobreviver ao encontro com 2-3 Carniçais da Cinza na planície rochosa. Terreno com formações que servem de cobertura — teste de posicionamento.",
+          "description": "Sobreviver ao encontro com 2 Carniçais da Cinza na planície rochosa até a ronda da periferia chegar. Terreno com formações que servem de cobertura — teste de posicionamento.",
           "on_complete": [
             {
               "effect": "xp_gain",
@@ -911,11 +930,11 @@
     {
       "id": "o-reconhecimento",
       "name": "Quest 1 — O Reconhecimento",
-      "description": "Líder da vila do jogador pede informação sobre as outras vilas. Visitar uma ou ambas, coletar informação, entender intenções. O jogador é primo de todo mundo — reconhecido, bem-vindo com desconfiança.",
+      "description": "Aldric pede ao forasteiro que veja Tharnvik e Kaëlmund \"com olhos de quem não deve nada a ninguém\" e volte para contar. Visitar uma ou ambas, coletar informação, entender intenções. O forasteiro é recebido com desconfiança, e cada vila tenta recrutá-lo.",
       "stages": [
         {
           "id": "receber-missao",
-          "description": "O líder da vila do jogador pede reconhecimento. Companheiro designado.",
+          "description": "Aldric pede o reconhecimento ao forasteiro. Os jovens das outras vilas se oferecem como guias.",
           "on_complete": [
             {
               "effect": "information",
@@ -967,7 +986,7 @@
     {
       "id": "o-pacto-rachado",
       "name": "Quest 2 — O Pacto Rachado",
-      "description": "Mundr exige pagamento maior. Senna não pode pagar. Negociar com Mundr, encontrar recurso alternativo, ou resolver a dependência de outra forma. Liiv está no meio — Mundr protege Liiv independente do pacto.",
+      "description": "Mundr exige pagamento maior pelo Pacto de Kaëla. Senna não pode pagar. Negociar com Mundr, encontrar recurso alternativo, ou resolver a dependência de outra forma. Liiv está no meio — Mundr protege Liiv independente do pacto.",
       "stages": [
         {
           "id": "crise-pagamento",
@@ -975,7 +994,7 @@
           "on_complete": [
             {
               "effect": "information",
-              "value": "Mundr não age por ganância — ele tem uma dívida antiga que precisa honrar, e Liiv é a moeda."
+              "value": "Mundr não age por ganância — ela tem uma dívida antiga com Kaëla, que dá nome ao pacto, e a segurança de Liiv é a moeda com que ela a honra."
             }
           ]
         },
@@ -1069,6 +1088,25 @@
           ]
         },
         {
+          "id": "verdade-contada-ao-conselho",
+          "description": "O jogador, herdeiro sem vila, conta a verdade inteira às três vilas reunidas no conselho, depois da trégua. Com prova e contexto, a vergonha vira entendimento.",
+          "on_complete": [
+            {
+              "effect": "xp_gain",
+              "value": 1000
+            },
+            {
+              "effect": "flag_set",
+              "target": "verdade-contada-ao-conselho",
+              "value": true
+            },
+            {
+              "effect": "information",
+              "value": "A verdade foi dita às três vilas juntas, por quem não tinha lado. Ninguém saiu inteiro, mas ninguém saiu sozinho."
+            }
+          ]
+        },
+        {
           "id": "verdade-revelada-publicamente",
           "description": "A verdade é revelada a todas as vilas. Tharnvik em fúria, Kaëlmund em crise, Drevamor humilhada, Sem-Vila vindicados.",
           "on_complete": [
@@ -1100,6 +1138,11 @@
               "effect": "faction_standing_change",
               "target": "os-sem-vila",
               "value": 20
+            },
+            {
+              "effect": "flag_set",
+              "target": "verdade-queimada",
+              "value": true
             }
           ]
         },
@@ -1110,6 +1153,11 @@
             {
               "effect": "xp_gain",
               "value": 600
+            },
+            {
+              "effect": "flag_set",
+              "target": "verdade-queimada",
+              "value": true
             }
           ]
         },
@@ -1366,7 +1414,7 @@
             {
               "effect": "faction_standing_change",
               "target": "os-dreva",
-              "value": 20
+              "value": 0
             },
             {
               "effect": "front_advance",
@@ -1548,6 +1596,50 @@
           }
         ]
       }
+    },
+    {
+      "id": "o-herdeiro-apagado",
+      "content": "O herdeiro que Valdrek apagou dos registros chamava-se Marduk Teggharth: filho legítimo de Valdrek com uma mulher da casa Teggharth, a quarta casa, cuja linhagem inteira Valdrek reescreveu na Crônica quando Marduk passou a ver as emendas. A linha de Marduk sobreviveu em outro continente. O forasteiro chamado pelas cartas de Fael é descendente direto dele: sangue de Valdrek pela linha legítima. A camada oculta da Crônica, escrita por Kaëla, só se abre para esse sangue e só diante das três casas reunidas.",
+      "lie_content": null,
+      "known_by": [
+        "fael-drevasson"
+      ],
+      "min_trust_level": 2,
+      "trigger_condition": {
+        "operator": "OR",
+        "conditions": [
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "fael-revela"
+          },
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "ler-cronica"
+          },
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "verdade-contada-ao-conselho"
+          },
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "verdade-revelada-publicamente"
+          },
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "verdade-revelada-parcial"
+          },
+          {
+            "type": "quest_stage",
+            "target": "a-verdade-enterrada",
+            "value": "verdade-entregue-brennan"
+          }
+        ]
+      }
     }
   ],
   "rules_references": [
@@ -1556,9 +1648,9 @@
       "name": "Carniçais da Cinza",
       "stat_block_base": "Ghoul",
       "cr": 1,
-      "count_encounter": "2-3",
+      "count_encounter": "2",
       "reflavor": "Pele cinzenta, olhos opacos, cheiro de cinza queimada em vez de podridão. Reanimados por energia residual antiga no subsolo da wasteland.",
-      "notes": "Encontro de abertura — testar pipeline de combate"
+      "notes": "Encontro de abertura — testar pipeline de combate Contra um PJ solo de nível 3, a ronda da periferia de Drevamor entra no fim da 2ª rodada: 2 carniçais sozinhos já são encontro mortal pelas tabelas do DMG."
     },
     {
       "id": "cla-grothmar",
@@ -2228,11 +2320,34 @@
             "type": "flag",
             "target": "verdade-queimada",
             "value": false
+          },
+          {
+            "type": "flag",
+            "target": "verdade-contada-ao-conselho",
+            "value": true
+          },
+          {
+            "type": "faction_reputation",
+            "target": "os-tharn",
+            "value": "hostile",
+            "comparison": "above"
+          },
+          {
+            "type": "faction_reputation",
+            "target": "os-kael",
+            "value": "hostile",
+            "comparison": "above"
+          },
+          {
+            "type": "faction_reputation",
+            "target": "os-dreva",
+            "value": "hostile",
+            "comparison": "above"
           }
         ]
       },
       "climax": {
-        "directive": "O jogador segura a verdade do cisma (Valdrek virou tirano; Kaila o envenenou; o cisma em três foi trava deliberada contra a tirania). A verdade é UMA — o que ele FAZ com ela é a escolha. Apresente as três portas e encene a que ele tomar.",
+        "directive": "O jogador segura a verdade do cisma (Valdrek virou tirano; Kaëla o envenenou; o cisma em três foi trava deliberada contra a tirania). A verdade é UMA — o que ele FAZ com ela é a escolha. Apresente as três portas e encene a que ele tomar.",
         "branches": [
           {
             "choice_id": "expor",
