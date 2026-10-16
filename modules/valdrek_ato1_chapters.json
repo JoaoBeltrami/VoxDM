@@ -1,0 +1,1264 @@
+{
+  "_meta": {
+    "schema": "chapters (rascunho do Modo Guiado, ver .internal/PROPOSTA_MODO_GUIADO.md)",
+    "module_id": "os-filhos-de-valdrek",
+    "fonte": ".internal/ATO1_FLUXOGRAMA.md (aprovado pelo autor em 16/10/2026)",
+    "notas": [
+      "As saídas leem só a folha `flag` (com AND), a mesma do avaliador do arco.py; nenhuma folha nova.",
+      "Extensões propostas ao rascunho: beats como objeto {id, description, critical, quest_stage?, requires?, on_complete?}; exit com `to_chapter` para o próximo capítulo; efeito novo `companion_set`; campos informativos time_of_day, sublocations, encounter, contingencies, gm_notes.",
+      "Os capítulos ato-2-* ainda não existem: os quatro `to_chapter` são alvos pendentes até o Ato 2 ser escrito."
+    ]
+  },
+  "mode": "guided",
+  "chapters": [
+    {
+      "id": "ato-1-sob-o-globo",
+      "name": "Ato 1 — Sob o Globo",
+      "entry": "c0-a-estrada",
+      "scenes": [
+        {
+          "id": "c0-a-estrada",
+          "name": "A Estrada",
+          "location": "wasteland",
+          "time_of_day": "entardecer",
+          "npcs_present": [
+            "ilvar-da-cerca",
+            "dalla-drevadottir"
+          ],
+          "read_aloud": "O sol desce vermelho sobre uma planície sem nome — ou com três nomes, dependendo de quem você pergunta. No peito você carrega as cartas que te trouxeram de outro continente: sem assinatura, só o seu nome e uma frase, \"uma dívida antiga existe em seu nome, e só você pode ouvir\". No horizonte, um brilho fraco começa a nascer sobre os telhados de Drevamor. Então o vento muda e traz cheiro de cinza queimada. Duas formas cinzentas se levantam do chão e começam a andar na sua direção.",
+          "goal": "Sobreviver e chegar a Drevamor antes que a noite feche.",
+          "encounter": {
+            "rules_ref": "carnicais-da-cinza",
+            "count": 2,
+            "allies_join": {
+              "npcs": [
+                "ilvar-da-cerca",
+                "dalla-drevadottir"
+              ],
+              "at_end_of_round": 2
+            }
+          },
+          "beats": [
+            {
+              "id": "c0-combate",
+              "description": "Combate com 2 carniçais da cinza; as formações rochosas servem de cobertura.",
+              "critical": true,
+              "quest_stage": "combate-inicial:encontro-carnicais"
+            },
+            {
+              "id": "c0-ronda-chega",
+              "description": "A ronda da periferia (Ilvar e Dalla) chega no fim da 2ª rodada; Ilvar diz quantos passos faltam até a luz, porque ele mediu.",
+              "critical": true
+            },
+            {
+              "id": "c0-porta-do-salao",
+              "description": "Ilvar leva o forasteiro até a porta do salão antes de o globo subir; ele e os dele ficam do lado de fora, na periferia.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "chegou-drevamor",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c0-dalla-pergunta",
+              "description": "Dalla pergunta se ele cruzou território neutro e se viu alguém de Tharnvik pelo caminho (semente de soren-dalla-encontros).",
+              "critical": false
+            }
+          ],
+          "exits": [
+            {
+              "to": "c1-sob-o-globo",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "chegou-drevamor",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "A ronda da periferia chega antes do previsto e escolta o forasteiro até a porta do salão.",
+          "contingencies": [
+            "PJ paralisado ou a 0 PV: a ronda chega no turno seguinte, Dalla arrasta o PJ e Ilvar o estabiliza. Não há fim de jogo na abertura.",
+            "Jogador foge: os carniçais o seguem até a borda da luz e a ronda o intercepta no caminho.",
+            "Jogador não quer ir a Drevamor: Ilvar avisa que de noite a planície é dos carniçais e dos worgs, e o escolta.",
+            "Se o motor de combate não suportar aliados, a ronda abate um carniçal por rodada na narração."
+          ],
+          "gm_notes": [
+            "Balanceamento: 2 carniçais (CR 1) contra um PJ nível 3 sozinho é encontro mortal pelo DMG; com Ilvar e Dalla vira médio a difícil."
+          ],
+          "max_turns": 12
+        },
+        {
+          "id": "c1-sob-o-globo",
+          "name": "Sob o Globo",
+          "location": "drevamor",
+          "time_of_day": "noite",
+          "npcs_present": [
+            "aldric-drevasson",
+            "fael-drevasson",
+            "soren-tharnsson",
+            "gharen-braco-de-ferro",
+            "maren-drevadottir",
+            "dalla-drevadottir",
+            "osmund-o-exilado"
+          ],
+          "read_aloud": "Ao cair da noite, o centro de Drevamor inteiro se junta na praça. Aldric ergue um cajado de madeira escura, diz uma palavra, e a luz se fecha numa cúpula sobre os telhados. Para todo mundo é a rotina de cada noite. Para você é um calor que entra pelo peito e um sussurro que mais ninguém parece ouvir. No salão comunal, três jovens esperam à mesa: um ruivo inquieto que não para de falar, um meio-orc com uma cicatriz do queixo ao pescoço que não tira os olhos da porta, e um rapaz magro com os dedos manchados de tinta que, por um instante, te olha como quem reconhece alguém.",
+          "goal": "Descobrir quem o chamou (ou ao menos por quê) e entender o que cada vila quer.",
+          "beats": [
+            {
+              "id": "c1-ritual-do-globo",
+              "description": "O globo sobe ao cair da noite; só o jogador sente o calor e o sussurro. Fael percebe pela reação dele.",
+              "critical": true
+            },
+            {
+              "id": "c1-cartas-sem-dono",
+              "description": "Ninguém assume as cartas. Se o jogador as mostrar, Aldric não reconhece a letra e Fael desvia o olhar.",
+              "critical": true
+            },
+            {
+              "id": "c1-crise-do-cajado",
+              "description": "Soren trouxe o ultimato de Bjorn (entregar o Cajado até a lua nova, ou Tharnvik vem buscar). Gharen trouxe a oferta de Senna (alugar o Cajado algumas noites por lua, em troca de ferro e comida).",
+              "critical": true
+            },
+            {
+              "id": "c1-tres-ideologias",
+              "description": "Os três jovens dizem o que a própria vila quer, como ideologia: Soren é Força, Gharen é Contrato, Fael é Guarda.",
+              "critical": true
+            },
+            {
+              "id": "c1-fael-escapa",
+              "description": "Fael deixa escapar que a Crônica mostra mais do que o pai sabe, e muda de assunto.",
+              "critical": true
+            },
+            {
+              "id": "c1-pedido-de-aldric",
+              "description": "Aldric pede ao forasteiro que veja Tharnvik e Kaëlmund com olhos de quem não deve nada a ninguém e volte para contar. Os jovens se oferecem como guias.",
+              "critical": true,
+              "quest_stage": "o-reconhecimento:receber-missao",
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "missao-recebida",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c1-rumo-tharnvik",
+              "description": "O jogador escolhe começar por Tharnvik: Soren guia; Gharen parte de madrugada para casa.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "rumo-tharnvik",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "rumo-kaelmund",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c1-rumo-kaelmund",
+              "description": "O jogador escolhe começar por Kaëlmund: Gharen guia; Soren parte de madrugada para casa.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "rumo-kaelmund",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "rumo-tharnvik",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c1-rumor-drevamor",
+              "description": "A versão de Drevamor sobre Valdrek: os artefatos ficaram com os Dreva porque eram os mais sábios.",
+              "critical": false
+            },
+            {
+              "id": "c1-olhar-soren-dalla",
+              "description": "Soren e Dalla trocam um olhar que o jogador pode notar (ver-soren-e-dalla-juntos).",
+              "critical": false
+            },
+            {
+              "id": "c1-osmund-encara",
+              "description": "Osmund, que saiu de Tharnvik, encara Soren em silêncio.",
+              "critical": false
+            }
+          ],
+          "exits": [
+            {
+              "to": "c2a-a-prova",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "missao-recebida",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "rumo-tharnvik",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c2b-o-acordo",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "missao-recebida",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "rumo-kaelmund",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "Soren, impaciente, puxa o forasteiro para o norte ao amanhecer; o pedido de Aldric vem antes da partida.",
+          "contingencies": [
+            "O jogador não puxa conversa: Soren puxa, fala demais e interrompe.",
+            "O jogador quer sair de noite: o globo está fechado até o amanhecer; de manhã Aldric faz o pedido antes da partida.",
+            "O jogador não escolhe por onde começar: Soren puxa para o norte (rumo a Tharnvik).",
+            "O jogador pressiona Fael pelas cartas: Fael desconversa (\"muita gente escreve em Drevamor\") e guarda a confissão para a Mesa."
+          ],
+          "gm_notes": [
+            "O globo só sobe à noite: o Cajado tem 10 cargas, gasta 1 por hora e recarrega 1d6+4 ao amanhecer. Com o globo ligado, nenhuma criatura Média atravessa."
+          ],
+          "max_turns": 25
+        },
+        {
+          "id": "c2a-a-prova",
+          "name": "A Prova",
+          "location": "tharnvik",
+          "sublocations": [
+            "gargantas-vulcanicas"
+          ],
+          "time_of_day": "dia",
+          "npcs_present": [
+            "bjorn-tharnsson",
+            "soren-tharnsson",
+            "yrsa-a-curandeira",
+            "runa-tharnsdottir",
+            "halvard-o-cinza"
+          ],
+          "read_aloud": "Tharnvik parece uma fortaleza mesmo quando não é: pedra escura, fogueiras de carvite queimando azul, cinza fina num vento que nunca para. Todo mundo fala alto, porque as gargantas abafam o resto. Bjorn Tharnsson te recebe sentado, sem se levantar, e te mede como quem mede um cavalo. \"Aldric manda um estrangeiro contar meus homens. Aqui, quem quer falar comigo desce primeiro.\" Ao lado dele, Soren fica muito quieto. Ele também nunca desceu.",
+          "goal": "Passar pela prova das gargantas para ganhar o direito de ouvir Bjorn.",
+          "beats": [
+            {
+              "id": "c2a-bjorn-exige-o-rito",
+              "description": "Bjorn exige o rito: descer às gargantas como os jovens de Tharnvik descem.",
+              "critical": true
+            },
+            {
+              "id": "c2a-descida",
+              "description": "A descida com Soren, que tenta ganhar a própria marca de cinza: calor, gases e escalada (testes de Constituição e Atletismo).",
+              "critical": true
+            },
+            {
+              "id": "c2a-o-fogo-se-curva",
+              "description": "No fundo, perto da fronteira de Vyrmathax que ninguém marcou, o fogo se curva na direção do jogador. A sombra de algo enorme passa pelo teto e o calor sobe de baixo (só narração).",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "indicio-tharnvik",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2a-volta-com-marca",
+              "description": "Sucesso na prova: a marca de cinza no rosto (Soren também a ganha se o jogador o ajudou).",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "marca-de-cinza",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2a-volta-ferido",
+              "description": "Falha na prova: queimaduras e menos respeito de Bjorn. O indício já aconteceu.",
+              "critical": false
+            },
+            {
+              "id": "c2a-yrsa-cuida",
+              "description": "Yrsa cuida das queimaduras (ou do rosto marcado) e fala de paz sem discurso.",
+              "critical": true
+            },
+            {
+              "id": "c2a-bjorn-fala",
+              "description": "Bjorn fala de Força, quer o Cajado, manda um recado a Aldric e tenta recrutar o forasteiro.",
+              "critical": true,
+              "quest_stage": "o-reconhecimento:visitar-vilas"
+            },
+            {
+              "id": "c2a-partida",
+              "description": "O forasteiro parte de Tharnvik.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "partiu-tharnvik",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2a-vigia-sem-insignia",
+              "description": "Um vigia sem insígnia observa da borda da garganta e, se perseguido, foge para o meio das Cinzas (informante de Brennan).",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "rastro-brennan-tharnvik",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2a-halvard-osmund",
+              "description": "Halvard pergunta, baixo, se Osmund está bem em Drevamor (semente de halvard-aprova-osmund).",
+              "critical": false
+            },
+            {
+              "id": "c2a-rumor-tharnvik",
+              "description": "A versão de Tharnvik sobre Valdrek: morreu lutando contra worgs.",
+              "critical": false
+            },
+            {
+              "id": "c2a-lenda-de-hakon",
+              "description": "Bjorn fala do bisavô Hakon Tharnsson, que segundo a família fez a dragoa ficar devendo a Tharnvik (meia verdade).",
+              "critical": false
+            },
+            {
+              "id": "c2a-o-pacote",
+              "description": "Se Kaëlmund ainda não foi visitada: Yrsa pede que o jogador leve ervas para Edda, e Runa enfia uma carta lacrada no meio. Abrir a carta conta como interceptar-mensageiro-entre-vilas.",
+              "critical": false,
+              "requires": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "indicio-kaelmund",
+                    "value": false
+                  }
+                ]
+              },
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "pacote-yrsa",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2a-halgrim-sem-marca",
+              "description": "Soren cita Halgrim Sem-Marca: desceu e voltou sem marca, e ninguém sabe por quê.",
+              "critical": false
+            }
+          ],
+          "exits": [
+            {
+              "to": "c2b-o-acordo",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "partiu-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-kaelmund",
+                    "value": false
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c2c-o-nome",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "partiu-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-kaelmund",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "Ao passar pela borda da garganta na saída, o fogo se curva para o jogador diante de Soren.",
+          "contingencies": [
+            "Recusa a prova: Bjorn não fala com ele, e Soren, humilhado, desce sozinho. O jogador desce atrás para não deixá-lo morrer, e o indício acontece no resgate.",
+            "Falha nos testes: ferido e sem a marca, mas o fogo se curva mesmo assim.",
+            "Quer cruzar a fronteira das profundezas: o calor fica insuportável e Soren o puxa de volta. Ali é território dela. Não há combate com Vyrmathax (CR 17).",
+            "Sai sem falar com Bjorn: Bjorn manda Runa alcançá-lo com o recado."
+          ],
+          "max_turns": 30
+        },
+        {
+          "id": "c2b-o-acordo",
+          "name": "O Acordo",
+          "location": "kaelmund",
+          "sublocations": [
+            "formacoes-rochosas"
+          ],
+          "time_of_day": "dia",
+          "npcs_present": [
+            "senna-kaeldottir",
+            "gharen-braco-de-ferro",
+            "edda-a-velha",
+            "torvin-kaelsson",
+            "liiv",
+            "mundr",
+            "ysolde-kaeldottir"
+          ],
+          "read_aloud": "Kaëlmund parece parte da paisagem: casas cavadas na rocha, passagens onde dois homens seguram um exército, e o martelo de uma forja que nunca para. Senna Kaëldottir te recebe atrás de uma pilha de pergaminhos, sem sorriso. \"Gharen diz que você veio olhar. Olhar é de graça. Conversar tem preço.\" Num canto, uma velha que contava uma história para as crianças para no meio de uma frase e fica olhando para o seu rosto.",
+          "goal": "Fechar o acordo pequeno de Senna (ajudar com o preço de Mundr) para ganhar o direito de negociar com ela.",
+          "beats": [
+            {
+              "id": "c2b-crise-do-pacto",
+              "description": "Senna expõe a crise: o Pacto de Kaëla com os Grothmar ficou caro demais e Mundr exige mais do que a vila pode pagar.",
+              "critical": true,
+              "quest_stage": "o-pacto-rachado:crise-pagamento"
+            },
+            {
+              "id": "c2b-palavra-dada",
+              "description": "O jogador dá a palavra de que vai ajudar (a promessa que Gharen vai cobrar no futuro).",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "promessa-senna",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2b-edda-murmura",
+              "description": "Edda, ao vê-lo, murmura \"Teggharth\", nome que nenhum registro tem. Se perguntada, conta só um pedaço de história, nunca uma opinião.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "indicio-kaelmund",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2b-liiv-guia",
+              "description": "Liiv guia o jogador e Gharen pelas passagens até Mundr e ajuda a falar com ela, mais alto e mais devagar.",
+              "critical": true
+            },
+            {
+              "id": "c2b-negocia-mundr",
+              "description": "A negociação com Mundr: aceitar o preço antigo por mais uma lua exige uma boa proposta.",
+              "critical": true,
+              "quest_stage": "o-pacto-rachado:negociar-mundr"
+            },
+            {
+              "id": "c2b-negociacao-falhou",
+              "description": "A lua fica sem acordo e o jogador fica devendo um favor a Senna.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "favor-devido-senna",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2b-senna-fala",
+              "description": "Senna fala de Contrato, quer o Cajado para não depender dos gigantes e a Crônica para reabrir fronteiras, e tenta recrutar o forasteiro.",
+              "critical": true,
+              "quest_stage": "o-reconhecimento:visitar-vilas"
+            },
+            {
+              "id": "c2b-partida",
+              "description": "O forasteiro parte de Kaëlmund.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "partiu-kaelmund",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2b-torvin-e-o-ferro",
+              "description": "Torvin conta que gente sem insígnia encomendou ferro e pediu entrega no Peso; e que carta de outro continente só chega por rota longa de mercador (\"a mãe do Brennan era comerciante élfica\").",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "rastro-brennan-kaelmund",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2b-clausula-de-ysolde",
+              "description": "Quem ler o contrato ou perguntar a Gharen nota que a cláusula de reajuste que estrangula o pacto foi escrita por Ysolde.",
+              "critical": false
+            },
+            {
+              "id": "c2b-rumor-kaelmund",
+              "description": "A versão de Kaëlmund sobre Valdrek: dividiu tudo por vontade própria.",
+              "critical": false
+            },
+            {
+              "id": "c2b-entrega-do-pacote",
+              "description": "Se o jogador trouxe o pacote de Yrsa: entrega as ervas a Edda; a carta de Runa é para Senna.",
+              "critical": false,
+              "requires": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "pacote-yrsa",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "c2b-mundr-fareja",
+              "description": "Mundr fareja o ar perto do jogador e diz algo na língua dos gigantes que Liiv não traduz.",
+              "critical": false
+            }
+          ],
+          "exits": [
+            {
+              "to": "c2a-a-prova",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "partiu-kaelmund",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-kaelmund",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-tharnvik",
+                    "value": false
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c2c-o-nome",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "partiu-kaelmund",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-kaelmund",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "indicio-tharnvik",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "Na saída, Edda puxa o jogador pela manga e murmura o nome Teggharth.",
+          "contingencies": [
+            "Recusa o acordo: Senna não negocia, e Edda o chama para levar umas ervas; o indício acontece ali.",
+            "Ameaça Mundr ou usa Liiv como alavanca: Mundr protege Liiv acima do pacto e a negociação falha (com custo).",
+            "Falha na negociação: o jogador fica devendo o favor; o indício de Edda já aconteceu."
+          ],
+          "gm_notes": [
+            "A dívida antiga de Mundr é com Kaëla (que dá nome ao pacto); ela a paga protegendo a casa de Kaëla, e a segurança de Liiv é a moeda. Mundr não quer a criança. No módulo curto, fica como mistério."
+          ],
+          "max_turns": 30
+        },
+        {
+          "id": "c2c-o-nome",
+          "name": "O Nome",
+          "location": "drevamor",
+          "time_of_day": "dia",
+          "npcs_present": [
+            "fael-drevasson"
+          ],
+          "read_aloud": "Drevamor de dia é outra vila: sem cúpula, só telhados, crianças e um gato dormindo num muro. No salão comunal, o Cajado descansa apagado num suporte de pedra. Você dá dois passos na direção dele e a pedra do topo acende sozinha, uma luz que pulsa no ritmo do seu coração. Atrás de você, alguém deixa cair uma pilha de pergaminhos. É Fael, e ele está branco.",
+          "goal": "Entender o que o fogo, o nome e o Cajado têm a ver com ele.",
+          "beats": [
+            {
+              "id": "c2c-cajado-acende",
+              "description": "O Cajado reage forte, e Fael vê tudo a sós com ele.",
+              "critical": true
+            },
+            {
+              "id": "c2c-fael-junta-os-pedacos",
+              "description": "Fael junta o fogo das gargantas, o nome que Edda disse e o Cajado: o jogador é sangue direto de Valdrek, pela linha de Marduk Teggharth, o filho que Valdrek apagou dos registros junto com a casa da mãe.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "sangue-confirmado",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c2c-o-livro-razao",
+              "description": "Como Fael sabe: no livro-razão da Crônica há uma dívida antiga lançada em nome da casa Teggharth, e as visões ficam em branco em volta desse nome.",
+              "critical": true
+            },
+            {
+              "id": "c2c-fael-revela",
+              "description": "Fael diz que a Crônica guarda uma verdade que muda tudo e uma página que só abre para o sangue dele, mas não diz o conteúdo.",
+              "critical": true,
+              "quest_stage": "a-verdade-enterrada:fael-revela"
+            },
+            {
+              "id": "c2c-hoje-a-noite",
+              "description": "Se o jogador perguntar pelas cartas, Fael pede: \"Hoje à noite, na frente do meu pai\".",
+              "critical": true
+            },
+            {
+              "id": "c2c-cronica-desperta",
+              "description": "Se o jogador tocar a Crônica, a página em branco esquenta e uma sombra de letra aparece e some.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "cronica-despertou",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to": "c3-a-mesa",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "sangue-confirmado",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "Fael vai atrás do jogador e fala na rua, baixo.",
+          "contingencies": [
+            "Quer abrir a Crônica agora: Fael mostra a nota de Kaëla na margem; a parte escondida só se abre para o sangue certo diante das três casas reunidas. Não abre aqui.",
+            "Acusa Fael pelas cartas: Fael não nega mais, só pede para contar na Mesa."
+          ],
+          "gm_notes": [
+            "A Crônica se mexer acorda a atenção de Vyrmathax, que quer o livro pelo nome do caçador. Só narração; paga no pisca do globo no fim do ato.",
+            "Até a camada oculta abrir, Fael não conta o conteúdo do cisma."
+          ],
+          "max_turns": 12
+        },
+        {
+          "id": "c3-a-mesa",
+          "name": "A Mesa",
+          "location": "drevamor",
+          "time_of_day": "noite",
+          "npcs_present": [
+            "aldric-drevasson",
+            "fael-drevasson",
+            "soren-tharnsson",
+            "gharen-braco-de-ferro",
+            "maren-drevadottir"
+          ],
+          "read_aloud": "O globo sobe de novo sobre os telhados, e com ele a certeza de que ninguém sai daqui esta noite. Aldric senta à cabeceira. Soren e Gharen sentam frente a frente, como dois recados que não se suportam. Fael não toca na comida. \"Você viu as três vilas\", diz Aldric. \"Agora me diga o que viu.\"",
+          "goal": "Contar o que viu, descobrir quem o chamou e decidir com quem vai.",
+          "beats": [
+            {
+              "id": "c3-relatorio",
+              "description": "O jogador decide o que contar e o que omitir; Soren e Gharen são testemunhas do que aconteceu nas vilas deles.",
+              "critical": true,
+              "quest_stage": "o-reconhecimento:reportar"
+            },
+            {
+              "id": "c3-fael-confessa",
+              "description": "Fael confessa diante do pai que mandou as cartas e por quê (a dívida no livro-razão). Aldric descobre junto.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "fael-confessou",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c3-sangue-na-mesa",
+              "description": "O jogador revela à mesa que é sangue de Valdrek; Soren e Gharen levam a notícia a Bjorn e Senna.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "sangue-revelado-na-mesa",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "c3-ultima-palavra",
+              "description": "Cada um fala por último, uma vez: Soren (Força), Gharen (Contrato), Fael (Guarda e a verdade) e Aldric (o medo de quem segura o que todos querem).",
+              "critical": true
+            },
+            {
+              "id": "c3-declara-tharnvik",
+              "description": "O jogador declara em voz que vai com Tharnvik.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "lado-tharn",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-kael",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-dreva",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-sem-vila",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c3-declara-kaelmund",
+              "description": "O jogador declara em voz que vai com Kaëlmund.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "lado-kael",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-tharn",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-dreva",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-sem-vila",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c3-declara-drevamor",
+              "description": "O jogador declara em voz que fica com Drevamor.",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "lado-dreva",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-tharn",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-kael",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-sem-vila",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c3-declara-sem-vila",
+              "description": "O jogador declara \"vou atrás do Brennan\".",
+              "critical": false,
+              "requires": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "rastro-brennan-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "rastro-brennan-kaelmund",
+                    "value": true
+                  }
+                ]
+              },
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "lado-sem-vila",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-tharn",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-kael",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-dreva",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "c3-nao-escolhe",
+              "description": "O jogador se recusa a escolher: Aldric diz \"então fica, ficar também é escolher\".",
+              "critical": false,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "lado-dreva",
+                  "value": true
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-tharn",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-kael",
+                  "value": false
+                },
+                {
+                  "effect": "flag_set",
+                  "target": "lado-sem-vila",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to": "c4t-o-punho",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "lado-tharn",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c4k-a-assinatura",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "lado-kael",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c4d-o-muro",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "lado-dreva",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "to": "c4s-a-fogueira",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "lado-sem-vila",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "rastro-brennan-tharnvik",
+                    "value": true
+                  },
+                  {
+                    "type": "flag",
+                    "target": "rastro-brennan-kaelmund",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "Aldric pede uma resposta antes de o globo cair; sem resposta, vale \"ficar também é escolher\" (Drevamor).",
+          "contingencies": [
+            "Pede os Sem-Vila sem os dois rastros: ninguém sabe onde Brennan acampa esta semana; ele escolhe de novo.",
+            "Quer dois lados: lado é compromisso firme; Aldric pede um nome só.",
+            "Aldric explode com Fael e a cena vira briga de família: Maren entra e corta."
+          ],
+          "max_turns": 25
+        },
+        {
+          "id": "c4t-o-punho",
+          "name": "O Punho",
+          "location": "tharnvik",
+          "time_of_day": "dia",
+          "npcs_present": [
+            "bjorn-tharnsson",
+            "soren-tharnsson",
+            "halvard-o-cinza"
+          ],
+          "read_aloud": "Bjorn não se levanta desta vez também. Mas manda trazer cerveja para dois, e isso, em Tharnvik, é um juramento.",
+          "goal": "Selar o lado escolhido e receber a primeira ordem.",
+          "beats": [
+            {
+              "id": "c4t-o-punho-juramento",
+              "description": "O líder aceita o jogador; o lado ganha +10 de reputação e soren-tharnsson passa a acompanhar.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "faction_standing_change",
+                  "target": "os-tharn",
+                  "value": 10
+                },
+                {
+                  "effect": "companion_set",
+                  "target": "soren-tharnsson"
+                }
+              ]
+            },
+            {
+              "id": "c4t-o-punho-primeira-ordem",
+              "description": "Bjorn aceita do jeito dele (a marca de cinza vale mais que palavra) e dá a primeira ordem: escoltar o aço que Halgrim traz (gancho de comboio-de-aco).",
+              "critical": true
+            },
+            {
+              "id": "c4t-o-punho-o-globo-pisca",
+              "description": "Do alto da muralha de basalto, o brilho de Drevamor, lá no meio da planície, apaga por um instante e volta.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "ato1-concluido",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to_chapter": "ato-2-tharnvik",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "ato1-concluido",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "A noite cai e o brilho de Drevamor pisca no horizonte.",
+          "contingencies": [
+            "Se o jogador voltar atrás, o líder lembra que a palavra foi dada na Mesa; trocar agora só traindo, com custo de reputação."
+          ],
+          "max_turns": 12
+        },
+        {
+          "id": "c4k-a-assinatura",
+          "name": "A Assinatura",
+          "location": "kaelmund",
+          "time_of_day": "dia",
+          "npcs_present": [
+            "senna-kaeldottir",
+            "gharen-braco-de-ferro",
+            "ysolde-kaeldottir"
+          ],
+          "read_aloud": "Em Kaëlmund ninguém jura em voz alta. Ysolde empurra um pergaminho na sua direção, com uma educação que corta, e espera a sua assinatura.",
+          "goal": "Selar o lado escolhido e receber a primeira ordem.",
+          "beats": [
+            {
+              "id": "c4k-a-assinatura-juramento",
+              "description": "O líder aceita o jogador; o lado ganha +10 de reputação e gharen-braco-de-ferro passa a acompanhar.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "faction_standing_change",
+                  "target": "os-kael",
+                  "value": 10
+                },
+                {
+                  "effect": "companion_set",
+                  "target": "gharen-braco-de-ferro"
+                }
+              ]
+            },
+            {
+              "id": "c4k-a-assinatura-primeira-ordem",
+              "description": "O juramento é um termo escrito, redigido por Ysolde. Primeira ordem: o contrato que segura o ferro e a comida de Drevamor (gancho de contrato-de-ferro).",
+              "critical": true
+            },
+            {
+              "id": "c4k-a-assinatura-o-globo-pisca",
+              "description": "Das rochas de Kaëlmund, o brilho de Drevamor pisca no horizonte.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "ato1-concluido",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to_chapter": "ato-2-kaelmund",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "ato1-concluido",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "A noite cai e o brilho de Drevamor pisca no horizonte.",
+          "contingencies": [
+            "Se o jogador voltar atrás, o líder lembra que a palavra foi dada na Mesa; trocar agora só traindo, com custo de reputação."
+          ],
+          "max_turns": 12
+        },
+        {
+          "id": "c4d-o-muro",
+          "name": "O Muro",
+          "location": "drevamor",
+          "time_of_day": "dia",
+          "npcs_present": [
+            "aldric-drevasson",
+            "fael-drevasson",
+            "maren-drevadottir",
+            "ilvar-da-cerca"
+          ],
+          "read_aloud": "Aldric olha para o Cajado como se ele pesasse mais esta manhã. Maren não espera o marido decidir: \"Então você fica. Ótimo. Temos trabalho.\"",
+          "goal": "Selar o lado escolhido e receber a primeira ordem.",
+          "beats": [
+            {
+              "id": "c4d-o-muro-juramento",
+              "description": "O líder aceita o jogador; o lado ganha +10 de reputação e fael-drevasson passa a acompanhar.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "faction_standing_change",
+                  "target": "os-dreva",
+                  "value": 10
+                },
+                {
+                  "effect": "companion_set",
+                  "target": "fael-drevasson"
+                }
+              ]
+            },
+            {
+              "id": "c4d-o-muro-primeira-ordem",
+              "description": "Aldric aceita sem saber o que fazer com isso, e Maren decide por ele; Ilvar pede ajuda para a periferia. Primeira ordem: requisitar comida, gente e ferro para aguentar (gancho de os-muros).",
+              "critical": true
+            },
+            {
+              "id": "c4d-o-muro-o-globo-pisca",
+              "description": "O globo, sobre as cabeças, apaga por um instante, e no escuro alguma coisa enorme passa por cima.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "ato1-concluido",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to_chapter": "ato-2-drevamor",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "ato1-concluido",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "A noite cai e o brilho de Drevamor pisca no horizonte.",
+          "contingencies": [
+            "Se o jogador voltar atrás, o líder lembra que a palavra foi dada na Mesa; trocar agora só traindo, com custo de reputação."
+          ],
+          "max_turns": 12
+        },
+        {
+          "id": "c4s-a-fogueira",
+          "name": "A Fogueira",
+          "location": "acampamento-sem-vila",
+          "time_of_day": "dia",
+          "npcs_present": [
+            "brennan-sem-vila"
+          ],
+          "read_aloud": "Seguindo os dois rastros, você acha uma fogueira sem bandeira, sem símbolo, sem nada que diga de onde aquela gente veio. Um meio-elfo se levanta, sorrindo como quem já esperava você.",
+          "goal": "Selar o lado escolhido e receber a primeira ordem.",
+          "beats": [
+            {
+              "id": "c4s-a-fogueira-juramento",
+              "description": "O líder aceita o jogador; o lado ganha +10 de reputação; não há companheiro.",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "faction_standing_change",
+                  "target": "os-sem-vila",
+                  "value": 10
+                }
+              ]
+            },
+            {
+              "id": "c4s-a-fogueira-primeira-ordem",
+              "description": "Brennan quer a verdade de Fael ou o acesso à Crônica. Primeira ordem: trazer o primeiro pedaço da verdade (gancho da etapa 1 da cadeia dos Sem-Vila).",
+              "critical": true
+            },
+            {
+              "id": "c4s-a-fogueira-o-globo-pisca",
+              "description": "No horizonte, o brilho de Drevamor pisca. Brennan sorri: \"O tempo deles acabou.\"",
+              "critical": true,
+              "on_complete": [
+                {
+                  "effect": "flag_set",
+                  "target": "ato1-concluido",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "exits": [
+            {
+              "to_chapter": "ato-2-sem-vila",
+              "when": {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "type": "flag",
+                    "target": "ato1-concluido",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fail_forward": "A noite cai e o brilho de Drevamor pisca no horizonte.",
+          "contingencies": [
+            "Se o jogador voltar atrás, o líder lembra que a palavra foi dada na Mesa; trocar agora só traindo, com custo de reputação."
+          ],
+          "max_turns": 12
+        }
+      ]
+    }
+  ]
+}
